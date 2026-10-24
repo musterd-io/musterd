@@ -702,7 +702,11 @@ export type AuditAction =
   // (`POST /teams/:slug/stream/epitaph`) before the machine's teardown could take it. actor = the
   // stream's own observer seat, target null, detail `{ reason, code, ran_ms, machine? }` — the
   // reason is composed in the CLI, never ffmpeg's raw stderr, so no credential rides along.
-  | 'stream.exit';
+  | 'stream.exit'
+  // Lane 01M5GDACC0: a queued `stream stop`'s deadline (`POST /teams/:slug/stream/winddown`), read
+  // by /broadcast's wind-down card. actor = the seat that queued or cancelled it, target null,
+  // detail `{ stop_at }` — epoch ms, or null when the stop was cancelled, overtaken or done.
+  | 'stream.winddown';
 
 /**
  * ADR 410 — whose row is this? `'actor'` and `'target'` name the column holding **the seat that
@@ -962,6 +966,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   // The stream's observer seat posted its own epitaph — the row is about the stream's end and was
   // acted by the seat itself, like any self-report.
   'stream.exit': 'actor',
+  'stream.winddown': 'actor',
   'governed.policy.change': 'actor',
   'governed.launch.issue': 'actor',
   'governed.launch.consume': 'actor',

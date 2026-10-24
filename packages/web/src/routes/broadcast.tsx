@@ -4,6 +4,7 @@ import broadcastCss from '../live/Broadcast.css?url';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { StreamAskBanner } from '../live/StreamAskBanner';
+import { WindDownCard } from '../live/WindDownCard';
 import { OfficeScene } from '../live/OfficeScene';
 import { teamContact } from '../live/teamContact';
 import { broadcastSeat, type LiveConfig } from '../live/client';
@@ -356,6 +357,7 @@ function BroadcastPage() {
                 still
               />
             </div>
+            <WindDownCard cfg={cfg} />
           </>
         )}
         {/* Operator diagnostics, not stream chrome: the two states where there is no office to look

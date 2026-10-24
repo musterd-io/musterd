@@ -53,7 +53,18 @@ export interface StreamState {
   failures?: { at: number; code: number; error: string }[];
   /** Set when the flap guard tripped; only a human start/stop clears it — one ask, not one per tick. */
   standDownAt?: number;
+  /**
+   * A queued stop (lane 01M5GDACC0): `stream stop` sets this deadline instead of killing the
+   * machine, the daemon carries the same number so /broadcast can count down to it, and the
+   * supervisor's tick stops the stream once it passes. One stored deadline, two readers — the card
+   * and the real stop cannot drift apart. Absent when no stop is queued.
+   */
+  stopAt?: number;
 }
+
+/** How far out `stream stop` queues the stop: long enough that a viewer sees the day end, not a
+ * cut (nick, 2026-10-21). `--now` skips it. */
+export const WIND_DOWN_MS = 30 * 60_000;
 
 /** The flap budget: this many supervisor restarts inside the window, then stand down and ask.
  * Each restart is a performance-4x Fly machine — an unguarded loop burns real money (nick,
@@ -62,7 +73,7 @@ export const FLAP_MAX = 3;
 export const FLAP_WINDOW_MS = 30 * 60_000;
 
 export interface EnsureDecision {
-  action: 'noop' | 'restart' | 'stand_down';
+  action: 'noop' | 'restart' | 'stand_down' | 'stop';
   /** What a restart is answering: a `crash` gets the dead machine's last words merged into the
    * note (lane 01M52Z987280); a `deploy` already carries its explanation, and quoting a dead
    * run's epitaph against it would read as a second cause. Absent on noop/stand_down. */
@@ -114,6 +125,16 @@ export function decideEnsure(args: {
     };
   if (state.desired === 'stopped') {
     return { action: 'noop', state, note: `desired stopped (by ${state.by ?? 'unknown'})` };
+  }
+  // A queued stop whose deadline has passed is a stop, whatever else is true: a crashed or stood-down
+  // stream with a stop due must not be relaunched only to be stopped a minute later.
+  if (state.stopAt !== undefined && now >= state.stopAt) {
+    const { stopAt: _due, ...rest } = state;
+    return {
+      action: 'stop',
+      state: { ...rest, desired: 'stopped', at: now, restarts: [] },
+      note: `wind-down over: stopping as queued by ${state.by ?? 'unknown'}`,
+    };
   }
   if (state.standDownAt !== undefined) {
     return { action: 'noop', state, note: 'stood down — awaiting a human `stream start`/`stop`' };
