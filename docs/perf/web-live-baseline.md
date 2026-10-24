@@ -2357,3 +2357,15 @@ more than they saved. Dropped before merge.
 
 - Falsify: a floor where members rarely gesture or carry (e.g. a quiet `/live` at night) holding the
   group sheets unloaded for minutes would make the split worth a second look for that case.
+
+## 2026-10-23 — Total JS budget raised for browser A2 approval proofs (ADR 662, lane 01M5FZ5R2VF8YZB48DQ357YYWM)
+
+`totalJsGzipBytes` rises 366,900 → 367,950 B. The browser passkey flow covers human lane verdicts,
+privileged-ask answers and request decisions. Its descriptor builders were moved to a schema-free
+protocol subpath, removing the Zod runtime from the browser chunk; the measured production total is
+367,013 B gzip. The 1,050 B increase leaves 937 B over this local build for the observed CI gzip
+variation and small bundler overhead. Removing the flow would leave these authority paths unsigned.
+
+- Falsify: once all three paths use the shared passkey ceremony, removing any one of them leaves the
+  affected high-authority action refused for an enrolled human; if another smaller implementation
+  keeps the production total at or below 366,900 B, revert this increase.

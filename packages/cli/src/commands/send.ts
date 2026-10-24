@@ -23,6 +23,7 @@ import {
   MAX_ELIGIBLE,
   type Recipient,
 } from '@musterd/protocol';
+import { humanAskAnswerApproval } from '@musterd/protocol/approval';
 import { ulid } from 'ulid';
 import { flagStr, GLOBAL_FLAGS, parseMeta, rejectUnknownFlags, type Parsed } from '../args.js';
 import { HttpClient } from '../client.js';
@@ -305,7 +306,34 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
     throw new CliError(`invalid message: ${(err as Error).message}`, 3);
   }
 
-  const ackBody = await sendOrEcho(() => http.send(team, envelope), envelope);
+  const ackBody = await sendOrEcho(async () => {
+    try {
+      return await http.send(team, envelope);
+    } catch (err) {
+      const askId = envelope.meta?.['in_reply_to'];
+      if (
+        !identity.key.startsWith('mscr_') ||
+        (act !== 'accept' && act !== 'decline') ||
+        typeof askId !== 'string' ||
+        !(err instanceof CliError && /authority refused \(no_signature\)/.test(err.message))
+      )
+        throw err;
+      const authority = humanAskAnswerApproval(askId, act);
+      process.stdout.write('This answer needs your passkey.\n');
+      const { collectApproval } = await import('./authority.js');
+      const approval = await collectApproval(
+        http,
+        team,
+        authority.act,
+        authority.target,
+        authority.payload,
+      );
+      return http.send(team, {
+        ...envelope,
+        meta: { ...envelope.meta, approval },
+      });
+    }
+  }, envelope);
 
   // ADR 210: a successful threaded send means this session IS the dialogue on that thread, which is
   // exactly the causal fact a later wake needs and the daemon can never learn. Bind it locally.

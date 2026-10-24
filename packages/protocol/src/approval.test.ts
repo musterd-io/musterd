@@ -39,13 +39,18 @@ const phoneKey = createPublicKey({
 });
 
 describe('the app-facing modules are node-free (ADR 694)', () => {
-  // The app imports these through `@musterd/protocol/approval` and `/app-channel`; a `node:`
-  // import (or a module that has one) would break the Expo bundle, not this test run.
+  // The app imports these through `@musterd/protocol/approval` and `/app-channel`; the schema-free
+  // approval-contracts sibling keeps browser builders out of the Zod bundle. A `node:` import (or a
+  // module that has one) would break the Expo bundle, not this test run.
   it.each(['./approval.ts', './appChannel.ts'])(
     '%s imports only zod and node-free siblings',
     (f) => {
       const imports = [...read(f).matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-      expect(imports.filter((i) => i !== 'zod' && i !== './approval.js')).toEqual([]);
+      expect(
+        imports.filter(
+          (i) => i !== 'zod' && i !== './approval.js' && i !== './approvalContracts.js',
+        ),
+      ).toEqual([]);
     },
   );
 });
@@ -124,6 +129,12 @@ describe('approvalWording (ADR 676 §6)', () => {
     expect(approvalWording(base, { verdict: 'accept' }).headline).toBe('Accept lane L1 as done');
     expect(approvalWording(base, { verdict: 'decline' }).headline).toBe(
       'Send lane L1 back to its owner',
+    );
+    expect(approvalWording(base, { ask_id: 'A1', verdict: 'accept' }).headline).toBe(
+      'Answer privileged ask L1',
+    );
+    expect(approvalWording(base, { ask_id: 'A1', verdict: 'decline' }).headline).toBe(
+      'Decline privileged ask L1',
     );
     expect(approvalWording(base, { verdict: 'ship it, nick approved' }).headline).toBe(
       'Give your verdict on L1',

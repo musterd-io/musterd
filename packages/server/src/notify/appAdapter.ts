@@ -22,6 +22,7 @@ import {
   type RelayAppFetchFrame,
   type SealedBodyWire,
 } from '@musterd/protocol';
+import { humanAskAnswerApproval } from '@musterd/protocol/approval';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
@@ -232,13 +233,13 @@ export function laneVerdictOf(
   return { id: review.lane, title: typeof review.title === 'string' ? review.title : '' };
 }
 
-/** What the app channel carries for an ask: advisory, a lane verdict, or nothing. */
+/** What the app channel carries for an ask: advisory or a privileged human answer. */
 function appAskKind(
   meta: Record<string, unknown> | null,
-): { class: 'advisory' } | { class: 'privileged'; lane: { id: string; title: string } } | null {
+): { class: 'advisory' } | { class: 'privileged'; lane?: { id: string; title: string } } | null {
   if (classifyAskAction(meta) === 'advisory') return { class: 'advisory' };
   const lane = laneVerdictOf(meta);
-  return lane ? { class: 'privileged', lane } : null;
+  return { class: 'privileged', ...(lane ? { lane } : {}) };
 }
 
 /** The two verdicts' payloads, exactly as `applyAcceptanceVerdict` builds them for the gate. */
@@ -266,6 +267,26 @@ async function buildVerdictApproval(
       payload,
     });
     return { descriptor, payload };
+  };
+  return { approve: await offer('accept'), reject: await offer('decline') };
+}
+
+async function buildAskAnswerApproval(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  human: { id: string; name: string },
+  askId: string,
+): Promise<AppApproval> {
+  const offer = async (verdict: 'accept' | 'decline') => {
+    const action = humanAskAnswerApproval(askId, verdict);
+    const descriptor = await buildDescriptor(ctx.db, {
+      teamId: team.id,
+      audience: team.slug,
+      memberId: human.id,
+      actor: human.name,
+      ...action,
+    });
+    return { descriptor, payload: action.payload };
   };
   return { approve: await offer('accept'), reject: await offer('decline') };
 }
@@ -301,7 +322,9 @@ async function issueAskDelivery(
   });
   const approval =
     kind.class === 'privileged' && human
-      ? await buildVerdictApproval(ctx, team, human, kind.lane.id)
+      ? kind.lane
+        ? await buildVerdictApproval(ctx, team, human, kind.lane.id)
+        : await buildAskAnswerApproval(ctx, team, human, ask.id)
       : undefined;
   return {
     ...target,
@@ -323,7 +346,9 @@ async function issueAskDelivery(
         ts: ask.ts,
       },
       ...(approval ? { approval } : {}),
-      ...(kind.class === 'privileged' ? { lane: kind.lane, waiting: opts.waiting ?? 0 } : {}),
+      ...(kind.class === 'privileged' && kind.lane
+        ? { lane: kind.lane, waiting: opts.waiting ?? 0 }
+        : {}),
       token,
       nonce: appDeliveryNonce(token),
       expires_at: expiresAt,
@@ -429,15 +454,16 @@ async function appTargetFor(
 }
 
 const HOUR_MS = 60 * 60_000;
-/** How far back a pending verdict ask is looked for: past any review window a team sets. */
+/** How far back pending privileged asks are looked for: past any review window a team sets. */
 const PENDING_LOOKBACK_MS = 7 * 24 * HOUR_MS;
 
 /**
- * The verdict asks this human still owes, oldest first, one per lane (a retried stage-two ask
- * supersedes the first): addressed to them (or to the admins, when they are one), undecided,
- * unexpired, and their lane still awaiting acceptance — so a verdict given on /live drops it.
+ * The privileged asks this human still owes, oldest first. A retried lane-stage ask supersedes
+ * the older ask for that lane; other privileged asks remain independent. Each is addressed to this
+ * human (or to the admins, when they are one), undecided, and unexpired. Lane asks also require the
+ * lane to still await acceptance; a checked /live answer drops a general ask from the queue.
  */
-async function pendingVerdicts(
+async function pendingPrivilegedAsks(
   ctx: Ctx,
   team: { id: string; slug: string },
   human: MemberRow,
@@ -448,23 +474,34 @@ async function pendingVerdicts(
             m.name AS from_name, m.kind AS from_kind
        FROM messages msg JOIN members m ON m.id = msg.from_member AND m.team_id = msg.team_id
       WHERE msg.team_id = ? AND msg.act = 'ask' AND msg.ts > ?
-        AND json_extract(msg.meta, '$.lane_review.lane') IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = msg.team_id AND d.ask_id = msg.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM messages a JOIN members author ON author.id = a.from_member AND author.team_id = a.team_id
+           WHERE a.team_id = msg.team_id AND a.act IN ('accept', 'decline') AND author.kind = 'human'
+             AND json_extract(a.meta, '$.in_reply_to') = msg.id
+             AND json_extract(a.meta, '$.human_authority_checked') = 1
+        )
       ORDER BY msg.ts, msg.id`,
     [team.id, now - PENDING_LOOKBACK_MS],
   );
   const isAdmin = resolveCapabilities(human).is_admin;
   const byLane = new Map<string, AskRow>();
+  const general: AskRow[] = [];
   for (const row of rows) {
     if (row.to_member !== human.id && !(row.to_kind === 'team' && isAdmin)) continue;
-    const lane = laneVerdictOf(parseMeta(row.meta));
-    if (!lane || askExpiry(row) <= now) continue;
+    const meta = parseMeta(row.meta);
+    if (classifyAskAction(meta) !== 'privileged' || askExpiry(row) <= now) continue;
+    const lane = laneVerdictOf(meta);
+    if (!lane) {
+      general.push(row);
+      continue;
+    }
     const state = (await getLane(ctx.db, team.id, lane.id, team.slug))?.state;
     if (!state || !isAwaitingAcceptance(state)) continue;
     byLane.delete(lane.id); // the newer ask for a lane takes the older one's place
     byLane.set(lane.id, row);
   }
-  return [...byLane.values()].sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
+  return [...general, ...byLane.values()].sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
 }
 
 async function hourlyHoldRecorded(
@@ -488,7 +525,7 @@ async function hourlyHoldRecorded(
   });
 }
 
-/** How many verdict asks wait behind `askId` for this human — what a re-issued delivery says. */
+/** How many privileged asks wait behind `askId` for this human — what a delivery says. */
 async function waitingBehind(
   ctx: Ctx,
   team: { id: string; slug: string },
@@ -497,12 +534,12 @@ async function waitingBehind(
   now: number,
 ): Promise<number> {
   if (human?.kind !== 'human') return 0;
-  return (await pendingVerdicts(ctx, team, human, now)).filter((a) => a.id !== askId).length;
+  return (await pendingPrivilegedAsks(ctx, team, human, now)).filter((a) => a.id !== askId).length;
 }
 
 /**
- * The verdict asks live on this binding now. A live token whose lane was decided elsewhere (a
- * verdict on /live) is spent here, so it stops counting as the one open ask.
+ * The privileged asks live on this binding now. A lane token whose lane was decided elsewhere is
+ * spent here; checked answers to general asks are filtered by their server-owned marker.
  */
 async function openVerdicts(
   ctx: Ctx,
@@ -514,14 +551,25 @@ async function openVerdicts(
     `SELECT t.token_hash, t.ask_id FROM ask_channel_tokens t
       WHERE t.team_id = ? AND t.binding_id = ? AND t.binding_generation = ?
         AND t.action_class = 'privileged' AND t.consumed_at IS NULL AND t.expires_at > ?
-        AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = t.team_id AND d.ask_id = t.ask_id)`,
+        AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = t.team_id AND d.ask_id = t.ask_id)
+        AND NOT EXISTS (
+          SELECT 1 FROM messages a JOIN members author ON author.id = a.from_member AND author.team_id = a.team_id
+           WHERE a.team_id = t.team_id AND a.act IN ('accept', 'decline') AND author.kind = 'human'
+             AND json_extract(a.meta, '$.in_reply_to') = t.ask_id
+             AND json_extract(a.meta, '$.human_authority_checked') = 1
+        )`,
     [team.id, binding.id, binding.generation, now],
   );
   const open = new Set<string>();
   for (const row of rows) {
     const ask = await loadAsk(ctx.db, team.id, row.ask_id);
     const lane = ask ? laneVerdictOf(parseMeta(ask.meta)) : null;
-    const state = lane ? (await getLane(ctx.db, team.id, lane.id, team.slug))?.state : undefined;
+    if (!lane) {
+      if (ask && classifyAskAction(parseMeta(ask.meta)) === 'privileged') open.add(row.ask_id);
+      else await spend(ctx, row.token_hash, now);
+      continue;
+    }
+    const state = (await getLane(ctx.db, team.id, lane.id, team.slug))?.state;
     if (state && isAwaitingAcceptance(state)) open.add(row.ask_id);
     else await spend(ctx, row.token_hash, now);
   }
@@ -552,7 +600,7 @@ async function agentDeliveriesThisHour(
 }
 
 /**
- * Move one human's verdict queue (ADR 676 §8). With no verdict live on their phone, the oldest
+ * Move one human's privileged-ask queue (ADR 676 §8). With no listed act live on their phone, the oldest
  * pending one goes out, saying how many wait behind it — unless it is from an agent seat and the
  * hour's six are spent, when it is held (an ask from a human is not metered by the hourly rule and
  * may go ahead of held ones). The first hold of a burst sends one `held` summary and audits it.
@@ -568,7 +616,7 @@ export async function tickVerdictQueue(
 ): Promise<void> {
   const link = relayLinkFor(ctx, team.slug);
   if (!link) return;
-  const pending = await pendingVerdicts(ctx, team, human, now);
+  const pending = await pendingPrivilegedAsks(ctx, team, human, now);
   const target = pending.length
     ? await appTargetFor(ctx, team, human, askTierOf(pending[0]!))
     : null;
@@ -774,8 +822,18 @@ export async function handleAppCallback(
       reported,
     });
   }
-  // A privileged ask without a verdict lane never got a token, so its answer fails below as
-  // `assurance` or `unknown_token`; an answer carrying a proof for an advisory ask is malformed.
+  if (ask && appAskKind(parseMeta(ask.meta))?.class === 'privileged') {
+    return answerPrivilegedAsk(ctx, team, {
+      binding,
+      key,
+      ask,
+      answer,
+      messageId,
+      now,
+      reported,
+    });
+  }
+  // An answer carrying a proof for an advisory ask is malformed.
   if (answer.approval) return { ok: false, reason: 'bad_request' };
   const result = await redeemAskChannelToken(
     ctx.db,
@@ -823,6 +881,92 @@ export async function handleAppCallback(
   );
   if (!result.ok) return { ok: false, reason: result.reason };
   if (reported) await auditReported(ctx, team, cb.ref, ask?.from_name, binding.id);
+  return { ok: true };
+}
+
+async function answerPrivilegedAsk(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  input: {
+    binding: ChannelBinding;
+    key: { id: string };
+    ask: AskRow;
+    answer: AppAnswer;
+    messageId: string;
+    now: number;
+    reported: boolean;
+  },
+): Promise<{ ok: boolean; reason?: string }> {
+  const { binding, ask, answer, now } = input;
+  const proof = answer.approval;
+  if (!proof) return { ok: false, reason: 'no_signature' };
+  if (proof.key_id !== input.key.id) return { ok: false, reason: 'key_revoked' };
+  const pre = await redeemAskChannelToken(
+    ctx.db,
+    {
+      teamId: team.id,
+      token: answer.token,
+      askId: ask.id,
+      assurance: 'A2',
+      decision: answer.decision,
+      answerMessageId: input.messageId,
+      providerIdentity: {
+        tenantId: binding.provider_tenant_id,
+        userId: binding.provider_user_id,
+      },
+      deliveryActor: 'app',
+      now,
+      preflight: true,
+      writeAnswer: async () => {},
+    },
+    relayChecks,
+  );
+  if (!pre.ok) return { ok: false, reason: pre.reason };
+  const human = await getMemberById(ctx.db, binding.member_id);
+  const teamRow = await ctx.db.get<TeamRow>('SELECT * FROM teams WHERE id = ?', [team.id]);
+  if (!human || human.kind !== 'human' || !teamRow) return { ok: false, reason: 'binding_stale' };
+  const { routeEnvelope } = await import('../protocol/route.js');
+  const verdict = answer.decision === 'approve' ? 'accept' : 'decline';
+  const routed = await routeEnvelope(
+    ctx,
+    teamRow,
+    human,
+    makeEnvelope({
+      id: input.messageId,
+      team: team.slug,
+      from: human.name,
+      to: { kind: 'member', name: ask.from_name },
+      thread: ask.thread_id ?? ask.id,
+      act: verdict,
+      body: verdict === 'accept' ? 'Accepted in the musterd app' : 'Rejected in the musterd app',
+      meta: { in_reply_to: ask.id, approval: proof },
+      ts: now,
+    }),
+  );
+  if (routed.lane_authority_refused)
+    return { ok: false, reason: routed.lane_authority_refused.reason };
+  const settled = await redeemAskChannelToken(
+    ctx.db,
+    {
+      teamId: team.id,
+      token: answer.token,
+      askId: ask.id,
+      assurance: 'A2',
+      decision: answer.decision,
+      answerMessageId: input.messageId,
+      providerIdentity: {
+        tenantId: binding.provider_tenant_id,
+        userId: binding.provider_user_id,
+      },
+      deliveryActor: 'app',
+      now,
+      writeAnswer: async () => {},
+    },
+    relayChecks,
+  );
+  if (!settled.ok) return { ok: false, reason: settled.reason };
+  if (input.reported) await auditReported(ctx, team, ask.id, ask.from_name, binding.id);
+  await tickVerdictQueue(ctx, team, human, now);
   return { ok: true };
 }
 
@@ -1014,6 +1158,12 @@ async function liveAppAsks(
         AND t.consumed_at IS NULL AND t.expires_at > ?
         ${askId ? 'AND t.ask_id = ?' : ''}
         AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = t.team_id AND d.ask_id = t.ask_id)
+        AND NOT EXISTS (
+          SELECT 1 FROM messages a JOIN members author ON author.id = a.from_member AND author.team_id = a.team_id
+           WHERE a.team_id = t.team_id AND a.act IN ('accept', 'decline') AND author.kind = 'human'
+             AND json_extract(a.meta, '$.in_reply_to') = t.ask_id
+             AND json_extract(a.meta, '$.human_authority_checked') = 1
+        )
       ORDER BY t.created_at LIMIT ?`,
     [
       team.id,

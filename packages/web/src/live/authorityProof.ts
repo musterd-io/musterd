@@ -1,4 +1,9 @@
 import { apiGet, apiPost, type LiveConfig } from './client';
+import type { ApprovalProof } from '@musterd/protocol';
+import {
+  humanAskAnswerApproval,
+  requestDecisionApproval,
+} from '@musterd/protocol/approval-contracts';
 
 /**
  * The A2 proof a human's verdict on a lane needs (ADR 662, lane 01M5DTPMXN): the server
@@ -28,12 +33,44 @@ export async function authorityProofForVerdict(
   cfg: LiveConfig,
   lane: string,
   verdict: 'accept' | 'decline',
-): Promise<Record<string, string> | null> {
+): Promise<ApprovalProof | null> {
+  return authorityProofForDescriptor(cfg, 'human_accept', lane, { lane, verdict });
+}
+
+export async function authorityProofForAsk(
+  cfg: LiveConfig,
+  askId: string,
+  verdict: 'accept' | 'decline',
+): Promise<ApprovalProof | null> {
+  const approval = humanAskAnswerApproval(askId, verdict);
+  return authorityProofForDescriptor(cfg, approval.act, approval.target, approval.payload);
+}
+
+export async function authorityProofForRequest(
+  cfg: LiveConfig,
+  input: {
+    requestId: string;
+    requestTarget: string | null;
+    decision: 'approve' | 'deny';
+    lifetime?: 'once' | 'ttl' | 'standing';
+    ttlHours?: number;
+  },
+): Promise<ApprovalProof | null> {
+  const approval = requestDecisionApproval(input);
+  return authorityProofForDescriptor(cfg, approval.act, approval.target, approval.payload);
+}
+
+async function authorityProofForDescriptor(
+  cfg: LiveConfig,
+  act: string,
+  target: string,
+  payload: unknown,
+): Promise<ApprovalProof | null> {
   const teamPath = `/teams/${encodeURIComponent(cfg.team)}/authority`;
   const created = await apiPost<{ descriptor: { nonce: string } }>(cfg, `${teamPath}/descriptors`, {
-    act: 'human_accept',
-    target: lane,
-    payload: { lane, verdict },
+    act,
+    target,
+    payload,
   });
   const nonce = created.descriptor.nonce;
   const view = await apiGet<{ passkeys?: { key_id: string; credential_id: string }[] }>(
@@ -41,7 +78,7 @@ export async function authorityProofForVerdict(
     `${teamPath}/descriptors/${encodeURIComponent(nonce)}`,
   );
   if (!view.passkeys || view.passkeys.length === 0) return null;
-  if (!navigator.credentials?.get) throw new Error('this browser cannot use a passkey');
+  if (!navigator.credentials?.get) throw new Error('passkeys are unavailable in this browser');
   // A cancel or timeout rejects with NotAllowedError (or AbortError) rather than
   // returning null — translate it, or the person reads the browser's raw error and
   // never learns the verdict went nowhere (slippy, review of #3078).
@@ -66,19 +103,17 @@ export async function authorityProofForVerdict(
       e.name === 'SecurityError' &&
       isLoopbackIp(window.location.hostname)
     )
-      throw new Error(
-        'passkeys cannot sign when /live is opened with an IP address — rerun `musterd live` and use the localhost URL it opens; the verdict was not sent',
-      );
-    if (e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError'))
-      throw new Error('passkey cancelled — the verdict was not sent');
+      throw new Error('open musterd’s localhost URL to use passkeys; verdict not sent');
+    if (e instanceof DOMException && ['NotAllowedError', 'AbortError'].includes(e.name))
+      throw new Error('passkey cancelled; verdict not sent');
     throw e;
   }
-  if (!assertion) throw new Error('passkey cancelled — the verdict was not sent');
+  if (!assertion) throw new Error('passkey cancelled; verdict not sent');
   const resp = assertion.response as AuthenticatorAssertionResponse;
   const key = view.passkeys.find(
     (p) => bytesToB64url(assertion.rawId) === p.credential_id.replace(/=+$/, ''),
   );
-  if (!key) throw new Error('that passkey is not the enrolled one — the verdict was not sent');
+  if (!key) throw new Error('passkey mismatch; verdict not sent');
   return {
     key_id: key.key_id,
     nonce,

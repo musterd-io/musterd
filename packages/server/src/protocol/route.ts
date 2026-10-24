@@ -26,11 +26,12 @@ import {
   TALK_ONLY_SEND_ACTS,
   ApprovalProofSchema,
 } from '@musterd/protocol';
+import { humanAskAnswerApproval } from '@musterd/protocol/approval';
 import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
 import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
-import { deliverAskToAppChannels } from '../notify/appAdapter.js';
+import { deliverAskToAppChannels, tickVerdictQueue } from '../notify/appAdapter.js';
 import { ringDoorbell } from '../notify/doorbell.js';
 import { deliverAskToSlackChannels } from '../notify/slackAdapter.js';
 import { appendAudit, appendReplicatedEvent } from '../store/audit.js';
@@ -333,6 +334,7 @@ async function routeEnvelopeInner(
   let dispute: RouteResult['dispute'];
   let acceptedHandoff: RouteResult['accepted_handoff'];
   let deafRecipient: RouteResult['deaf_recipient'];
+  let verifiedPrivilegedAskReply = false;
   /** ADR 243: which evidence answered — audited, never on the wire. */
   let handoffBasis: HandoffLaneBasis | undefined;
   if (env.act === 'handoff' && !(env.meta as { lane_handoff?: unknown } | null)?.lane_handoff) {
@@ -597,6 +599,13 @@ async function routeEnvelopeInner(
     const { channel_answer: _clientChannelAnswer, ...restMeta } = outgoingEnv.meta;
     outgoingEnv = { ...outgoingEnv, meta: restMeta };
   }
+  // ADR 662: a human answer to a privileged ask is accepted only after the same A2 gate used by
+  // lane verdicts. This stamp is server-owned; persistent consumers use it to distinguish answers
+  // checked by this route from older bearer-only rows that must no longer release work.
+  if (!daemonComposed && outgoingEnv.meta && 'human_authority_checked' in outgoingEnv.meta) {
+    const { human_authority_checked: _clientChecked, ...restMeta } = outgoingEnv.meta;
+    outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
   // ADR 623 §3-§4: one door for every consumer that treats a human `accept` or `decline` as authority
   // (acceptance, hold proposals, policy review, handoff accept). A channel answer is recorded as a
   // `message`, never as one of these, so a daemon-composed accept/decline that still carries
@@ -634,6 +643,60 @@ async function routeEnvelopeInner(
       ...outgoingEnv,
       meta: { ...outgoingEnv.meta, action_class: classifyAskAction(outgoingEnv.meta) },
     };
+  }
+
+  // ADR 662 / 694: a human's reply to a privileged ask is a listed human answer. Lane reviews
+  // keep their existing post-persist acknowledgement path; other privileged asks (including the
+  // ADR 150 gate release) are refused before persistence unless the shared verifier accepts them.
+  // The proof is over the stable ask id and chosen verdict, while the ask itself remains visible
+  // beside the server-built descriptor on the caller surface.
+  if (
+    !daemonComposed &&
+    sender.kind === 'human' &&
+    (outgoingEnv.act === 'accept' || outgoingEnv.act === 'decline')
+  ) {
+    const replyTo = outgoingEnv.meta?.['in_reply_to'];
+    if (typeof replyTo === 'string') {
+      const replied = await ctx.db.get<{ id: string; meta: string | null }>(
+        `SELECT id, meta FROM messages WHERE team_id = ? AND id = ? AND act = 'ask'`,
+        [team.id, replyTo],
+      );
+      const parsedAskMeta = replied ? safeParse(replied.meta) : null;
+      const askMeta =
+        typeof parsedAskMeta === 'object' && parsedAskMeta !== null && !Array.isArray(parsedAskMeta)
+          ? (parsedAskMeta as Record<string, unknown>)
+          : null;
+      if (
+        replied &&
+        classifyAskAction(askMeta) === 'privileged' &&
+        !(askMeta && 'lane_review' in askMeta)
+      ) {
+        const approval = humanAskAnswerApproval(replied.id, outgoingEnv.act);
+        const proof = ApprovalProofSchema.safeParse(outgoingEnv.meta?.['approval']);
+        const check = await requireAuthority(ctx.db, {
+          teamId: team.id,
+          audience: team.slug,
+          presenter: sender,
+          credential: 'human',
+          act: approval.act,
+          target: approval.target,
+          payload: approval.payload,
+          proof: proof.success ? proof.data : undefined,
+          expectedOrigins: ctx.config.webauthnOrigins,
+        });
+        if (!check.ok) {
+          throw new MusterdError(
+            'forbidden',
+            `authority refused (${check.reason}): human answers to privileged asks require an A2 device signature (ADR 662)`,
+          );
+        }
+        outgoingEnv = {
+          ...outgoingEnv,
+          meta: { ...outgoingEnv.meta, human_authority_checked: true },
+        };
+        verifiedPrivilegedAskReply = true;
+      }
+    }
   }
 
   // Per-act model stamp (ADR 101): the occupancy attestation is the *source*, the stamp on each act
@@ -766,6 +829,9 @@ async function routeEnvelopeInner(
   // Persist (append-only log) — the urgent-downgraded envelope when applicable, so the stored meta and
   // every delivery (direct + firehose, all derived from the row) carry the corrected flags.
   const message = await insertMessage(ctx.db, team.id, sender.id, toMemberId, outgoingEnv);
+  if (verifiedPrivilegedAskReply && sender.kind === 'human') {
+    void tickVerdictQueue(ctx, team, sender, outgoingEnv.ts);
+  }
 
   // Coordination loop latency (ADR 082 slice 3): accept/decline close the directed act they answer
   // (meta.in_reply_to); resolve closes its thread root. Emitted first-party instead of reconstructed

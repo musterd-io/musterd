@@ -247,6 +247,12 @@ All four converged on one shape, and nick directed it be written as this ADR.
   descriptor from server data" holds for the phone through `approvalWording` in protocol's node-free
   `approval.ts`.
 
+- _(2026-10-21, lane 01M5FZ5R2VF8YZB48DQ357YYWM: the remaining human-answer paths now call
+  `requireAuthority` before changing request or gate state. Privileged ask replies carry a
+  server-checked marker, so historical bearer-only replies no longer release ADR 150 gates. CLI,
+  `/live`, web request approvals and the app phone obtain the server-built descriptor and attach
+  its proof.)_
+
 ## Observability & Evaluation
 
 - **Traces:** every listed act's audit row records its assurance (`A2`), the authenticator kind

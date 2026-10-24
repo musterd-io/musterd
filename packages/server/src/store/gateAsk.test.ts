@@ -50,6 +50,7 @@ async function answer(
   id: string,
   askId: string,
   ts: number,
+  checked = true,
 ): void {
   const env = makeEnvelope({
     id,
@@ -57,7 +58,7 @@ async function answer(
     from: from.name,
     to: { kind: 'member', name: from.name },
     act,
-    meta: { in_reply_to: askId },
+    meta: { in_reply_to: askId, ...(checked ? { human_authority_checked: true } : {}) },
     ts,
   });
   await insertMessage(db, team.id, from.id, from.id, env);
@@ -125,7 +126,7 @@ withDrivers('gateAsk', (o) => {
       expect(await gateAskHumanAnswer(db, team.id, 'ask-1')).toBeNull();
     });
 
-    it('still releases on a plain human accept that follows an ignored A1 one', async () => {
+    it('releases on a route-checked human accept that follows an ignored A1 one', async () => {
       const { db, team, ada, nick } = await seed();
       await ask(db, team, ada, 'ask-1', 'fp-abc', 1_000);
       await insertMessage(
@@ -150,7 +151,14 @@ withDrivers('gateAsk', (o) => {
       });
     });
 
-    it('returns a human accept naming the ask', async () => {
+    it('ignores a historical bearer-only human accept', async () => {
+      const { db, team, ada, nick } = await seed();
+      await ask(db, team, ada, 'ask-1', 'fp-abc', 1_000);
+      await answer(db, team, nick, 'accept', 'ans-legacy', 'ask-1', 2_000, false);
+      expect(await gateAskHumanAnswer(db, team.id, 'ask-1')).toBeNull();
+    });
+
+    it('returns a route-checked human accept naming the ask', async () => {
       const { db, team, ada, nick } = await seed();
       await ask(db, team, ada, 'ask-1', 'fp-abc', 1_000);
       await answer(db, team, nick, 'accept', 'ans-1', 'ask-1', 2_000);

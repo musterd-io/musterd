@@ -309,6 +309,26 @@ async function answerBody(
   });
 }
 
+/** The phone rebuilds the descriptor payload before signing the offered A2 action. */
+function phoneSigns(
+  s: Awaited<ReturnType<typeof seed>>,
+  offer: AppApprovalOffer,
+  signer: KeyObject = s.phone.signing,
+) {
+  const digest = createHash('sha256').update(canonicalJson(offer.payload), 'utf8').digest('hex');
+  if (digest !== offer.descriptor.payload_digest) throw new Error('the app shows nothing');
+  const rebuilt = { ...offer.descriptor, payload_digest: digest };
+  return {
+    key_id: s.deviceKeyId,
+    nonce: rebuilt.nonce,
+    signature: cryptoSign(
+      'sha256',
+      Buffer.from(descriptorSigningBytes(rebuilt), 'utf8'),
+      signer,
+    ).toString('base64url'),
+  };
+}
+
 const callback = (askRef: string, body: string) =>
   ({ protocol: 1, type: 'callback', ask_ref: askRef, body }) as const;
 
@@ -369,11 +389,37 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
     expect(JSON.stringify(delivered)).not.toContain(delivery.token);
   });
 
-  it('a privileged ask that is not a lane verdict is not delivered to the app', async () => {
+  it('a gated privileged ask is delivered with an A2 answer descriptor', async () => {
     const s = await seed();
     const env = await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-p', 'approve');
     await deliverAskToAppChannels(s.ctx, s.team, env);
-    expect(s.sent.filter((f) => f.type === 'app_deliver')).toHaveLength(0);
+    const delivery = await receive(s, lastAppFrame(s.sent));
+    if (delivery.kind !== 'ask' || !delivery.approval) throw new Error('expected an A2 ask');
+    expect(delivery.ask.action_class).toBe('privileged');
+    expect(delivery.lane).toBeUndefined();
+    expect(delivery.approval.approve.payload).toEqual({ ask_id: 'ask-p', verdict: 'accept' });
+    expect(delivery.approval.reject.payload).toEqual({ ask_id: 'ask-p', verdict: 'decline' });
+    expect(delivery.approval.approve.descriptor).toMatchObject({
+      actor: 'nick',
+      act: 'human_accept',
+      target: 'ask-p',
+      audience: 'revive',
+    });
+    const body = await answerBody(s, delivery, {
+      approval: phoneSigns(s, delivery.approval.approve),
+    });
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('ask-p', body), NOW + 1_000),
+    ).resolves.toEqual({ ok: true });
+    const answer = await s.db.get<{ meta: string; act: string }>(
+      "SELECT act, meta FROM messages WHERE team_id = ? AND id LIKE 'app-ask-p-%'",
+      [s.team.id],
+    );
+    expect(answer?.act).toBe('accept');
+    expect(JSON.parse(answer!.meta)).toMatchObject({
+      in_reply_to: 'ask-p',
+      human_authority_checked: true,
+    });
   });
 
   it('"I did not expect this" on a reject writes channel.answer_reported naming the asking seat', async () => {
@@ -640,28 +686,6 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
       });
       await insertMessage(st.db, st.team.id, from.id, st.nick.id, env);
       return { env, laneId: lane.id };
-    }
-
-    /** What the app does with one offer: recompute the digest itself, then sign what it rebuilt. */
-    function phoneSigns(
-      st: Awaited<ReturnType<typeof seed>>,
-      offer: AppApprovalOffer,
-      signer: KeyObject = st.phone.signing,
-    ) {
-      const digest = createHash('sha256')
-        .update(canonicalJson(offer.payload), 'utf8')
-        .digest('hex');
-      if (digest !== offer.descriptor.payload_digest) throw new Error('the app shows nothing');
-      const rebuilt = { ...offer.descriptor, payload_digest: digest };
-      return {
-        key_id: st.deviceKeyId,
-        nonce: rebuilt.nonce,
-        signature: cryptoSign(
-          'sha256',
-          Buffer.from(descriptorSigningBytes(rebuilt), 'utf8'),
-          signer,
-        ).toString('base64url'),
-      };
     }
 
     async function delivered(st: Awaited<ReturnType<typeof seed>>) {

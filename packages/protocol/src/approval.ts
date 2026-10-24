@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export { humanAskAnswerApproval, requestDecisionApproval } from './approvalContracts.js';
 
 /**
  * The node-free half of human authority (ADR 662 decisions 4–5, ADR 694): the closed list of
@@ -127,6 +128,14 @@ function laneVerdict(payload: unknown): 'accept' | 'decline' | null {
 const WORDING: Record<HighAuthorityAct, (target: string, payload: unknown) => string> = {
   human_accept: (target, payload) => {
     const verdict = laneVerdict(payload);
+    if (
+      typeof payload === 'object' &&
+      payload !== null &&
+      typeof (payload as { ask_id?: unknown }).ask_id === 'string'
+    ) {
+      if (verdict === 'accept') return `Answer privileged ask ${target}`;
+      if (verdict === 'decline') return `Decline privileged ask ${target}`;
+    }
     if (verdict === 'accept') return `Accept lane ${target} as done`;
     if (verdict === 'decline') return `Send lane ${target} back to its owner`;
     return `Give your verdict on ${target}`;

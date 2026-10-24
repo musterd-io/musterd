@@ -1,5 +1,7 @@
-import { type Request } from '@musterd/protocol';
+import type { Request } from '@musterd/protocol';
+import { requestDecisionApproval } from '@musterd/protocol/approval';
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
+import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
 import { clock, theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
@@ -86,7 +88,8 @@ async function decideCommand(parsed: Parsed): Promise<number> {
   const { team, http } = resolve(parsed.flags);
 
   if (deny) {
-    const res = await http.decideRequest(team, id, { decision: 'deny' });
+    const body = { decision: 'deny' as const };
+    const res = await decideWithAuthority(http, team, id, body);
     if (parsed.flags['json']) {
       process.stdout.write(JSON.stringify(res) + '\n');
       return 0;
@@ -108,11 +111,12 @@ async function decideCommand(parsed: Parsed): Promise<number> {
   // least-privilege choice; `--standing` never expires; `--ttl-hours <n>` sets an explicit window.
   const lifetime = ttlHours !== undefined ? 'ttl' : once ? 'once' : standing ? 'standing' : 'ttl';
 
-  const res = await http.decideRequest(team, id, {
+  const body = {
     decision: 'approve',
     lifetime,
     ...(ttlHours !== undefined ? { ttl_hours: ttlHours } : {}),
-  });
+  } as const;
+  const res = await decideWithAuthority(http, team, id, body);
 
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(res) + '\n');
@@ -131,6 +135,41 @@ async function decideCommand(parsed: Parsed): Promise<number> {
     );
   }
   return 0;
+}
+
+async function decideWithAuthority(
+  http: HttpClient,
+  team: string,
+  id: string,
+  body:
+    | { decision: 'deny' }
+    | { decision: 'approve'; lifetime: 'once' | 'ttl' | 'standing'; ttl_hours?: number },
+) {
+  try {
+    return await http.decideRequest(team, id, body);
+  } catch (err) {
+    if (!(err instanceof CliError && /authority refused \(no_signature\)/.test(err.message)))
+      throw err;
+  }
+  const { requests } = await http.requests(team);
+  const request = requests.find((r) => r.id === id);
+  if (!request) throw new CliError(`request "${id}" is no longer available`, 1);
+  const authority = requestDecisionApproval({
+    requestId: id,
+    requestTarget: request.target,
+    decision: body.decision === 'approve' ? 'approve' : 'deny',
+    ...(body.decision === 'approve' ? { lifetime: body.lifetime, ttlHours: body.ttl_hours } : {}),
+  });
+  process.stdout.write('This request decision needs your passkey.\n');
+  const { collectApproval } = await import('./authority.js');
+  const approval = await collectApproval(
+    http,
+    team,
+    authority.act,
+    authority.target,
+    authority.payload,
+  );
+  return http.decideRequest(team, id, { ...body, approval });
 }
 
 /** `--ttl-hours` must be a positive number when present. */
