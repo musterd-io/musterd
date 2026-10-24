@@ -1334,9 +1334,20 @@ export async function appendAudit(db: Driver, teamId: string, entry: AuditEntry)
 }
 
 /**
+ * A threaded act that is a huddle TURN for clause 7(vi): anything said in the room except an act
+ * that carries its own obligation — an `ask`, `request_help` or `handoff` is answered by a move,
+ * never discharged by a read, and a `steer` has the directed rule above. The fold (`isHuddleTurn`
+ * in messages.ts) rings every act in the room, so the set here must be as wide: the live fixture
+ * after #3292 was a `status_update` turn that kept ringing because only `message` counted.
+ */
+export function isHuddleTurnAct(act: string): boolean {
+  return !['ask', 'request_help', 'handoff', 'steer'].includes(act);
+}
+
+/**
  * Doorbell contract clause 7(iv): the acts an inbox read DISCHARGES by showing them to their
  * addressee — acts with no answering move. Two shapes: a steer or urgent act directed to `me`, and a
- * huddle turn (a threaded plain `message` from someone else; lane 01M5N5KGZG). For turns only the
+ * huddle turn (a threaded act from someone else — `isHuddleTurnAct`; lane 01M5N5KGZG). For turns only the
  * NEWEST per thread is recorded: the fold rings a room for what was said since the seat last spoke
  * or was last shown, so one row per room per read is the whole fact, and a busy room costs one row,
  * not one per turn. Whether the thread is a huddle is settled by the fold's root lookup, not here —
@@ -1356,7 +1367,7 @@ export function renderableOnRead(
       out.push({ id: m.id, act: m.act });
       continue;
     }
-    if (m.act === 'message' && m.thread) {
+    if (m.thread && isHuddleTurnAct(m.act)) {
       const cur = newestTurn.get(m.thread);
       if (!cur || m.ts > cur.ts || (m.ts === cur.ts && m.id > cur.id))
         newestTurn.set(m.thread, { id: m.id, act: m.act, ts: m.ts });
