@@ -1,4 +1,5 @@
 import {
+  createHash,
   createPublicKey,
   generateKeyPairSync,
   sign as cryptoSign,
@@ -7,13 +8,19 @@ import {
 import { AppCallbackSchema, appAnswerSigningBytes } from '@musterd/protocol/app-channel';
 import { canonicalJson } from '@musterd/protocol/approval';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { answerNotification } from './answer';
+import { answerNotification, sendAnswer } from './answer';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys, type SealedBody } from './phoneKeys';
 import type { PushRoute } from './push';
 
 vi.mock('./phoneKeys', () => ({
-  phoneKeys: { open: vi.fn(), verifyEd25519: vi.fn(), sign: vi.fn(), seal: vi.fn() },
+  phoneKeys: {
+    open: vi.fn(),
+    verifyEd25519: vi.fn(),
+    sign: vi.fn(),
+    signAll: vi.fn(),
+    seal: vi.fn(),
+  },
   phoneKeysErrorCode: (error: unknown) =>
     (error as { code?: string } | null)?.code === 'biometry-failed' ? 'biometry-failed' : null,
 }));
@@ -103,6 +110,7 @@ beforeEach(() => {
     },
   );
   vi.mocked(phoneKeys.sign).mockResolvedValue('c2ln');
+  vi.mocked(phoneKeys.signAll).mockResolvedValue(['c2ln', 'ZGVzYw']);
   vi.mocked(phoneKeys.seal).mockResolvedValue({ v: 1, enc: 'RU5D', ct: 'Q1Q' });
 });
 
@@ -226,5 +234,153 @@ describe('answerNotification', () => {
         fetchImpl,
       }),
     ).toBe('undelivered');
+  });
+});
+
+function offer(verdict: 'accept' | 'decline', over: Record<string, unknown> = {}) {
+  const payload = { lane: '01M5LANE', verdict, ask_id: 'ask-9f3k' };
+  return {
+    descriptor: {
+      v: 1 as const,
+      actor: 'nick',
+      act: 'human_accept' as const,
+      target: '01M5LANE',
+      payload_digest: createHash('sha256').update(canonicalJson(payload)).digest('hex'),
+      audience: 'revive',
+      expiry: ROUTE.expires_at,
+      nonce: `desc-nonce-${verdict}-0001`,
+      ...over,
+    },
+    payload,
+  };
+}
+
+function listed(over: Record<string, unknown> = {}) {
+  return {
+    ...delivery({
+      ask: { ...delivery().ask, action_class: 'privileged' },
+      approval: { approve: offer('accept'), reject: offer('decline') },
+    }),
+    ...over,
+  } as Parameters<typeof sendAnswer>[0]['delivery'];
+}
+
+describe('sendAnswer from the app', () => {
+  const keyed: PairingPin = { ...pin, device_key_id: '01M5DEVICEKEY' };
+  const accepted = () => vi.fn(async () => new Response('accepted', { status: 202 }));
+
+  it('signs a listed act and the descriptor it rebuilt under one Face ID, naming the device key', async () => {
+    const fetchImpl = accepted();
+    const outcome = await sendAnswer({
+      pin: keyed,
+      route: ROUTE,
+      delivery: listed(),
+      decision: 'approve',
+      reported: false,
+      now: 1,
+      fetchImpl,
+    });
+    expect(outcome).toBe('sent');
+    expect(phoneKeys.sign).not.toHaveBeenCalled();
+    const [messages] = vi.mocked(phoneKeys.signAll).mock.calls[0]!;
+    expect(messages[0]).toContain('musterd-app-answer/v1');
+    expect(messages[1]).toBe(
+      [
+        'musterd-approval/v1',
+        'nick',
+        'human_accept',
+        '01M5LANE',
+        offer('accept').descriptor.payload_digest,
+        'revive',
+        String(ROUTE.expires_at),
+        'desc-nonce-accept-0001',
+      ].join('\n'),
+    );
+    const sealed = JSON.parse(vi.mocked(phoneKeys.seal).mock.calls[0]![0].plaintext);
+    expect(sealed.approval).toEqual({
+      key_id: '01M5DEVICEKEY',
+      nonce: 'desc-nonce-accept-0001',
+      signature: 'ZGVzYw',
+    });
+  });
+
+  it('signs the decline offer on a reject, and carries "I did not expect this"', async () => {
+    await sendAnswer({
+      pin: keyed,
+      route: ROUTE,
+      delivery: listed(),
+      decision: 'reject',
+      reported: true,
+      now: 1,
+      fetchImpl: accepted(),
+    });
+    const [messages] = vi.mocked(phoneKeys.signAll).mock.calls[0]!;
+    expect(messages[0]!.endsWith('\nreported')).toBe(true);
+    expect(messages[1]).toContain('desc-nonce-decline-0001');
+    const sealed = JSON.parse(vi.mocked(phoneKeys.seal).mock.calls[0]![0].plaintext);
+    expect(sealed.reported).toBe(true);
+    expect(sealed.approval.nonce).toBe('desc-nonce-decline-0001');
+  });
+
+  it('never reports an approve, and an advisory answer signs once', async () => {
+    await sendAnswer({
+      pin,
+      route: ROUTE,
+      delivery: delivery() as Parameters<typeof sendAnswer>[0]['delivery'],
+      decision: 'approve',
+      reported: true,
+      now: 1,
+      fetchImpl: accepted(),
+    });
+    expect(phoneKeys.signAll).not.toHaveBeenCalled();
+    expect(vi.mocked(phoneKeys.sign).mock.calls[0]![0].endsWith('\n-')).toBe(true);
+    const sealed = JSON.parse(vi.mocked(phoneKeys.seal).mock.calls[0]![0].plaintext);
+    expect(sealed.reported).toBeUndefined();
+  });
+
+  it('signs nothing for a digest that does not match its payload, or with no device key', async () => {
+    const tampered = listed({
+      approval: {
+        approve: { ...offer('accept'), payload: { lane: '01M5OTHER', verdict: 'accept' } },
+        reject: offer('decline'),
+      },
+    });
+    expect(
+      await sendAnswer({
+        pin: keyed,
+        route: ROUTE,
+        delivery: tampered,
+        decision: 'approve',
+        reported: false,
+        now: 1,
+      }),
+    ).toBe('unverified');
+    expect(
+      await sendAnswer({
+        pin,
+        route: ROUTE,
+        delivery: listed(),
+        decision: 'approve',
+        reported: false,
+        now: 1,
+      }),
+    ).toBe('unpaired');
+    expect(phoneKeys.signAll).not.toHaveBeenCalled();
+    expect(phoneKeys.sign).not.toHaveBeenCalled();
+  });
+
+  it('refuses a privileged ask that carries no offer', async () => {
+    expect(
+      await sendAnswer({
+        pin: keyed,
+        route: ROUTE,
+        delivery: delivery({
+          ask: { ...delivery().ask, action_class: 'privileged' },
+        }) as Parameters<typeof sendAnswer>[0]['delivery'],
+        decision: 'approve',
+        reported: false,
+        now: 1,
+      }),
+    ).toBe('refused');
   });
 });

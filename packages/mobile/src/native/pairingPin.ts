@@ -28,6 +28,11 @@ export interface PairingPin {
    * and set by the extension from the first delivery it verifies.
    */
   binding?: string;
+  /**
+   * This phone's ADR 662 device key id, minted by the daemon when a standing key approved it.
+   * Set by the extension from the signed `paired` delivery; a listed-act answer names it.
+   */
+  device_key_id?: string;
 }
 
 const B64URL = /^[A-Za-z0-9_-]+$/;
@@ -79,6 +84,12 @@ export function readPairingPin(value: unknown): PairingPin | null {
     if (!text) return null;
     binding = text;
   }
+  let deviceKeyId: string | undefined;
+  if (record.device_key_id !== undefined) {
+    const text = bounded(record.device_key_id, 64);
+    if (!text) return null;
+    deviceKeyId = text;
+  }
   return {
     v: 1,
     identity,
@@ -86,6 +97,7 @@ export function readPairingPin(value: unknown): PairingPin | null {
     relay: new URL(record.relay).origin,
     team,
     ...(binding !== undefined ? { binding } : {}),
+    ...(deviceKeyId !== undefined ? { device_key_id: deviceKeyId } : {}),
   };
 }
 

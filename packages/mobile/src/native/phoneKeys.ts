@@ -78,6 +78,13 @@ export interface PhoneKeys {
   /** Sign `message` with the signing key after Face ID. DER-encoded ECDSA P-256/SHA-256. */
   sign(message: string): Promise<string>;
 
+  /**
+   * Sign one or two messages under a single Face ID evaluation, in order (ADR 694: a listed-act
+   * answer's signature and its descriptor signature are made together). After the first, the
+   * native side forbids another prompt, so a second signature that would need one fails closed.
+   */
+  signAll(messages: string[]): Promise<string[]>;
+
   /** Seal `plaintext` to `recipientPublic` (a raw P-256 point, base64url). */
   seal(input: {
     recipientPublic: string;
@@ -136,8 +143,17 @@ export interface PhoneKeys {
    */
   takePendingAnswer(): Promise<{ action: string; userInfo: string } | null>;
 
-  /** Fires when a notification action arrives while the app is already running. */
-  addListener(event: 'onPendingAnswer', listener: () => void): { remove(): void };
+  /**
+   * The musterd notifications in Notification Center — what the extension admitted — each with
+   * its whole payload JSON, still carrying the `musterd` block. The asks list's source.
+   */
+  deliveredPushes(): Promise<{ id: string; userInfo: string; deliveredAt: number }[]>;
+
+  /**
+   * `onPendingAnswer` fires when a notification action arrives while the app is running;
+   * `onDelivery` when a musterd notification is presented while the app is in front.
+   */
+  addListener(event: 'onPendingAnswer' | 'onDelivery', listener: () => void): { remove(): void };
 }
 
 /**
