@@ -4,7 +4,7 @@
   "totalJsGzipBytes": 358000,
   "maxChunkGzipBytes": 112000,
   "liveCssGzipBytes": 27950,
-  "appCssGzipBytes": 15600,
+  "appCssGzipBytes": 16240,
   "siteCssGzipBytes": 6300,
   "sharedCssGzipBytes": 2700,
   "cssBundles": {
@@ -13,6 +13,7 @@
     ],
     "app": [
       "Broadcast",
+      "broadcast",
       "PromptBar",
       "Board",
       "approvals",

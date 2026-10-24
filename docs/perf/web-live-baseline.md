@@ -2406,3 +2406,12 @@ painters kept for `?office=painted`. Local total JS read 359.8 KB against a 360.
 above local on this lane. Measured + 15% would loosen it (ADR 183). Deleting the painters (next) pays this and
 today's other raises back. The board's frame and cork are no longer painted every frame: 150 cork flecks were four
 wall projections each, inside the ambient loop.
+
+## 2026-10-24 — the stream's wind-down card; App CSS RAISED 15,600 → 16,240 B (lane 01M5GDACC0)
+
+`/broadcast` gained the wind-down card (`live/WindDownCard.css`): when `musterd stream stop` queues a stop, a paper
+card counts down to it with a sinking sun. Its stylesheet is a new `broadcast` bundle (625 B gzip), classified `app`
+beside `Broadcast` and not merged into it, because `Broadcast.css` is held by another lane. That put app CSS 0.4 KB
+over its ceiling, so the ceiling moves by the bundle's own size and no more. No JS budget moved; the card runs no
+animation loop (one custom property, set when the minutes change). Measured + 15% would loosen it (ADR 183). Folding
+the card's rules into `Broadcast.css` once that lane lands drops one stylesheet request; it does not change the bytes.
