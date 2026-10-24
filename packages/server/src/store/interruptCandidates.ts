@@ -1,6 +1,6 @@
 import { isAwaitingAcceptance } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
-import { listRenderedActs } from './audit.js';
+import { isHuddleTurnAct, listRenderedActs } from './audit.js';
 import { handoffNamedLaneOutOfPlay } from './delivery.js';
 import type { MessageRow } from './rows.js';
 
@@ -375,7 +375,7 @@ async function dischargeOutsideTheWindow(
   // in each thread discharges itself and every turn before it in that thread, the same shape as
   // the steer rule above. A turn newer than anything shown still rings. Threads are keyed without
   // their root: a rendered row on a non-huddle thread drops rows the fold would never have raised.
-  const turns = out.filter((r) => r.thread_id !== null && r.act === 'message');
+  const turns = out.filter((r) => r.thread_id !== null && isHuddleTurnAct(r.act));
   if (turns.length > 0) {
     const rendered = await listRenderedActs(
       db,
@@ -392,7 +392,7 @@ async function dischargeOutsideTheWindow(
           shownUpTo.set(r.thread_id!, { ts: r.ts, id: r.id });
       }
       out = out.filter((r) => {
-        if (r.thread_id === null || r.act !== 'message') return true;
+        if (r.thread_id === null || !isHuddleTurnAct(r.act)) return true;
         const upTo = shownUpTo.get(r.thread_id);
         if (!upTo) return true;
         return r.ts > upTo.ts || (r.ts === upTo.ts && r.id > upTo.id);

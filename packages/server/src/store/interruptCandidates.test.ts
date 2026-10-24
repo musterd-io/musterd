@@ -410,6 +410,17 @@ withDrivers('interruptCandidates', (o) => {
       // A turn after what she was shown rings again.
       await say(db, team, bob, null, 'message', 'turn-3', { thread: 'h1' });
       expect(await ring()).toEqual(['turn-3']);
+      // A turn is any act said in the room, not only `message` — the live fixture after #3292 was
+      // miley's `status_update` turn, still ringing after ghost's `message` was rendered.
+      await say(db, team, bob, null, 'status_update', 'turn-4', { thread: 'h1' });
+      await appendAudit(db, team.id, {
+        actor: ada.name,
+        action: 'inbox.rendered',
+        target: ada.name,
+        result: 'allow',
+        detail: { act: 'turn-4', act_kind: 'status_update' },
+      });
+      expect(await ring()).toEqual([]);
     });
 
     it('ADR 378 amendment: a huddle turn that folded BEFORE its root is admitted once the root lands, even under the cursor', async () => {
