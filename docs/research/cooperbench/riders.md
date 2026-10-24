@@ -54,7 +54,7 @@ finding says which run, which build and which arm.
 
 ## Rider 2: after a lane frees a held file, do holders stop announcing it? (ADR 724)
 
-**Lane:** `01M5N3THX3`. **Status:** pre-registered 2026-10-23, before ADR 724 is built.
+**Lane:** `01M5N3THX3`. **Status:** pre-registered 2026-10-23, before ADR 724 is built. First read 2026-10-24 in [finding 025](../025-cooperbench-coordination-cost-run.md) (`rider2.py` beside that run): the act was delivered in 9 of 10 `core` pairs; holder signals 18 against 23; freeing → next gated edit medians 30 s against 35 s.
 
 **What changed.** [ADR 724](../../decisions/724-held-refusal-watches-the-holders-lane.md): a
 held-file refusal opens a watch on the holder's lane. When the lane frees the file (done,
@@ -80,7 +80,10 @@ still wait for the holder's reply rather than the act.
 ## Rider 3: did findings 022's product changes remove the calls they were for? (one-call orientation, ADR 726, ADR 724)
 
 **Lane:** `01M5QDHJEE`. **Status:** pre-registered 2026-10-24, before the run that reads it
-([coordination-cost manifest](./coordination-cost-manifest.md)).
+([coordination-cost manifest](./coordination-cost-manifest.md)). **Read once 2026-10-24** in
+[finding 025](../025-cooperbench-coordination-cost-run.md): R3a 29 (did not act; 20 of the 27 and of
+the 29 are the instructed first `team_inbox_check`, which the rule's baseline counted), R3b 6
+(acted), R3c 41 calls, no kind fell.
 
 **What changed.** One call orients a seat at session start (#3289): the first reply carries the held
 lanes, the open count and directed acts, so no `team_status` / `lane_board` / inbox before a claim.

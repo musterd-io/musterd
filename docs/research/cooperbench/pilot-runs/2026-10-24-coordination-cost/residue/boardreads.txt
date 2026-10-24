@@ -1,0 +1,12 @@
+| What the agent was after | claim-musterd-core (100) | cc-musterd (85) |
+| --- | --- | --- |
+| start: orienting before it claimed a lane | 27 | 29 |
+| routine check-in at a task boundary | 15 | 21 |
+| held file: who holds it, is it free | 10 | 4 |
+| partner progress: is my partner done | 11 | 11 |
+| overlap warning: who else is on my file | 7 | 4 |
+| other, or the text does not say | 30 | 16 |
+
+claim-musterd-core by structural context: {'before_claim': 27, 'mid_work': 42, 'after_wait': 13, 'after_held_refusal': 8, 'after_own_finish': 10}
+
+cc-musterd by structural context: {'before_claim': 29, 'mid_work': 32, 'after_held_refusal': 4, 'after_wait': 9, 'after_own_finish': 11}

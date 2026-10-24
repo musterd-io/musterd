@@ -1,0 +1,29 @@
+== claim-musterd-core
+   musterd:team_inbox_check (plain)           39 $ 1.22
+   musterd:team_inbox_check (wait)            65 $ 1.20
+   gate:edit-refused                          33 $ 0.91
+   other:ToolSearch                           44 $ 0.84
+   musterd:lane_board                         33 $ 0.59
+   musterd:lane_open                          18 $ 0.32
+   musterd:lane_resolve                        8 $ 0.18
+   musterd:team_status                         8 $ 0.14
+   musterd:lane_release                        3 $ 0.06
+   musterd:lane_handoff                        3 $ 0.05
+   musterd:lane_update                         2 $ 0.05
+   musterd:lane_submit                         2 $ 0.04
+   wait:bash-sleep                             1 $ 0.02
+== cc-musterd
+   musterd:team_inbox_check (wait)            86 $ 1.56
+   musterd:team_inbox_check (plain)           45 $ 1.38
+   other:ToolSearch                           49 $ 1.00
+   gate:edit-refused                          32 $ 0.84
+   musterd:lane_board                         31 $ 0.54
+   musterd:lane_resolve                       15 $ 0.33
+   musterd:lane_open                          14 $ 0.23
+   musterd:lane_update                         5 $ 0.12
+   musterd:lane_submit                         5 $ 0.12
+   musterd:team_status                         6 $ 0.10
+   musterd:lane_release                        3 $ 0.05
+   musterd:lane_claim                          2 $ 0.04
+   wait:bash-sleep                             1 $ 0.02
+   musterd:lane_handoff                        1 $ 0.02
