@@ -25,6 +25,10 @@ export const workspaceSrcAliases = [
   // `./app-channel` publishes dist/appChannel.js, so the generic `$1.ts` substitution below would
   // miss it: the one subpath whose exports name differs from its source filename.
   { find: /^@musterd\/protocol\/app-channel$/, replacement: src('protocol', 'appChannel.ts') },
+  {
+    find: /^@musterd\/protocol\/approval-contracts$/,
+    replacement: src('protocol', 'approvalContracts.ts'),
+  },
   { find: /^@musterd\/protocol\/(.+)$/, replacement: src('protocol', '$1.ts') },
   { find: /^@musterd\/protocol$/, replacement: src('protocol', 'index.ts') },
   { find: /^@musterd\/server$/, replacement: src('server', 'index.ts') },
