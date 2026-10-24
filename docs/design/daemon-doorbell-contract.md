@@ -302,6 +302,10 @@ working, and every boundary before that is guaranteed deaf (clause 3, delta).
   `01M4YYV60Q` rang sloane twice after its lane closed. The interrupt path now asks the same
   `handoffNamedLaneOutOfPlay` the inbox route and the orientation `why` ask; a bare handoff keeps
   ringing.
+  _(2026-10-23, lane `01M5N5KGZG`, lazara.)_ (vi) a huddle turn the seat has been shown — by a window
+  read or by the by-id read the line names, which until now recorded nothing — is discharged with
+  every older turn in its room. lazara's own stale pointer (ghost's 2026-10-05 turn in the `dreaming`
+  room, ringing at every boundary through 2026-10-23) is the fixture.
 - **Codex live delivery remains unmeasured:** ADR 397 ships the bounded PostToolUse seam and unit
   proof, but the authorized Codex 0.154.0 Surface resolved a different adapter checkout and could
   not call musterd. A correctly wired disposable run must record callability and model delivery;

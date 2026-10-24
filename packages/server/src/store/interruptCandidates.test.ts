@@ -373,6 +373,45 @@ withDrivers('interruptCandidates', (o) => {
       expect(raised).not.toContain('steer-old');
     });
 
+    it('clause 7(vi): a huddle turn this seat was shown is discharged with the older turns in its room; a newer turn still rings (lane 01M5N5KGZG)', async () => {
+      const { db, team, nick, ada, bob } = await seed();
+      const huddle = {
+        huddle: {
+          topic: { kind: 'goal', id: 'dreaming' },
+          room: 'http://127.0.0.1:4851/b/h',
+          anchor: 'docs/wiki/huddles.md',
+        },
+      };
+      // A @team room Ada joined by speaking once, then never again — the stale-pointer shape.
+      await say(db, team, nick, null, 'message', 'h1', { meta: huddle });
+      await say(db, team, ada, null, 'message', 'ada-spoke', { thread: 'h1' });
+      await say(db, team, bob, null, 'message', 'turn-1', { thread: 'h1' });
+      await say(db, team, bob, null, 'message', 'turn-2', { thread: 'h1' });
+      const ring = async () =>
+        pendingInterrupts(
+          await rowsToEnvelopes(
+            db,
+            team.slug,
+            await listInterruptCandidates(db, ada, { cursorTs: 0 }),
+          ),
+          ada.name,
+          { huddles: true },
+        ).map((e) => e.id);
+      expect((await ring()).sort()).toEqual(['turn-1', 'turn-2']);
+      // The by-id read the line asks for renders turn-2 to Ada (recorded by renderableOnRead).
+      await appendAudit(db, team.id, {
+        actor: ada.name,
+        action: 'inbox.rendered',
+        target: ada.name,
+        result: 'allow',
+        detail: { act: 'turn-2', act_kind: 'message' },
+      });
+      expect(await ring()).toEqual([]);
+      // A turn after what she was shown rings again.
+      await say(db, team, bob, null, 'message', 'turn-3', { thread: 'h1' });
+      expect(await ring()).toEqual(['turn-3']);
+    });
+
     it('ADR 378 amendment: a huddle turn that folded BEFORE its root is admitted once the root lands, even under the cursor', async () => {
       // Cross-host, the two rows arrive out of order: the turn at receipt T1, an unrelated inbox
       // read moves the cursor to T2 > T1, then the root lands at T3 > T2. The turn is below the

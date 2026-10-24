@@ -2,6 +2,7 @@ import {
   isLaneReviewGrade,
   isWireAttestationSource,
   REPORTED_ASKS_WINDOW_MS,
+  type Envelope,
   type LaneEvent,
 } from '@musterd/protocol';
 import { monotonicFactory } from 'ulid';
@@ -1330,6 +1331,71 @@ export async function appendAudit(db: Driver, teamId: string, entry: AuditEntry)
   } catch (err) {
     log.warn({ msg: 'audit_append_failed', action: entry.action, err: String(err) });
   }
+}
+
+/**
+ * Doorbell contract clause 7(iv): the acts an inbox read DISCHARGES by showing them to their
+ * addressee — acts with no answering move. Two shapes: a steer or urgent act directed to `me`, and a
+ * huddle turn (a threaded plain `message` from someone else; lane 01M5N5KGZG). For turns only the
+ * NEWEST per thread is recorded: the fold rings a room for what was said since the seat last spoke
+ * or was last shown, so one row per room per read is the whole fact, and a busy room costs one row,
+ * not one per turn. Whether the thread is a huddle is settled by the fold's root lookup, not here —
+ * a rendered row on a non-huddle thread turn discharges nothing because nothing rang.
+ */
+export function renderableOnRead(
+  messages: readonly Pick<Envelope, 'id' | 'from' | 'to' | 'act' | 'thread' | 'ts' | 'meta'>[],
+  me: string,
+): { id: string; act: string }[] {
+  const out: { id: string; act: string }[] = [];
+  const newestTurn = new Map<string, { id: string; act: string; ts: number }>();
+  for (const m of messages) {
+    if (m.from === me) continue;
+    const directed = m.to.kind === 'member' && m.to.name === me;
+    const urgent = (m.meta as { urgent?: unknown } | null | undefined)?.['urgent'] === true;
+    if (directed && (m.act === 'steer' || urgent)) {
+      out.push({ id: m.id, act: m.act });
+      continue;
+    }
+    if (m.act === 'message' && m.thread) {
+      const cur = newestTurn.get(m.thread);
+      if (!cur || m.ts > cur.ts || (m.ts === cur.ts && m.id > cur.id))
+        newestTurn.set(m.thread, { id: m.id, act: m.act, ts: m.ts });
+    }
+  }
+  for (const t of newestTurn.values()) out.push({ id: t.id, act: t.act });
+  return out;
+}
+
+/**
+ * Write the `inbox.rendered` rows for one read — one per (recipient, act), never twice. Returns the
+ * ids that were ALREADY recorded before this read: the read that renders an act for the first time
+ * still counts it (a seat that has never seen the act cannot have been shown it), so a caller's
+ * clause 7(iv) discharge lands from the next read on.
+ */
+export async function recordRendered(
+  db: Driver,
+  teamId: string,
+  me: string,
+  renderable: readonly { id: string; act: string }[],
+): Promise<Set<string>> {
+  if (renderable.length === 0) return new Set();
+  const already = await listRenderedActs(
+    db,
+    teamId,
+    me,
+    renderable.map((m) => m.id),
+  );
+  for (const m of renderable) {
+    if (already.has(m.id)) continue;
+    await appendAudit(db, teamId, {
+      actor: me,
+      action: 'inbox.rendered',
+      target: me,
+      result: 'allow',
+      detail: { act: m.id, act_kind: m.act },
+    });
+  }
+  return already;
 }
 
 /**
