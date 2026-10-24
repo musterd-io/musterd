@@ -4,7 +4,9 @@ One scratch team (team.py), one seat, one scratch git repo with two files. The s
 way a CooperBench container admits it (a blocking `claim`, approved by the host admin). Claude Code
 then runs headless with ONLY the musterd MCP server (--strict-mcp-config) and ONLY musterd's
 hooks (--settings, with --setting-sources local in a repo that has no local settings), under
-CooperBench's permission mode. It is told to claim a lane for src/a.py, edit it, then edit
+default permissions with only Write/Edit on src/** and the two required musterd tools. Its
+environment is filtered to the model key, per-seat wiring, and runtime paths. It is told to claim a
+lane for src/a.py, edit it, then edit
 src/b.py. Pass: a.py changed, b.py unchanged, and the daemon audited a lane.gate deny.
 
 This is the check that the gate is live in the arm's exact wiring. The gate fails open on any
@@ -67,18 +69,31 @@ def main() -> int:
         # The real file, not the bin symlink: @musterd/mcp's isMain guard compares the symlink path in
         # argv[1] with the resolved import.meta.url and silently never starts (lane 01M5BA0Q8N).
         mcp_entry = (PREFIX / "bin" / "musterd-mcp").resolve()
-        mcp_path.write_text(json.dumps(cfg.mcp_config(seat_env, command="node", args=[str(mcp_entry)])))
+        mcp_path.write_text(
+            json.dumps(
+                cfg.mcp_config(
+                    cfg.claude_smoke_mcp_env(seat_env),
+                    command="node",
+                    args=[str(mcp_entry)],
+                )
+            )
+        )
         settings_path.write_text(json.dumps(cfg.claude_settings()))
 
         proc = subprocess.run(
-            [
-                "claude", "-p", PROMPT, "--model", MODEL, "--output-format", "json",
-                "--permission-mode", "bypassPermissions",
-                "--setting-sources", "local", "--settings", str(settings_path),
-                "--strict-mcp-config", "--mcp-config", str(mcp_path),
-            ],
+            cfg.claude_smoke_argv(
+                PROMPT,
+                model=MODEL,
+                settings=settings_path,
+                mcp_config=mcp_path,
+            ),
             cwd=repo,
-            env={**os.environ, **seat_env},
+            env=cfg.claude_smoke_env(
+                os.environ,
+                seat_env,
+                home=repo.parent / f"{repo.name}-home",
+                prefix=PREFIX,
+            ),
             capture_output=True,
             text=True,
             timeout=600,

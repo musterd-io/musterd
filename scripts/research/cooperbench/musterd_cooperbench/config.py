@@ -8,6 +8,7 @@ hook commands are musterd's own, copied verbatim from packages/cli/src/onboard/h
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -42,6 +43,76 @@ GATE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
 # Excluding it in .git/info/exclude keeps it out of `git diff` and `git add -A`, so it can never
 # reach the patch CooperBench scores; nothing the agent can see in the repo changes.
 GIT_EXCLUDE = ".musterd/\n"
+
+# The smoke scripts run Claude on the CooperBench VM itself, outside the arm's task containers.
+# Pass only its model credential, per-seat musterd wiring, and stable runtime paths. The VM's other
+# credentials and process environment must never become available to the headless agent.
+_SMOKE_HOST_ENV_KEYS = ("ANTHROPIC_API_KEY", "LANG", "LC_ALL")
+_SMOKE_SEAT_ENV_KEYS = (
+    "MUSTERD_SERVER",
+    "MUSTERD_LAUNCH_SURFACE",
+    "MUSTERD_CONFIG",
+    "MUSTERD_TEAM",
+    "MUSTERD_CLAIM",
+    "MUSTERD_AUTOJOIN",
+)
+_SMOKE_ALLOWED_TOOLS = (
+    "Write(src/**)",
+    "Edit(src/**)",
+    "mcp__musterd__team_inbox_check",
+    "mcp__musterd__lane_open",
+)
+
+
+def claude_smoke_env(
+    host_env: dict[str, str],
+    seat_env: dict[str, str],
+    *,
+    home: Path,
+    prefix: Path,
+) -> dict[str, str]:
+    """Build the small environment a host-side smoke Claude process needs."""
+    env = {key: host_env[key] for key in _SMOKE_HOST_ENV_KEYS if key in host_env}
+    env.update({key: seat_env[key] for key in _SMOKE_SEAT_ENV_KEYS if key in seat_env})
+    env["HOME"] = str(home)
+    # Do not pass the host PATH: it can name user-controlled directories and credential helpers.
+    env["PATH"] = os.pathsep.join(
+        (str(prefix / "bin"), "/usr/local/bin", "/usr/bin", "/bin")
+    )
+    return env
+
+
+def claude_smoke_mcp_env(seat_env: dict[str, str]) -> dict[str, str]:
+    """Keep the MCP child config to seat wiring; its PATH comes from the filtered parent env."""
+    return {key: seat_env[key] for key in _SMOKE_SEAT_ENV_KEYS if key in seat_env}
+
+
+def claude_smoke_argv(
+    prompt: str, *, model: str, settings: Path, mcp_config: Path
+) -> list[str]:
+    """Run only the smoke's file-edit and musterd tools under Claude's normal permission checks."""
+    return [
+        "claude",
+        "-p",
+        prompt,
+        "--model",
+        model,
+        "--output-format",
+        "json",
+        "--permission-mode",
+        "default",
+        "--tools",
+        "Edit,Write",
+        "--allowedTools",
+        *_SMOKE_ALLOWED_TOOLS,
+        "--setting-sources",
+        "local",
+        "--settings",
+        str(settings),
+        "--strict-mcp-config",
+        "--mcp-config",
+        str(mcp_config),
+    ]
 
 
 def seat_env(pair: PairTeam, agent_id: str, *, home: Path | str) -> dict[str, str]:
