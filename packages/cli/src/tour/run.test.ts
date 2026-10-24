@@ -143,7 +143,7 @@ describe('runTour', () => {
     const f = fakes({});
     expect(await runTour(f.port, f.ui, 'ada', opts)).toBe(2);
     expect(f.calls).toEqual([]);
-    expect(f.hints[0]).toMatch(/^The tour runs as you, and this folder acts as ada, an agent\./);
+    expect(f.hints[0]).toMatch(/^The tour runs as you, but this folder belongs to ada, an agent\./);
   });
 
   it('strips terminal control sequences from what the agent wrote', async () => {

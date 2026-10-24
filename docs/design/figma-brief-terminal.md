@@ -438,7 +438,7 @@ so a box is never wider than the screen.
 
     ```
     This is your roster. You and ada are both members, each with a name that stays.
-    ada is running claude-opus-5-5. The harness reports the model; the agent does not choose what it says.
+    ada is running claude-opus-5-5. The tool ada runs in reports that name, so an agent cannot claim to be a model it is not.
 
       nick  human, you
       ada   agent

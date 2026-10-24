@@ -65,7 +65,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     hints: [],
     body: [
       'This is your roster. You and {agent} are both members, each with a name that stays.',
-      '{agent} is running {model}. That name comes from the tool {agent} runs in, not from {agent}, so an agent cannot claim to be a model it is not.',
+      '{agent} is running {model}. The tool {agent} runs in reports that name, so an agent cannot claim to be a model it is not.',
     ],
   },
   {
