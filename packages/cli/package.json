@@ -1,6 +1,6 @@
 {
   "name": "@musterd/cli",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Your agents, on a team with you. CLI + daemon launcher.",
   "license": "MIT",
   "homepage": "https://musterd.io",
