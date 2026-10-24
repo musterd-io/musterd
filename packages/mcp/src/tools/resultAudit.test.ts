@@ -468,6 +468,8 @@ describe('structured-first results carry structuredContent', () => {
     depends_on: [],
     branch: 'feat/x',
     goal_id: null,
+    // The cleanup hint needs a landed merge (lane 01M5G8VTK0).
+    merged: { sha: 'abc1234', verification: 'ancestor' },
   };
   const okClient: any = {
     joined: true,
