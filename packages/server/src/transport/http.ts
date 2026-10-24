@@ -34,8 +34,6 @@ import {
   ClaimTargetSchema,
   DecideRequestSchema,
   IssueGrantSchema,
-  type Policy,
-  type PolicyOverride,
   PolicyOverrideSchema,
   DoorbellPrefsSchema,
   doorbellPrefsProblem,
@@ -624,7 +622,6 @@ import {
   holdAtHub,
   joinerEnrollment,
   noteRecipientsAtHub,
-  policyAtHub,
   statusLineAtHub,
   styleAtHub,
   localNodeWithLabel,
@@ -4740,13 +4737,9 @@ export async function handleHttp(
         // `detail: policy` post-parse, which is exactly why nothing could later say whether a stored
         // value was chosen or baked in.
         //
-        // Residence-2 census gap 1 (2026-09-03): policy is hub-authoritative (ADR 325 residence 1),
-        // and until now it never left the machine it was edited on — 21 readers, `claimWakeLeases`
-        // among them, consult the LOCAL blob, so a joiner's host ran different caps and cooldowns
-        // than the hub after every `policy set`. An enrolled joiner now forwards to the hub (the
-        // `/sync/lane` pattern, ADR 361) and learns the answer back through the fold; the hub
-        // stamps the change so every machine converges. Unreachable hub REFUSES: policy is not an
-        // act that may fork.
+        // Policy stays hub-local under ADR 729 because its values may contain secret-bearing URLs
+        // or tokens. The ordinary hub Surface writes and stamps the policy for every node to fold;
+        // the joiner's guard below refuses before this handler can forward the document.
         const rawPolicy = (await readJson(req)) as { approval?: unknown };
         const stored = parseOrBadRequest(PolicyOverrideSchema, rawPolicy);
         // ADR 662: team policy is a listed act — an enrolled human admin signs for it.
@@ -4768,31 +4761,6 @@ export async function handleHttp(
         ] as const) {
           const problem = url === undefined ? null : publicHttpsUrlProblem(url);
           if (problem) throw new MusterdError('validation', `the team ${sink} url ${problem}`);
-        }
-        const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
-        if (enrollment) {
-          let answer: { policy: Policy; stored: PolicyOverride };
-          try {
-            answer = await policyAtHub(enrollment, team.slug, {
-              actor: member.name,
-              policy: stored,
-              // ADR 587: the copy the admin's client read and merged into is this machine's stored
-              // doc. The hub refuses the change if that copy is behind its own.
-              base: await getStoredPolicy(ctx.db, team.id),
-            });
-          } catch (err) {
-            if (err instanceof HubUnreachableError)
-              throw new MusterdError('hub_unreachable', err.message);
-            // Stale copy: pull now, so the admin's retry reads and merges into the hub's doc.
-            if (err instanceof MusterdError && err.code === 'conflict') {
-              await pullTeam(ctx, team).catch(() => undefined);
-            }
-            throw err;
-          }
-          // Best effort, as on the lane path: pull the hub's decision now so the admin's next read
-          // agrees with the answer they were just handed. A failed pull changes nothing.
-          await pullTeam(ctx, team).catch(() => undefined);
-          return sendJson(res, 200, answer);
         }
         const applied = await applyPolicyChange(ctx.db, team.id, member.name, stored);
         await pushTeam(ctx, team).catch(() => undefined);
@@ -7696,9 +7664,10 @@ export async function handleHttp(
         return sendJson(res, 200, answer);
       }
 
-      // Residence-2 census gap 1, hub side: a joiner forwards its admin's policy change. The node
-      // credential proves the MACHINE; the actor is re-authorized against the hub's own roster,
-      // because a joiner saying "this seat is an admin" is a claim about a roster it does not own.
+      // ADR 729 excludes policy writes from the authority relay because policy values may contain
+      // secret-bearing URLs or tokens. This legacy node-authenticated endpoint must not remain a
+      // side door around the relay's credential-free operation allowlist: policy changes are
+      // hub-local and can only arrive through the ordinary hub Surface route.
       if (method === 'POST' && rest === '/sync/policy') {
         const team = await requireTeam(ctx.db, slug);
         const node = await authenticateNode(ctx.db, team.id, bearer(req));
@@ -7708,49 +7677,11 @@ export async function handleHttp(
             'the sync surface authenticates with a machine credential (msnode_) for this team',
           );
         }
-        await touchNode(ctx.db, node.id, Date.now());
-        const body = parseOrBadRequest(SyncPolicyRequestSchema, await readJson(req));
-        const actor = await getMemberByName(ctx.db, team.id, body.actor);
-        if (!actor) throw new MusterdError('not_found', `no seat "${body.actor}" on this roster`);
-        try {
-          // Residence before capability, the order `/sync/lane` uses: an unentitled node learns
-          // nothing, not even whether the name it guessed is an admin. This is the check gptbot's
-          // review of #1228 found missing — authenticating the machine and then trusting the
-          // caller-supplied `actor` let ANY enrolled node forward a change as the admin seat,
-          // because a node credential says which machine speaks and never for whom.
-          //
-          // The STRICT form, not `assertSeatResident`: this act changes the team, so an unbound
-          // seat must not be claimable by whoever names it first. For a human admin trusted on
-          // several machines (ADR 358) every one of them is in the set and passes.
-          await assertSeatAlreadyResident(ctx.db, team.id, actor, node, 'policy change');
-        } catch (err) {
-          if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
-          throw err;
-        }
-        // The same capability the local admin route resolves — not a string compare on `role`,
-        // which ADR 227 made one of several the seat may hold.
-        if (!resolveCapabilities(actor).is_admin) {
-          throw new MusterdError('forbidden', `"${body.actor}" is not an admin on ${slug}`);
-        }
-        // ADR 587: a joiner names the stored doc its change was built on, and a stale one is refused
-        // inside the write. ADR 593: one that names none is a pre-587 build, and its whole doc is
-        // exactly the 2026-09-06 write that unset the hub's loops — so it is refused too. `conflict`
-        // because a pre-587 joiner relays that code and no other of ours; the schema keeps `base`
-        // optional so that build reaches this message rather than a parse error.
-        if (body.base === undefined) {
-          log.warn({ msg: 'sync_policy_without_base', team: slug, node: node.id });
-          throw new MusterdError(
-            'conflict',
-            "this machine's musterd is too old to say which copy of the team's policy its change " +
-              'was built on, so the hub cannot tell an unset from a stale copy; nothing was changed ' +
-              '— update musterd on this machine and run the command again',
-          );
-        }
-        const applied = await applyPolicyChange(ctx.db, team.id, actor.name, body.policy, {
-          base: body.base,
-        });
-        await pushTeam(ctx, team).catch(() => undefined);
-        return sendJson(res, 200, applied);
+        parseOrBadRequest(SyncPolicyRequestSchema, await readJson(req));
+        throw new MusterdError(
+          'hub_local_required',
+          'team policy may contain secret-bearing values and must be changed on a Surface attached to the hub',
+        );
       }
 
       // ADR 721 Decision 5, hub side: a joiner forwards a human's own status line. The `/sync/style`

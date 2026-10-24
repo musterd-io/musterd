@@ -1,8 +1,9 @@
 import { POLICY_REVIEW_DEFAULT_MS, type PolicyOverride, makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
+import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
-import { joinerEnrollment, policyAtHub } from '../sync/claim.js';
+import { joinerEnrollment } from '../sync/claim.js';
 import { appendAudit, listAudit } from './audit.js';
 import { addMember, getMemberByName } from './members.js';
 import { type MessageRow, resolveCapabilities, type MemberRow, type TeamRow } from './rows.js';
@@ -104,7 +105,8 @@ export async function raisePolicyReview(
  * shape): accept re-stamps `review_by` to the default window from now, keeping every knob; decline
  * stores `{}`, so every default comes back to life. Anyone else's reply, or a second answer, changes
  * nothing. The write rides `applyPolicyChange` as the human — the same `policy.change` every machine
- * folds — forwarded to the hub when this daemon is a joiner. Returns what happened, for the caller's
+ * folds. Policy contains secret-bearing values and is hub-local under ADR 729, so a joiner refuses
+ * before sending the stored document over its node channel. Returns what happened, for the caller's
  * announcement, or null.
  */
 export async function answerPolicyReview(
@@ -135,9 +137,13 @@ export async function answerPolicyReview(
   const next: PolicyOverride =
     act === 'accept' ? { ...knobs, review_by: now + POLICY_REVIEW_DEFAULT_MS } : {};
   const enrollment = await joinerEnrollment(db, team.id, team.slug);
-  const applied = enrollment
-    ? await policyAtHub(enrollment, team.slug, { actor: decider.name, policy: next })
-    : await applyPolicyChange(db, team.id, decider.name, next);
+  if (enrollment) {
+    throw new MusterdError(
+      'hub_local_required',
+      'team policy may contain secret-bearing values and must be reviewed on a Surface attached to the hub',
+    );
+  }
+  const applied = await applyPolicyChange(db, team.id, decider.name, next);
   const verdict = act === 'accept' ? 'confirmed' : 'dropped';
   await appendAudit(db, team.id, {
     actor: decider.name,
