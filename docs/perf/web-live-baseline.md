@@ -2379,3 +2379,11 @@ ceiling is raised by 1 KB. Measured + 15% would loosen it (ADR 183). Deleting th
 A defect worth keeping: the tinted copy was first drawn on a fresh canvas (300 × 150) that the tint step only grows,
 so every chair was blitted from a canvas wider than its sprite and squeezed to about a third of its width. The backs
 read "at an angle" and "paper thin" (nick). `render-desk.test.ts` pins the canvas to the sprite's size.
+
+## 2026-10-23 — rendered monitors and wall fixtures; Total JS RAISED +1,024 B (lane 01M5D8EJ40)
+
+The monitor bodies (#3287) and the wall fixtures (prints' frames, planter, clock body, lane board) blit with their
+painters kept for `?office=painted`. Local total JS read 359.8 KB against a 360.3 KB ceiling, and CI reads ~0.8 KB
+above local on this lane. Measured + 15% would loosen it (ADR 183). Deleting the painters (next) pays this and
+today's other raises back. The board's frame and cork are no longer painted every frame: 150 cork flecks were four
+wall projections each, inside the ambient loop.

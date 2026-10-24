@@ -676,16 +676,18 @@ function wallArt(
   h: number,
   motif: MotifName,
   frame: 'thin' | 'thick' | 'none' = 'thick',
+  /** The frame and mat are rendered art (lane 01M5D8EJ40): paint only the print on the mat. */
+  printOnly = false,
 ): void {
   const dt = w / 2 / FLOOR;
   const du = h / 2 / WALL_H;
   // Frame weight varies per piece. `none` is a stretched canvas — an unframed piece in a group is
   // what stops six prints reading as one catalogue order.
-  if (frame !== 'none') {
+  if (frame !== 'none' && !printOnly) {
     wallRect(ctx, fit, edge, tc - dt, uc - du, tc + dt, uc + du, DRESS.frame);
   }
   const inset = frame === 'thick' ? 0.88 : frame === 'thin' ? 0.95 : 1;
-  wallRect(ctx, fit, edge, tc - dt * inset, uc - du * inset, tc + dt * inset, uc + du * inset, DRESS.mat);
+  if (!printOnly) wallRect(ctx, fit, edge, tc - dt * inset, uc - du * inset, tc + dt * inset, uc + du * inset, DRESS.mat);
 
   const hw = (w / 2) * 0.68; // the mat opening — a composition needs the area a lone colour block didn't
   const hh = (h / 2) * 0.68;
@@ -793,11 +795,15 @@ function wallClock(
   tc: number,
   uc: number,
   hours: number,
+  /** The rim, dial and numerals are rendered art (lane 01M5D8EJ40): paint only the hands. */
+  handsOnly = false,
 ): void {
   const R = 25;
-  wallDisc(ctx, fit, edge, tc, uc, R + 2.5, DRESS.clockRim);
-  wallDisc(ctx, fit, edge, tc, uc, R, DRESS.clockFace);
-  drawClockNumerals(ctx, fit, edge, tc, uc, R);
+  if (!handsOnly) {
+    wallDisc(ctx, fit, edge, tc, uc, R + 2.5, DRESS.clockRim);
+    wallDisc(ctx, fit, edge, tc, uc, R, DRESS.clockFace);
+    drawClockNumerals(ctx, fit, edge, tc, uc, R);
+  }
   // Hands: 12 o'clock is straight up the wall (+u), sweeping clockwise toward +t.
   const hand = (turns: number, len: number, w: number): void => {
     const a = turns * Math.PI * 2;
@@ -842,6 +848,8 @@ function wallLaneBoard(
   fit: Fit,
   edge: (t: number) => [number, number],
   data: WallBoard | null,
+  /** The frame, cork and column caps are rendered art (lane 01M5D8EJ40): paint only the notes. */
+  notesOnly = false,
 ): void {
   const { tc, uc, w: W, h: H } = WALL_BOARD;
   const p = (a: number, b: number): Pt => wallPt(edge, tc + a / FLOOR, uc + b / WALL_H, fit);
@@ -863,31 +871,33 @@ function wallLaneBoard(
     ctx.restore();
   };
 
-  rect(-W / 2 + 4, -H / 2 - 4, W / 2 + 4, H / 2 - 4, PINBOARD.cast); // soft cast
-
-  // The frame is LIGHTER than the cork, which is the whole reason it works: a dark surround would
-  // make the board a hole in the wall, while a pale one reads as a lit edge and lets the cork become
-  // the dark field the notes sit off. Thin, too — 3 units, a picture-frame lip, not a bulletin-board
-  // slab (nick, 2026-08-02: "I like the pale oak but make the frame thin").
   const FR = 3;
-  rect(-W / 2, -H / 2, W / 2, H / 2, PINBOARD.oak);
-  stroke([[-W / 2, H / 2], [W / 2, H / 2]], 1, PINBOARD.oakLit); // sunlit top lip
-  stroke([[-W / 2, -H / 2], [W / 2, -H / 2]], 1, PINBOARD.oakShade); // shaded underside
-  rect(-W / 2 + FR, -H / 2 + FR, W / 2 - FR, H / 2 - FR, PINBOARD.cork);
+  if (!notesOnly) {
+    rect(-W / 2 + 4, -H / 2 - 4, W / 2 + 4, H / 2 - 4, PINBOARD.cast); // soft cast
 
-  // Cork freckle. Seeded off the index alone (not off lane data) so the surface is *the same cork*
-  // every frame — a texture that reshuffles on repaint reads as static, not as material. Kept to 150
-  // flecks: each one is four wall projections, and this paints inside the ambient loop.
-  for (let i = 0; i < 150; i++) {
-    const h = Math.imul(i + 1, 2654435761) >>> 0;
-    const a = -W / 2 + FR + 1.5 + ((h % 4096) / 4096) * (W - FR * 2 - 3);
-    const b = -H / 2 + FR + 1.5 + (((h >>> 12) % 4096) / 4096) * (H - FR * 2 - 3);
-    const sz = 0.9 + ((h >>> 24) % 3) * 0.35;
-    rect(a, b, a + sz, b + sz, PINBOARD.fleck[h % 3]!);
+    // The frame is LIGHTER than the cork, which is the whole reason it works: a dark surround would
+    // make the board a hole in the wall, while a pale one reads as a lit edge and lets the cork become
+    // the dark field the notes sit off. Thin, too — 3 units, a picture-frame lip, not a bulletin-board
+    // slab (nick, 2026-08-02: "I like the pale oak but make the frame thin").
+    rect(-W / 2, -H / 2, W / 2, H / 2, PINBOARD.oak);
+    stroke([[-W / 2, H / 2], [W / 2, H / 2]], 1, PINBOARD.oakLit); // sunlit top lip
+    stroke([[-W / 2, -H / 2], [W / 2, -H / 2]], 1, PINBOARD.oakShade); // shaded underside
+    rect(-W / 2 + FR, -H / 2 + FR, W / 2 - FR, H / 2 - FR, PINBOARD.cork);
+
+    // Cork freckle. Seeded off the index alone (not off lane data) so the surface is *the same cork*
+    // every frame — a texture that reshuffles on repaint reads as static, not as material. Kept to 150
+    // flecks: each one is four wall projections, and this paints inside the ambient loop.
+    for (let i = 0; i < 150; i++) {
+      const h = Math.imul(i + 1, 2654435761) >>> 0;
+      const a = -W / 2 + FR + 1.5 + ((h % 4096) / 4096) * (W - FR * 2 - 3);
+      const b = -H / 2 + FR + 1.5 + (((h >>> 12) % 4096) / 4096) * (H - FR * 2 - 3);
+      const sz = 0.9 + ((h >>> 24) % 3) * 0.35;
+      rect(a, b, a + sz, b + sz, PINBOARD.fleck[h % 3]!);
+    }
+    // Where the cork meets the frame's top lip, one darker line — the shadow the frame casts onto the
+    // cork. It is what seats the cork *inside* the frame instead of flush with it.
+    stroke([[-W / 2 + FR, H / 2 - FR], [W / 2 - FR, H / 2 - FR]], 1, PINBOARD.inner);
   }
-  // Where the cork meets the frame's top lip, one darker line — the shadow the frame casts onto the
-  // cork. It is what seats the cork *inside* the frame instead of flush with it.
-  stroke([[-W / 2 + FR, H / 2 - FR], [W / 2 - FR, H / 2 - FR]], 1, PINBOARD.inner);
 
   // Six columns inside the frame. No ruled dividers any more: cork has no lines on it, and the cap
   // strips alone carry the column read.
@@ -899,7 +909,7 @@ function wallLaneBoard(
     const a0 = -W / 2 + M + i * colW;
     const mid = a0 + colW / 2;
     // The cap strip: each column announces its state in full colour even when it holds nothing.
-    rect(a0 + 2, H / 2 - M - 2.5, a0 + colW - 2, H / 2 - M, tone.cap);
+    if (!notesOnly) rect(a0 + 2, H / 2 - M - 2.5, a0 + colW - 2, H / 2 - M, tone.cap);
 
     const col = data?.[i];
     if (!col) continue;
@@ -1234,6 +1244,9 @@ export function drawWalls(
   /** The paint-sequence hook (RenderOpts.units): each live fixture is its own unit, so the sign's
    *  animation damages the sign and not the clock and the board beside it. */
   run: (draw: () => void) => void = (draw) => draw(),
+  /** Pre-rendered wall fixtures (lane 01M5D8EJ40): the frames, the planter, the clock body and the
+   *  board blit, and only what changes or is printed paints over them. */
+  art?: RenderedAssets,
 ): void {
   /**
    * What each wall carries. The right wall gets the clock (it is the only one whose `+t` runs screen-right,
@@ -1249,24 +1262,29 @@ export function drawWalls(
   const dress = (edge: (t: number) => [number, number], wallIndex: 0 | 1): void => {
     // Nothing goes high near the back corner: that is where the wall is tallest on screen and the canvas
     // crops its top edge, so anything hung up there loses the wall behind it and floats.
-    if (wantsStatic) {
-      for (const a of ART) {
-        if (a.wall !== wallIndex) continue;
-        wallArt(ctx, fit, edge, a.tc, a.uc, a.w, a.h, a.motif, a.frame);
-      }
-    }
+    ART.forEach((a, i) => {
+      if (a.wall !== wallIndex) return;
+      // rendered: the frame and mat blit at the print's floor point, and the print paints on the mat
+      const [fx, fy] = edge(a.tc);
+      if (wantsStatic) wallArt(ctx, fit, edge, a.tc, a.uc, a.w, a.h, a.motif, a.frame);
+      else if (blitIf(ctx, fit, art, `wall/art-${i}`, fx, fy)) wallArt(ctx, fit, edge, a.tc, a.uc, a.w, a.h, a.motif, a.frame, true);
+    });
     if (wallIndex === 1) {
       if (!wantsFixtures) return;
-      run(() => wallClock(ctx, fit, edge, 0.52, 0.62, env.hours)); // dead centre, between the windows
+      const [cx, cy] = edge(0.52);
+      run(() => wallClock(ctx, fit, edge, 0.52, 0.62, env.hours, !wantsStatic && blitIf(ctx, fit, art, 'wall/clock', cx, cy))); // dead centre, between the windows
       // Painted with or without a schedule: on /live it is the door to the team's settings, so a team
       // that never set hours still needs something to reach for (nick, 2026-10-19).
       run(() => workingHoursSign(ctx, fit, edge, teamWorkingHours, t));
       // The agile board — far-right gap. Must be THIS wall: `+t` runs screen-left on the other one
       // (same constraint that fixed the clock here), and a kanban has a reading direction.
-      run(() => wallLaneBoard(ctx, fit, edge, wallBoard));
+      const [bx, by] = edge(WALL_BOARD.tc);
+      run(() => wallLaneBoard(ctx, fit, edge, wallBoard, !wantsStatic && blitIf(ctx, fit, art, 'wall/board', bx, by)));
       return;
     }
+    const [hx, hy] = edge(0.52);
     if (wantsStatic) wallHanger(ctx, fit, edge, 0.52, 0.76); // between the windows — where you'd really hang one
+    else blitIf(ctx, fit, art, 'wall/hanger', hx, hy);
   };
 
   const wall = (
@@ -1335,6 +1353,9 @@ export function drawWalls(
   // back-left wall (lx=0 edge) is a touch darker — more edge-on to the implied upper-left light.
   // It carries no live fixture, so the `live` slice skips it entirely.
   if (wantsStatic) wall(WALL_EDGES[0]!, 0.9, { shell: true, dress: true, cable: true });
+  // Over a rendered wall the left wall's dressing and string lights paint too: the wall render has
+  // neither (they went missing when the rendered office became the default — lane 01M5D8EJ40).
+  else if (art) wall(WALL_EDGES[0]!, 0.9, { shell: false, dress: true, cable: true });
   // back-right wall (ly=0 edge) catches more of that light — and carries the clock, sign and board.
   wall(WALL_EDGES[1]!, 0.99, { shell: wantsStatic, dress: true, cable: wantsRightCable });
 }
@@ -5410,7 +5431,7 @@ export function renderScene(
         blitIf(c, fit, rendered, `room/ceiling-${ceiling}`, 0, 0, 1 - 0.8 * env.daylight);
         c.restore();
       }
-      if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, 'live');
+      if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, 'live', undefined, rendered);
     } else {
       drawFloor(c, fit);
       drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, cache ? 'static' : 'all');
@@ -5439,7 +5460,7 @@ export function renderScene(
     run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
     // On the stage, in their existing order: three fixtures that are not static, then the right
     // wall's additive strand, then the additive daylight beams. See `WallSlice`.
-    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, 'live', run);
+    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, 'live', run, shellRendered ? rendered : undefined);
     if (!shellRendered) run(() => drawWindowBeams(ctx, fit, env));
     // Source-over floor paint, so it caches cleanly on top of the beams it is painted over.
     run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));

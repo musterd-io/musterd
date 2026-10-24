@@ -277,6 +277,16 @@ vent and mount boss on the back. Built from the floor and lifted to the desk's s
 pods and the front desk share the images. The painter keeps only the live screen face on top (`screenPanel(…, faceOnly)`):
 the animated desktop, the curved monitor's bow shading and the bloom. The idle glass is the render's own.
 
+## The wall fixtures (lane 01M5D8EJ40)
+
+`scene.py` `wall_art` / `wall_clock` / `wall_board` / `wall_hanger`, each at its real place on its wall (the painter's `ART`,
+`WALL_BOARD`, the clock at t 0.52 u 0.62, the planter at t 0.52 u 0.76), so the room's five light-state images need no
+re-render: the prints' frames and mats, the clock's rim, dial and numerals, the lane board's oak frame, cork and column caps,
+and the hanging planter. What is flat or live stays painted over them: the print on each mat, the clock's hands, the board's
+notes, the hours sign and both walls' string lights. Before these, a rendered wall carried none of the left wall's dressing.
+The wall render never had it, and the live slice painted only the right wall's fixtures. Clock numerals are built as text
+facing out of the wall and are *not* pre-mirrored. On this wall their +x runs along +t, which the canvas reads screen-right.
+
 ## Original art
 
 Everything in this folder is ours. No game's assets, palettes or character designs are referenced

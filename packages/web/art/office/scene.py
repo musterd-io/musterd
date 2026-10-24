@@ -878,6 +878,207 @@ def desk_monitor(asset_id: str, setup: str, facing: str, zs: float, col) -> bpy.
     return finish(asset_id, parts, lx, ly, col)
 
 
+# ── the wall fixtures (lane 01M5D8EJ40) ─────────────────────────────────────────────────────
+# What hangs on the back walls, each its own asset at its real place on the wall so the room's five big
+# light-state images need not be re-rendered: the framed prints (frame and mat — the print itself stays
+# painted, flat on the mat), the hanging planter, the clock (rim, dial, numerals — the hands stay painted)
+# and the lane board (oak frame, cork, the column caps — the notes stay painted). Positions are the
+# painter's (`ART`, `WALL_BOARD` in layout.ts; the clock at t 0.52, u 0.62; the planter at t 0.52, u 0.76).
+ART_PIECES = [  # layout.ts ART: wall, tc, uc, w, h, frame
+    (0, 0.14, 0.56, 54, 42, "thick"),
+    (0, 0.83, 0.68, 26, 26, "none"),
+    (0, 0.92, 0.66, 22, 30, "thin"),
+    (0, 0.87, 0.46, 30, 22, "thin"),
+    (1, 0.23, 0.58, 60, 44, "thick"),
+]
+CLOCK = (1, 0.52, 0.62, 25.0)  # wall, tc, uc, R
+HANGER = (0, 0.52, 0.76)  # wall, tc, uTop
+BOARD = (1, 0.885, 0.5628, 150, 88)  # layout.ts WALL_BOARD
+BOARD_CAPS = ["#B4A88F", "#8FB0E6", "#3F74C4", "#D1503F", "#6A93D4", "#2F9E6A"]  # render.ts WALLBOARD_TONES
+
+
+def wall_floor(which: int, t: float) -> tuple[float, float]:
+    """The floor point under `t` on a back wall (render.ts WALL_EDGES): the lx=0 edge or the ly=0 edge."""
+    return (0.0, t * FLOOR) if which == 0 else (t * FLOOR, 0.0)
+
+
+def wall_block(name: str, which: int, t: float, u: float, along: float, up: float, d0: float, depth: float, mat, zs: float):
+    """A block on a wall's face: centred at (`t`, `u`), `along` wide, `up` tall, from `d0` to `d0 + depth`
+    out of the plaster."""
+    fx, fy = wall_floor(which, t)
+    z0 = u * WALL_H - up / 2
+    if which == 0:
+        return box(name, d0 + depth / 2, fy, z0, depth, along, up, mat, zs)
+    return box(name, fx, d0 + depth / 2, z0, along, depth, up, mat, zs)
+
+
+def wall_mesh(o: bpy.types.Object, which: int, t: float, u: float, d: float, zs: float) -> bpy.types.Object:
+    """Stand a mesh built facing +z at the origin (x across, y up) on a wall: turned to face out of it,
+    its up stretched by `zs` like every height in the scene, and moved to (`t`, `u`), `d` out."""
+    fx, fy = wall_floor(which, t)
+    o.location = (0, 0, 0)
+    # +z → the wall's outward normal; x → along the wall; y → up
+    if which == 1:  # normal +y, along +x
+        turn = Matrix(((1, 0, 0, 0), (0, 0, 1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
+    else:  # normal +x, along +y
+        turn = Matrix(((0, 0, 1, 0), (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
+    at = Vector((fx + (d if which == 0 else 0), fy + (d if which == 1 else 0), u * WALL_H * zs))
+    o.data.transform(Matrix.Translation(at) @ Matrix.Diagonal((1, 1, zs, 1)) @ turn)
+    return o
+
+
+def wall_disc(name: str, which: int, t: float, u: float, r: float, d0: float, depth: float, mat, zs: float, verts: int = 48):
+    bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=depth)
+    o = bpy.context.active_object
+    o.name = name
+    o.data.materials.append(mat)
+    smooth(o)
+    return wall_mesh(o, which, t, u, d0 + depth / 2, zs)
+
+
+def cork(name: str) -> bpy.types.Material:
+    """Cork: the painter's cork with its three fleck tones as a fine noise, so it reads as grain."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = 0.95
+    noise = nt.nodes.new("ShaderNodeTexNoise")
+    noise.inputs["Scale"].default_value = 0.9
+    noise.inputs["Detail"].default_value = 8.0
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    els = ramp.color_ramp.elements
+    els[0].position, els[0].color = 0.38, (*srgb("#AB7038"), 1)
+    els[1].position, els[1].color = 0.62, (*srgb("#D9A468"), 1)
+    mid = els.new(0.5)
+    mid.color = (*srgb("#C98F52"), 1)
+    nt.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
+    return m
+
+
+def wall_art(asset_id: str, i: int, zs: float, col) -> bpy.types.Object:
+    which, tc, uc, w, h, frame = ART_PIECES[i]
+    walnut = wood("art-frame", srgb("#5b4130"), grain=0.12)
+    mat = matte("art-mat", srgb("#f2e7d5"), 0.85)
+    parts = []
+    if frame == "none":
+        parts.append(wall_block(f"{asset_id}/canvas", which, tc, uc, w, h, 0, 2.6, mat, zs))
+    else:
+        bar = (w / 2) * (1 - (0.88 if frame == "thick" else 0.95))
+        depth = 3.2 if frame == "thick" else 2.2
+        du = (h - bar) / 2 / WALL_H
+        dt = (w - bar) / 2 / FLOOR
+        parts.append(wall_block(f"{asset_id}/top", which, tc, uc + du, w, bar, 0, depth, walnut, zs))
+        parts.append(wall_block(f"{asset_id}/bottom", which, tc, uc - du, w, bar, 0, depth, walnut, zs))
+        parts.append(wall_block(f"{asset_id}/left", which, tc - dt, uc, bar, h - 2 * bar, 0, depth, walnut, zs))
+        parts.append(wall_block(f"{asset_id}/right", which, tc + dt, uc, bar, h - 2 * bar, 0, depth, walnut, zs))
+        parts.append(wall_block(f"{asset_id}/mat", which, tc, uc, w - 2 * bar, h - 2 * bar, 0, 1.2, mat, zs))
+    fx, fy = wall_floor(which, tc)
+    return finish(asset_id, parts, fx, fy, col)
+
+
+def wall_clock(asset_id: str, zs: float, col) -> bpy.types.Object:
+    which, tc, uc, R = CLOCK
+    rim = paint("clock-rim", srgb("#4b3524"), 0.4)
+    face = matte("clock-face", srgb("#f6ead2"), 0.6)
+    tick = matte("clock-tick", srgb("#94795c"), 0.7)
+    parts = [wall_disc(f"{asset_id}/rim", which, tc, uc, R + 2.5, 0, 3.2, rim, zs)]
+    parts.append(wall_disc(f"{asset_id}/face", which, tc, uc, R, 0, 3.6, face, zs))
+    for k in range(12):
+        a = k / 12 * math.tau
+        if k % 3 == 0:
+            bpy.ops.object.text_add()
+            tx = bpy.context.active_object
+            tx.data.body = str(12 if k == 0 else k)
+            tx.data.size = 8.5
+            tx.data.align_x, tx.data.align_y = "CENTER", "CENTER"
+            tx.data.extrude = 0.25
+            bpy.ops.object.convert(target="MESH")
+            tx = bpy.context.active_object
+            tx.name = f"{asset_id}/numeral"
+            tx.data.materials.clear()
+            tx.data.materials.append(tick)
+            # the text lies in x/y facing +z: shift it to its ring place before standing it on the wall
+            # Not pre-mirrored: on this wall the text's +x runs along +t, which the canvas reads screen-right,
+            # so the read-time mirror leaves it reading the right way (a pre-mirrored first try came out backwards).
+            tx.data.transform(Matrix.Translation(Vector((math.sin(a) * R * 0.66, math.cos(a) * R * 0.66, 0))))
+            parts.append(wall_mesh(tx, which, tc, uc, 3.7, zs))
+        else:
+            tt = tc + math.sin(a) * R * 0.8 / FLOOR
+            uu = uc + math.cos(a) * R * 0.8 / WALL_H
+            parts.append(wall_disc(f"{asset_id}/tick", which, tt, uu, 1.3, 3.6, 0.3, tick, zs, 12))
+    fx, fy = wall_floor(which, tc)
+    return finish(asset_id, parts, fx, fy, col)
+
+
+def wall_board(asset_id: str, zs: float, col) -> bpy.types.Object:
+    which, tc, uc, W, H = BOARD
+    oak = wood("board-oak", srgb("#DCBF8E"), grain=0.15)
+    ck = cork("board-cork")
+    FR = 3.0
+    parts = [wall_block(f"{asset_id}/cork", which, tc, uc, W - 2 * FR, H - 2 * FR, 0, 1.6, ck, zs)]
+    dt = (W - FR) / 2 / FLOOR
+    du = (H - FR) / 2 / WALL_H
+    for name, t, u, a, b in (("top", tc, uc + du, W, FR), ("bottom", tc, uc - du, W, FR), ("left", tc - dt, uc, FR, H - 2 * FR), ("right", tc + dt, uc, FR, H - 2 * FR)):
+        bar = wall_block(f"{asset_id}/{name}", which, t, u, a, b, 0, 3.0, oak, zs)
+        bevel(bar, 0.6, 2)
+        parts.append(bar)
+    # the column caps, each in its state's colour, under the top lip (render.ts wallLaneBoard)
+    M = FR + 2
+    col_w = (W - 2 * M) / len(BOARD_CAPS)
+    for k, hexc in enumerate(BOARD_CAPS):
+        a0 = -W / 2 + M + k * col_w
+        mid_a = a0 + col_w / 2
+        cap_u = uc + (H / 2 - M - 1.25) / WALL_H
+        parts.append(wall_block(f"{asset_id}/cap{k}", which, tc + mid_a / FLOOR, cap_u, col_w - 4, 2.5, 1.6, 0.5, matte(f"board-cap{k}", srgb(hexc), 0.6), zs))
+    fx, fy = wall_floor(which, tc)
+    return finish(asset_id, parts, fx, fy, col)
+
+
+def wall_hanger(asset_id: str, zs: float, col) -> bpy.types.Object:
+    """The hanging planter between the left wall's windows: a bracket, three cords converging on it, a
+    terracotta bowl and trailing vines."""
+    which, tc, u_top = HANGER
+    pot_c = paint("hanger-pot", srgb("#b9603a"), 0.7)
+    rope = matte("hanger-rope", srgb("#8a6a4a"), 0.9)
+    leaf = matte("hanger-leaf", srgb("#5f8f4b"), 0.75)
+    soil = matte("hanger-soil", srgb("#4a3424"), 0.95)
+    fx, fy = wall_floor(which, tc)
+    out = 16.0  # the bowl hangs this far out from the plaster
+    zt = u_top * WALL_H
+    zp = zt - 17
+    def at(along: float, d: float, z: float) -> Vector:
+        return Vector((d, fy + along, z * zs)) if which == 0 else Vector((fx + along, d, z * zs))
+    parts = []
+    bracket = at(0, 3, zt)
+    parts.append(ball(f"{asset_id}/bracket", bracket.x, bracket.y, zt - 1.6, 1.6, 1.6, 1.6, rope, zs))
+    for k, a in enumerate((-13, 0, 13)):
+        rim = at(a * 0.75, out + (0 if a else 6), zp)
+        mid = (bracket + rim) / 2
+        dvec = rim - bracket
+        bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.45, depth=dvec.length, location=mid)
+        c = bpy.context.active_object
+        c.name = f"{asset_id}/cord{k}"
+        c.rotation_euler = dvec.to_track_quat("Z", "Y").to_euler()
+        c.data.materials.append(rope)
+        parts.append(c)
+    pc = at(0, out, 0)
+    parts.append(cyl(f"{asset_id}/pot", pc.x, pc.y, zp - 17, 9.5, 15, 17, pot_c, zs, 32))
+    parts.append(cyl(f"{asset_id}/soil", pc.x, pc.y, zp - 1.2, 12.5, 12.5, 1.0, soil, zs, 32))
+    # trailing vines: chains of leaves falling over the rim, a few behind the pot
+    for k, (a, drop, n) in enumerate(((-11, 34, 6), (2, 50, 8), (12, 27, 5), (-15, 30, 5), (9, 40, 6))):
+        for j in range(n):
+            f = j / max(1, n - 1)
+            v = at(a * (1 + 0.5 * f), out + (7 if k < 3 else -7) * (1 - 0.3 * f), zp - drop * f)
+            parts.append(ball(f"{asset_id}/leaf", v.x, v.y, v.z / zs - 2.2, 2.6, 2.0, 2.2, leaf, zs))
+    for j in range(7):
+        a = (j - 3) * 3.5
+        v = at(a, out + ((j % 2) * 4 - 2), zp + 1.5)
+        parts.append(ball(f"{asset_id}/crown", v.x, v.y, zp - 0.5, 4.2, 4.2, 3.4, leaf, zs))
+    return finish(asset_id, parts, fx, fy, col)
+
+
 def end_table(asset_id: str, zs: float, col) -> bpy.types.Object:
     lx, ly = RECEPTION["end_table"]
     oak = wood("oak", OAK)
@@ -1249,6 +1450,11 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     a["printer"] = printer("printer", zs, export)
     a["welcome/wagon"] = wagon("welcome/wagon", zs, export)
     a["chair/shadow"] = chair_shadow("chair/shadow", zs, export)
+    for i in range(len(ART_PIECES)):
+        a[f"wall/art-{i}"] = wall_art(f"wall/art-{i}", i, zs, export)
+    a["wall/clock"] = wall_clock("wall/clock", zs, export)
+    a["wall/board"] = wall_board("wall/board", zs, export)
+    a["wall/hanger"] = wall_hanger("wall/hanger", zs, export)
     for setup in MONITOR_SETUPS:
         for facing in ("N", "E", "S", "W"):
             a[f"monitor/{setup}/{facing}"] = desk_monitor(f"monitor/{setup}/{facing}", setup, facing, zs, export)
