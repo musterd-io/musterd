@@ -9,6 +9,7 @@ import {
   metricNudge,
   laneDetailLines,
   laneIdQuery,
+  laneLanded,
   LaneStakesSchema,
   LaneStateSchema,
   reviewWaitMinutes,
@@ -168,10 +169,12 @@ function renderWarnings(warnings: LaneWarning[]): void {
  * the remote branch on merge; the local one lingers in the worktree, and the naive cleanup fails —
  * you can't `git checkout main` (a sibling worktree owns it) and `git branch -d` refuses a
  * squash-merged branch. The worktree-safe move detaches to fresh `origin/main` (the next lane's start
- * state) and force-deletes. No-op when the lane carries no branch.
+ * state) and force-deletes. No-op when the lane carries no branch, and when nothing verifiably
+ * landed (`laneLanded`): `-D` on an unmerged branch destroys the work (lane 01M5G8VTK0).
  */
-function renderBranchCleanup(branch: string | null): void {
-  if (!branch) return;
+function renderBranchCleanup(lane: Lane): void {
+  const branch = lane.branch;
+  if (!branch || !laneLanded(lane)) return;
   process.stdout.write(
     theme.meta('landed? clear the local branch (the remote auto-deleted on merge):') + '\n',
   );
@@ -528,7 +531,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
           ) + '\n',
         );
       }
-      renderBranchCleanup(res.lane.branch);
+      renderBranchCleanup(res.lane);
     }
     return 0;
   }

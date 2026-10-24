@@ -12,6 +12,18 @@ import { laneCommand, lanesCommand, renderLane } from './lane.js';
 import { claimSeams } from './laneClaims.js';
 import { teamCommand } from './team.js';
 
+/** A rail result saying this SHA is on origin/main — what makes a close "landed" (lane 01M5G8VTK0). */
+function landedClaim(sha: string) {
+  return {
+    kind: 'commit_landed' as const,
+    ref: sha,
+    verdict: 'confirmed' as const,
+    checked_by: 'nick',
+    checked_at: 1,
+    evidence: 'reachable from origin/main',
+  };
+}
+
 describe('lane commands', () => {
   let server: RunningServer;
   let dir: string;
@@ -396,8 +408,12 @@ describe('lane commands', () => {
     );
     expect(submitted.code).toBe(0);
     expect(submitted.out).toContain('⎇ izzo/the-work');
-    // And it PERSISTED, rather than only being echoed back: a later command reads it off the lane.
-    const resolved = await capture(() => laneCommand(parseArgs(['resolve', id])));
+    // And it PERSISTED, rather than only being echoed back: a later command reads it off the lane
+    // (the cleanup hint needs a landed merge, so the resolve attests one — lane 01M5G8VTK0).
+    claimSeams.check = async (refs) => [landedClaim(refs.sha!)];
+    const resolved = await capture(() =>
+      laneCommand(parseArgs(['resolve', id, '--sha', 'deadbeef'])),
+    );
     expect(resolved.out).toContain('git branch -D izzo/the-work');
   });
 
@@ -434,12 +450,25 @@ describe('lane commands', () => {
     expect(submitted.out).toContain('⎇ feat/kept');
   });
 
-  it('resolve prints the local-branch cleanup hint when the lane carries a branch', async () => {
+  it('resolve prints the local-branch cleanup hint when the lane carries a branch and its merge landed', async () => {
     const id = await openLane(['landed', '--claim', '--branch', 'feat/landed']);
-    const resolved = await capture(() => laneCommand(parseArgs(['resolve', id])));
+    claimSeams.check = async (refs) => [landedClaim(refs.sha!)];
+    const resolved = await capture(() =>
+      laneCommand(parseArgs(['resolve', id, '--sha', 'deadbeef'])),
+    );
     expect(resolved.out).toContain('clear the local branch');
     expect(resolved.out).toContain('git branch -D feat/landed');
     expect(resolved.out).toContain('git switch --detach origin/main');
+  });
+
+  // lane 01M5G8VTK0: the line is this repo's squash-merge cleanup. Printed on every close with a
+  // branch, it told a CooperBench agent — no merge, another workflow — to `-D` its unmerged work.
+  it('resolve omits the cleanup hint when nothing verifiably landed', async () => {
+    const id = await openLane(['not landed', '--claim', '--branch', 'agent1']);
+    const resolved = await capture(() => laneCommand(parseArgs(['resolve', id])));
+    expect(resolved.out).toContain('lane done');
+    expect(resolved.out).not.toContain('branch -D');
+    expect(resolved.out).not.toContain('clear the local branch');
   });
 
   it('resolve omits the cleanup hint for a lane with no branch', async () => {

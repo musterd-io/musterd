@@ -1189,6 +1189,23 @@ export type UpdateLane = z.infer<typeof UpdateLaneSchema>;
 // `MERGE_VERIFICATION_TIERS` lives in `lanes.wire.js`; re-exported below.
 
 /**
+ * Did this lane's work verifiably land on `origin/main`? True when the attested SHA verified
+ * `ancestor` at submit/resolve, or a `commit_landed` claim on the lane is `confirmed` (the CLI's
+ * ADR 585 rail files the claim and stamps no tier). Both surfaces gate the "clear the local
+ * branch … `git branch -D`" hint on this (lane 01M5G8VTK0): a lane closed with no landed merge —
+ * a counterpart accept, a design lane, or a repo with another workflow — gets no instruction to
+ * force-delete a branch nothing has preserved. A CooperBench agent followed that line on its own
+ * unmerged work branch (2026-10-21).
+ */
+export function laneLanded(lane: {
+  merged?: { verification?: string | undefined } | null | undefined;
+  claims?: readonly { kind: string; verdict: string }[] | null | undefined;
+}): boolean {
+  if (lane.merged?.verification === 'ancestor') return true;
+  return (lane.claims ?? []).some((c) => c.kind === 'commit_landed' && c.verdict === 'confirmed');
+}
+
+/**
  * Every mutating lane verb returns the lane plus any contention warnings (ADR 083 §4). Under
  * two-stage close (ADR 192) a patch that enters `awaiting_acceptance` additionally reports the
  * acceptor routing: who the ask went to, or that self-close is sanctioned (no eligible acceptor live).

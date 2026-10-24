@@ -1661,14 +1661,50 @@ describe('lane_resolve handler (branch cleanup hint, ADR 106)', () => {
     };
   }
 
-  it('prints the local-branch cleanup command when the resolved lane carries a branch', async () => {
-    const updateLane = vi.fn(async () => ({ lane: lane({ branch: 'feat/x' }), warnings: [] }));
+  it('prints the local-branch cleanup command when the resolved lane carries a branch and its merge verified landed', async () => {
+    const updateLane = vi.fn(async () => ({
+      lane: lane({ branch: 'feat/x', merged: { sha: 'abc1234', verification: 'ancestor' } }),
+      warnings: [],
+    }));
     const handlers = captureAll(registerLanes, { updateLane } as Partial<MusterdClient>);
     const out = text(await handlers['lane_resolve']!({ id: 'lane1' }));
     expect(out).toContain('lane done');
     expect(out).toContain('git branch -D feat/x');
     expect(out).toContain('git switch --detach origin/main');
     expect(updateLane).toHaveBeenCalledWith('lane1', { state: 'done' });
+  });
+
+  // lane 01M5G8VTK0: a CooperBench agent closed a lane with no merge in a repo with another
+  // workflow, got this line, and force-deleted its own unmerged work branch.
+  it('prints no `-D` when the lane carries a branch but nothing verifiably landed', async () => {
+    const updateLane = vi.fn(async () => ({ lane: lane({ branch: 'agent1' }), warnings: [] }));
+    const handlers = captureAll(registerLanes, { updateLane } as Partial<MusterdClient>);
+    const out = text(await handlers['lane_resolve']!({ id: 'lane1' }));
+    expect(out).toContain('lane done');
+    expect(out).not.toContain('branch -D');
+    expect(out).not.toContain('clear the local branch');
+  });
+
+  it('a confirmed commit_landed claim counts as landed (the CLI rail stamps no tier)', async () => {
+    const updateLane = vi.fn(async () => ({
+      lane: lane({
+        branch: 'feat/y',
+        claims: [
+          {
+            kind: 'commit_landed',
+            ref: 'abc1234',
+            verdict: 'confirmed',
+            checked_by: 'Ada',
+            checked_at: 1,
+            evidence: 'reachable from origin/main',
+          },
+        ],
+      }),
+      warnings: [],
+    }));
+    const handlers = captureAll(registerLanes, { updateLane } as Partial<MusterdClient>);
+    const out = text(await handlers['lane_resolve']!({ id: 'lane1' }));
+    expect(out).toContain('git branch -D feat/y');
   });
 
   /**
