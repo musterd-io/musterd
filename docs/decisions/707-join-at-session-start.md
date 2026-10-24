@@ -46,6 +46,12 @@ Follows-up: 01M5GWB5GGHBD67X7DVX74ZA7R
   sized from probes exiting in milliseconds after `initialize`.
 - Mason's lane 01M4RX7NE2 is covered for adapters on this build: a reloaded adapter
   with idle wake on joins at session start without a tool call.
+- _2026-10-23 (lane 01M5N4ED6T, finding 022):_ the join answer is now the session's
+  orientation. `team_join` appends the held lanes on this project (owner, state, scope),
+  the open claimable count and the directed obligations still unread (peeked, not marked
+  read); a session this ADR joined silently never sees that answer, so the same block
+  (lanes only) leads its first `team_inbox_check`. Once per adapter process. The primer's
+  join bullet says so and no longer asks for a board or roster read before the first claim.
 
 ## Observability & Evaluation
 

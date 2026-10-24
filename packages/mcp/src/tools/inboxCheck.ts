@@ -6,6 +6,7 @@ import {
   isReviewDispute,
   type Envelope,
 } from '@musterd/protocol';
+import { resolveProject } from '@musterd/protocol/project';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { linkReceived } from '../otel.js';
@@ -24,6 +25,7 @@ import {
   textResult,
 } from './format.js';
 import { renderRoom, roomStructured, roomsFor, type RoomContext } from './huddleRooms.js';
+import { orientationBlock } from './orientation.js';
 
 // Length is gated (`pnpm context:check`, standing-context budgets): this string is in every turn's
 // tool list, so the elision contract is stated in the fewest bytes that still state it. The full
@@ -744,6 +746,12 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
           }
           client.markStyleShown();
         }
+        // Lane 01M5N4ED6T: most seats auto-claim (ADR 707) and this is the first answer they read,
+        // so the orientation block rides here once — lanes only; the directed acts are below.
+        const orientation = await orientationBlock(client, resolveProject(), {
+          withDirected: false,
+        });
+        const orientationNotice = orientation ? `${orientation}\n\n` : '';
         const byId = new Map<string, Envelope>();
         for (const e of [...buffered, ...fetched.messages]) byId.set(e.id, e);
         const ordered = [...byId.values()].sort(
@@ -819,6 +827,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
           // so a stale adapter learns about itself immediately — even on an empty inbox.
           const emptyText =
             styleNotice +
+            orientationNotice +
             wakeLine +
             'no new messages — nothing waiting on you; check again at your next task boundary' +
             recall +
@@ -964,6 +973,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         ].filter((w): w is ToolWarning => w !== null);
         const text =
           styleNotice +
+          orientationNotice +
           wakeLine +
           notice +
           messages.map(line).join('\n') +
