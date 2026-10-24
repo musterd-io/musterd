@@ -256,6 +256,19 @@ blitted wherever the dog's trail puts it: `--only welcome/wagon`. The welcome's 
 strip, the lanyard toss, the hello glows) stay painted: they are a second long and coloured per
 newcomer.
 
+## The desk chairs (lane 01M5D8EJ40)
+
+`scene.py` `chair_base` / `chair_back` / `chair_shadow`, rendered with `--only chair/...` like any static item. Five styles
+(`CHAIR_STYLES`: task, wheeled, wheeled with arms, exec, gamer) × two seat axes (`sn` for a chair facing N or S, `ew`)
+× two parts: the base (star base on twin casters, gas column, seat pan, armrests on posts) and the back (spine and
+padded back, the gamer's wings and headrest), which the room sorts apart so a sitter goes between them. The star base
+looks the same from every side and the back is symmetric, so N and S share an image, as do E and W. They are rendered
+in neutral greys at the painter's shade ratios and tinted with the member's chair colour at draw time
+(`blitTinted` in render.ts, one cached copy per colour). The contact shadow is its own untinted sprite, because a
+multiply tint over a soft shadow's half-transparent edge shows the tint colour instead of darkening the floor. They are
+bigger than the painter's chairs: a 40-wide seat, backs to the shoulders or above (nick, 2026-10-23: the first, painter-sized
+render was "too small"), with the seat top kept at `SEAT_TOP`, where a seated figure lands.
+
 ## Original art
 
 Everything in this folder is ours. No game's assets, palettes or character designs are referenced

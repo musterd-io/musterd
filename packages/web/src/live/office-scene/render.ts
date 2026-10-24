@@ -58,6 +58,7 @@ import { pulseIntensity, pulseLive, runGlow } from '../pulse';
 import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, solveSkeleton, typingBurst, typingFromPulse } from './skeleton';
 import type { UnitHook } from './damage';
 import { blitAsset } from './rendered/blit';
+import { tintFrame } from './rendered/tint';
 import { ceilingOf, dayOf, figureTintFor, roomMixFor } from './rendered/roomState';
 import type { FigureAssets, RenderedAssets } from './rendered/assets';
 import { dogCell, dogDir, dogFrame } from './rendered/dogSheet';
@@ -3508,6 +3509,49 @@ const CHAIR_KINDS_BY_ID: readonly ChairKind[] = [
 function chairKindFor(id: number): ChairKind {
   return CHAIR_KINDS_BY_ID[id % CHAIR_KINDS_BY_ID.length]!;
 }
+/** The rendered chair sprite for a desk: its kind, and for a wheeled chair whether it has arms. */
+function chairVariantFor(id: number): string {
+  const kind = chairKindFor(id);
+  return kind === 'wheeled' && chairStyleFor(id).arms ? 'wheeled-arms' : kind;
+}
+
+/** Tinted copies of rendered assets, by `<asset id>·<colour>`: a chair per member colour is a small image. */
+const tintedArt = new WeakMap<RenderedAssets, Map<string, HTMLCanvasElement>>();
+
+/**
+ * Blit the rendered asset `id` multiplied by `color` — the chairs are rendered in neutral greys at the
+ * painter's own shade ratios, so one image serves every member colour. Answers false when the asset
+ * is not in, so the caller paints.
+ */
+function blitTinted(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  rendered: RenderedAssets | undefined,
+  id: string,
+  lx: number,
+  ly: number,
+  color: string,
+): boolean {
+  const img = rendered?.images.get(id);
+  const a = img && rendered!.manifest.assets.find((x) => x.id === id);
+  if (!img || !a || typeof document === 'undefined') return false;
+  let cache = tintedArt.get(rendered!);
+  if (!cache) tintedArt.set(rendered!, (cache = new Map()));
+  const key = `${id}·${color}`;
+  let tinted = cache.get(key);
+  if (!tinted) {
+    tinted = document.createElement('canvas');
+    // sized to the image: `tintFrame` only grows a canvas, and a fresh one is 300 × 150, which squeezed
+    // every chair into a third of its width (nick: backs "at an angle", "paper thin")
+    tinted.width = a.w;
+    tinted.height = a.h;
+    if (!tintFrame(tinted, img, 0, 0, a.w, a.h, color)) return false;
+    cache.set(key, tinted);
+  }
+  blitAsset(ctx, fit, a, tinted, lx, ly);
+  return true;
+}
+
 function chairStyleFor(id: number): ChairStyle {
   const arms = deskRnd(id, CHAIR_ARM_SALT) < 0.5;
   switch (chairKindFor(id)) {
@@ -5102,18 +5146,29 @@ export function deskStationItems(
      only churn the cache, so it paints live until the beat ends. */
   const resting = shift === 0 && yaw === 0;
   const chairKey = `chair·${slot.id}·${vacantPeek}·${chairColor}·${statKey}`;
+  // The rendered chair (lane 01M5D8EJ40): the style's sprite for this seat axis, tinted with the chair
+  // colour; the painter when the art is not in.
+  const axis = FWD[slot.dir][1] !== 0 ? 'sn' : 'ew';
+  const chairArt = `chair/${chairVariantFor(slot.id)}/${axis}`;
+  const drawBase = (c: CanvasRenderingContext2D) => {
+    // the shadow untinted under the tinted chair (a multiply would show the tint in its soft edge)
+    if (opts.rendered?.images.has(`${chairArt}/base`)) blitIf(c, fit, opts.rendered, 'chair/shadow', cx, cy);
+    if (!blitTinted(c, fit, opts.rendered, `${chairArt}/base`, cx, cy, chairColor)) chairBase(c, fit, cx, cy, slot.dir, chairColor, chairStyle);
+  };
+  const drawBack = (c: CanvasRenderingContext2D) =>
+    blitTinted(c, fit, opts.rendered, `${chairArt}/back`, bx, by, chairColor) || chairBack(c, fit, bx, by, slot.dir, chairColor, chairStyle);
   out.push({
     d: depth(cx, cy) - 0.2,
-    fn: () => chairBase(ctx, fit, cx, cy, slot.dir, chairColor, chairStyle),
+    fn: () => drawBase(ctx),
     ...(resting && {
-      parts: [{ kind: 'sprite', key: `${chairKey}·base`, draw: (c) => chairBase(c, fit, cx, cy, slot.dir, chairColor, chairStyle) }],
+      parts: [{ kind: 'sprite', key: `${chairKey}·base`, draw: drawBase }],
     }),
   });
   out.push({
     d: depth(bx, by),
-    fn: () => chairBack(ctx, fit, bx, by, slot.dir, chairColor, chairStyle),
+    fn: () => drawBack(ctx),
     ...(resting && {
-      parts: [{ kind: 'sprite', key: `${chairKey}·back`, draw: (c) => chairBack(c, fit, bx, by, slot.dir, chairColor, chairStyle) }],
+      parts: [{ kind: 'sprite', key: `${chairKey}·back`, draw: drawBack }],
     }),
   });
   // Stepped-away texture (§4 lane 4): a jacket in the owner's colour draped over the chair back —

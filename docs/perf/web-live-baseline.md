@@ -2369,3 +2369,13 @@ variation and small bundler overhead. Removing the flow would leave these author
 - Falsify: once all three paths use the shared passkey ceremony, removing any one of them leaves the
   affected high-authority action refused for an enrolled human; if another smaller implementation
   keeps the production total at or below 366,900 B, revert this increase.
+
+## 2026-10-23 — rendered desk chairs; Total JS RAISED +1,024 B (lane 01M5D8EJ40)
+
+Twenty chair sprites (five styles × two seat axes × base and back) and an untinted shadow, tinted per member at draw
+time. Local total JS read 359.1 KB against a 359.3 KB ceiling. CI has read ~0.8 KB above local on this lane, so the
+ceiling is raised by 1 KB. Measured + 15% would loosen it (ADR 183). Deleting the painters pays it back.
+
+A defect worth keeping: the tinted copy was first drawn on a fresh canvas (300 × 150) that the tint step only grows,
+so every chair was blitted from a canvas wider than its sprite and squeezed to about a third of its width. The backs
+read "at an angle" and "paper thin" (nick). `render-desk.test.ts` pins the canvas to the sprite's size.
