@@ -72,7 +72,7 @@ long wait is several calls. Each one costs about $0.018.
 | Kind (`core`) | Pilot 3 | Claim run |
 | --- | --- | --- |
 | State signal: pushed/fetch, lane done, merged, ETA (019's `is_signal`) | 47 calls, $1.22 | 34, $0.69 |
-| Status update, not a signal | 43, $1.16 | 40, $0.94 |
+| Status update, not a signal | 43, $1.16 | 40, $0.94 _(re-read 2026-10-24 by the same `sends.py` for [finding 025](./025-cooperbench-coordination-cost-run.md): 45, $1.02)_ |
 | Message, not a signal or a plan | 40, $1.10 | 36, $0.75 |
 | Plan / scope ("I plan to modify …") | 41, $0.98 | 26, $0.47 |
 | `request_help` / `accept` / `handoff` | 7, $0.18 | 5, $0.10 |
