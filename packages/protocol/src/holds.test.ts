@@ -11,6 +11,7 @@ import {
   isHoldEnforced,
   isMergeShapedCommand,
   pushedRemote,
+  pushSpec,
   type Hold,
 } from './holds.js';
 import { NextBriefSchema, NextSummarySchema } from './lanes.js';
@@ -172,5 +173,33 @@ describe('pushedRemote (ADR 730 §1)', () => {
     'git push HEAD:refs/heads/x',
   ])('%s → null', (cmd) => {
     expect(pushedRemote(cmd)).toBeNull();
+  });
+
+  it('returns the refspecs too, so a push of another branch is not the lane branch (big-body, 2026-10-25)', () => {
+    expect(pushSpec('git push team other')).toEqual({
+      remote: 'team',
+      refspecs: ['other'],
+      all: false,
+      del: false,
+    });
+    expect(pushSpec('git push -u origin +HEAD:refs/heads/agent1')).toEqual({
+      remote: 'origin',
+      refspecs: ['HEAD:refs/heads/agent1'],
+      all: false,
+      del: false,
+    });
+    expect(pushSpec('git push')).toEqual({
+      remote: 'origin',
+      refspecs: [],
+      all: false,
+      del: false,
+    });
+    expect(pushSpec('git push --all team')).toMatchObject({ remote: 'team', all: true });
+    expect(pushSpec('git push -d team old')).toMatchObject({ refspecs: ['old'], del: true });
+    // An option's value is neither the remote nor a refspec.
+    expect(pushSpec('git push -o ci.skip team agent1')).toMatchObject({
+      remote: 'team',
+      refspecs: ['agent1'],
+    });
   });
 });

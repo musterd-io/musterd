@@ -12,7 +12,7 @@ import {
   isSessionReachTool,
   isWriteShaped,
   matchEnforcement,
-  pushedRemote,
+  pushSpec,
   SUBAGENT_CHANNEL_TOOLS,
   textFingerprint,
 } from '@musterd/protocol';
@@ -494,10 +494,15 @@ async function recordSubagentCommand(): Promise<number> {
 
 /**
  * ADR 730 §1 — what a Bash PostToolUse payload says was pushed, or null. The command names the
- * remote (`pushedRemote`); the working tree names the branch and HEAD (`gitHere`); and the push is
- * reported only when `refs/remotes/<remote>/<branch>` is at HEAD — git's own record that the push
- * landed. A failed push, a pushed detached HEAD, or a push of some other branch leaves that ref
- * elsewhere and reports nothing. One `rev-parse` beyond `gitHere`'s, and only on a `git push`.
+ * remote and the refspecs (`pushSpec`); the working tree names the branch and HEAD (`gitHere`). The
+ * push is reported only when the command pushed the current branch — no refspec (push.default),
+ * `--all`, or a refspec whose source is the branch, `HEAD` or `refs/heads/<branch>` and whose
+ * destination, when given, is the branch again — and `refs/remotes/<remote>/<branch>` is at HEAD,
+ * git's own record that it landed. A failed push, a dry run, a delete, a pushed detached HEAD, or a
+ * push of some other branch (even from a branch already up to date on the remote — big-body's
+ * decline, 2026-10-25) reports nothing. When the harness payload carries an exit code or an
+ * interrupted flag, a non-zero or interrupted command reports nothing either. One `rev-parse`
+ * beyond `gitHere`'s, and only on a `git push`.
  */
 export function pushReportFor(
   stdin: string,
@@ -505,16 +510,46 @@ export function pushReportFor(
 ): { remote: string; branch: string; head: string } | null {
   const call = parseToolCall(stdin);
   if (!call || call.tool !== 'Bash' || call.command === undefined) return null;
-  const remote = pushedRemote(call.command);
-  if (!remote) return null;
+  if (commandFailed(stdin)) return null;
+  const spec = pushSpec(call.command);
+  if (!spec || spec.del) return null;
   const { git_branch: branch, git_head: head } = gitHere(cwd);
   if (!branch || !head) return null;
+  if (
+    !spec.all &&
+    spec.refspecs.length > 0 &&
+    !spec.refspecs.some((r) => refspecPushes(r, branch))
+  ) {
+    return null;
+  }
   const tracking = gitOutput(
-    ['rev-parse', '--verify', '-q', `refs/remotes/${remote}/${branch}`],
+    ['rev-parse', '--verify', '-q', `refs/remotes/${spec.remote}/${branch}`],
     cwd,
   );
   if (!tracking || tracking.trim() !== head) return null;
-  return { remote, branch, head };
+  return { remote: spec.remote, branch, head };
+}
+
+/** `<src>[:<dst>]` moves `branch` on the remote: src is the branch (by name or as HEAD), dst too. */
+function refspecPushes(refspec: string, branch: string): boolean {
+  const [src, dst] = refspec.split(':', 2);
+  const isBranch = (ref: string | undefined) => ref === branch || ref === `refs/heads/${branch}`;
+  return (src === 'HEAD' || isBranch(src)) && (dst === undefined || isBranch(dst));
+}
+
+/** The harness's own verdict on the command, when its PostToolUse payload carries one. */
+function commandFailed(raw: string): boolean {
+  try {
+    const o = JSON.parse(raw) as { tool_response?: unknown };
+    const r = o.tool_response;
+    if (typeof r !== 'object' || r === null) return false;
+    const { exit_code, exitCode, interrupted } = r as Record<string, unknown>;
+    if (interrupted === true) return true;
+    const code = typeof exit_code === 'number' ? exit_code : exitCode;
+    return typeof code === 'number' && code !== 0;
+  } catch {
+    return false;
+  }
 }
 
 /** PostToolUse `Bash` one-shot (ADR 730). Always exits 0 — a missed push must not break the command. */
