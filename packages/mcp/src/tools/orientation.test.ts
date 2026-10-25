@@ -46,14 +46,14 @@ describe('renderOrientation', () => {
     expect(renderOrientation({ project: 'repo', lanes: [], unread: [] })).toBe('');
   });
 
-  it('lists held lanes with owner and scope, the seat’s own first, and the open count', () => {
+  it('lists held lanes with owner and scope, the seat’s own first, then the open lanes', () => {
     const out = renderOrientation({
       project: 'repo',
       me: 'ada',
       lanes: [
         lane({ id: '01A', owner_seat: 'bob', state: 'active', scope: ['a.ts', 'b.ts', 'c.ts'] }),
         lane({ id: '01B', owner_seat: 'ada', title: 'mine' }),
-        lane({ id: '01C', state: 'open', owner_seat: null }),
+        lane({ id: '01C', state: 'open', owner_seat: null, title: 'free', scope: ['c.ts'] }),
         lane({ id: '01D', state: 'done', owner_seat: 'bob' }),
       ],
     });
@@ -62,9 +62,28 @@ describe('renderOrientation', () => {
     expect(lines[1]).toContain('held lanes (2)');
     expect(lines[2]).toContain('01B [claimed] "mine" — ada (yours)');
     expect(lines[3]).toBe('  01A [active] "a lane" — bob · a.ts, b.ts +1');
-    expect(out).toContain('open lanes: 1 claimable on repo');
+    expect(lines[4]).toBe('open lanes (1) — unowned, claimable on repo:');
+    expect(lines[5]).toBe('  01C [open] "free" · c.ts');
+    // Finding 025: the pre-open `lane_board` read asks "what is on the board before I open a
+    // lane"; the block answers it and says lane_open checks the overlap itself.
+    expect(lines[6]).toContain(
+      'to start: lane_claim the one above that is your work, else lane_open',
+    );
+    expect(lines[6]).toContain('no board read first');
     expect(out).not.toContain('01D');
     expect(out).not.toContain('directed acts');
+  });
+
+  it('caps held and open lanes together, held first', () => {
+    const held = Array.from({ length: MAX_LANES - 2 }, (_, i) => lane({ id: `01H${i}` }));
+    const open = Array.from({ length: 5 }, (_, i) =>
+      lane({ id: `01O${i}`, state: 'open', owner_seat: null, updated_at: 10 - i }),
+    );
+    const out = renderOrientation({ project: 'repo', lanes: [...open, ...held] });
+    expect(out.split('\n').filter((l) => l.startsWith('  01H'))).toHaveLength(MAX_LANES - 2);
+    expect(out.split('\n').filter((l) => l.startsWith('  01O'))).toHaveLength(2);
+    expect(out).toContain('  01O0 [open]');
+    expect(out).toContain('+3 more — team_next ranks them');
   });
 
   it('caps the held list and says how many more', () => {
@@ -91,7 +110,8 @@ describe('renderOrientation', () => {
     expect(out).not.toContain('01T');
     expect(out).not.toContain('01M');
     expect(out).toContain('team_send {reply_to}');
-    expect(out).toContain('open lanes: none on repo — lane_open');
+    expect(out).toContain('open lanes: none on repo');
+    expect(out).toContain('to start: lane_open declares your work');
   });
 
   it('caps the directed list', () => {
