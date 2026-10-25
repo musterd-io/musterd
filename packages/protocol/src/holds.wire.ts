@@ -96,17 +96,51 @@ export function isMergeShapedCommand(command: string): boolean {
  * that happened is reported.
  */
 export function pushedRemote(command: string): string | null {
+  return pushSpec(command)?.remote ?? null;
+}
+
+/** What a `git push` segment names: the remote, and the refspecs after it (ADR 730 §1). */
+export interface PushSpec {
+  remote: string;
+  /** The refspec words, `+` stripped; empty when the command relies on `push.default`. */
+  refspecs: string[];
+  /** `--all` / `--mirror` / `--branches`: every branch, so any current branch counts. */
+  all: boolean;
+  /** `--delete` / `-d`: the refspecs name branches being removed, not pushed. */
+  del: boolean;
+}
+
+/** Options that take their value as the next word, so that word is not the remote or a refspec. */
+const PUSH_VALUE_OPTIONS = new Set(['-o', '--push-option', '--receive-pack', '--exec', '--repo']);
+
+/**
+ * The first `git push` segment of a command, parsed: null when there is none, when it is a dry run,
+ * or when the remote slot holds a refspec rather than a remote name. Big-body's decline on lane
+ * 01M5RQQ4T2 (2026-10-25): the remote alone is not enough — from an up-to-date lane branch,
+ * `git push team other` would otherwise report the lane branch, so the refspecs come back too.
+ */
+export function pushSpec(command: string): PushSpec | null {
   for (const raw of command.split(/&&|\|\||;|\||\n|&/)) {
     const seg = normalizeSegment(raw);
     const m = /^git\s+(?:-C\s+\S+\s+)*push\b(.*)$/.exec(seg);
     if (!m) continue;
     const words = m[1]!.trim().split(/\s+/).filter(Boolean);
     if (words.includes('--dry-run') || words.includes('-n')) return null;
-    const args = words.filter((w) => !w.startsWith('-'));
+    const args: string[] = [];
+    let all = false;
+    let del = false;
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i]!;
+      if (w === '--all' || w === '--mirror' || w === '--branches') all = true;
+      else if (w === '--delete' || w === '-d') del = true;
+      else if (PUSH_VALUE_OPTIONS.has(w)) i++;
+      else if (!w.startsWith('-')) args.push(w);
+    }
     const remote = args[0];
-    if (remote === undefined) return 'origin';
+    if (remote === undefined) return { remote: 'origin', refspecs: [], all, del };
     // A bare refspec in the remote slot (`git push HEAD:x`) is not a remote name.
-    return /^[A-Za-z0-9._-]+$/.test(remote) ? remote : null;
+    if (!/^[A-Za-z0-9._-]+$/.test(remote)) return null;
+    return { remote, refspecs: args.slice(1).map((r) => r.replace(/^\+/, '')), all, del };
   }
   return null;
 }

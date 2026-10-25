@@ -64,6 +64,45 @@ describe('pushReportFor (ADR 730)', () => {
     expect(pushReportFor('not json', repo)).toBeNull();
   });
 
+  it('reports nothing when the command pushed another branch, even from an up-to-date lane branch', () => {
+    // Big-body's decline (lane 01M5RQQ4T2, 2026-10-25): agent1 is already at HEAD on the remote, so
+    // the tracking ref alone would say "pushed" for any push command run from this branch.
+    const { repo, head } = repoWithRemote();
+    git(repo, 'push', '-q', 'team', 'agent1');
+    git(repo, 'branch', 'other');
+    git(repo, 'push', '-q', 'team', 'other');
+    expect(pushReportFor(payload('git push team other'), repo)).toBeNull();
+    expect(pushReportFor(payload('git push team other:agent1-review'), repo)).toBeNull();
+    expect(pushReportFor(payload('git push team HEAD:other'), repo)).toBeNull();
+    expect(pushReportFor(payload('git push -d team other'), repo)).toBeNull();
+    // The current branch, by any of its spellings, still reports.
+    const report = { remote: 'team', branch: 'agent1', head };
+    expect(pushReportFor(payload('git push team'), repo)).toEqual(report);
+    expect(pushReportFor(payload('git push -u team HEAD'), repo)).toEqual(report);
+    expect(pushReportFor(payload('git push team HEAD:agent1'), repo)).toEqual(report);
+    expect(pushReportFor(payload('git push team +agent1:refs/heads/agent1'), repo)).toEqual(report);
+    expect(pushReportFor(payload('git push --all team'), repo)).toEqual(report);
+  });
+
+  it('trusts a harness exit code or interrupted flag when the payload carries one', () => {
+    const { repo, head } = repoWithRemote();
+    git(repo, 'push', '-q', 'team', 'agent1');
+    const withResponse = (tool_response: unknown) =>
+      JSON.stringify({
+        tool_name: 'Bash',
+        tool_input: { command: 'git push team agent1' },
+        tool_response,
+      });
+    expect(pushReportFor(withResponse({ exit_code: 1 }), repo)).toBeNull();
+    expect(pushReportFor(withResponse({ interrupted: true }), repo)).toBeNull();
+    expect(pushReportFor(withResponse({ exit_code: 0, stdout: '' }), repo)).toEqual({
+      remote: 'team',
+      branch: 'agent1',
+      head,
+    });
+    expect(pushReportFor(withResponse({ stdout: 'Everything up-to-date' }), repo)).not.toBeNull();
+  });
+
   it('reports nothing from a detached HEAD', () => {
     const { repo } = repoWithRemote();
     git(repo, 'push', '-q', 'team', 'agent1');

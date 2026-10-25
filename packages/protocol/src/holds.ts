@@ -20,6 +20,8 @@ export {
   isHoldEnforced,
   isMergeShapedCommand,
   pushedRemote,
+  pushSpec,
+  type PushSpec,
   type Hold,
   type HoldEffect,
 } from './holds.wire.js';

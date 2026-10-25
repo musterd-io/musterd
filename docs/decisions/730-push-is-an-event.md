@@ -39,7 +39,11 @@ nothing that wakes a seat whose file is still held into editing it.
    it takes the remote from the command (`origin` when none is named) and the current branch and HEAD
    from the working tree (`gitHere`). It then reads `refs/remotes/<remote>/<branch>`. **The push is
    reported only when that ref equals HEAD**: a push that failed, pushed another branch, or pushed a
-   detached HEAD leaves the ref elsewhere and sends nothing. It POSTs `{remote, branch, head}`
+   detached HEAD leaves the ref elsewhere and sends nothing. _(Amended 2026-10-25: a branch already
+   up to date on the remote leaves the ref at HEAD whatever the command pushed, so the hook also
+   reads the command's refspecs (`pushSpec`) and reports only a push of the current branch — no
+   refspec, `--all`, or a refspec naming the branch or `HEAD` — never a delete, and never a command
+   the harness payload marks failed or interrupted. Big-body's decline on this lane.)_ It POSTs `{remote, branch, head}`
    (`LanePushReportSchema`) to the daemon as the seat, once, and always exits 0.
 2. **The daemon records it on the seat's lane.** `POST /teams/:slug/lanes/push` is member-authed as
    the pushing seat. The daemon finds that seat's lanes in a contending state (claimed, active,
@@ -95,6 +99,10 @@ nothing that wakes a seat whose file is still held into editing it.
   head. On CooperBench `core` that is bounded by the held refusals (15 on finding 025's run).
 - `lane_heads` gains `pushed_head`, `pushed_remote`, `pushed_at` (ladder v132, daemon-local, not
   replicated).
+- _2026-10-25 (acceptance, this lane):_ big-body declined the first landing: from a lane branch
+  already at HEAD on the remote, `git push team other` reported the lane branch. The hook now reads
+  the refspecs too and the harness's exit status when present (amendment in §1); the regression case
+  is in `gate.push.test.ts`.
 - _2026-10-24 (build, this lane):_ the daemon, hook, CLI and protocol parts land together (#3310).
   §5, the CooperBench arm's `config.py` and its pinning test, lands in lane `01M5R2G1Q3` beside the
   `gate_smoke.py` fix, because another lane holds those two files as this ADR lands.
