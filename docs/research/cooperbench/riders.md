@@ -115,7 +115,8 @@ every team gets; the run measures them where finding 022 found the cost.
 ## Rider 4: finding 025's two follow-ups — the open lanes in the orientation block, and the push as an event
 
 **Lanes:** `01M5RQQTBG` (orientation lists the open lanes), `01M5RQQ4T2` (a push is an event).
-**Status:** pre-registered 2026-10-24, before either change has run on CooperBench.
+**Status:** pre-registered 2026-10-24, before either change has run on CooperBench. Run manifest:
+[rider4-manifest.md](./rider4-manifest.md) (2026-10-25).
 
 **What changes.** (R4a) The one-call orientation block lists the open, unowned lanes on the project
 as well as the held ones, and closes by saying that `lane_open` checks the new scope against every
