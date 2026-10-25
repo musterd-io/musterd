@@ -75,7 +75,7 @@ counts on `core`:
 | Count | Claim run (`core`, 10 pairs, 20 agents) | How it is counted |
 | --- | --- | --- |
 | **R3a** board reads before the agent's first claim | **27** of 100 | `boardreads.py`, `context = before first claim` |
-| **R3b** status updates that are not a state signal | **40** calls, $0.94 | `sends.py`, act `status_update`, `is_signal` false |
+| **R3b** status updates that are not a state signal | **40** calls, $0.94 | `sends.py`, act `status_update`, `is_signal` false _(Re-read 2026-10-24 by the same code for [finding 025](../025-cooperbench-coordination-cost-run.md): 45 calls, $1.02. The rule below was read as written; it acts under either baseline.)_ |
 | **R3c** state-signal sends (019's `is_signal`), by kind | **34** calls, $0.69 (pushed 10, merged 16, lane done 4, ETA 2, other 2) | `sends.py` |
 
 **Rider 2**, as pre-registered: in the pairs with at least one held refusal, the holder's state-signal
@@ -83,7 +83,7 @@ sends per pair, and the time from the holder's lane freeing the file to the refu
 of it. Its claim-run baseline is read with the same code before this run's numbers are, and both go
 in the finding. No rule.
 
-Reported beside them, no rule: pass count (claim run `core`: 3 of 10), merge outcome, model cost
+Reported beside them, no rule: pass count (claim run `core`: 3 of 10 — 4 of 10 by the same `readout.json`, re-read 2026-10-24 for finding 025), merge outcome, model cost
 (claim run `core`: $17.29; finding 022 put the reachable saving at $0.5–1, which is inside the
 run-to-run spread, so cost decides nothing here), wall time, held refusals and their next moves
 (rider 1's counts, reported for the record; its rule was read once, in finding 024, and is not read
@@ -98,7 +98,7 @@ few, and a count still near the baseline means the change did not reach the agen
 | | "the change acted" | "the change did not act" | between: "part of it" |
 | --- | --- | --- | --- |
 | **R3a** orientation reads (27) | **≤ 9** | **≥ 22** | reported with the `intent` table |
-| **R3b** status updates (40) | **≤ 13** | **≥ 32** | reported with the first ten bodies |
+| **R3b** status updates (40; 45 by the 2026-10-24 re-read) | **≤ 13** | **≥ 32** | reported with the first ten bodies |
 
 **R3c** state signals are reported by kind with no rule: the kinds ADR 724 carries ("lane done / you
 can edit" 4, "merged" 16) are too few for a fair test at ten pairs, and "pushed" (10) has no product
