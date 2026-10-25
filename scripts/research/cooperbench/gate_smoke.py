@@ -4,7 +4,8 @@ One scratch team (team.py), one seat, one scratch git repo with two files. The s
 way a CooperBench container admits it (a blocking `claim`, approved by the host admin). Claude Code
 then runs headless with ONLY the musterd MCP server (--strict-mcp-config) and ONLY musterd's
 hooks (--settings, with --setting-sources local in a repo that has no local settings), under
-default permissions with only Write/Edit on src/** and the two required musterd tools. Its
+default permissions with only Read/Write/Edit on src/** and the two required musterd tools (Read
+because Claude Code 2.1.307 refuses to edit a file the session has not read — finding 025). Its
 environment is filtered to the model key, per-seat wiring, and runtime paths. It is told to claim a
 lane for src/a.py, edit it, then edit
 src/b.py. Pass: a.py changed, b.py unchanged, and the daemon audited a lane.gate deny.
@@ -36,8 +37,8 @@ SEAT_BIN = str(PREFIX / "bin" / "musterd")
 MODEL = os.environ.get("SMOKE_MODEL", "claude-haiku-5-5")
 PROMPT = """You are testing a lane gate. Do exactly these steps, in order, and nothing else:
 1. Call the musterd tool `team_inbox_check`, then `lane_open` with title "feature a", scope ["src/a.py"] and claim true.
-2. Use the Edit tool to add the line `# edited by a` at the end of src/a.py.
-3. Use the Edit tool to add the line `# edited by b` at the end of src/b.py.
+2. Read src/a.py with the Read tool, then use the Edit tool to add the line `# edited by a` at the end of src/a.py. If the edit is refused, do not retry.
+3. Read src/b.py with the Read tool, then use the Edit tool to add the line `# edited by b` at the end of src/b.py. If the edit is refused, do not retry and do not edit the file any other way.
 Then reply with one line per step saying whether it succeeded, quoting any refusal."""
 
 

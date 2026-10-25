@@ -30,6 +30,14 @@ INTERRUPT_HOOK = (
     "command -v musterd >/dev/null 2>&1 && musterd inbox --interrupt-check --hook claude-code 2>/dev/null || true "
     "# musterd-interrupt-hook"
 )
+# ADR 730: the PostToolUse push hook, on Bash only. It runs after the command and reports a `git push`
+# that landed (remote-tracking ref at HEAD), so the daemon can tell the seats waiting on the lane.
+# It decides nothing, so it is not the Bash gate the arm leaves out below.
+PUSH_HOOK = (
+    'd="${CLAUDE_PROJECT_DIR:-.}"; cd "$d" 2>/dev/null; '
+    "command -v musterd >/dev/null 2>&1 && musterd gate record-push --stdin 2>/dev/null || true "
+    "# musterd-push-hook"
+)
 # musterd's own matcher is "Edit|Write|MultiEdit|NotebookEdit|Bash". The arm leaves Bash out on purpose.
 # It gates every path with one `**` class (agents declare their own scopes), and the gate matches a
 # Bash call by its whole command string, so `**` matched every command: `git diff`, `git status` and
@@ -56,7 +64,12 @@ _SMOKE_SEAT_ENV_KEYS = (
     "MUSTERD_CLAIM",
     "MUSTERD_AUTOJOIN",
 )
+# `Read(src/**)` is not a write: Claude Code 2.1.307 refuses an Edit or Write of a file the session has
+# not read ("File has not been read yet"), so without it neither edit reaches the gate and the smoke
+# fails with gate_denies=0 (finding 025 pre-flight, lane 01M5R2G1Q3). The gate's matcher never names
+# Read, so it changes nothing about what is gated.
 _SMOKE_ALLOWED_TOOLS = (
+    "Read(src/**)",
     "Write(src/**)",
     "Edit(src/**)",
     "mcp__musterd__team_inbox_check",
@@ -90,7 +103,7 @@ def claude_smoke_mcp_env(seat_env: dict[str, str]) -> dict[str, str]:
 def claude_smoke_argv(
     prompt: str, *, model: str, settings: Path, mcp_config: Path
 ) -> list[str]:
-    """Run only the smoke's file-edit and musterd tools under Claude's normal permission checks."""
+    """Run only the smoke's read, file-edit and musterd tools under Claude's normal permission checks."""
     return [
         "claude",
         "-p",
@@ -102,7 +115,7 @@ def claude_smoke_argv(
         "--permission-mode",
         "default",
         "--tools",
-        "Edit,Write",
+        "Read,Edit,Write",
         "--allowedTools",
         *_SMOKE_ALLOWED_TOOLS,
         "--setting-sources",
@@ -146,11 +159,14 @@ def mcp_config(env: dict[str, str], *, command: str, args: list[str] | None = No
 
 
 def claude_settings(extra_env: dict[str, str] | None = None) -> dict[str, Any]:
-    """`--settings` JSON: musterd's gate and interrupt hooks, CooperBench's own env."""
+    """`--settings` JSON: musterd's gate, interrupt and push hooks, CooperBench's own env."""
     settings: dict[str, Any] = {
         "hooks": {
             "PreToolUse": [{"matcher": GATE_MATCHER, "hooks": [{"type": "command", "command": GATE_HOOK}]}],
-            "PostToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": INTERRUPT_HOOK}]}],
+            "PostToolUse": [
+                {"matcher": "*", "hooks": [{"type": "command", "command": INTERRUPT_HOOK}]},
+                {"matcher": "Bash", "hooks": [{"type": "command", "command": PUSH_HOOK}]},
+            ],
         }
     }
     if extra_env:
