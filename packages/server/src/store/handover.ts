@@ -140,3 +140,52 @@ export async function moveWatchHolder(
     );
   }
 }
+
+/** ADR 730: a seat with an open watch on a lane, and the path it was refused. */
+export interface LaneWatcher {
+  seat: string;
+  path: string;
+}
+
+/** The seats still watching `laneId` (ADR 724 watches not yet answered or handed over). */
+export async function watchersOfLane(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<LaneWatcher[]> {
+  return db.all<LaneWatcher>(
+    `SELECT seat, path FROM gate_hold_refusals
+      WHERE team_id = ? AND holder_lane_id = ? AND watch_fired_at IS NULL AND handed_over_at IS NULL
+      ORDER BY seat, path`,
+    [teamId, laneId],
+  );
+}
+
+/**
+ * ADR 730 §2: record that the lane's branch reached `remote` at `head` (ladder v132 columns on the
+ * ADR 697 row). Returns the head announced before, so the caller sends nothing for a repeat push of
+ * the same commit.
+ */
+export async function recordLanePush(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+  remote: string,
+  head: string,
+  now = Date.now(),
+): Promise<{ previous_head: string | null }> {
+  return db.tx(async (t) => {
+    const row = await t.get<{ pushed_head: string | null }>(
+      'SELECT pushed_head FROM lane_heads WHERE team_id = ? AND lane_id = ?',
+      [teamId, laneId],
+    );
+    await t.run(
+      `INSERT INTO lane_heads (team_id, lane_id, head, at, pushed_head, pushed_remote, pushed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (team_id, lane_id) DO UPDATE SET
+         pushed_head = excluded.pushed_head, pushed_remote = excluded.pushed_remote, pushed_at = excluded.pushed_at`,
+      [teamId, laneId, head, now, head, remote, now],
+    );
+    return { previous_head: row?.pushed_head ?? null };
+  });
+}

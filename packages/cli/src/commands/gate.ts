@@ -12,6 +12,7 @@ import {
   isSessionReachTool,
   isWriteShaped,
   matchEnforcement,
+  pushedRemote,
   SUBAGENT_CHANNEL_TOOLS,
   textFingerprint,
 } from '@musterd/protocol';
@@ -107,6 +108,7 @@ export async function gateCommand(parsed: Parsed): Promise<number> {
   const sub = parsed.positionals[0];
   if (sub === 'check') return gateCheck(parsed);
   if (sub === 'record-subagent') return recordSubagentCommand();
+  if (sub === 'record-push') return recordPushCommand();
   throw new CliError(
     'usage: musterd gate check --stdin  — hook-driven (a PreToolUse hook pipes the tool call in); ' +
       '`musterd init` provisions the hook',
@@ -484,6 +486,50 @@ async function recordSubagentCommand(): Promise<number> {
       );
       if (explicit && identity) await http.recordActor(team, att);
     }
+  } catch {
+    // Always exit 0.
+  }
+  return 0;
+}
+
+/**
+ * ADR 730 §1 — what a Bash PostToolUse payload says was pushed, or null. The command names the
+ * remote (`pushedRemote`); the working tree names the branch and HEAD (`gitHere`); and the push is
+ * reported only when `refs/remotes/<remote>/<branch>` is at HEAD — git's own record that the push
+ * landed. A failed push, a pushed detached HEAD, or a push of some other branch leaves that ref
+ * elsewhere and reports nothing. One `rev-parse` beyond `gitHere`'s, and only on a `git push`.
+ */
+export function pushReportFor(
+  stdin: string,
+  cwd: string,
+): { remote: string; branch: string; head: string } | null {
+  const call = parseToolCall(stdin);
+  if (!call || call.tool !== 'Bash' || call.command === undefined) return null;
+  const remote = pushedRemote(call.command);
+  if (!remote) return null;
+  const { git_branch: branch, git_head: head } = gitHere(cwd);
+  if (!branch || !head) return null;
+  const tracking = gitOutput(
+    ['rev-parse', '--verify', '-q', `refs/remotes/${remote}/${branch}`],
+    cwd,
+  );
+  if (!tracking || tracking.trim() !== head) return null;
+  return { remote, branch, head };
+}
+
+/** PostToolUse `Bash` one-shot (ADR 730). Always exits 0 — a missed push must not break the command. */
+async function recordPushCommand(): Promise<number> {
+  try {
+    const stdin = await readStdin();
+    const report = pushReportFor(stdin, process.cwd());
+    if (!report) return 0;
+    // Hook one-shot, so never reclaim the seat; awaited, because a floated request dies with the
+    // process. The daemon decides which lane this is (the seat's contending lane on that branch).
+    const { http, team, identity, explicit } = resolveRead(
+      {},
+      { claimSeatPerRequest: false, timeoutMs: HOOK_HTTP_TIMEOUT_MS },
+    );
+    if (explicit && identity) await http.reportPush(team, report);
   } catch {
     // Always exit 0.
   }

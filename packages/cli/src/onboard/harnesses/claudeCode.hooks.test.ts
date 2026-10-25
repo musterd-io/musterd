@@ -19,6 +19,7 @@ import {
   TRACE_HOOK_EVENTS,
   TRACE_HOOK_MARKER,
   SESSIONSTART_HOOK_MARKER,
+  PUSH_HOOK_MARKER,
 } from './claudeCode.js';
 
 /** The Claude Code settings shape the hooks land in. */
@@ -120,6 +121,11 @@ describe('musterd Claude Code hooks (local Notification + global SessionStart)',
     const ledger = local.hooks?.['PostToolUse']?.find((m) => m.matcher === 'Agent');
     expect(ledger?.hooks?.[0]?.command).toContain(SUBAGENT_LEDGER_HOOK_MARKER);
     expect(ledger?.hooks?.[0]?.command).toContain('gate record-subagent --stdin');
+
+    // ADR 730: the push hook rides PostToolUse on Bash only, and reports through the gate CLI.
+    const push = local.hooks?.['PostToolUse']?.find((m) => m.matcher === 'Bash');
+    expect(push?.hooks?.[0]?.command).toContain(PUSH_HOOK_MARKER);
+    expect(push?.hooks?.[0]?.command).toContain('gate record-push --stdin');
   });
 
   it('registers the trace tap (ADR 445 R1) on exactly the events no other musterd hook rides', () => {
@@ -152,7 +158,7 @@ describe('musterd Claude Code hooks (local Notification + global SessionStart)',
     installMusterdHooks();
     installMusterdHooks();
     expect(read(localPath()).hooks?.['Notification']).toHaveLength(1);
-    expect(read(localPath()).hooks?.['PostToolUse']).toHaveLength(2);
+    expect(read(localPath()).hooks?.['PostToolUse']).toHaveLength(3); // interrupt + ledger + push
     expect(read(localPath()).hooks?.['PreToolUse']).toHaveLength(2); // gate + session-reach wall
     expect(read(localPath()).hooks?.['SessionStart']).toHaveLength(1);
     expect(read(localPath()).hooks?.['SessionEnd']).toHaveLength(1);
@@ -166,20 +172,21 @@ describe('musterd Claude Code hooks (local Notification + global SessionStart)',
     mkdirSync(join(cwd, '.claude'), { recursive: true });
     writeFileSync(localPath(), JSON.stringify({ hooks: { Notification: [] } }), 'utf8');
     const drift = inspectClaudeHookDrift(cwd);
-    expect(drift).toHaveLength(7 + TRACE_HOOK_EVENTS.length);
+    expect(drift).toHaveLength(8 + TRACE_HOOK_EVENTS.length);
     expect(drift[0]).toContain('PostToolUse interrupt hook is missing');
     expect(drift[1]).toContain('PreToolUse enforcement-gate hook is missing');
     expect(drift[2]).toContain('session-reach wall is missing');
     expect(drift[3]).toContain('subagent-ledger hook is missing');
-    expect(drift[4]).toContain('session-capture hook is missing');
-    expect(drift[5]).toContain('SessionEnd hook is missing');
+    expect(drift[4]).toContain('push hook is missing');
+    expect(drift[5]).toContain('session-capture hook is missing');
+    expect(drift[6]).toContain('SessionEnd hook is missing');
     // The trace tap (ADR 445 R1): one line per event it is registered on, each named.
     TRACE_HOOK_EVENTS.forEach((event, i) => {
-      expect(drift[6 + i]).toContain(`${event} trace-tap hook is missing`);
+      expect(drift[7 + i]).toContain(`${event} trace-tap hook is missing`);
     });
     // The user-facing half (seat statusline chip) is doctored alongside the agent-facing hooks —
     // its absence is why a correctly-oriented session could still look dead to the human.
-    expect(drift[6 + TRACE_HOOK_EVENTS.length]).toContain('`statusLine` seat chip is missing');
+    expect(drift[7 + TRACE_HOOK_EVENTS.length]).toContain('`statusLine` seat chip is missing');
 
     // Once init wires them, the drift clears.
     installMusterdHooks();

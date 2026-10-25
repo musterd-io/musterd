@@ -167,6 +167,7 @@ export const POSTTOOLUSE_HOOK_MARKER = 'musterd-interrupt-hook';
 export const PRETOOLUSE_HOOK_MARKER = 'musterd-gate-hook';
 export const SESSIONMSG_HOOK_MARKER = 'musterd-sessionmsg-hook';
 export const SUBAGENT_LEDGER_HOOK_MARKER = 'musterd-subagent-ledger-hook';
+export const PUSH_HOOK_MARKER = 'musterd-push-hook';
 export const SESSION_CAPTURE_HOOK_MARKER = 'musterd-session-capture-hook';
 export const SESSION_END_HOOK_MARKER = 'musterd-session-end-hook';
 export const TRACE_HOOK_MARKER = 'musterd-trace-hook';
@@ -242,6 +243,17 @@ function subagentLedgerHookCommand(): string {
     'd="${CLAUDE_PROJECT_DIR:-.}"; cd "$d" 2>/dev/null; ' +
     'command -v musterd >/dev/null 2>&1 && musterd gate record-subagent --stdin 2>/dev/null || true ' +
     `# ${SUBAGENT_LEDGER_HOOK_MARKER}`
+  );
+}
+
+function pushHookCommand(): string {
+  // PostToolUse on Bash (ADR 730): after the command ran, report a `git push` that landed — the
+  // remote-tracking ref at HEAD — so the daemon can tell the seats waiting on this lane. Returns at
+  // once for any command that is not a push. Always exits 0.
+  return (
+    'd="${CLAUDE_PROJECT_DIR:-.}"; cd "$d" 2>/dev/null; ' +
+    'command -v musterd >/dev/null 2>&1 && musterd gate record-push --stdin 2>/dev/null || true ' +
+    `# ${PUSH_HOOK_MARKER}`
   );
 }
 
@@ -570,6 +582,16 @@ const LOCAL_HOOKS: readonly LocalHookSpec[] = [
     missing:
       'the Claude Code PostToolUse subagent-ledger hook is missing from .claude/settings.local.json — ' +
       'SendMessage to a subagent this session spawned cannot be recognized (ADR 442). Run `musterd init --refresh-hooks` to wire it.',
+  },
+  {
+    marker: PUSH_HOOK_MARKER,
+    event: 'PostToolUse',
+    command: pushHookCommand,
+    matcher: 'Bash',
+    missing:
+      'the Claude Code PostToolUse push hook is missing from .claude/settings.local.json — a push of ' +
+      "this seat's lane branch is not seen, so seats waiting on the lane are not told (ADR 730). Run " +
+      '`musterd init --refresh-hooks` to wire it.',
   },
   {
     marker: SESSION_CAPTURE_HOOK_MARKER,
@@ -980,6 +1002,7 @@ export function removeMusterdHooks(): void {
   dropHook(settingsLocalPath(), 'PostToolUse', (m) =>
     isMusterdHookFor(m, SUBAGENT_LEDGER_HOOK_MARKER),
   );
+  dropHook(settingsLocalPath(), 'PostToolUse', (m) => isMusterdHookFor(m, PUSH_HOOK_MARKER));
   dropHook(settingsLocalPath(), 'PreToolUse', (m) => isMusterdHookFor(m, PRETOOLUSE_HOOK_MARKER));
   dropHook(settingsLocalPath(), 'PreToolUse', (m) => isMusterdHookFor(m, SESSIONMSG_HOOK_MARKER));
   dropHook(settingsLocalPath(), 'SessionStart', (m) =>
