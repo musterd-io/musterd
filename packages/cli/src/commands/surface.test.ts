@@ -95,7 +95,7 @@ describe('musterd surface (ADR 332)', () => {
           hooks?: Record<string, unknown[]>;
         }
       ).hooks ?? {};
-    expect(hooksNow()['PostToolUse']).toHaveLength(2);
+    expect(hooksNow()['PostToolUse']).toHaveLength(3);
 
     expect(run('decline', surfaceName('PostToolUse'))).toBe(0);
     expect(hooksNow()['PostToolUse']).toBeUndefined();
