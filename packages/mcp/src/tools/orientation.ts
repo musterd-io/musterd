@@ -16,6 +16,14 @@ import type { MusterdClient } from '../client.js';
  * calls it replaces each re-read the whole context (42–62k tokens on the pilot) and `lane_board`
  * alone rendered every lane on the team, 50+ lines on revive. Removing one call pays for the
  * block many times over.
+ *
+ * Finding 025 (lane 01M5RQQTBG) read the first version on the same pairs: the reads past the
+ * first call went 7 → 9, eight of them `lane_board` right before `lane_open` — the agent looking
+ * at the board before it declares its own work. The block listed only the held lanes and an open
+ * COUNT, so that question was still unanswered. It now lists the open lanes too (id, title,
+ * scope; held first, one cap over both) and closes by saying what `lane_open` does with them:
+ * it checks the new scope against every lane here and warns on overlap, so no board read is owed
+ * before it.
  */
 
 /** In-flight states a teammate holds: what an arriving seat must not build in. */
@@ -68,9 +76,11 @@ export function renderOrientation(input: OrientationInput): string {
       const mineB = b.owner_seat === input.me ? 0 : 1;
       return mineA - mineB || (b.updated_at ?? 0) - (a.updated_at ?? 0);
     });
-  const open = input.lanes.filter((l) => l.state === 'open' && l.owner_seat === null).length;
+  const open = input.lanes
+    .filter((l) => l.state === 'open' && l.owner_seat === null)
+    .sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0));
   const directed = input.unread ? directedOwed(input.unread) : [];
-  if (held.length === 0 && open === 0 && directed.length === 0) return '';
+  if (held.length === 0 && open.length === 0 && directed.length === 0) return '';
 
   const lines: string[] = [`Orientation — ${input.project} now:`];
   if (held.length > 0) {
@@ -81,10 +91,21 @@ export function renderOrientation(input: OrientationInput): string {
     }
     if (held.length > MAX_LANES) lines.push(`  +${held.length - MAX_LANES} more — lane_board`);
   }
+  // One cap over both lists: the held lanes come first, the open ones fill what is left.
+  const openRoom = Math.max(0, MAX_LANES - Math.min(held.length, MAX_LANES));
+  if (open.length > 0) {
+    lines.push(`open lanes (${open.length}) — unowned, claimable on ${input.project}:`);
+    for (const l of open.slice(0, openRoom))
+      lines.push(`  ${l.id} [open] "${clip(l.title, TITLE_MAX)}"${scopeOf(l)}`);
+    if (open.length > openRoom)
+      lines.push(`  +${open.length - openRoom} more — team_next ranks them`);
+  } else {
+    lines.push(`open lanes: none on ${input.project}`);
+  }
   lines.push(
-    open > 0
-      ? `open lanes: ${open} claimable on ${input.project} — team_next ranks them; lane_claim before you build`
-      : `open lanes: none on ${input.project} — lane_open declares your work`,
+    open.length > 0
+      ? 'to start: lane_claim the one above that is your work, else lane_open — it checks your scope against every lane here and warns on overlap, so no board read first.'
+      : 'to start: lane_open declares your work — it checks your scope against every lane here and warns on overlap, so no board read first.',
   );
   if (directed.length > 0) {
     lines.push(`directed acts waiting on you (${directed.length}):`);

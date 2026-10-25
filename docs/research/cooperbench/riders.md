@@ -112,3 +112,32 @@ rule: the kinds ADR 724 carries are 4 and 16 calls, too few for a fair test at t
 orientation block, the missing status instruction and the ADR 724 act are the product every seat on
 every team gets; the run measures them where finding 022 found the cost.
 
+## Rider 4: finding 025's two follow-ups — the open lanes in the orientation block, and the push as an event
+
+**Lanes:** `01M5RQQTBG` (orientation lists the open lanes), `01M5RQQ4T2` (a push is an event).
+**Status:** pre-registered 2026-10-24, before either change has run on CooperBench.
+
+**What changes.** (R4a) The one-call orientation block lists the open, unowned lanes on the project
+as well as the held ones, and closes by saying that `lane_open` checks the new scope against every
+lane and warns on overlap. Finding 025 found 9 board reads after the instructed first call (8
+`lane_board`, 1 `team_status`), eight of them an agent reading the board right before `lane_open`.
+(R4b) The daemon learns of a `git push` of a lane's branch and sends one directed act to the seats
+waiting on that lane. Finding 025 found "pushed / fetch" the largest state-signal kind, 14 calls
+($0.26), with no product event behind it.
+
+**Read**, from the first complete musterd run on a build carrying the change over all 10 `core`
+pairs, with the claim run's residue scripts unchanged:
+
+| | Count | Finding 025 (`core`) |
+| --- | --- | --- |
+| R4a | board reads with `context = before first claim`, minus the instructed first `team_inbox_check` of each agent | 9 of 85 (claim run 7) |
+| R4b | sends `is_signal` marks as pushed / fetch | 14 calls, $0.26 (claim run 10) |
+
+**Verdict rule.** R4a **≤ 3** "the block answered the pre-open question", **≥ 8** "it did not";
+between, "part of it", with the labelled rows. R4b **≤ 5** "the push event carried the signal",
+**≥ 12** "it did not"; between, "part of it", with the bodies. Each rule stands alone, and the count
+of ADR 724 acts and push acts delivered is reported beside them with no rule.
+
+**Not gaming.** As riders 1–3: no instruction, hint or tool is added to any arm for it. The open
+lanes in the block and the push act are the product every seat on every team gets.
+
