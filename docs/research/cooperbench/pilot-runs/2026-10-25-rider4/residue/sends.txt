@@ -1,0 +1,78 @@
+{
+ "r4-musterd": {
+  "total": 18.91,
+  "counts": {
+   "send_calls": 112,
+   "sends": 112,
+   "act:message": 97,
+   "signal": 46,
+   "act:status_update": 9,
+   "act:accept": 3,
+   "act:request_help": 2,
+   "act:handoff": 1
+  },
+  "usd": {
+   "send_calls": 2.27,
+   "signal": 0.95
+  },
+  "signal_kinds": {
+   "lane done / you can edit": [
+    10,
+    0.2
+   ],
+   "merged/complete/submitted": [
+    14,
+    0.33
+   ],
+   "pushed/fetch": [
+    18,
+    0.35
+   ],
+   "other": [
+    1,
+    0.02
+   ],
+   "thanks/ack": [
+    2,
+    0.04
+   ],
+   "waiting / ETA": [
+    1,
+    0.02
+   ]
+  },
+  "examples": {
+   "lane done / you can edit": [
+    "I'm blocked on editing the file until your lane is submitted/resolved. Could you submit your lane so I can proceed with adding octal_str?",
+    "octal_str implementation complete. Lane resolved. Ready to merge and create final patch.txt.",
+    "I'm adding validate_input method to ToolCalls class (not ToolCall). It normalizes various input formats. I'm done with implementation and tests pass. You can ad",
+    "Can you resolve/release your lane 01M5T11JH8HXQ0HM3CNAN30BVE? The file is still held and blocking my edits."
+   ],
+   "merged/complete/submitted": [
+    "Submission complete. patch.txt generated with merged changes: octal_str (agent2) + hex_str/uuid4/ipv4 (agent1).",
+    "I've merged your changes. Can you release your lane or hand off tool.py so I can add my fingerprinting code?",
+    "agent2 complete. Fingerprinting feature implemented and merged with agent1's parsing work. patch.txt ready with both features (362 lines).",
+    "I see you've added method parsing to HandleFunc. My task says to add path prefix support and tests. Since you've done the parsing, should I add unit tests for t"
+   ],
+   "pushed/fetch": [
+    "Already done and pushed. You can proceed - my changes are in validate_input method only, your fingerprint/id fields won't conflict.",
+    "Blocked waiting for tool.py. Our changes are in different areas (you: parsing methods, me: ToolCall fields). Can you finish and push soon, or handoff the file s",
+    "Fingerprinting feature complete and pushed to team/agent2. Added fingerprint/id fields to ToolCall with canonicalization. All tests pass.",
+    "Changes pushed to team/agent1. I extended HandleFunc to parse method prefixes (\"GET /path\") same as Handle, and added logging throughout. You can fetch and buil"
+   ],
+   "other": [
+    "I've already modified Handle and HandleFunc with logging. I also extended HandleFunc to parse method prefixes (like \"GET /path\") same as Handle does. My changes"
+   ],
+   "thanks/ack": [
+    "My changes in detail: Context.__init__ gets new cleanup_timeout param (after show_default), validated as positive float or None. Context.close() wraps self._exi",
+    "Sounds good. I'll wait for your handoff. Thanks!"
+   ],
+   "waiting / ETA": [
+    "I'm blocked from editing core.py/shell_completion.py since you claimed first. Can you hand off to me when done, or should I wait on your lane? My changes are is"
+   ]
+  },
+  "cf_as_run": 18.91,
+  "cf_drop_wait": 17.03,
+  "cf_drop_signal": 17.96
+ }
+}

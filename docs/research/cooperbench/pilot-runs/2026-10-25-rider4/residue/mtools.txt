@@ -1,0 +1,13 @@
+== r4-musterd
+   musterd:team_inbox_check (wait)            82 $ 1.51
+   musterd:team_inbox_check (plain)           42 $ 1.25
+   other:ToolSearch                           55 $ 1.12
+   gate:edit-refused                          34 $ 0.88
+   musterd:lane_board                         26 $ 0.44
+   musterd:lane_resolve                       16 $ 0.34
+   musterd:lane_open                          16 $ 0.29
+   musterd:team_status                         8 $ 0.14
+   musterd:lane_update                         6 $ 0.13
+   musterd:lane_handoff                        3 $ 0.06
+   musterd:lane_submit                         3 $ 0.05
+   musterd:lane_release                        1 $ 0.02

@@ -99,6 +99,14 @@ nothing that wakes a seat whose file is still held into editing it.
   head. On CooperBench `core` that is bounded by the held refusals (15 on finding 025's run).
 - `lane_heads` gains `pushed_head`, `pushed_remote`, `pushed_at` (ladder v132, daemon-local, not
   replicated).
+- _2026-10-25 (rider 4, [finding 026](../research/026-cooperbench-rider4-run.md)):_ on 10 CooperBench
+  `core` pairs the hook reported 20 of 20 pushes and the daemon recorded each; 4 acts went out, because
+  16 pushes had no open ADR 724 watch on the lane (the refused seat's own push never has one; a
+  holder's push before the partner's refusal or after the lane freed has none either). Hand-sent
+  "pushed" messages rose 14 → 18, and 3 of the 4 holders whose push was announced said it again by
+  hand — the hook tells the pusher nothing. The audience (§3) and the pusher's feedback are the two
+  product changes to pre-register next; the overlap-warned partner is a recorded interest this ADR's
+  Rejected list did not weigh.
 - _2026-10-25 (acceptance, this lane):_ big-body declined the first landing: from a lane branch
   already at HEAD on the remote, `git push team other` reported the lane branch. The hook now reads
   the refspecs too and the harness's exit status when present (amendment in §1); the regression case
