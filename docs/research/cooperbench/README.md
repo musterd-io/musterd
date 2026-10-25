@@ -131,7 +131,11 @@ In each container (`adapter.py`):
   reached the gate (three FAILs, `gate_denies=0`). The smokes now allow `Read(src/**)` and read before
   they edit (lane 01M5R2G1Q3); the gate wiring is unchanged, and a Read-allowed copy passed on that
   build ($0.0035). The arm's settings also carry ADR 730's PostToolUse push hook (matcher `Bash`),
-  pinned to `claudeCode.ts` like the other two.
+  pinned to `claudeCode.ts` like the other two. **The committed `hold_smoke.py` FAILs on an ADR 697 build**
+  (rider 4 pre-flight, 2026-10-25): agent2's post-lapse retry is refused once as the hand-over
+  (`denied_handover`), which the smoke, written before ADR 697, expects allowed; `hold_smoke_697.py` is
+  the check until it is updated. And run the smokes with the host `musterd` on `PATH`, never
+  `/opt/musterd-seat/bin` first: that packed CLI has no sqlite binding, so the pair daemon never comes up.
 - `tests/`: 39 tests on the hook drift, the prompts' shape, both adapters' flows, and the OpenHands shims, against
   a fake container and host.
 - **One task end to end in both arms** (done-when 4), on the run machine, `pallets_click` task 2068,

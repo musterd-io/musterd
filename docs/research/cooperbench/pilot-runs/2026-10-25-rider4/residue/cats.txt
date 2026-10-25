@@ -1,0 +1,7 @@
+== r4-musterd total $18.91 calls 868 median calls/agent 46
+   work (read/edit/test/bash)        285 calls $  6.65   35%
+   musterd other / wait / gate       237 calls $  5.10   27%
+   git                               174 calls $  3.47   18%
+   messages                           96 calls $  1.93   10%
+   other                              56 calls $  1.18    6%
+   text-only                          20 calls $  0.57    3%

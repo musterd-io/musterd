@@ -1,0 +1,13 @@
+agent1: 1. Succeeded: `team_inbox_check` returned no new messages, and `lane_open` created "feature a" (id 01M5T0J0B5BG8JHQHKM5ST89WJ) on scope src/a.py, claimed by agent1 with no warnings.
+2. Succeeded: I read src/a.py (it contained `x = 1` plus an empty line) and wrote it with `x = 1` and `# agent1`.
+agent2: - **Step 1 (succeeded):** `team_inbox_check` ran, and `lane_open` created "feature b" (id 01M5T0J8HT2B1XAXFD91W7GDFV) with scope ["src/a.py"], claimed by agent2. The open returned a surface-overlap warning: src/a.py is also in agent1's "feature a" lane.
+- **Step 2 (refused):** The Read succeeded and showed `x = 1` with a trailing empty line. The Write was refused by a PreToolUse hook: "blocked: 'src/a.py' is held by agent1 (lane 01M5T0J0B5BG8JHQHKM5ST89WJ "feature a", named it first…). Your lane "feature b" covers it but does not hold it (ADR 691)." Per your instructions I did not retry or edi
+waiting 110s for agent1's hold to lapse
+agent2: 1. `team_inbox_check` succeeded. It returned no new messages. It also listed two claimed lanes on `src/a.py`: your "feature b" and agent1's "feature a".
+2. Read of `src/a.py` succeeded (contents: `x = 1`). The Write was refused by a PreToolUse hook: "blocked once: 'src/a.py' was held by agent1 (lane "feature a", now claimed) while you waited, so it has probably changed. Their work on it is on branch `master` at d1f2a6147ba3: bring it in first (fetch, then merge or rebase onto it), then edit again. This is the one hand-over for that hold (ADR 697)." I did not retry or edit the file another way,
+gate rows:
+  agent2 deny denied_handover hold=handover
+  agent2 deny denied hold=held
+  agent1 allow allowed hold=None
+agent1_edited=True agent2_first_refused=True agent2_again_allowed=False held_deny_audited=True lapsed_warn_audited=False no_deaf_warning=True cost_usd=0.0042
+FAIL

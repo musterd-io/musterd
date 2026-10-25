@@ -116,7 +116,8 @@ every team gets; the run measures them where finding 022 found the cost.
 
 **Lanes:** `01M5RQQTBG` (orientation lists the open lanes), `01M5RQQ4T2` (a push is an event).
 **Status:** pre-registered 2026-10-24, before either change has run on CooperBench. Run manifest:
-[rider4-manifest.md](./rider4-manifest.md) (2026-10-25).
+[rider4-manifest.md](./rider4-manifest.md) (2026-10-25). **Read 2026-10-25 → [finding 026](../026-cooperbench-rider4-run.md):**
+R4a 6 (part of it), R4b 18 (did not act); 20 of 20 pushes recorded, 4 acts sent (no watcher on the other 16).
 
 **What changes.** (R4a) The one-call orientation block lists the open, unowned lanes on the project
 as well as the held ones, and closes by saying that `lane_open` checks the new scope against every

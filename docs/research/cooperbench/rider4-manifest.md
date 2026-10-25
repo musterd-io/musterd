@@ -1,7 +1,7 @@
 # CooperBench rider 4 run: pre-registration
 
 **Lane:** `01M5SZXMJX` (goal `coordination-cost`), asked by nick. **Status:** pre-registered 2026-10-25,
-before any pair ran. Nothing below changes once a measured pair has run; what the run teaches goes in
+before any pair ran; run the same day → [finding 026](../026-cooperbench-rider4-run.md). Nothing below changes once a measured pair has run; what the run teaches goes in
 the finding, not here. **CooperBench:** `63b9d44`. **Before this:** [coordination-cost
 run](./coordination-cost-manifest.md) → [finding 025](../025-cooperbench-coordination-cost-run.md),
 whose two follow-ups this run reads.

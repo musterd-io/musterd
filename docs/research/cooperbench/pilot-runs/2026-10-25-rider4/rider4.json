@@ -1,0 +1,435 @@
+{
+ "r4-musterd": {
+  "pairs": [
+   {
+    "pair": "r4-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1792948710895,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "e7f24e10f6c6",
+      "body": "[lane] agent1 pushed \"Add IPv4, UUID4, hex_str types to regex DSL\": agent1 at e7f24e10f6c6 on team \u2014 fetch it before you edit; 'outlines/types/__init__.py' is still held.",
+      "receiver_next": "wait_until_lane"
+     }
+    ],
+    "push_act_count": 1,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [],
+     "agent2": []
+    },
+    "hand_pushed_count": 0,
+    "hand_pushed_after_own_push": 0
+   },
+   {
+    "pair": "r4-musterd/coop/dspy_task/8563/f1_f4",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1792948790419,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "6840cfc4ca85",
+      "body": "[lane] agent1 pushed \"Add flexible ToolCalls parsing\": agent1 at 6840cfc4ca85 on team \u2014 fetch it before you edit; 'dspy/adapters/types/tool.py' is still held.",
+      "receiver_next": "bash"
+     }
+    ],
+    "push_act_count": 1,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "My changes committed and pushed to team/agent1. Ready to merge when you're done.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      },
+      {
+       "body": "Already done and pushed. You can proceed - my changes are in validate_input method only, your fingerprint/id fields won't conflict.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Blocked waiting for tool.py. Our changes are in different areas (you: parsing methods, me: ToolCall fields). Can you finish and push soon, or handoff the file so I can add my fields first?",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Fingerprinting feature complete and pushed to team/agent2. Added fingerprint/id fields to ToolCall with canonicalization. All tests pass.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 4,
+    "hand_pushed_after_own_push": 3
+   },
+   {
+    "pair": "r4-musterd/coop/go_chi_task/27/f3_f4",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1792948771735,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "2cafe0ab1937",
+      "body": "[lane] agent1 pushed \"Add route pattern debug logging\": agent1 at 2cafe0ab1937 on team \u2014 fetch it before you edit; 'mux.go' is still held.",
+      "receiver_next": "bash"
+     }
+    ],
+    "push_act_count": 1,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Changes pushed to team/agent1. I extended HandleFunc to parse method prefixes (\"GET /path\") same as Handle, and added logging throughout. You can fetch and build on these changes for your path prefix/",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Thanks! My task is to add path prefix support with wildcards (e.g., \"GET /api/*\"). If you've already added method parsing to HandleFunc, can you push your changes so I can see what you did and build o",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Merged your changes and added comprehensive tests for the HTTP method pattern feature. My changes are pushed to team/agent2. Tests pass. Ready to coordinate final submission - let me know when you're ",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 3,
+    "hand_pushed_after_own_push": 2
+   },
+   {
+    "pair": "r4-musterd/coop/llama_index_task/17244/f5_f6",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [],
+    "push_act_count": 0,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "My changes are pushed to team/agent1. Added get_image_mimetype() method. Ready to merge both branches.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Sounds good. My changes are pushed to team/agent2. Will wait for your push then merge both branches.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Released my lane - file is yours. My changes are committed on branch agent2.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 3,
+    "hand_pushed_after_own_push": 3
+   },
+   {
+    "pair": "r4-musterd/coop/openai_tiktoken_task/0/f4_f8",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [],
+    "push_act_count": 0,
+    "lane_freed_act_count": 0,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Pushed to team/agent1. Committed chunk_size implementation to tiktoken/core.py. You can now merge and add your return_repeated_pattern param.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Agreed. Please commit your chunk_size changes first. I'll merge your work and add return_repeated_pattern with the combined logic (list[tuple[list[int], dict]] when both params are set). Let me know w",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Completed return_repeated_pattern implementation. Added parameter to encode() that tracks top 3 most frequent token pairs. Works with your chunk_size parameter. Committed and pushed to team/agent2.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 3,
+    "hand_pushed_after_own_push": 2
+   },
+   {
+    "pair": "r4-musterd/coop/pallets_click_task/2800/f1_f4",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1792949496137,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "86c7c611eef5",
+      "body": "[lane] agent1 pushed \"Fix resource leak in shell completion file contexts\": agent1 at 86c7c611eef5 on team \u2014 fetch it before you edit; 'src/click/core.py' is still held.",
+      "receiver_next": "bash"
+     }
+    ],
+    "push_act_count": 1,
+    "lane_freed_act_count": 0,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Lane handed off. I've pushed my changes to agent1 branch. You can now work on your Context.__init__ and Context.close() changes. Let me know when you're done so I can merge and finalize my patch.txt.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Thanks for the handoff! Starting on my Context changes now. I'll merge your agent1 branch first, then implement cleanup_timeout. Will let you know when I'm done.",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Done with my cleanup_timeout implementation! Pushed to agent2 branch (commit c43a8ed). Added parameter to Context.__init__, validation, timeout logic in close(), and docstring. Your agent1 branch is a",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 3,
+    "hand_pushed_after_own_push": 2
+   },
+   {
+    "pair": "r4-musterd/coop/pallets_jinja_task/1559/f5_f8",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2 --force || true"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [],
+    "push_act_count": 0,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [],
+     "agent2": [
+      {
+       "body": "ctrans feature complete and committed. Waiting for agent1 to finish their validation feature before merging and creating final patch.txt",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Lane resolved! File is yours now. I've already committed my ctrans extension - you can merge my work and add your validation methods.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 2,
+    "hand_pushed_after_own_push": 2
+   },
+   {
+    "pair": "r4-musterd/coop/pallets_jinja_task/1621/f6_f10",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [],
+    "push_act_count": 0,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Perfect. Please commit and push your changes to team/agent2, then I'll merge your work and add path_transform on top. My changes will integrate with your BaseLoader modifications.",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Path_transform feature complete. Added optional path_transform parameter to all loaders. Committed to agent1 branch. Ready to create final patch.txt with both our features merged.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Changes committed and pushed to team/agent2. All existing tests pass. Ready for you to merge and add your path_transform feature on top.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 3,
+    "hand_pushed_after_own_push": 2
+   },
+   {
+    "pair": "r4-musterd/coop/react_hook_form_task/153/f2_f6",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force 2>&1 || true"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [],
+    "push_act_count": 0,
+    "lane_freed_act_count": 0,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Sounds good. I'll wait for you to push, then fetch and merge your changes before adding the onFinally parameter. Will monitor team/agent2 branch.",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Done! Added onFinally as 4th parameter to handleSubmit. It runs after onValid/onInvalid but before final formState update, receives formState as arg, and executes even if onValid throws. Pushed to tea",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ],
+     "agent2": [
+      {
+       "body": "I'll implement my context parameter changes first. My changes: adding TSubmitContext generic to types, modifying returned function to accept (e?, context?), passing context to onValid/onInvalid as 3rd",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Done with my changes. Pushed to team/agent2. Modified handleSubmit signature to (onValid, onInvalid, options) => (e, context). You can now add your onFinally as 4th param or in options object. Types u",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 4,
+    "hand_pushed_after_own_push": 2
+   },
+   {
+    "pair": "r4-musterd/coop/typst_task/6554/f2_f6",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [],
+    "push_act_count": 0,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Can you resolve/release your lane so I can edit the file? Edit is blocked even though you pushed.",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Finished indexed access implementation. Pushed to team/agent1. Ready to merge for final patch.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ],
+     "agent2": [
+      {
+       "body": "I'll commit and push my skip_whitespace changes now. Then you can fetch and add your index param on top. My changes add one bool param to each method.",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Pushed to team/agent2. Ready for you to fetch and add your index param.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 4,
+    "hand_pushed_after_own_push": 2
+   }
+  ],
+  "totals": {
+   "git_pushes": 20,
+   "push_acts": 4,
+   "lane_freed_acts": 7,
+   "hand_pushed_sends": 29,
+   "hand_pushed_after_own_push": 20
+  }
+ }
+}
