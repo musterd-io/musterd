@@ -204,7 +204,30 @@ function withMusterdKeysIos(config) {
     return inner;
   });
 
+  config = withEasAppExtension(config, bundleId);
   config = withNotificationExtension(config, bundleId);
+  return config;
+}
+
+/**
+ * Declare the extension to EAS. With no committed `ios/`, EAS Build creates signing credentials
+ * only for the targets listed under `extra.eas.build.experimental.ios.appExtensions`; an
+ * undeclared target has no provisioning profile and the archive fails to sign.
+ */
+function withEasAppExtension(config, bundleId) {
+  const extra = (config.extra ??= {});
+  const eas = (extra.eas ??= {});
+  const build = (eas.build ??= {});
+  const experimental = (build.experimental ??= {});
+  const ios = (experimental.ios ??= {});
+  const extensions = (ios.appExtensions ??= []);
+  if (!extensions.some((entry) => entry.targetName === EXTENSION_NAME)) {
+    extensions.push({
+      targetName: EXTENSION_NAME,
+      bundleIdentifier: `${bundleId}.${EXTENSION_BUNDLE_SUFFIX}`,
+      entitlements: { 'keychain-access-groups': [keychainGroup(bundleId)] },
+    });
+  }
   return config;
 }
 
