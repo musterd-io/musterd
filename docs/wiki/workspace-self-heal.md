@@ -101,6 +101,8 @@ Two things worth not relearning while reading such a transcript: Claude Code rec
 
 The host's dream-wake self-heal repaired 5 hooks on grokbot, wanderer and alfie on two nights running, while dolly repaired no hooks either night. Night 2026-10-22: `~/.musterd/host.log` lines 23128, 23137, 23141 print `repaired 5 hooks.` (grokbot's insight 01M5KMAW65F3QFHCJFA5KHY6H3). Night 2026-10-23: lines 23391, 23401, 23405 print `repaired 1 guidance file and 5 hooks.`, and dolly's line 23397 prints `repaired 1 guidance file.` The cause is not checked. izzo's lines 23363 and 23366 name `~/.claude/settings.json` and the runtime `.codex/hooks.json` as shared files that need a human, which may be related. A repair that has to run again every night is not holding (2026-10-23; falsify: the next dream wake for grokbot, wanderer or alfie prints a self-heal line with no hooks in it, or no self-heal line at all). <!-- claim: defect -->
 
+On night 2026-10-24 the falsifier came out the second way. In the dream batch (host.log lines 23555–23591), no seat printed a `wake self-heal:` line, and that includes grokbot, wanderer and alfie. This is one night, so the claim above stays as written. Two readings are still open: the repair held, or the batch stopped logging the line. The next batch that prints `repaired … 5 hooks` for any of the three seats decides between them.
+
 ## What it will never touch
 
 The ADR 261 permission floor, and any file outside the seat's worktree (the machine-wide Claude Code settings, Codex's git-common-dir `hooks.json`) — spec 2026-09-16, ADR 408 decision 2. Falsify: leave a seat's `.claude/settings.local.json` one floor entry short, run the probe, and check the entry is STILL absent and the line names `--refresh-permissions`.
