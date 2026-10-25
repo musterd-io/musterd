@@ -90,7 +90,10 @@ Submit, so no Xcode runs on the laptop that hosts the seats (nick, 2026-10-05: l
 the shared laptop down). It needs the Apple Developer Program membership. `eas.json` holds one
 `production` profile: Node and pnpm pinned to the repo's, the build number kept by EAS
 (`appVersionSource: remote`, `autoIncrement`), and an `eas-build-post-install` hook that builds
-`@musterd/protocol` so Metro can read its `dist`. The Expo project is `@nas4146/musterd`.
+`@musterd/protocol` so Metro can read its `dist`. The Expo project is `@nas4146/musterd`. The config plugin
+also declares the `MusterdNotify` extension (`io.musterd.app.notify`) under
+`extra.eas.build.experimental.ios.appExtensions`, which is how EAS knows to make its provisioning
+profile; an undeclared extension target fails to sign.
 
 ```bash
 cd packages/mobile
