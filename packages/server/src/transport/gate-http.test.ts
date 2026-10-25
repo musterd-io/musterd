@@ -423,6 +423,91 @@ withDrivers('gate-http', (_o, kind) => {
         expect((await notices('lane_freed'))[0]!.meta.holder).toBe('Cy');
       });
 
+      describe('ADR 730: a push is an event', () => {
+        const pushes = async () =>
+          (
+            await server.store.all<{ to_member: string; body: string; meta: string }>(
+              `SELECT to_member, body, meta FROM messages WHERE act = 'message' AND meta LIKE '%"lane_pushed"%' ORDER BY ts`,
+            )
+          ).map((r) => ({
+            to: r.to_member,
+            body: r.body,
+            meta: (JSON.parse(r.meta) as Record<string, any>)['lane_pushed'],
+          }));
+        const push = (seat: string, branch: string, head: string, remote = 'team') =>
+          post('/teams/dawn/lanes/push', { remote, branch, head }, seatHeaders(seat));
+
+        it('the holder pushing its lane branch tells the refused seat once per head, with branch, head and the held path', async () => {
+          const boLane = await heldByBo();
+          const first = await push('Bo', 'bo/feat', 'abc123def4567890');
+          expect(first.status).toBe(200);
+          expect(first.json).toEqual({ lanes: 1, acts: 1 });
+          const [act] = await pushes();
+          expect(act!.meta).toEqual({
+            lane: boLane.id,
+            holder: 'Bo',
+            branch: 'bo/feat',
+            head: 'abc123def4567890',
+            remote: 'team',
+            paths: ['src/tariff.ts'],
+          });
+          expect(act!.body).toContain('Bo pushed "bo first": bo/feat at abc123def456 on team');
+          expect(act!.body).toContain("'src/tariff.ts' is still held");
+          // The same head again: recorded, not announced.
+          expect((await push('Bo', 'bo/feat', 'abc123def4567890')).json).toEqual({
+            lanes: 1,
+            acts: 0,
+          });
+          expect(await pushes()).toHaveLength(1);
+          // A new head: announced again.
+          expect((await push('Bo', 'bo/feat', 'fedcba9876543210')).json).toEqual({
+            lanes: 1,
+            acts: 1,
+          });
+          expect((await pushes())[1]!.meta.head).toBe('fedcba9876543210');
+          // The watch is still open: the resolve frees the file as before (ADR 724).
+          await server.store.run('UPDATE lanes SET state = ? WHERE id = ?', ['done', boLane.id]);
+          expect(await server.runLaneWatchSweep()).toBe(1);
+          expect(await notices('lane_freed')).toHaveLength(1);
+        });
+
+        it('a branch no lane of the seat knows, or another seat pushing it, records nothing and tells nobody', async () => {
+          await heldByBo();
+          expect((await push('Bo', 'bo/other', 'abc123def4567890')).json).toEqual({
+            lanes: 0,
+            acts: 0,
+          });
+          expect((await push('Ada', 'bo/feat', 'abc123def4567890')).json).toEqual({
+            lanes: 0,
+            acts: 0,
+          });
+          expect(await pushes()).toHaveLength(0);
+        });
+
+        it('a seat with no refusal on record is not told', async () => {
+          await bo();
+          await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+            title: 'bo alone',
+            scope: ['src/tariff.ts'],
+            claim: true,
+          });
+          await gateA('block', 'src/tariff.ts', 'Bo', {
+            git_branch: 'bo/solo',
+            git_head: 'abc123def4567890',
+          });
+          expect((await push('Bo', 'bo/solo', 'abc123def4567890')).json).toEqual({
+            lanes: 1,
+            acts: 0,
+          });
+          expect(await pushes()).toHaveLength(0);
+        });
+
+        it('rejects a malformed report', async () => {
+          await heldByBo();
+          expect((await push('Bo', 'bo/feat', 'not-a-sha')).status).toBe(400);
+        });
+      });
+
       it('a watch older than seven days is dropped without a notice', async () => {
         const boLane = await heldByBo();
         await server.store.run('UPDATE lanes SET state = ? WHERE id = ?', ['done', boLane.id]);

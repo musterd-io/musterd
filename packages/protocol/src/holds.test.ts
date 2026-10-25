@@ -10,6 +10,7 @@ import {
   isHoldActive,
   isHoldEnforced,
   isMergeShapedCommand,
+  pushedRemote,
   type Hold,
 } from './holds.js';
 import { NextBriefSchema, NextSummarySchema } from './lanes.js';
@@ -147,5 +148,29 @@ describe('isMergeShapedCommand (ADR 516 increment 2)', () => {
     'git push origin "feat/main-notes"',
   ])('does not match %s', (cmd) => {
     expect(isMergeShapedCommand(cmd)).toBe(false);
+  });
+});
+
+describe('pushedRemote (ADR 730 §1)', () => {
+  it.each([
+    ['git push origin feat/x', 'origin'],
+    ['git push', 'origin'],
+    ['git push -u origin feat/x', 'origin'],
+    ['cd /w && git -C /repo push team HEAD:agent1', 'team'],
+    ['git add -A && git commit -m x && git push --force-with-lease origin b', 'origin'],
+    ['bash -c "git push team agent1"', 'team'],
+  ])('%s → %s', (cmd, remote) => {
+    expect(pushedRemote(cmd)).toBe(remote);
+  });
+
+  it.each([
+    'git fetch origin',
+    'git pull',
+    'git push --dry-run origin b',
+    'git push -n',
+    'echo git push',
+    'git push HEAD:refs/heads/x',
+  ])('%s → null', (cmd) => {
+    expect(pushedRemote(cmd)).toBeNull();
   });
 });

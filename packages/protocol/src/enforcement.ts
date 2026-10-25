@@ -102,6 +102,18 @@ export const GateCheckRequestSchema = z.object({
 });
 export type GateCheckRequest = z.infer<typeof GateCheckRequestSchema>;
 
+/**
+ * ADR 730 §1–2: a push the PostToolUse hook saw land — `POST /teams/:slug/lanes/push`, member-authed
+ * as the pushing seat. The hook sends it only once `refs/remotes/<remote>/<branch>` equals HEAD, so
+ * the daemon records a push that happened, on the seat's contending lane whose branch this is.
+ */
+export const LanePushReportSchema = z.object({
+  remote: z.string().min(1).max(255),
+  branch: z.string().min(1).max(255),
+  head: z.string().regex(/^[0-9a-f]{7,64}$/),
+});
+export type LanePushReport = z.infer<typeof LanePushReportSchema>;
+
 /** The audit `outcome` a gate decision records (in `detail.outcome`). Gate A uses
  *  `allowed`/`warned`/`denied`; Gate B adds the ask-lifecycle outcomes. `allowed` = an owned lane or a
  *  released ask; `warned` = warn posture proceeded (the un-asked-costly-action query keys on it). */

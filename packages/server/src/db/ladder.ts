@@ -1082,6 +1082,26 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       }
     },
   },
+  {
+    // ADR 730: the last push of a lane's branch the PostToolUse hook reported — head, remote, when —
+    // on the ADR 697 lane_heads row. Daemon-local like the row. Nullable, no backfill: a lane that
+    // was never seen pushing has none.
+    version: 132,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lane_heads')").pluck().all();
+      if (!cols.includes('pushed_head'))
+        db.exec('ALTER TABLE lane_heads ADD COLUMN pushed_head TEXT');
+      if (!cols.includes('pushed_remote'))
+        db.exec('ALTER TABLE lane_heads ADD COLUMN pushed_remote TEXT');
+      if (!cols.includes('pushed_at'))
+        db.exec('ALTER TABLE lane_heads ADD COLUMN pushed_at BIGINT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lane_heads ADD COLUMN IF NOT EXISTS pushed_head TEXT');
+      await d.exec('ALTER TABLE lane_heads ADD COLUMN IF NOT EXISTS pushed_remote TEXT');
+      await d.exec('ALTER TABLE lane_heads ADD COLUMN IF NOT EXISTS pushed_at BIGINT');
+    },
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (

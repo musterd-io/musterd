@@ -58,6 +58,7 @@ import {
   type EnforcementPolicy,
   type ActorAttestation,
   type GateCheckRequest,
+  type LanePushReport,
   type GateDecision,
   RequestsResponseSchema,
   EnrollResidencyResponseSchema,
@@ -2366,6 +2367,19 @@ export class HttpClient {
 
   async gateCheck(slug: string, body: GateCheckRequest): Promise<GateDecision> {
     return (await this.request('POST', `/teams/${slug}/gate`, body)) as GateDecision;
+  }
+
+  /**
+   * ADR 730: a push the PostToolUse hook saw land — `POST /teams/:slug/lanes/push`, member-authed as
+   * the pushing seat. The daemon records it on the seat's lane on that branch and tells the seats
+   * waiting on the lane. Swallows every error: it observes a push, it never fails one.
+   */
+  async reportPush(slug: string, body: LanePushReport): Promise<void> {
+    try {
+      await this.request('POST', `/teams/${slug}/lanes/push`, body);
+    } catch {
+      // Deliberately silent, like recordActor.
+    }
   }
 
   /**

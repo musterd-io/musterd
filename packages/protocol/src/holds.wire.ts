@@ -88,6 +88,30 @@ export function isMergeShapedCommand(command: string): boolean {
 }
 
 /**
+ * ADR 730 §1: which remote does this shell command push to? The first segment that is a `git push`
+ * (after the same normalisation as {@link isMergeShapedCommand}: prefixes, `bash -c`, `git -C`)
+ * names it — its first word after `push` that is not an option, `origin` when it names none. Null
+ * when no segment pushes, or the push is a `--dry-run`. The branch is NOT read from here: the hook
+ * takes it from the working tree, then checks the remote-tracking ref against HEAD, so only a push
+ * that happened is reported.
+ */
+export function pushedRemote(command: string): string | null {
+  for (const raw of command.split(/&&|\|\||;|\||\n|&/)) {
+    const seg = normalizeSegment(raw);
+    const m = /^git\s+(?:-C\s+\S+\s+)*push\b(.*)$/.exec(seg);
+    if (!m) continue;
+    const words = m[1]!.trim().split(/\s+/).filter(Boolean);
+    if (words.includes('--dry-run') || words.includes('-n')) return null;
+    const args = words.filter((w) => !w.startsWith('-'));
+    const remote = args[0];
+    if (remote === undefined) return 'origin';
+    // A bare refspec in the remote slot (`git push HEAD:x`) is not a remote name.
+    return /^[A-Za-z0-9._-]+$/.test(remote) ? remote : null;
+  }
+  return null;
+}
+
+/**
  * One segment, as the shell would run it: leading `VAR=value` assignments dropped; a `command`,
  * `exec`, `env`, `sudo`, `time` or `nice` prefix looked through; a `bash -c "…"` / `sh -c '…'`
  * wrapper unwrapped (the inner string is the command, and it is normalised again); quotes around

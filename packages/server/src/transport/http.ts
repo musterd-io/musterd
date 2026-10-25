@@ -75,6 +75,7 @@ import {
   PostGoalRetractSchema,
   ActorAttestationSchema,
   GateCheckRequestSchema,
+  LanePushReportSchema,
   AskTierSchema,
   type AskTier,
   askContract,
@@ -230,6 +231,7 @@ import {
   readUnpricedWakeBreach,
   recordActorAttestation,
 } from '../protocol/gate.js';
+import { recordPush } from '../protocol/lanePush.js';
 import {
   acceptanceAskBody,
   deliverDispatchNudge,
@@ -5704,6 +5706,16 @@ export async function handleHttp(
         const gateReq = parseOrBadRequest(GateCheckRequestSchema, await readJson(req));
         const decision = await adjudicateGate(ctx, team, member, gateReq);
         return sendJson(res, 200, decision);
+      }
+
+      // ADR 730: a push the PostToolUse hook saw land (remote-tracking ref at HEAD). Member-authed as
+      // the pushing seat; the daemon records it on that seat's contending lane on the branch and tells
+      // the seats with an open ADR 724 watch on it, once per head. Not a gate: nothing to decide.
+      if (method === 'POST' && rest === '/lanes/push') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        const report = parseOrBadRequest(LanePushReportSchema, await readJson(req));
+        return sendJson(res, 200, await recordPush(ctx, team, member, report));
       }
 
       // ── Actor attestation (ADR 163) — who did it, never whether it was allowed ──────────────────
