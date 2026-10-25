@@ -17,8 +17,10 @@ def _ts_command(fn: str) -> str:
     expr = body[body.index("return (") : body.index(");")]
     literals = re.findall(r"'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`", expr)
     text = "".join(a or b for a, b in literals)
-    return text.replace("${POSTTOOLUSE_HOOK_MARKER}", "musterd-interrupt-hook").replace(
-        "${PRETOOLUSE_HOOK_MARKER}", "musterd-gate-hook"
+    return (
+        text.replace("${POSTTOOLUSE_HOOK_MARKER}", "musterd-interrupt-hook")
+        .replace("${PRETOOLUSE_HOOK_MARKER}", "musterd-gate-hook")
+        .replace("${PUSH_HOOK_MARKER}", "musterd-push-hook")
     )
 
 
@@ -30,10 +32,19 @@ def test_interrupt_hook_matches_claude_code_ts():
     assert cfg.INTERRUPT_HOOK == _ts_command("postToolUseHookCommand")
 
 
-def test_settings_carry_only_the_two_hooks_and_cooperbench_env():
+def test_push_hook_matches_claude_code_ts():
+    assert cfg.PUSH_HOOK == _ts_command("pushHookCommand")
+
+
+def test_settings_carry_only_the_three_hooks_and_cooperbench_env():
     s = cfg.claude_settings({"MAX_MCP_OUTPUT_TOKENS": "2000"})
     assert set(s["hooks"]) == {"PreToolUse", "PostToolUse"}
     assert s["hooks"]["PreToolUse"][0]["matcher"] == cfg.GATE_MATCHER
+    # ADR 730 §5: the push hook rides PostToolUse on Bash alone; the interrupt hook stays on every tool.
+    assert [(h["matcher"], h["hooks"][0]["command"]) for h in s["hooks"]["PostToolUse"]] == [
+        ("*", cfg.INTERRUPT_HOOK),
+        ("Bash", cfg.PUSH_HOOK),
+    ]
     assert s["env"] == {"MAX_MCP_OUTPUT_TOKENS": "2000"}
     # Tool search stays on since ADR 707 (finding 019 fix A): no ENABLE_TOOL_SEARCH override.
     assert "env" not in cfg.claude_settings()

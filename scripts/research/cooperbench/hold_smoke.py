@@ -44,17 +44,17 @@ LAPSE_WAIT_S = int(os.environ.get("LAPSE_WAIT_S", "110"))
 
 HOLDER = """You are testing a file hold. Do exactly these steps, in order, and nothing else:
 1. Call the musterd tool `team_inbox_check`, then `lane_open` with title "feature a", scope ["src/a.py"] and claim true.
-2. Use the Write tool to write src/a.py with exactly two lines: `x = 1` then `# agent1`.
+2. Read src/a.py with the Read tool, then use the Write tool to write src/a.py with exactly two lines: `x = 1` then `# agent1`.
 Then reply with one line per step saying whether it succeeded."""
 
 SECOND = """You are testing a file hold. Do exactly these steps, in order, and nothing else:
 1. Call the musterd tool `team_inbox_check`, then `lane_open` with title "feature b", scope ["src/a.py"] and claim true.
-2. Use the Write tool to write src/a.py with exactly two lines: `x = 1` then `# agent2 first`. If it is refused, do not retry and do not edit the file any other way.
+2. Read src/a.py with the Read tool, then use the Write tool to write src/a.py with exactly two lines: `x = 1` then `# agent2 first`. If it is refused, do not retry and do not edit the file any other way.
 Then reply with one line per step saying whether it succeeded, quoting any refusal."""
 
 AGAIN = """You are testing a file hold. Do exactly these steps, in order, and nothing else:
 1. Call the musterd tool `team_inbox_check`.
-2. Use the Write tool to write src/a.py with exactly two lines: `x = 1` then `# agent2 again`. If it is refused, do not retry and do not edit the file any other way.
+2. Read src/a.py with the Read tool, then use the Write tool to write src/a.py with exactly two lines: `x = 1` then `# agent2 again`. If it is refused, do not retry and do not edit the file any other way.
 Then reply with one line per step saying whether it succeeded, quoting any refusal or warning."""
 
 

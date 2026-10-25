@@ -125,7 +125,13 @@ In each container (`adapter.py`):
   claimed a lane for `src/a.py` and edited it; its edit to `src/b.py` was refused ("'**' is a
   declared contended surface you have not claimed a lane for"); the daemon audited one `lane.gate`
   deny. PASS on this Mac with no Docker (2026-10-19, $0.007), PASS on the Fly run machine (2026-10-20,
-  $0.005), and PASS with no deaf warning after the first-call fix (2026-10-20, $0.012).
+  $0.005), and PASS with no deaf warning after the first-call fix (2026-10-20, $0.012). **On Claude
+  Code 2.1.307 it could not pass as then written** (finding 025 pre-flight, 2026-10-24): Edit and Write
+  refuse a file the session has not read, and the smoke gave the model no Read tool, so neither edit
+  reached the gate (three FAILs, `gate_denies=0`). The smokes now allow `Read(src/**)` and read before
+  they edit (lane 01M5R2G1Q3); the gate wiring is unchanged, and a Read-allowed copy passed on that
+  build ($0.0035). The arm's settings also carry ADR 730's PostToolUse push hook (matcher `Bash`),
+  pinned to `claudeCode.ts` like the other two.
 - `tests/`: 39 tests on the hook drift, the prompts' shape, both adapters' flows, and the OpenHands shims, against
   a fake container and host.
 - **One task end to end in both arms** (done-when 4), on the run machine, `pallets_click` task 2068,

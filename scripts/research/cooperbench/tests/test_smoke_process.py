@@ -62,9 +62,11 @@ def test_smoke_claude_argv_uses_default_permissions_and_only_required_tools(
 
     assert "bypassPermissions" not in argv
     assert argv[argv.index("--permission-mode") + 1] == "default"
-    assert argv[argv.index("--tools") + 1] == "Edit,Write"
+    # Read is allowed (finding 025 pre-flight): Claude Code 2.1.307 refuses to edit an unread file.
+    assert argv[argv.index("--tools") + 1] == "Read,Edit,Write"
     allowed = argv[argv.index("--allowedTools") + 1 : argv.index("--setting-sources")]
     assert allowed == [
+        "Read(src/**)",
         "Write(src/**)",
         "Edit(src/**)",
         "mcp__musterd__team_inbox_check",
