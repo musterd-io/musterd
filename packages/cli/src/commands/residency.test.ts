@@ -8,10 +8,12 @@ import type { HostRegistryEntry } from '../host/registry.js';
 import {
   collectPolicyFlags,
   ensureHostKey,
+  harnessClassError,
   harnessDrift,
   policyFlags,
   registryDrift,
   renderPolicy,
+  residencyCommand,
   seatWorkspace,
 } from './residency.js';
 
@@ -38,17 +40,22 @@ describe('registryDrift — the enrollment↔registry cross-check', () => {
     expect(registryDrift(enrolled, [entry()], 'revive', 'mac.lan', () => true)).toEqual([]);
   });
 
-  it('every remediation carries --as: enrollment is admin-gated, and these are read inside a seat', () => {
-    // The bug this pins: the hint used to print bare `musterd residency on`, which is refused with
-    // `this operation requires an admin seat (is_admin)` when run where the hint tells you to run
-    // it — inside the seat's own workspace, authenticating as that agent seat.
+  it('every remediation names --seat and --workspace, run from an admin Workspace (ADR 442)', () => {
+    // `--as` is gone. The hint used to print it, and nick ran that on 2026-10-21. The command
+    // runs from the admin's own Workspace; the flags name the agent and its folder.
     const missing = registryDrift(enrolled, [], 'revive', 'mac.lan', () => false);
-    const noBinding = registryDrift(enrolled, [entry()], 'revive', 'mac.lan', () => false);
-    for (const line of [...missing, ...noBinding]) {
-      expect(line).toContain('musterd residency on --as <admin>');
-    }
+    const vanished = registryDrift(enrolled, [entry()], 'revive', 'mac.lan', () => false);
     expect(missing).toHaveLength(1);
-    expect(noBinding).toHaveLength(1);
+    expect(vanished).toHaveLength(1);
+    for (const line of [...missing, ...vanished]) {
+      expect(line).toContain('musterd residency on --seat izzo --workspace <its folder>');
+      expect(line).toContain("from an admin's own Workspace");
+      expect(line).not.toContain('--as');
+    }
+    // No registry row: the folder is unknown, so the placeholder stays.
+    expect(missing[0]).not.toContain('/ws/izzo');
+    // The registered path is gone. Do not tell the reader to pass it.
+    expect(vanished[0]).not.toContain('--workspace /ws/izzo');
   });
 
   it('skips a seat the roster binds to another node, even when its host label is ours (lane 01M41NQ05V)', () => {
@@ -79,7 +86,9 @@ describe('registryDrift — the enrollment↔registry cross-check', () => {
       (p) => !p.includes('.musterd'),
     );
     expect(bare[0]).toContain('/ws/izzo has no binding');
-    expect(bare[0]).toContain('that workspace');
+    // The folder is there, so the hint names it. The command still runs from the admin's Workspace.
+    expect(bare[0]).toContain('musterd residency on --seat izzo --workspace /ws/izzo');
+    expect(bare[0]).toContain("from an admin's own Workspace");
   });
 
   it('ignores enrollments on host labels this machine has never answered to', () => {
@@ -92,6 +101,24 @@ describe('registryDrift — the enrollment↔registry cross-check', () => {
     const lines = registryDrift(enrolled, otherTeam, 'revive', 'mac.lan', () => true);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('missing from this machine');
+  });
+});
+
+describe('residency usage and harness classes', () => {
+  it('the usage line names --seat and --workspace, and does not name --as', async () => {
+    await expect(residencyCommand(parseArgs(['nope']))).rejects.toThrow(
+      /--seat <agent> --workspace <its folder>.*from an admin's own Workspace/s,
+    );
+    await expect(residencyCommand(parseArgs(['nope']))).rejects.not.toThrow(/--as/);
+  });
+
+  it('a missing harness and a guess like claude name the known classes', () => {
+    const known = 'claude-code, cursor, codex, opencode, grok, muse, musterd';
+    expect(harnessClassError(undefined)).toBe(
+      `no harness — pass --harness <class>, one of: ${known}`,
+    );
+    expect(harnessClassError('claude')).toBe(`unknown harness "claude" — choose from: ${known}`);
+    expect(harnessClassError('claude-code')).toBeNull();
   });
 });
 

@@ -32,6 +32,7 @@ import {
   upsertHostEntry,
 } from '../host/registry.js';
 import { keychainLookup, seatKeyService } from '../keychain.js';
+import { harnessAdapters } from '../onboard/harnesses/index.js';
 import { opencodeCapability } from '../opencodeBin.js';
 import { clock, theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
@@ -51,9 +52,9 @@ import { enrollmentChecks, enrollmentRefusal } from './residencyChecks.js';
  * four — the kill switch. `status`
  * cross-checks the three stores and names drift (the `init --check` idiom).
  *
- * The two identities in play are deliberately different flags: `--seat` names *what gets
- * enrolled* (an agent seat; defaults to this workspace's binding), `--as` names *who authorizes*
- * (an admin — enrollment is an actor≠authorizer gate, ADR 127).
+ * `--seat` names what gets enrolled (an agent seat; defaults to this workspace's binding).
+ * Who authorizes is the folder the command runs from: an admin runs it from their own Workspace,
+ * and `--workspace` names the agent's folder (ADR 442). `--as` is gone.
  *
  * Increment 5 adds the knobs (ADR 131 §3): `on` takes per-seat override flags, `policy` reads or
  * sets the team-wide defaults with the same flag vocabulary, and `status` renders the effective
@@ -69,15 +70,28 @@ const POLICY_FLAGS_USAGE =
   '[--dream-budget <usd>]';
 
 /**
- * The remediation every drift line points at. It carries `--as <admin>` because enrollment is an
- * actor≠authorizer gate (ADR 127, and the header above) and these hints are read *inside a seat's
- * workspace*, where the caller authenticates as that agent seat — so the bare form fails with
- * `this operation requires an admin seat (is_admin)`. Observed 2026-07-31: the drift line printed
- * the bare form, the operator ran it verbatim in the workspace it named, and it was refused. A hint
- * that cannot be executed where it is printed is worse than no hint — it reads as a broken tool
- * rather than a missing flag. One constant so the whole surface cannot drift apart again.
+ * The command an admin runs from their own Workspace (ADR 442). `--seat` is the agent and
+ * `--workspace` is that agent's folder. A caller that knows either fills it in; the angle brackets
+ * stay where it does not. One helper, so the drift lines cannot name a different command.
  */
-const ENROLL_HINT = 'musterd residency on --as <admin>';
+function enrollHint(seat?: string, workspace?: string): string {
+  return `musterd residency on --seat ${seat ?? '<seat>'} --workspace ${workspace ?? '<its folder>'}`;
+}
+
+/** Printed beside the hint, so a copied command is not run inside the agent's folder. */
+const FROM_ADMIN = "from an admin's own Workspace";
+
+/**
+ * The classes `--harness` accepts (ADR 281). Absent, or a short guess like `claude`, used to be
+ * answered with `no harness` and a single example. The refusal names the registry.
+ */
+export function harnessClassError(harness: string | undefined): string | null {
+  const known = harnessAdapters().map((a) => a.id);
+  const list = known.join(', ');
+  if (!harness) return `no harness — pass --harness <class>, one of: ${list}`;
+  if (!known.includes(harness)) return `unknown harness "${harness}" — choose from: ${list}`;
+  return null;
+}
 
 /**
  * The enrollment↔registry cross-check (ADR 131 §1, third store): every enrollment claiming a host
@@ -153,7 +167,7 @@ export function registryDrift(
     if (!entry) {
       lines.push(
         `! drift: "${r.seat}" is enrolled to ${r.host} but missing from this machine's host ` +
-          `registry — run \`${ENROLL_HINT}\` in its workspace`,
+          `registry — ${FROM_ADMIN}, run \`${enrollHint(r.seat)}\``,
       );
       continue;
     }
@@ -164,11 +178,13 @@ export function registryDrift(
     // hunting a config fault instead of recognising their own deleted directory. A workspace that
     // exists but holds no binding is the provisioning case the original text was written for.
     const vanished = !exists(entry.workspace);
+    // A path that is gone is not the folder to pass. The sentence still names the seat's real one.
+    const hint = vanished ? enrollHint(r.seat) : enrollHint(r.seat, entry.workspace);
     lines.push(
       `! drift: "${r.seat}"'s registered workspace ${entry.workspace} ` +
         (vanished ? 'no longer exists' : 'has no binding') +
-        ` — a wake cannot occupy; re-run \`${ENROLL_HINT}\` in ` +
-        (vanished ? "the seat's real workspace" : 'that workspace'),
+        ` — a wake cannot occupy; ${FROM_ADMIN}, re-run \`${hint}\`` +
+        (vanished ? ", naming the seat's real workspace" : ''),
     );
   }
   return lines;
@@ -286,9 +302,9 @@ export async function residencyCommand(parsed: Parsed): Promise<number> {
   if (sub === 'status' || sub === undefined) return statusCommand(parsed);
   throw new CliError(
     'usage: musterd residency on | off | status | policy  ' +
-      '(--seat <agent> = what gets enrolled, default this workspace’s seat; --as <admin> = who ' +
-      `authorizes; --harness musterd --key-env <VAR> = a resident seat on your own key, ADR 588). ` +
-      `Knobs, on \`on\` (this seat) or \`policy\` (team defaults): ${POLICY_FLAGS_USAGE}`,
+      `(--seat <agent> --workspace <its folder>, run ${FROM_ADMIN} — the folder you run from is ` +
+      'who authorizes, ADR 442; --harness musterd --key-env <VAR> = a resident seat on your own ' +
+      `key, ADR 588). Knobs, on \`on\` (this seat) or \`policy\` (team defaults): ${POLICY_FLAGS_USAGE}`,
     2,
   );
 }
@@ -526,10 +542,13 @@ async function onCommand(
   const binding = target?.binding ?? null;
   // Identity declares no surface since ADR 281; the captured session's harness is the evidence-backed
   // default (a claude-code hook only fires under claude-code). `--harness` stays the explicit choice.
-  const harness = flagStr(parsed.flags, 'harness') ?? binding?.session?.harness;
-  if (!harness) {
-    throw new CliError('no harness — pass --harness <class> (e.g. claude-code)', 2);
+  // A guess such as `claude` is not a class; the refusal names the registry.
+  const rawHarness = flagStr(parsed.flags, 'harness') ?? binding?.session?.harness;
+  const harnessError = harnessClassError(rawHarness);
+  if (harnessError !== null || rawHarness === undefined) {
+    throw new CliError(harnessError ?? 'no harness — pass --harness <class>', 2);
   }
+  const harness = rawHarness;
   if (harness === 'codex') {
     const capability = await codexCapability();
     if (!capability.supported) {
@@ -858,7 +877,7 @@ async function statusCommand(parsed: Parsed): Promise<number> {
   }
   if (residency.length === 0) {
     process.stdout.write(
-      theme.meta(`no seats enrolled — \`${ENROLL_HINT}\` in a seat’s workspace`) + '\n',
+      theme.meta(`no seats enrolled — ${FROM_ADMIN}, \`${enrollHint()}\``) + '\n',
     );
     return 0;
   }
@@ -884,7 +903,7 @@ async function statusCommand(parsed: Parsed): Promise<number> {
       process.stdout.write(
         theme.warn(
           `! drift: "${bound}" is enrolled but this workspace holds no grant — ` +
-            `re-run \`${ENROLL_HINT}\` here`,
+            `${FROM_ADMIN}, re-run \`${enrollHint(bound, findWorkspaceDir() ?? undefined)}\``,
         ) + '\n',
       );
     } else if (!mine && binding.grant !== undefined) {
@@ -955,7 +974,8 @@ async function statusCommand(parsed: Parsed): Promise<number> {
       process.stdout.write(
         theme.meta(
           `note: host registry holds "${entry.seat}" (${hostRegistryPath()}) but the seat is not ` +
-            `enrolled — stale after a revoke elsewhere; \`${ENROLL_HINT}\` or ignore`,
+            `enrolled — stale after a revoke elsewhere; ${FROM_ADMIN}, ` +
+            `\`${enrollHint(entry.seat, entry.workspace)}\` or ignore`,
         ) + '\n',
       );
     }
