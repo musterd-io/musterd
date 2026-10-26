@@ -232,6 +232,20 @@ Use Claude’s published identity and ChatGPT Developer Mode on an eligible Busi
 
 Recorded unmet on 2026-09-29: this workspace exposes no authenticated Claude published-identity or eligible ChatGPT Developer Mode session, and no browser-control surface to run those callbacks. The hermetic fixtures do not count as real-client acceptance; reopen this check when those client sessions are available.
 
+Run on 2026-10-26 (lane 01M3QQJENE): a throwaway daemon on its own database, reached through a Cloudflare quick tunnel, team `cimd`, members admitted by invite.
+
+| Client | Identity it chose | Discovery | Consent | Callback + code exchange | Tool call | Refresh |
+|---|---|---|---|---|---|---|
+| claude.ai web | CIMD, `https://claude.ai/oauth/mcp-oauth-client-metadata` | pass | pass, page shows "Client ID host: claude.ai" | pass | pass, `team_status` | pass, `oauth.token_rotated` after the 1h expiry |
+| ChatGPT web, Plus account | CIMD, a per-connector `https://chatgpt.com/oauth/<id>/client.json` | pass | pass | pass | pass, `team_status` | not observed (the run ended inside the first hour) |
+| Codex CLI 0.162 | CIMD, `https://chatgpt.com/oauth/codex/<id>/client.json` | pass | failed with 400, then pass after ADR 743 | pass | `tools/list` pass; no tool call, because the machine's Codex model login was revoked | not observed |
+| DCR | a client registered over `/register`, driven by curl through the tunnel | pass | pass | pass | pass, `team_status` | pass |
+
+- Codex registers portless loopback redirects and authorizes from an ephemeral port, which the exact redirect match refused. Fixed by [ADR 743](../../decisions/743-oauth-loopback-redirect-any-port.md) (#3379); the same login then completed.
+- No real client used DCR. All three defaulted to CIMD, and claude.ai sent its CIMD client ID even with "Register automatically" selected on the connector. The DCR row is therefore the client shape driven by hand, as Rehearsal A did, and not a real client.
+- ChatGPT's "Add custom MCP server" is on a Plus account, not only Business, Enterprise or Edu.
+- The consent page renders as unstyled HTML, and a remote seat's `POST /teams/:team/telemetry/tool-calls` is refused 403 on every tool call. Both are noted here and not fixed in this run.
+
 - [ ] **Step 5: Publish and close the lane by the repository workflow**
 
 Push only after the local pre-push gates pass. Keep the seat trailer and `Refs ADR-NNN` in the final squash message. Let required CI auto-merge the PR; after merge submit the lane with PR/SHA/authorizer and follow the returned acceptance contract.
