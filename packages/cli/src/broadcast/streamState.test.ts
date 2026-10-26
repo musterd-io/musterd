@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   FLAP_MAX,
   FLAP_WINDOW_MS,
+  STALL_MS,
   decideEnsure,
   standDownReport,
   readStreamState,
@@ -351,5 +352,61 @@ describe('standDownReport — what the human is told when the supervisor gives u
     const d = decideEnsure({ state, liveCount: 0, now: NOW });
     expect(d.state.failures ?? []).toEqual([]);
     expect(standDownReport(d.state, NOW)).not.toContain('ancient history');
+  });
+});
+
+// ADR 737: a machine that is up but not encoding is a crash that has not exited (2026-10-12: 3.5 h
+// dark with the machine `started`).
+describe('decideEnsure — a stalled machine', () => {
+  it('a live machine with fresh encoder progress stays a noop', () => {
+    const d = decideEnsure({ state: live(), liveCount: 1, now: NOW, stalledForMs: 5_000 });
+    expect(d.action).toBe('noop');
+  });
+
+  it('unknown progress is never a stall', () => {
+    const d = decideEnsure({ state: live(), liveCount: 1, now: NOW, stalledForMs: null });
+    expect(d.action).toBe('noop');
+  });
+
+  it('no progress past STALL_MS stops the machine, charges the budget, and marks the stall', () => {
+    const d = decideEnsure({ state: live(), liveCount: 1, now: NOW, stalledForMs: STALL_MS });
+    expect(d.action).toBe('stop_stalled');
+    expect(d.state.restarts).toEqual([NOW]);
+    expect(d.state.stallStoppedAt).toBe(NOW);
+    expect(d.note).toMatch(/no encoder progress for 3m/);
+  });
+
+  it('the next tick relaunches it without charging again, and clears the mark', () => {
+    const d = decideEnsure({
+      state: live({ restarts: [NOW - 60_000], stallStoppedAt: NOW - 60_000 }),
+      liveCount: 0,
+      now: NOW,
+    });
+    expect(d.action).toBe('restart');
+    expect(d.cause).toBe('stall');
+    expect(d.state.restarts).toEqual([NOW - 60_000]);
+    expect(d.state.stallStoppedAt).toBeUndefined();
+  });
+
+  it('a stall with the budget spent stands down instead', () => {
+    const restarts = Array.from({ length: FLAP_MAX }, (_, i) => NOW - (i + 1) * 60_000);
+    const d = decideEnsure({
+      state: live({ restarts }),
+      liveCount: 1,
+      now: NOW,
+      stalledForMs: STALL_MS * 2,
+    });
+    expect(d.action).toBe('stand_down');
+    expect(d.note).toMatch(/started but not streaming/);
+  });
+
+  it('a deliberate stop is never overridden by a stall reading', () => {
+    const d = decideEnsure({
+      state: live({ desired: 'stopped' }),
+      liveCount: 1,
+      now: NOW,
+      stalledForMs: STALL_MS * 10,
+    });
+    expect(d.action).toBe('noop');
   });
 });
