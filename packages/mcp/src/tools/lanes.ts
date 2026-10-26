@@ -282,7 +282,7 @@ export function registerLanes(
         risk: z
           .array(z.string())
           .optional()
-          .describe('only user-facing: peer review. Other tag or stakes high: human. [] = none.'),
+          .describe('only user-facing: peer review. Other tag, e.g. policy: human. [] = none.'),
       },
     },
     async (args) => {
@@ -296,7 +296,8 @@ export function registerLanes(
               `lane_open: this lane's scope reaches a human-visible surface` +
                 `${args.scope ? ` (${args.scope.join(', ')})` : ''}. Pass risk explicitly — as your` +
                 ` tags (e.g. ["user-facing"]), or [] to record there is none. user-facing alone is a` +
-                ` peer review; another tag, or stakes high, is what asks a human (ADR 631).`,
+                ` peer review; another tag (policy, security…) asks a human, and stakes high` +
+                ` does only on a user-facing lane (ADR 631).`,
             ),
           );
         }

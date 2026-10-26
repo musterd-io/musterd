@@ -286,3 +286,13 @@ The brief's owed-reviews slice carried its own notion of "unanswered", and it wa
 
 **What to do with it.** `awaiting_acceptance` is not evidence that a verdict is owed — read the ask's ledger. And on a risky lane, the wait after your accept belongs to a human, whatever the brief says about it. (dreamy insight `01M5EFMRH`.)
 
+
+## `stakes: high` with no risk tag never asks a human; tag the lane `policy` instead (2026-10-26; falsify: a lane opened with `stakes: high` and `risk: []` whose peer accept fires "human acceptance required") <!-- claim: other -->
+
+Lane `01M5N3TX8E` (ADR 726, which reversed ADRs 057 and 316) was opened with `stakes: high` and `risk: []`. izzo's accept at 2026-10-23 20:13 closed it `done (confirmed) — counterpart_confirm`, and no ask reached nick. That is what the code says. `humanReviewRequired` (`packages/protocol/src/lanes.ts`) returns false on an empty risk list before it reads `stakes`. ADR 631 §2 lets `stakes: high` require a human only on a `user-facing` lane.
+
+The two fields have different jobs. A risk tag names the kind of harm and routes the review to a human (ADR 172/188). Stakes prices the review: `low` can skip acceptance (ADR 234 §3, ADR 530 §5). ADR 631 crosses that line once, for `user-facing`, and nowhere else.
+
+The author was misled by the guidance. The `lane_open` `risk` text read "Other tag or stakes high: human", and the CLI refusal read "add another tag, or --stakes high". Both now say that `stakes: high` asks a human only on a `user-facing` lane (lane `01M5N6VNXF`).
+
+**For a change a human must decide** — one that reverses or amends an ADR, or changes team rules or policy — declare `risk: ["policy"]`. Any tag other than `user-facing` already routes to a human, so the tag needs no code. It is a convention, recorded here.

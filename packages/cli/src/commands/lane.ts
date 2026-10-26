@@ -345,7 +345,8 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         `open "${title}": scope reaches a human-visible surface (${scope?.join(', ')}). ` +
           `Declare its acceptance risk with --risk <tags> (e.g. --risk user-facing), ` +
           `or --risk none to record that there is none. user-facing alone is a peer review; ` +
-          `add another tag, or --stakes high, when the change is big (ADR 631). ` +
+          `add another tag (policy, security…) to ask a human; --stakes high does that only ` +
+          `on a user-facing lane (ADR 631). ` +
           `The lane cannot open with the default.`,
         2,
       );
