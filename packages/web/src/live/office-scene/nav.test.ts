@@ -4,7 +4,9 @@ import {
   CHECK_IN_MARKS,
   COFFEE_STAND,
   COOLER_STAND,
+  DESK_D,
   DESK_SLOTS,
+  DESK_W,
   ENTRANCE,
   FRIDGE_STAND,
   FWD,
@@ -38,6 +40,28 @@ describe('the floor plan stays navigable', () => {
       // every waypoint but the last (the seat itself, inside the chair's footprint) is real open floor;
       // a degenerate straight glide through the furniture would fail here
       for (const p of path.slice(0, -1)) expect(walkable(p.lx, p.ly)).toBe(true);
+    }
+  });
+});
+
+describe('desk clearances', () => {
+  it('stands no desk slab in the 60 units behind any seat', () => {
+    // Rugs are walkable, so a seat whose push-back floor lands on another pod's rug passes
+    // `walkable` — but if a desk SLAB is there the chair-push animation crosses it (office v3,
+    // Review Focus 1).
+    const insideSlab = (s: (typeof DESK_SLOTS)[number], p: { lx: number; ly: number }) => {
+      const sn = s.dir === 'S' || s.dir === 'N';
+      const w = sn ? DESK_W : DESK_D;
+      const d = sn ? DESK_D : DESK_W;
+      return Math.abs(p.lx - s.lx) < w / 2 && Math.abs(p.ly - s.ly) < d / 2;
+    };
+    for (const d of DESK_SLOTS) {
+      const f = FWD[d.dir];
+      const behind = { lx: d.lx - f[0] * (SEAT_BACK + 60), ly: d.ly - f[1] * (SEAT_BACK + 60) };
+      for (const o of DESK_SLOTS) {
+        if (o === d) continue;
+        expect(insideSlab(o, behind), `desk ${d.id} pushes back into desk ${o.id}`).toBe(false);
+      }
     }
   });
 });
@@ -85,15 +109,16 @@ describe('walkability grid', () => {
   });
 
   it('returns a plain segment when the straight line is already clear', () => {
-    const from = { lx: 60, ly: 290 };
-    const to = { lx: 60, ly: 400 };
+    // x 40: the left-wall aisle west of the pinwheel (office v3); x 60 is its west chair's pad.
+    const from = { lx: 40, ly: 290 };
+    const to = { lx: 40, ly: 400 };
     expect(findPath(from, to)).toEqual([from, to]);
   });
 
   it('detours around another member standing mid-route', () => {
-    const from = { lx: 60, ly: 290 };
-    const to = { lx: 60, ly: 430 };
-    const path = findPath(from, to, [{ lx: 60, ly: 360 }]);
+    const from = { lx: 40, ly: 290 };
+    const to = { lx: 40, ly: 430 };
+    const path = findPath(from, to, [{ lx: 40, ly: 360 }]);
     expect(path.length).toBeGreaterThan(2);
     // and softened avoidance never blocks the endpoints themselves
     const near = findPath(from, to, [{ lx: from.lx, ly: from.ly + 10 }, { lx: to.lx, ly: to.ly }]);

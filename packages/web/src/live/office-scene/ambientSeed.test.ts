@@ -246,12 +246,13 @@ describe('ambientPool — a working member keeps their desk (ADR 464 §3.1, fals
       presence: 'online',
       kind: 'agent',
     }) as unknown as import('./types').OfficeNode;
-  // Row-mates: desk slots 0 and 1 share a pod row in the layout; 2 and 3 the next.
+  // Row-mates: desk slots 4 and 5 share the spine's west-facing column (office v3; slots 0–3 are
+  // the pinwheel, whose four desks face four ways and pair with nobody); 6 and 7 the next.
   const placements = new Map<string, import('./seating').Placement>([
-    ['ada', { kind: 'desk', slot: 0 }],
-    ['bo', { kind: 'desk', slot: 1 }],
-    ['cy', { kind: 'desk', slot: 2 }],
-    ['di', { kind: 'desk', slot: 3 }],
+    ['ada', { kind: 'desk', slot: 4 }],
+    ['bo', { kind: 'desk', slot: 5 }],
+    ['cy', { kind: 'desk', slot: 6 }],
+    ['di', { kind: 'desk', slot: 7 }],
     ['ev', { kind: 'leisure', spot: 0 }],
   ]);
   const nodes = new Map([

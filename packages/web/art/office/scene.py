@@ -35,16 +35,24 @@ DESK_UP = DESK_LEG_H + DESK_SLAB
 LEG = 8
 LEG_INSET = 6
 
-PODS = [  # id, cx, cy, axis, size, rug fill, rug mark, weave
-    (0, 215, 290, "ns", 4, "#93a9a4", "#75908a", "border"),
-    (1, 560, 545, "ew", 4, "#97a7b8", "#7c8ca0", "stripes"),
-    (2, 245, 560, "ew", 2, "#ab97a4", "#8b7683", "border"),
-    (3, 455, 250, "ew", 1, "#a8ab8e", "#8c9070", "stripes"),
+PODS = [  # id, cx, cy, axis, shape, rug fill, rug mark, weave — mirrors layout.ts PODS (office v3, 2026-10-26)
+    (0, 225, 330, "ns", "pinwheel", "#93a9a4", "#75908a", "border"),
+    (1, 540, 440, "ns", "spine", "#97a7b8", "#7c8ca0", "stripes"),
+    (2, 235, 595, "ew", "zigzag", "#ab97a4", "#8b7683", "border"),
+    (3, 790, 830, "ns", "duo", "#b5a58c", "#95846c", "border"),
 ]
-POD_RUG = (230, 250)        # along, across
-POD_RUG_DUO = (170, 140)
-POD_RUG_SOLO = (130, 120)
-BENCH = dict(lx=320, ly=62, long=300, deep=30)
+POD_RUGS = {  # shape → (along, across) — mirrors layout.ts podRug()
+    "quad": (230, 250),
+    "duo": (120, 220),
+    "solo": (130, 120),
+    "spine": (440, 250),
+    "pinwheel": (240, 240),
+    "zigzag": (260, 240),
+}
+# The pod rugs' field is near-transparent (office v3): a thin bound rug the floor shows through, so
+# the zone reads as a marker rather than a carpet. The meeting and reception rugs stay opaque.
+POD_RUG_FIELD_ALPHA = 0.25
+BENCH = dict(lx=320, ly=56, long=300, deep=30)
 NOOK = (725, 175)
 NOOK_RUG_R = 150
 NOOK_RUG = ("#ce9256", "#b2743c")
@@ -262,6 +270,23 @@ def glow(name: str, rgb: tuple[float, float, float], strength: float = 1.6) -> b
     return m
 
 
+def translucent(name: str, like: bpy.types.Material, alpha: float) -> bpy.types.Material:
+    """A blended copy of `like` at `alpha` — the thin pod rugs the floor shows through (office v3)."""
+    m = bpy.data.materials.get(name)
+    if m:
+        return m
+    m = like.copy()
+    m.name = name
+    bsdf = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+    bsdf.inputs["Alpha"].default_value = alpha
+    for attr, val in (("surface_render_method", "BLENDED"), ("blend_method", "BLEND")):
+        try:
+            setattr(m, attr, val)
+        except Exception:
+            pass
+    return m
+
+
 def shadow_mat() -> bpy.types.Material:
     """The contact shadow under an item: translucent black, blended, casting nothing."""
     m = bpy.data.materials.get("contact-shadow")
@@ -413,10 +438,14 @@ def bench(asset_id: str, zs: float, col: bpy.types.Collection) -> bpy.types.Obje
     return finish(asset_id, parts, B["lx"], B["ly"], col)
 
 
-def rug(asset_id: str, lx: float, ly: float, w: float, d: float, fill: str, mark: str, weave: str, zs: float, col) -> bpy.types.Object:
-    """A flat rug: 1.2 high, bound or striped with a second thin layer, a knot at each corner."""
+def rug(asset_id: str, lx: float, ly: float, w: float, d: float, fill: str, mark: str, weave: str, zs: float, col,
+        field_alpha: float = 1.0) -> bpy.types.Object:
+    """A flat rug: 1.2 high, bound or striped with a second thin layer, a knot at each corner.
+    `field_alpha` < 1 thins the field (and a border weave's inner panel) so the floor shows through."""
     base = fabric(f"rug-{fill}", srgb(fill), weave=1.4)
     accent = fabric(f"rug-{mark}", srgb(mark), weave=1.4)
+    if field_alpha < 1.0:
+        base = translucent(f"rug-{fill}-a{int(field_alpha * 100)}", base, field_alpha)
     parts = [box(f"{asset_id}/field", lx, ly, 0, w, d, 1.2, base, zs)]
     if weave == "border":
         parts.append(box(f"{asset_id}/border", lx, ly, 1.2, w - 26, d - 26, 0.3, accent, zs))
@@ -1415,11 +1444,11 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     for o in shell:
         o["shell"] = True
     a["room/shell"] = shell[0]
-    for pid, cx, cy, axis, size, fill, mark, weave in PODS:
+    for pid, cx, cy, axis, shape, fill, mark, weave in PODS:
         ns = axis == "ns"
-        along, across = POD_RUG_SOLO if size == 1 else POD_RUG_DUO if size == 2 else POD_RUG
+        along, across = POD_RUGS[shape]
         w, d = (across, along) if ns else (along, across)
-        a[f"rug/pod-{pid}"] = rug(f"rug/pod-{pid}", cx, cy, w, d, fill, mark, weave, zs, export)
+        a[f"rug/pod-{pid}"] = rug(f"rug/pod-{pid}", cx, cy, w, d, fill, mark, weave, zs, export, field_alpha=POD_RUG_FIELD_ALPHA)
     mw, md, mf, mm, mv = MEETING["rug"]
     a["rug/meeting"] = rug("rug/meeting", MEETING["lx"], MEETING["ly"], mw, md, mf, mm, mv, zs, export)
     rlx, rly, rw, rd, rf, rm, rv = RECEPTION["rug"]

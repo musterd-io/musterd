@@ -171,6 +171,15 @@ export function walkable(lx: number, ly: number): boolean {
   return grid()[Math.floor(ly / CELL) * N + Math.floor(lx / CELL)] === 0;
 }
 
+/** `p` itself when it is open floor, else the centre of the nearest open cell — for a computed
+ * point (a midpoint between two seats, say) that may land inside furniture. `findPath` keeps its
+ * exact endpoints, so a caller that wants to STAND somewhere nudges first. */
+export function nearestWalkable(p: P): P {
+  if (walkable(p.lx, p.ly)) return p;
+  const g = grid();
+  return centre(nearestFree(p, (c) => g[c] === 1));
+}
+
 const cellOf = (p: P): number => Math.floor(p.ly / CELL) * N + Math.floor(p.lx / CELL);
 const centre = (c: number): P => ({
   lx: (c % N) * CELL + CELL / 2,

@@ -98,7 +98,7 @@ const STATIC_IDS: Record<string, number> = {
   'rug/reception': 1,
   'rug/nook': 1,
   'bench/base': 1,
-  'plant/snake': 3,
+  'plant/snake': 4, // three on the walls + the pinwheel's hub (office v3)
   'plant/fiddle': 6, // five on the floor + reception's
   'shelf/0': 1,
   'shelf/1': 1,

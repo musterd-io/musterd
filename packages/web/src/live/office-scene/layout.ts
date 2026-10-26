@@ -111,78 +111,87 @@ export interface Rug {
  * a visor, a blink — is the one thing that makes a member read as a person rather than a coloured block,
  * so the room needs some; turning more of the floor toward the camera would make it a stage set.
  */
+export type PodShape = 'quad' | 'duo' | 'solo' | 'spine' | 'pinwheel' | 'zigzag';
+export const POD_SHAPE_SEATS: Record<PodShape, number> = {
+  quad: 4,
+  duo: 2,
+  solo: 1,
+  spine: 8,
+  pinwheel: 4,
+  zigzag: 3,
+};
+/** The most desks that may face the camera (`'S'`). A face is what makes a member read as a
+ * person, so the room needs some; more than this and it is a stage set. */
+export const MAX_S_FACING = 4;
+
 export interface Pod {
   id: number;
   cx: number;
   cy: number;
   axis: 'ns' | 'ew';
-  /** Four desks (two facing pairs) or two (one facing pair) — the 2026-08-02 re-cut mixes sizes so
-   * the room reads grown-organically rather than stamped from a grid. */
-  size: 1 | 2 | 4;
+  /**
+   * The cluster's shape (office v3, 2026-10-26). `quad` is two facing pairs, `duo` one, `solo` one
+   * desk; `spine` is four facing pairs in a line along `axis`; `pinwheel` is four desks around a
+   * centre plant, each facing a different cardinal direction; `zigzag` is three desks stepped
+   * diagonally so no two share a row or a column. The mix is what keeps the room from reading as a
+   * grid — nick asked for "a bit of quirky layout, not just all symmetrical groups or rows".
+   */
+  shape: PodShape;
   /** The pod's floor rug — a zone marker under the whole cluster, seats included. With no divider to carry
    * it, the rug is the *only* thing that makes a pod a place: it is what lets a member say "the blue pod". */
   rug: Rug;
 }
 
+/**
+ * Layout E (office v3, 2026-10-26 — spec `docs/superpowers/specs/2026-10-26-office-v3-design.md`
+ * §2.1): 28 desks on an asymmetric floor. The three-column room of 2026-08-03 (quad / quad / duo /
+ * solo, 17 desks) is replaced wholesale; its history is in git. Positions were tuned within the
+ * spec's ±40 against `layout.test.ts` and `nav.test.ts`.
+ */
 export const PODS: Pod[] = [
   {
+    // NW quarter: four desks around a floor plant, each facing a different way.
     id: 0,
-    cx: 215,
-    // The band under the bench is the constraint above (north seats must clear MIN_SPOT_GAP from the
-    // bench chairs) and pod 2's pads the one below. 255 sits in the middle of that pocket instead of
-    // against its south edge. (255 was tried on 2026-08-03 and fails: at that latitude the north
-    // seats' stand-behind floor lands in the bench chairs' grid cells.)
-    cy: 290,
+    cx: 225,
+    cy: 330,
     axis: 'ns',
-    size: 4,
+    shape: 'pinwheel',
     rug: { shape: 'rect', weave: 'border', fill: '#93a9a4', mark: '#75908a' },
   },
   {
-    // The room's other quad. It sat at (620, 570) hard against the right column and was the hub of
-    // the last crowding: 18 units to the meeting rug, 21 to one window desk, 31 to the other. West
-    // into the middle is where the space is — the huddle, the centre duo and pod 3's second desk all
-    // came out of that band, and nothing had moved in to use it.
+    // Centre: four facing pairs in a line running N–S. Five was tried (2026-10-26) and sealed the
+    // room: the foot met the meeting table's north chairs and the only way east was round the top
+    // wall, past the work board. Starts at y≈240 so its north-east desk clears
+    // the café (the fridge's west face is at x≈603).
     id: 1,
-    cx: 560,
-    cy: 545,
-    axis: 'ew',
-    size: 4,
+    cx: 540,
+    cy: 440,
+    axis: 'ns',
+    shape: 'spine',
     rug: { shape: 'rect', weave: 'stripes', fill: '#97a7b8', mark: '#7c8ca0' },
   },
   {
-    // The old third quad, cut to a duo (2026-08-02). 2026-08-03: pulled west and north into the left
-    // column — the room now reads as three columns (left desks / centre desks / nook+pod1 right).
+    // Front-left: three desks stepped diagonally.
     id: 2,
-    cx: 245,
-    cy: 560,
+    cx: 235,
+    cy: 595,
     axis: 'ew',
-    size: 2,
+    shape: 'zigzag',
     rug: { shape: 'rect', weave: 'border', fill: '#ab97a4', mark: '#8b7683' },
   },
   {
-    // Upper-centre, in the clearing the huddle left. 'ew' is load-bearing: an 'ns' pod here would add
-    // a third viewer-facing desk and break the exactly-two rule pod 0 carries.
-    //
-    // A DUO until 2026-08-03, now a solo — the one desk this round spends. It was the lounge's west
-    // wall, 13 units off the nook's rug, and it could not move: a duo's two seats put their
-    // stand-behind floor on OPPOSITE sides, so it needed ~350 units of width in a band that had ~190.
-    // One desk needs that clearance on one side only, which is what let it move 45 west and hand the
-    // lounge a 55-unit margin where it had 13.
+    // SE corner: two desks side by side against the south wall, facing S like a front row, seats
+    // to the north (a N-facing pair would push its chairs off the floor). The spec's solo island
+    // (front-right) is gone: with the meeting table, this row and the window desks, the front strip
+    // sealed itself — the meeting chairs and this row's seats became pockets nobody could reach.
     id: 3,
-    cx: 455,
-    cy: 250,
-    axis: 'ew',
-    size: 1,
-    rug: { shape: 'rect', weave: 'stripes', fill: '#a8ab8e', mark: '#8c9070' },
+    cx: 790,
+    cy: 830,
+    axis: 'ns',
+    shape: 'duo',
+    rug: { shape: 'rect', weave: 'border', fill: '#b5a58c', mark: '#95846c' },
   },
 ];
-
-/*
- * There is no pod 4. The centre duo that stood at (350, 700) is gone with the 2026-08-03 declutter:
- * the floor drops 20 → 18 desks, and this is the cluster that bought the most room per seat removed.
- * It was the piece with the least air around it — 20 units to the meeting rug, 25 to reception's —
- * and it stood in the front strip, which is the one band the door has to cross to reach anything.
- */
 
 /** Desk centre offsets from the pod centre: along the pairing axis, and across it (two desks per row). */
 export const POD_ALONG = 40; // desk centre to pod centre, across the shared screen (68-deep desks → a 12 gap)
@@ -200,42 +209,103 @@ export const POD_ACROSS = 55; // the two desks of a row, side by side (100-wide 
  * What makes a pod read as a pod is the desks facing each other across a shared rug, not a panel.
  */
 export const POD_RUG = { along: 230, across: 250 };
-/** A duo's rug — the facing pair sits on the pod's axis, so the rug is narrow across it. The 170
- * along is what lets the front duo fit between reception's rug and the meeting zone's. */
-export const POD_RUG_DUO = { along: 170, across: 140 };
+/** A duo's rug — a side-by-side row (office v3), so the rug is wide across the axis and shallow
+ * along it: one row of desks, their chairs, and a stride behind. */
+export const POD_RUG_DUO = { along: 120, across: 220 };
 /** A solo's rug — one desk's worth, and no bigger: the whole point of a solo is the floor it gives back. */
 export const POD_RUG_SOLO = { along: 130, across: 120 };
+/** A spine's rug: four pairs along the axis. */
+export const POD_RUG_SPINE = { along: 440, across: 250 };
+/** A pinwheel's rug: square, the plant at its centre. */
+export const POD_RUG_PINWHEEL = { along: 240, across: 240 };
+/** A zigzag's rug: the three stepped desks and their seats. */
+export const POD_RUG_ZIGZAG = { along: 260, across: 240 };
 
-/** The four desks of a pod, in pod-local order (north/west row first). */
-function podDesks(pod: Pod): DeskSlot[] {
+/** The rug under a pod, by shape, as `{ along, across }` the pod's axis. */
+export function podRug(pod: Pod): { along: number; across: number } {
+  switch (pod.shape) {
+    case 'solo':
+      return POD_RUG_SOLO;
+    case 'duo':
+      return POD_RUG_DUO;
+    case 'spine':
+      return POD_RUG_SPINE;
+    case 'pinwheel':
+      return POD_RUG_PINWHEEL;
+    case 'zigzag':
+      return POD_RUG_ZIGZAG;
+    default:
+      return POD_RUG;
+  }
+}
+
+/** The pinwheel's desks, as offsets from the pod centre: each a step out from the centre plant,
+ * facing *inward* so the seat lands on the outside of the ring — the four face S, W, N, E in turn. */
+const PINWHEEL_ARMS: ReadonlyArray<{ dx: number; dy: number; dir: Dir }> = [
+  { dx: 0, dy: -90, dir: 'S' },
+  { dx: 85, dy: 0, dir: 'W' },
+  { dx: 0, dy: 90, dir: 'N' },
+  { dx: -85, dy: 0, dir: 'E' },
+];
+
+/** The zigzag's desks, as offsets from the pod centre: stepped so no two share a row or a column. */
+const ZIGZAG_STEPS: ReadonlyArray<{ dx: number; dy: number; dir: Dir }> = [
+  { dx: -110, dy: -90, dir: 'E' },
+  { dx: 0, dy: 0, dir: 'W' },
+  { dx: -60, dy: 102, dir: 'E' },
+];
+
+/** The desks of a pod, in pod-local order (north/west row first). Slot ids are assigned
+ * sequentially over `DESK_SLOTS` (the old `id * 4 + i` stride cannot hold an 8-desk spine). */
+function podDesks(pod: Pod): Omit<DeskSlot, 'id'>[] {
   const ns = pod.axis === 'ns';
   const near: Dir = ns ? 'S' : 'E'; // the row on the low side faces *into* the pod, i.e. toward +axis
   const far: Dir = ns ? 'N' : 'W';
-  const at = (along: number, across: number, dir: Dir, i: number): DeskSlot => ({
-    id: pod.id * 4 + i,
+  const at = (along: number, across: number, dir: Dir): Omit<DeskSlot, 'id'> => ({
     lx: pod.cx + (ns ? across : along),
     ly: pod.cy + (ns ? along : across),
     dir,
     pod: pod.id,
     kind: 'pod',
   });
-  if (pod.size === 1) {
-    // The desk sits ON the pod centre and faces `near`, so its seat — and the 60 units of floor the
-    // occupant needs to push back and stand — land on the side AWAY from whatever this pod was moved
-    // to make room for.
-    return [at(0, 0, near, 0)];
+  const off = (o: { dx: number; dy: number; dir: Dir }): Omit<DeskSlot, 'id'> => ({
+    lx: pod.cx + o.dx,
+    ly: pod.cy + o.dy,
+    dir: o.dir,
+    pod: pod.id,
+    kind: 'pod',
+  });
+  switch (pod.shape) {
+    case 'solo':
+      // The desk sits ON the pod centre and faces `near`, so its seat — and the 60 units of floor the
+      // occupant needs to push back and stand — land on the side AWAY from whatever this pod was
+      // moved to make room for.
+      return [at(0, 0, near)];
+    case 'duo':
+      // Side by side across the axis, both facing `near` (office v3: the corner duo is a front row
+      // against the south wall, seats to the north).
+      return [at(0, -POD_ACROSS, near), at(0, POD_ACROSS, near)];
+    case 'spine': {
+      // Four facing pairs along the axis, 100 apart; the two columns face each other across it.
+      // Column-major (the whole high column, then the low one), so the seating probe's linear runs
+      // land row-mates side by side — `deskNeighbourPairs` pairs same-facing desks ROW_GAP apart.
+      const lo: Dir = ns ? 'E' : 'S';
+      const hi: Dir = ns ? 'W' : 'N';
+      const alongs = [-150, -50, 50, 150];
+      return [...alongs.map((along) => at(along, POD_ACROSS, hi)), ...alongs.map((along) => at(along, -POD_ACROSS, lo))];
+    }
+    case 'pinwheel':
+      return PINWHEEL_ARMS.map(off);
+    case 'zigzag':
+      return ZIGZAG_STEPS.map(off);
+    default:
+      return [
+        at(-POD_ALONG, -POD_ACROSS, near),
+        at(-POD_ALONG, POD_ACROSS, near),
+        at(POD_ALONG, -POD_ACROSS, far),
+        at(POD_ALONG, POD_ACROSS, far),
+      ];
   }
-  if (pod.size === 2) {
-    // One facing pair on the pod's axis. Ids keep the *4 stride (0 and 2), so a duo's desks hash to
-    // the same props/chair-styles they would as the corresponding quad rows — and ids stay unique.
-    return [at(-POD_ALONG, 0, near, 0), at(POD_ALONG, 0, far, 2)];
-  }
-  return [
-    at(-POD_ALONG, -POD_ACROSS, near, 0),
-    at(-POD_ALONG, POD_ACROSS, near, 1),
-    at(POD_ALONG, -POD_ACROSS, far, 2),
-    at(POD_ALONG, POD_ACROSS, far, 3),
-  ];
 }
 
 /**
@@ -248,7 +318,10 @@ function podDesks(pod: Pod): DeskSlot[] {
  * and pod 0 slid south (cy 220 → 300) specifically so bench chairs at ly≈104 clear its north-row
  * seats by a full MIN_SPOT_GAP. The printer moved out of the run (it stood at lx 390, mid-bench).
  */
-export const BENCH = { lx: 320, ly: 62, long: 300, deep: 30, seats: 4, dir: 'N' as Dir };
+// `ly` 62 → 56 (office v3): the chairs' padded footprints ended at y 125, one row into the
+// nav grid's row 8, so a bench sitter's nearest open cell was SIDEWAYS between the chairs and every
+// walk out of the bench began with an S-bend. At 56 the pads end at 119 and the way out is south.
+export const BENCH = { lx: 320, ly: 56, long: 300, deep: 30, seats: 4, dir: 'N' as Dir };
 
 /**
  * The two standalone window desks on the right flank — facing the ROOM, window light behind them.
@@ -266,12 +339,12 @@ export const WINDOW_DESKS: ReadonlyArray<{ lx: number; ly: number; dir: Dir }> =
   // ~150 units of clear floor for desk + seat + stand-behind, and that band is pod 0's rug at the top,
   // reception at the bottom and the door posts in between. The one built there measured a 5.6x detour
   // from the door — a seat nobody could reach without crossing the whole room first.
-  { lx: 776, ly: 390, dir: 'W' },
-  { lx: 776, ly: 760, dir: 'W' },
+  // Office v3: the lower one rose to 580 so the corner duo could take the SE corner.
+  { lx: 776, ly: 400, dir: 'W' },
+  { lx: 776, ly: 580, dir: 'W' },
 ];
 
-const benchSlots: DeskSlot[] = Array.from({ length: BENCH.seats }, (_, i) => ({
-  id: PODS.length * 4 + i,
+const benchSlots: Omit<DeskSlot, 'id'>[] = Array.from({ length: BENCH.seats }, (_, i) => ({
   lx: BENCH.lx - BENCH.long / 2 + (i + 0.5) * (BENCH.long / BENCH.seats),
   ly: BENCH.ly,
   dir: BENCH.dir,
@@ -279,8 +352,7 @@ const benchSlots: DeskSlot[] = Array.from({ length: BENCH.seats }, (_, i) => ({
   kind: 'bench' as const,
 }));
 
-const windowSlots: DeskSlot[] = WINDOW_DESKS.map((w, i) => ({
-  id: PODS.length * 4 + BENCH.seats + i,
+const windowSlots: Omit<DeskSlot, 'id'>[] = WINDOW_DESKS.map((w) => ({
   lx: w.lx,
   ly: w.ly,
   dir: w.dir,
@@ -288,8 +360,10 @@ const windowSlots: DeskSlot[] = WINDOW_DESKS.map((w, i) => ({
   kind: 'window' as const,
 }));
 
-/** Every seat on the floor: pods first (so ids 0..11 stay the pod desks), then bench, then window. */
-export const DESK_SLOTS: DeskSlot[] = [...PODS.flatMap(podDesks), ...benchSlots, ...windowSlots];
+/** Every seat on the floor: pods first, then bench, then window; ids are the index. */
+export const DESK_SLOTS: DeskSlot[] = [...PODS.flatMap(podDesks), ...benchSlots, ...windowSlots].map(
+  (s, id) => ({ id, ...s }),
+);
 
 /** The break nook — where `away` members drift; also the broadcast megaphone spot.
  *
@@ -344,7 +418,9 @@ export const LOUNGE = {
   // not against it, and the old 64-unit centre spacing put the table's edge within a few units of the
   // couch front (couch dep 44, table d 40 — 42 units of furniture across a 64-unit gap).
   couch: { dx: 6, dy: -4, len: 108, dep: 44 }, // faces S (toward the room)
-  table: { dx: 6, dy: 86, w: 56, d: 40 },
+  // Office v3-1: dx 6 → 30, so the spine's north-east seat has its stand-behind floor clear of the
+  // table's padded footprint. The café is re-cut in v3-3.
+  table: { dx: 30, dy: 86, w: 56, d: 40 },
   // The chairs stay where they were. Pushing them out with the table walked chairW into a reading
   // spot (MIN_SPOT_GAP) and put an away member's stand point on furniture — the gap this set needed
   // was between the couch and the table, and widening everything just moved the crowding outward.
@@ -365,11 +441,12 @@ export const NOOK_SPOTS: ReadonlyArray<{ dx: number; dy: number }> = [
   // inside the 192 rug and is well outside this one — an away member standing off the rug reads as
   // someone who wandered out of the nook rather than someone in it. Pulled into a tighter horseshoe
   // that still clears the couch (x -48..60, y -26..18) and the coffee table (x -22..34, y 54..94).
-  { dx: -100, dy: 8 }, // west flank, south of the fridge
-  { dx: -78, dy: 58 }, // southwest corner of the set
-  { dx: -58, dy: 78 }, // front arc, clear of the coffee table's west corner
+  // v3-1: the west flank pulled in 20 east, off the spine's north-east seat; the café is re-cut in v3-3.
+  { dx: -80, dy: 8 }, // west flank, south of the fridge
+  { dx: -64, dy: 58 }, // southwest corner of the set
+  { dx: -50, dy: 90 }, // front arc, clear of the coffee table's west corner
   { dx: 10, dy: 134 },
-  { dx: 74, dy: 62 }, // southeast corner
+  { dx: 86, dy: 60 }, // southeast corner (v3-1: 12 east, off the moved table's pad)
   { dx: 96, dy: 14 }, // east flank, below the cooler
 ];
 
@@ -560,11 +637,13 @@ export interface Plant {
  * floor between zones without standing in a walking line. */
 export const PLANTS: Plant[] = [
   { lx: 70, ly: 110, species: 'snake' },
+  // The pinwheel's hub (office v3): the four desks turn around this plant.
+  { lx: 225, ly: 330, species: 'snake' },
   // (a fiddle stood at 480,55 — removed with the bench: it landed against the counter's end, and a
   // plant wedged between a bench and a printer is clutter, not softening.)
   { lx: 855, ly: 130, species: 'fiddle' },
   { lx: 55, ly: 645, species: 'fiddle' }, // left wall, in the gap between pod 2 and reception
-  { lx: 866, ly: 610, species: 'snake' }, // right flank, between the two window desks (760 was one's stand-behind floor)
+  { lx: 866, ly: 490, species: 'snake' }, // right flank, between the two window desks (400 and 580), clear of both stand-behinds
   { lx: 380, ly: 870, species: 'fiddle' },
   { lx: 66, ly: 470, species: 'fiddle' }, // left flank, in the rug gap between pods 0 and 2
   { lx: 830, ly: 330, species: 'snake' }, // right flank, under the nook shelf
