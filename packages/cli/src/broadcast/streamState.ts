@@ -60,7 +60,22 @@ export interface StreamState {
    * and the real stop cannot drift apart. Absent when no stop is queued.
    */
   stopAt?: number;
+  /**
+   * When the supervisor stopped a machine that was up but not encoding (ADR 737). The next tick
+   * finds no machine and relaunches it as the same event: the restart was charged when the stall
+   * was found, so the relaunch is not charged twice. Cleared by that relaunch.
+   */
+  stallStoppedAt?: number;
 }
+
+/** How long the encoder may go without a progress line before a started machine is a stall
+ * (ADR 737). ffmpeg writes one about every second; three minutes is far outside any healthy gap. */
+export const STALL_MS = 3 * 60_000;
+/** A machine younger than this is booting, not stalled: image pull, tailnet, Chrome and the first
+ * page all come before ffmpeg's first line (29 s to `started` on 2026-09-03, plus the page). */
+export const STALL_BOOT_GRACE_MS = 4 * 60_000;
+/** How long after a stall stop the next tick's relaunch counts as that same event. */
+const STALL_RECOVERY_MS = 10 * 60_000;
 
 /** How far out `stream stop` queues the stop: long enough that a viewer sees the day end, not a
  * cut (nick, 2026-10-21). `--now` skips it. */
@@ -73,11 +88,11 @@ export const FLAP_MAX = 3;
 export const FLAP_WINDOW_MS = 30 * 60_000;
 
 export interface EnsureDecision {
-  action: 'noop' | 'restart' | 'stand_down' | 'stop';
+  action: 'noop' | 'restart' | 'stand_down' | 'stop' | 'stop_stalled';
   /** What a restart is answering: a `crash` gets the dead machine's last words merged into the
    * note (lane 01M52Z987280); a `deploy` already carries its explanation, and quoting a dead
    * run's epitaph against it would read as a second cause. Absent on noop/stand_down. */
-  cause?: 'crash' | 'deploy';
+  cause?: 'crash' | 'deploy' | 'stall';
   /** The state as it should be persisted after this decision (ledger stamped / stand-down set). */
   state: StreamState;
   /** One human-readable line for the supervisor log. */
@@ -114,9 +129,13 @@ export function decideEnsure(args: {
   recordedDigest?: string | null;
   recordedDigestAt?: number | null;
   recordedDigestAuthoritative?: boolean;
+  /** How long the live machine has gone without an encoder progress line, when that is known and
+   * the machine is past its boot grace; null/absent when it is not known (ADR 737). */
+  stalledForMs?: number | null;
 }): EnsureDecision {
   const { state, liveCount, now, recordedDigest, recordedDigestAt, recordedDigestAuthoritative } =
     args;
+  const stalledForMs = args.stalledForMs ?? null;
   if (!state)
     return {
       action: 'noop',
@@ -143,8 +162,40 @@ export function decideEnsure(args: {
   // Pruned with the ledger, not separately: a cause outliving the attempt it explains is how a
   // stale error ends up quoted in a report about a newer failure.
   const failures = (state.failures ?? []).filter((f) => now - f.at < FLAP_WINDOW_MS);
-  if (liveCount > 0)
+  if (liveCount > 0) {
+    // ADR 737: a machine that is up but has not encoded for STALL_MS is a crash that has not
+    // exited. It is stopped this tick and relaunched by the next one, which finds no machine —
+    // never stopped and relaunched in one tick, where a slow `--rm` teardown would put two
+    // machines on one Twitch key (the 2026-09-03 duplicate). Charged now, against the same budget.
+    if (stalledForMs !== null && stalledForMs >= STALL_MS) {
+      const mins = Math.round(stalledForMs / 60_000);
+      if (restarts.length >= FLAP_MAX) {
+        return {
+          action: 'stand_down',
+          state: { ...state, restarts, failures, standDownAt: now },
+          note: `standing down and asking — started but not streaming (no encoder progress for ${mins}m); ${standDownReport({ ...state, restarts, failures }, now)}`,
+        };
+      }
+      return {
+        action: 'stop_stalled',
+        cause: 'stall',
+        state: { ...state, restarts: [...restarts, now], failures, stallStoppedAt: now },
+        note: `stall detected: started but no encoder progress for ${mins}m — stopping it; the next tick relaunches (${restarts.length + 1}/${FLAP_MAX} in window)`,
+      };
+    }
     return { action: 'noop', state: { ...state, restarts, failures }, note: 'live' };
+  }
+  // The relaunch half of a stall: already charged when the stall was found.
+  if (state.stallStoppedAt !== undefined && now - state.stallStoppedAt < STALL_RECOVERY_MS) {
+    const { stallStoppedAt: _done, ...rest } = state;
+    const relaunchImage = state.image ?? recordedDigest;
+    return {
+      action: 'restart',
+      cause: 'stall',
+      state: { ...rest, restarts, failures, ...(relaunchImage ? { image: relaunchImage } : {}) },
+      note: `relaunching after the stall stop — already counted (${restarts.length}/${FLAP_MAX} in window)${broadcastArgsNote(state)}`,
+    };
+  }
   // A missing `image` (legacy state) is never a free pass — only an observed change is a deploy.
   //
   // When the record is AUTHORITATIVE (one per machine, beside this file) a difference is the whole

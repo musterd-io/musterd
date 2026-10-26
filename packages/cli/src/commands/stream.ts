@@ -37,6 +37,8 @@ import {
   writeCaptureImage,
   REGION,
   runChecks,
+  lastEncoderProgressAt,
+  machineCreatedAt,
   occupiedMachines,
   startedMachines,
   VM_SIZE,
@@ -46,6 +48,8 @@ import {
 import {
   FLAP_MAX,
   FLAP_WINDOW_MS,
+  STALL_BOOT_GRACE_MS,
+  STALL_MS,
   decideEnsure,
   standDownReport,
   readStreamState,
@@ -933,10 +937,31 @@ function stopMachine(a: { exec: Exec; app: string; out: (s: string) => void }, m
   return 0;
 }
 
+/**
+ * How long the live machine has gone without an encoder progress line (ADR 737), or null when that
+ * is not known: no machine, a machine still inside its boot grace, a log read that failed, or a log
+ * buffer holding no progress line at all. Unknown is never a stall — the supervisor only acts on a
+ * progress line it can see going stale.
+ */
+function stallAge(
+  a: { exec: Exec; app: string; now: () => number },
+  listJson: string,
+  machine: string | undefined,
+): number | null {
+  if (!machine) return null;
+  const created = machineCreatedAt(listJson, machine);
+  if (created === null || a.now() - created < STALL_BOOT_GRACE_MS) return null;
+  const r = a.exec('fly', ['logs', '-a', a.app, '--machine', machine, '--no-tail']);
+  if (r.code !== 0) return null;
+  const last = lastEncoderProgressAt(r.stdout);
+  return last === null ? null : Math.max(0, a.now() - last);
+}
+
 async function statusVerb(
   a: { exec: Exec; app: string; out: (s: string) => void } & Sup,
 ): Promise<number> {
-  const live = startedMachines(machineListJson(a.exec, a.app));
+  const listJson = machineListJson(a.exec, a.app);
+  const live = startedMachines(listJson);
   const state = readStreamState(a.statePath);
   if (live.length === 0) {
     // "Why did it die?" is the question a not-live status is being asked — answer it with the
@@ -976,11 +1001,21 @@ async function statusVerb(
     }
     return 0;
   }
-  a.out(
-    `${theme.ok('◉ live')} ${theme.meta(
-      `machine ${live.join(', ')} · ${a.app}${state?.args ? ` · ${state.args}` : ''}`,
-    )}\n`,
-  );
+  // ADR 737: a started machine is not a live stream. Said the same way the supervisor decides it.
+  const stalledFor = stallAge(a, listJson, live[0]);
+  if (stalledFor !== null && stalledFor >= STALL_MS) {
+    a.out(
+      `${theme.warn('◉ started but not streaming')} ${theme.meta(
+        `machine ${live.join(', ')} · no encoder progress for ${Math.round(stalledFor / 60_000)}m · the supervisor stops and relaunches it`,
+      )}\n`,
+    );
+  } else {
+    a.out(
+      `${theme.ok('◉ live')} ${theme.meta(
+        `machine ${live.join(', ')} · ${a.app}${state?.args ? ` · ${state.args}` : ''}`,
+      )}\n`,
+    );
+  }
   if (state?.stopAt !== undefined) {
     const mins = Math.max(0, Math.ceil((state.stopAt - a.now()) / 60_000));
     a.out(
@@ -1022,8 +1057,10 @@ async function ensureVerb(
   // The crash predicate asks whether a machine EXISTS, never whether it is up yet — a booting
   // machine read as absent is the 2026-09-03 duplicate-launch, where the supervisor put a second
   // performance-4x beside a healthy start and Twitch killed one of them.
-  const occupying = occupiedMachines(machineListJson(a.exec, a.app));
+  const listJson = machineListJson(a.exec, a.app);
+  const occupying = occupiedMachines(listJson);
   const liveCount = occupying.length;
+  const stalledForMs = stallAge(a, listJson, occupying[0]);
   // The machine's record if there is one, this checkout's legacy file only if there is not — and
   // `decideEnsure` is told which, because a difference means something different in each case.
   const recorded = readCaptureImage({ statePath: a.statePath, repoRoot: a.repoRoot });
@@ -1034,8 +1071,17 @@ async function ensureVerb(
     recordedDigest: recorded?.digest ?? null,
     recordedDigestAt: recorded?.at ?? null,
     recordedDigestAuthoritative: recorded?.source === 'machine',
+    stalledForMs,
   });
   switch (d.action) {
+    case 'stop_stalled': {
+      // ADR 737: charged and recorded first, then the machine — the next tick relaunches it.
+      writeStreamState(a.statePath, d.state);
+      a.err(`${theme.warn('↻')} ${d.note}\n`);
+      const machine = occupying[0];
+      if (machine) stopMachine(a, machine);
+      return 0;
+    }
     case 'stop': {
       // The wind-down is over. The decision already says `stopped`, written before the machine is
       // touched — the same order `stop` keeps, for the same reason.

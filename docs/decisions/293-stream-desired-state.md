@@ -71,6 +71,8 @@ and it leaves a name on the record.
 
 ## Consequences
 
+- _(2026-10-26)_ The crash predicate is widened by [ADR 737](737-stalled-stream-is-a-crash.md): a machine that is `started` but has written no encoder progress line for 3 minutes, past a 4-minute boot grace, is stopped and relaunched as a crash, against the same flap budget. The 2026-10-12 stall sat 3.5 h behind "a machine exists".
+
 - A Chrome death costs at most ~60s of dead air plus the machine boot, not a session.
 - Composed with ADR 292, the restarted page loads the currently-served bundle and then keeps
   itself current — the whole 2026-08-18/19 incident family is closed by the pair.

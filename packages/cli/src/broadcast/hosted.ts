@@ -194,6 +194,40 @@ export function occupiedMachines(json: string): string[] {
   return machineIds(json, (state) => OCCUPYING.has(state));
 }
 
+/** When a machine in `fly machine list --json` was created (epoch ms), or null when the list does
+ * not name it or carries no parseable `created_at`. The stall check's boot grace is measured from
+ * here (ADR 737): a booting machine has written no progress line yet, and is not a stall. */
+export function machineCreatedAt(json: string, id: string): number | null {
+  try {
+    const doc = JSON.parse(json) as unknown;
+    if (!Array.isArray(doc)) return null;
+    const m = doc.find((x) => (x as { id?: unknown })?.id === id) as
+      | { created_at?: unknown }
+      | undefined;
+    const t = typeof m?.created_at === 'string' ? Date.parse(m.created_at) : NaN;
+    return Number.isFinite(t) ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The newest ffmpeg progress line (`frame=… time=…`) in `fly logs --no-tail` output, as epoch ms
+ * from Fly's line timestamp; null when the buffer holds none. ffmpeg writes one roughly every
+ * second while it encodes and nothing while it is starved — the 2026-10-12 stall left its last
+ * progress line at 19:30Z with the machine still `started` for three more hours (ADR 737). */
+export function lastEncoderProgressAt(logs: string): number | null {
+  let newest: number | null = null;
+  for (const raw of logs.split('\n')) {
+    // eslint-disable-next-line no-control-regex
+    const line = raw.replace(/\x1b\[[0-9;]*m/g, '');
+    if (!/\bframe=\s*\d+/.test(line)) continue;
+    const m = line.match(/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z)/);
+    const t = m ? Date.parse(m[1]!) : NaN;
+    if (Number.isFinite(t) && (newest === null || t > newest)) newest = t;
+  }
+  return newest;
+}
+
 /**
  * Pull the pushed digest out of `fly deploy --build-only` output.
  *

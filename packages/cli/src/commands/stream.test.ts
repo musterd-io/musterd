@@ -707,6 +707,84 @@ describe('musterd stream', () => {
       ...over,
     });
 
+    // ADR 737: the supervisor reads the machine log, and a stale progress line stops the machine.
+    describe('a stalled machine', () => {
+      const MACHINE = '784161da167238';
+      const listed = (createdAgoMs: number) =>
+        JSON.stringify([
+          { id: MACHINE, state: 'started', created_at: new Date(NOW - createdAgoMs).toISOString() },
+        ]);
+      const progressAgo = (ms: number) =>
+        `${new Date(NOW - ms).toISOString().replace(/\.\d+Z$/, 'Z')} app[${MACHINE}] sjc [info]frame=18012 fps= 30 speed=1x\n`;
+      const stops: string[][] = [];
+      const execWith = (list: string, logs: string): Exec => {
+        const base = greenExec({
+          'fly machine list': ok(list),
+          [`fly logs -a musterd-broadcast --machine ${MACHINE} --no-tail`]: ok(logs),
+        });
+        return (cmd, args) => {
+          if (cmd === 'fly' && args[0] === 'machine' && args[1] === 'stop') {
+            stops.push(args);
+            return ok('');
+          }
+          return base(cmd, args);
+        };
+      };
+      beforeEach(() => void (stops.length = 0));
+
+      it('stops a machine whose encoder went quiet, and does not relaunch in the same tick', async () => {
+        writeStreamState(statePath, {
+          desired: 'live',
+          by: 'nick',
+          at: NOW - 3_600_000,
+          restarts: [],
+        });
+        const exec = execWith(listed(3_600_000), progressAgo(10 * 60_000));
+        expect(await run(['ensure'], { ...sup(), exec })).toBe(0);
+        expect(stops).toHaveLength(1);
+        expect(launches).toBe(0);
+        expect(readStreamState(statePath)?.stallStoppedAt).toBe(NOW);
+        expect(out.join('')).toMatch(/stall detected/);
+      });
+
+      it('leaves a booting machine alone even with no progress yet', async () => {
+        writeStreamState(statePath, {
+          desired: 'live',
+          by: 'nick',
+          at: NOW - 60_000,
+          restarts: [],
+        });
+        const exec = execWith(listed(60_000), '');
+        expect(await run(['ensure'], { ...sup(), exec })).toBe(0);
+        expect(stops).toHaveLength(0);
+      });
+
+      it('leaves a healthy machine alone', async () => {
+        writeStreamState(statePath, {
+          desired: 'live',
+          by: 'nick',
+          at: NOW - 3_600_000,
+          restarts: [],
+        });
+        const exec = execWith(listed(3_600_000), progressAgo(2_000));
+        expect(await run(['ensure'], { ...sup(), exec })).toBe(0);
+        expect(stops).toHaveLength(0);
+      });
+
+      it('status says started but not streaming', async () => {
+        writeStreamState(statePath, {
+          desired: 'live',
+          by: 'nick',
+          at: NOW - 3_600_000,
+          restarts: [],
+        });
+        const exec = execWith(listed(3_600_000), progressAgo(10 * 60_000));
+        expect(await run(['status'], { ...sup(), exec })).toBe(0);
+        expect(out.join('')).toMatch(/started but not streaming/);
+        expect(out.join('')).toMatch(/no encoder progress for 10m/);
+      });
+    });
+
     it('does nothing when desired is stopped or state is absent', async () => {
       expect(await run(['ensure'], sup())).toBe(0);
       writeStreamState(statePath, { desired: 'stopped', by: 'miley', at: NOW, restarts: [] });

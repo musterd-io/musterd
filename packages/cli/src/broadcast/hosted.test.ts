@@ -22,6 +22,8 @@ import {
   startedMachines,
   writeCaptureImage,
   type Check,
+  lastEncoderProgressAt,
+  machineCreatedAt,
 } from './hosted.js';
 
 const ok = (stdout = ''): ExecResult => ({ code: 0, stdout, stderr: '' });
@@ -534,5 +536,32 @@ describe('the capture image record', () => {
   it('reads with no checkout at all (the supervisor outside a repo)', () => {
     writeCaptureImage({ statePath, digest: A, repoRoot: repo, now: 4_000 });
     expect(readCaptureImage({ statePath, repoRoot: null })?.digest).toBe(A);
+  });
+});
+
+describe('stall signals (ADR 737)', () => {
+  it('lastEncoderProgressAt reads the newest ffmpeg progress line, colour codes and all', () => {
+    const logs = [
+      '\x1b[2m2026-10-26T18:43:40Z\x1b[0m app[784161da167238] sjc [info]frame=17900 fps= 30 q=15.0 speed=1x',
+      '2026-10-26T18:43:43Z app[784161da167238] sjc [info]{"t":599607,"frames":0}',
+      '2026-10-26T18:43:44Z app[784161da167238] sjc [info]frame=18012 fps= 30 q=15.0 speed=1x',
+    ].join('\n');
+    expect(lastEncoderProgressAt(logs)).toBe(Date.parse('2026-10-26T18:43:44Z'));
+  });
+
+  it('lastEncoderProgressAt is null when the buffer holds no progress line', () => {
+    expect(
+      lastEncoderProgressAt('2026-10-26T18:43:43Z app[x] sjc [info]▸ tailnet up\n'),
+    ).toBeNull();
+  });
+
+  it('machineCreatedAt reads the named machine only', () => {
+    const json = JSON.stringify([
+      { id: 'aaa', state: 'started', created_at: '2026-10-26T18:32:55Z' },
+      { id: 'bbb', state: 'started' },
+    ]);
+    expect(machineCreatedAt(json, 'aaa')).toBe(Date.parse('2026-10-26T18:32:55Z'));
+    expect(machineCreatedAt(json, 'bbb')).toBeNull();
+    expect(machineCreatedAt('not json', 'aaa')).toBeNull();
   });
 });
