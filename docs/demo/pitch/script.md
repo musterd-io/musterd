@@ -80,16 +80,12 @@ workflows in code, and their agents are not standing members. musterd is the sta
 harness. Nothing my agents do counts as done until another member accepts it, and the record shows
 who did it, who accepted it, and which model.
 
-## 12 · Nick Sanders, founder (0:20)
+## 12 · Nick Sanders, founder (0:30)
 
 Two asks (change them to suit the room; these are the standing two). Introductions to product and dev teams that run several agents across tools. And
 conversations with investors who back developer infrastructure. I'm Nick; find me here, or at
-musterd.io.
-
-## 13 · Watch the agents build musterd (0:15)
-
-The agents and I build musterd in the open, on Twitch at twitch.tv/musterd_io. The code takes you
-there.
+musterd.io. The agents and I build musterd in the open, on Twitch at twitch.tv/musterd_io; the code
+on this slide takes you there.
 
 ---
 
@@ -98,14 +94,14 @@ there.
 | Page | Claim | Source, and when it was read |
 | --- | --- | --- |
 | 1, 12 | Tagline and subhead | `docs/design/brand.md` §1; ADR 563 (the claim is the team; it replaced ADR 550's "musterd makes your agents accountable" on 2026-10-12, which this script carried until 2026-10-13) |
-| 1, 12 | QR code | Encodes `https://musterd.io`; decoded in Chrome with `BarcodeDetector` on 2026-10-09 |
+| 1 | QR code | Encodes `https://musterd.io`; decoded in Chrome with `BarcodeDetector` on 2026-10-09 |
 | 2 | 37% never reached main before, 0.9% after | The slide's own footnote: our team's git history, July, then a September read. Not re-derived for this script; the earlier "more than a third" is the same July figure. The 37% is finding 001's P3 post-mortem, which ROADMAP calls "a forensic proxy, not a reproducible calibration gate", so the slide says "never reached main", which is what was measured (wording corrected 2026-10-13 from "thrown away"). Do not swap in the cookoff's 72% → 1.9%: it is held out of outbound copy until its re-run lands (`docs/wiki/how-musterd-got-here.md`) |
 | 3 | Models, harnesses, protocols change monthly | Slide text; no number is claimed |
 | 4 | wanderer to ghost `challenge`, schmidt to nick `ask` | Quoted on the slide as examples of the two kinds of message |
 | 5 | The six features; the roster is an example team | Slide labels it "example team"; do not call it our roll call. Doorbell: waking an offline member is shipped through residency (a woken member is reply-only: it can coordinate, not edit); reaching a busy member is the interrupt line, whose coverage varies by harness; an open session idle at the prompt is goal `idle-wake`, still in flight. Do not say "any harness" |
 | 6 | Miley's session | Slide notes; the hooks named are Claude Code's, other harnesses get the same moves through MCP. The merge currently comes before review; the slide shows the flow we are moving to, so I say "submits" and leave the order of merge out |
 | 7 | 2,090 lanes closed, 2,329 asks to a member | `./counts.sh`, read 2026-10-20. Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
-| 12, 13 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
+| 12 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
 | 5 | "Every team gets an office" | [ADR 578](../../decisions/578-the-office-and-knowledge-work.md): the office is everything a team shares, as one place. Say board, inbox, memory, record and /live; never the daemon or MCP. The /live sentence is [ADR 683](../../decisions/683-live-and-multiplayer-in-the-message.md) §1: three things the code does today (the office scene, answering an ask in the composer, writing to a member; read 2026-10-20). Never say presence indicators, shared session, dashboard or control plane |
 | 8 | Buyer tiers; knowledge work as the expansion | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 578 names knowledge work on the slide (ADR 550 §4 kept it in view) |
 | 8 | One in six of our lanes is writing | `./counts.sh`, read 2026-10-20: 321 of 1,937 closed lanes that declared a scope touched only docs/, content/ or .md files (17%). A floor, not a census. It shows the primitives carry non-code work; it is not a waste measurement for knowledge work, which does not exist yet (ADR 550 §4) |
