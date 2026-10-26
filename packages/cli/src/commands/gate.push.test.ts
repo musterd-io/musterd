@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { pushContextLine, pushReportFor } from './gate.js';
+import { pushChanges, pushContextLine, pushReportFor } from './gate.js';
 
 /**
  * ADR 730 §1: the Bash PostToolUse hook reports a push only when git's own remote-tracking ref says
@@ -34,13 +34,14 @@ function repoWithRemote(): { repo: string; head: string } {
 const payload = (command: string) =>
   JSON.stringify({ tool_name: 'Bash', tool_input: { command }, tool_response: {} });
 
+// ADR 732: a report also carries `subjects` and `files`; these tests read the ADR 730 shape with toMatchObject.
 describe('pushReportFor (ADR 730)', () => {
   it('reports the remote, branch and head once the push has landed, and nothing before', () => {
     const { repo, head } = repoWithRemote();
     // The command names a push, but the remote-tracking ref is not there yet: nothing to report.
     expect(pushReportFor(payload('git push team agent1'), repo)).toBeNull();
     git(repo, 'push', '-q', 'team', 'agent1');
-    expect(pushReportFor(payload('git push team agent1'), repo)).toEqual({
+    expect(pushReportFor(payload('git push team agent1'), repo)).toMatchObject({
       remote: 'team',
       branch: 'agent1',
       head,
@@ -77,11 +78,13 @@ describe('pushReportFor (ADR 730)', () => {
     expect(pushReportFor(payload('git push -d team other'), repo)).toBeNull();
     // The current branch, by any of its spellings, still reports.
     const report = { remote: 'team', branch: 'agent1', head };
-    expect(pushReportFor(payload('git push team'), repo)).toEqual(report);
-    expect(pushReportFor(payload('git push -u team HEAD'), repo)).toEqual(report);
-    expect(pushReportFor(payload('git push team HEAD:agent1'), repo)).toEqual(report);
-    expect(pushReportFor(payload('git push team +agent1:refs/heads/agent1'), repo)).toEqual(report);
-    expect(pushReportFor(payload('git push --all team'), repo)).toEqual(report);
+    expect(pushReportFor(payload('git push team'), repo)).toMatchObject(report);
+    expect(pushReportFor(payload('git push -u team HEAD'), repo)).toMatchObject(report);
+    expect(pushReportFor(payload('git push team HEAD:agent1'), repo)).toMatchObject(report);
+    expect(pushReportFor(payload('git push team +agent1:refs/heads/agent1'), repo)).toMatchObject(
+      report,
+    );
+    expect(pushReportFor(payload('git push --all team'), repo)).toMatchObject(report);
   });
 
   it('trusts a harness exit code or interrupted flag when the payload carries one', () => {
@@ -95,7 +98,7 @@ describe('pushReportFor (ADR 730)', () => {
       });
     expect(pushReportFor(withResponse({ exit_code: 1 }), repo)).toBeNull();
     expect(pushReportFor(withResponse({ interrupted: true }), repo)).toBeNull();
-    expect(pushReportFor(withResponse({ exit_code: 0, stdout: '' }), repo)).toEqual({
+    expect(pushReportFor(withResponse({ exit_code: 0, stdout: '' }), repo)).toMatchObject({
       remote: 'team',
       branch: 'agent1',
       head,
@@ -108,6 +111,47 @@ describe('pushReportFor (ADR 730)', () => {
     git(repo, 'push', '-q', 'team', 'agent1');
     git(repo, 'checkout', '-q', '--detach');
     expect(pushReportFor(payload('git push team HEAD:agent1'), repo)).toBeNull();
+  });
+});
+
+describe('pushChanges (ADR 732): what the push carried', () => {
+  it('reads the pushed commits on a first push, then exactly the range the remote moved over', () => {
+    const { repo, head } = repoWithRemote();
+    git(repo, 'push', '-q', 'team', 'agent1');
+    expect(pushChanges('team', 'agent1', head, repo)).toEqual({
+      subjects: ['base'],
+      files: ['a.txt'],
+    });
+    writeFileSync(join(repo, 'b.txt'), 'b\n');
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-qm', 'Add b: the second feature');
+    writeFileSync(join(repo, 'c.txt'), 'c\n');
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-qm', 'Add c');
+    git(repo, 'push', '-q', 'team', 'agent1');
+    const head2 = git(repo, 'rev-parse', 'HEAD');
+    const report = pushReportFor(payload('git push team agent1'), repo);
+    expect(report).toEqual({
+      remote: 'team',
+      branch: 'agent1',
+      head: head2,
+      subjects: ['Add c', 'Add b: the second feature'],
+      files: ['b.txt', 'c.txt'],
+    });
+  });
+  it('caps subjects at five and files at twenty, and says nothing for a repo it cannot read', () => {
+    const { repo } = repoWithRemote();
+    for (let i = 0; i < 7; i += 1) {
+      writeFileSync(join(repo, `f${i}.txt`), `${i}\n`);
+      git(repo, 'add', '-A');
+      git(repo, 'commit', '-qm', `commit ${i}`);
+    }
+    git(repo, 'push', '-q', 'team', 'agent1');
+    const c = pushChanges('team', 'agent1', git(repo, 'rev-parse', 'HEAD'), repo);
+    expect(c.subjects).toHaveLength(5);
+    expect(c.subjects![0]).toBe('commit 6');
+    expect(c.files!.length).toBeLessThanOrEqual(20);
+    expect(pushChanges('team', 'agent1', 'abc123def4567890', tmpdir())).toEqual({});
   });
 });
 

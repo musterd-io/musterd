@@ -48,7 +48,10 @@ text.
 1. **The audience adds the covering lanes.** For a recorded push (ADR 730 §2), the daemon tells, once
    per head, every seat with an open ADR 724 watch on the lane **and** every other seat that owns a
    contending lane (claimed, active, blocked) in the same project whose scope covers a file the pushing
-   lane **names** (`isNamedFile`; covering by `pathGlobMatches`, the ADR 150 read). The pushing lane
+   lane **names** _(Amended 2026-10-26: [ADR 732](732-push-reaches-ended-lanes-and-carries-what-changed.md)
+   reads the protocol's contending set — awaiting acceptance and ready for review included — and also
+   counts an owner whose covering lane left those states within the team's
+   `push_audience_ended_lane_window_ms`; finding 027 found all 10 silent pushes behind this line.)_ (`isNamedFile`; covering by `pathGlobMatches`, the ADR 150 read). The pushing lane
    must name the file: an area glob says "I work around here" and would widen the audience to the
    glob-overlap set. Never the pusher, never an unowned lane, never a lane in another project (the
    `default` project contends with all, as everywhere). One act per seat per head carries the union of
@@ -97,6 +100,10 @@ text.
 - One more read per recorded push (the board, filtered to contending lanes) and one `laneHoldingFile`
   per announced path.
 - `hold_smoke.py` and `gate_smoke.py` are unaffected: neither pushes.
+- _2026-10-26:_ [finding 027](../research/027-cooperbench-rider5-run.md) read this ADR on CooperBench:
+  12 of 22 recorded pushes fired an act; the 10 that did not all came after the partner's lane had
+  ended, and that partner merged. [ADR 732](732-push-reaches-ended-lanes-and-carries-what-changed.md)
+  widens §1 to recently ended lanes and puts what changed into the act; §2 and §3 stand.
 - _2026-10-25 (acceptance, this lane):_ the `lanePush.ts` line in `docs/architecture/03-server.md`
   landed one PR behind this one — big-body's lane `01M5N55GVE` held the file, cleared the line, then
   declined the first landing for it; the line now describes this ADR's audience and response.

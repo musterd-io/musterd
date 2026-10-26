@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ACCEPTANCE_REVIEW_WINDOW_MS } from './ask.wire.js';
 import { DoorbellPolicySchema } from './doorbell.js';
-import { EnforcementPolicySchema } from './enforcement.js';
+import { EnforcementPolicySchema, PUSH_AUDIENCE_ENDED_LANE_WINDOW_MS } from './enforcement.js';
 import { GuardianTiersSchema } from './guardian.js';
 import { IncidentPolicySchema } from './incident.js';
 import { StakesDefaultSchema } from './lanes.js';
@@ -314,6 +314,18 @@ export const PolicySchema = z.object({
     .min(60_000)
     .max(24 * 60 * 60_000)
     .default(ACCEPTANCE_REVIEW_WINDOW_MS),
+  /**
+   * ADR 732 §1: a push of a lane naming a file still reaches the owner of a lane that covered it and
+   * left the contending states within this many ms — the finished partner is the one who merges
+   * (finding 027: 7 of 10). 0 turns the ended-lane audience off; at most 24 hours. Default 30 minutes
+   * (`PUSH_AUDIENCE_ENDED_LANE_WINDOW_MS`).
+   */
+  push_audience_ended_lane_window_ms: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60 * 60_000)
+    .default(PUSH_AUDIENCE_ENDED_LANE_WINDOW_MS),
   /**
    * ADR 514: agent style — the stance floor human admins own, the team's default dials, and a team
    * prose addendum. A human's own dials (`members.style_prefs`) sit on top and can never lower the

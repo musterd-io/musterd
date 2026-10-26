@@ -8,6 +8,7 @@ import {
   isSessionReachTool,
   isWriteShaped,
   LanePushOutcomeSchema,
+  LanePushReportSchema,
   matchEnforcement,
   normalizeCommand,
   SESSION_REACH_TOOLS,
@@ -393,6 +394,26 @@ describe('session reach (ADR 442) — the wall', () => {
         harness: 'vim',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('LanePushReportSchema (ADR 732): what the push carried', () => {
+  it('takes subjects and files, capped, and still parses a bare report', () => {
+    const bare = { remote: 'team', branch: 'agent1', head: 'abc123def4567890' };
+    expect(LanePushReportSchema.parse(bare)).toEqual(bare);
+    const full = {
+      ...bare,
+      subjects: ['Add hex_str', 'Fix uuid4'],
+      files: ['src/a.py', 'src/b.py'],
+    };
+    expect(LanePushReportSchema.parse(full)).toEqual(full);
+    expect(LanePushReportSchema.safeParse({ ...bare, subjects: Array(6).fill('s') }).success).toBe(
+      false,
+    );
+    expect(LanePushReportSchema.safeParse({ ...bare, subjects: [''] }).success).toBe(false);
+    expect(LanePushReportSchema.safeParse({ ...bare, files: Array(21).fill('f') }).success).toBe(
+      false,
+    );
   });
 });
 

@@ -1,7 +1,9 @@
 import {
+  LANE_CONTENDING_STATES,
   type Lane,
   type LanePushOutcome,
   type LanePushReport,
+  type LaneState,
   makeEnvelope,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
@@ -19,6 +21,7 @@ import {
 } from '../store/lanes.js';
 import { getMemberByName } from '../store/members.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
+import { getPolicy } from '../store/teams.js';
 import { routeEnvelope } from './route.js';
 
 /**
@@ -34,9 +37,20 @@ import { routeEnvelope } from './route.js';
  * the relation the gate itself refuses on (ADR 150 covering, ADR 691 holds), so it exists before any
  * refusal and survives the lane freeing. On finding 026's run the watch set was empty for 16 of 20
  * pushes; the covering set was not. The response names the seats told, so the hook can tell the pusher.
+ *
+ * ADR 732: the covering set also holds the owner of a lane that covered the file and LEFT the
+ * contending states within the team's `push_audience_ended_lane_window_ms` — on finding 027's run all
+ * 10 silent pushes came minutes after the partner's lane had ended, and that partner merged the
+ * branch. The contending states are the protocol's (ADR 731 read a narrower local list, so a partner
+ * awaiting acceptance heard nothing). And the act carries what the push changed — the commit subjects
+ * and files the hook read off git — so the receiver needs no hand-sent "here is what I did".
  */
 
+/** The pusher's own lane is found among the lanes being worked (ADR 730 §2), as before. */
 const CONTENDING = ['claimed', 'active', 'blocked'] as const;
+/** Every state ADR 732 reads as "not ended" for the audience: the protocol's contending set. */
+const AUDIENCE_LIVE: LaneState[] = [...LANE_CONTENDING_STATES];
+const ENDED: LaneState[] = ['done', 'abandoned', 'parked', 'open'];
 
 function quoted(paths: string[]): string {
   return paths.map((p) => `'${p}'`).join(', ');
@@ -44,37 +58,73 @@ function quoted(paths: string[]): string {
 
 export type PushOutcome = LanePushOutcome;
 
+/** When a lane left the contending states: its close, else its last change (parked, released). */
+function endedAt(lane: Lane): number {
+  return lane.resolved_at ?? lane.updated_at;
+}
+
 /**
  * ADR 731 §1: the seats whose contending lane covers a file the pushing lane names, with those files.
  * Same project only, never the pusher, never an unowned lane. The pushing lane must NAME the file: an
  * area glob says "I work around here", not "this file is mine", and would widen the audience to the
  * glob-overlap set ADR 575 measured at 27% precision.
+ *
+ * ADR 732 §1: a lane that covered the file and ended within `windowMs` of `now` still counts, if it
+ * still has an owner on record — a released lane has none and is out. `ended` reports how many of the
+ * seats came in only that way, for the log.
  */
 export async function coveringSeats(
   db: Driver,
   team: TeamRow,
   lane: Lane,
-): Promise<Map<string, string[]>> {
+  windowMs = 0,
+  now = Date.now(),
+): Promise<{ seats: Map<string, string[]>; ended: number }> {
   const named = lane.scope.filter(isNamedFile);
-  const out = new Map<string, string[]>();
-  if (named.length === 0) return out;
-  const others = (await listLanes(db, team.id, team.slug, { states: [...CONTENDING] })).filter(
-    (o) =>
-      o.id !== lane.id &&
-      o.owner_seat !== null &&
-      o.owner_seat !== lane.owner_seat &&
-      projectsContend(lane.project, o.project),
+  const seats = new Map<string, string[]>();
+  if (named.length === 0) return { seats, ended: 0 };
+  const eligible = (o: Lane) =>
+    o.id !== lane.id &&
+    o.owner_seat !== null &&
+    o.owner_seat !== lane.owner_seat &&
+    projectsContend(lane.project, o.project);
+  const live = (await listLanes(db, team.id, team.slug, { states: AUDIENCE_LIVE })).filter(
+    eligible,
   );
-  for (const other of others) {
-    const seat = other.owner_seat!;
-    for (const file of named) {
-      if (!other.scope.some((g) => pathGlobMatches(g, file))) continue;
-      const paths = out.get(seat) ?? [];
-      if (!paths.includes(file)) paths.push(file);
-      out.set(seat, paths);
+  const recent =
+    windowMs > 0
+      ? (await listLanes(db, team.id, team.slug, { states: ENDED })).filter(
+          (o) => eligible(o) && endedAt(o) >= now - windowMs,
+        )
+      : [];
+  const add = (others: Lane[]) => {
+    const seen = new Set<string>();
+    for (const other of others) {
+      const seat = other.owner_seat!;
+      for (const file of named) {
+        if (!other.scope.some((g) => pathGlobMatches(g, file))) continue;
+        const paths = seats.get(seat) ?? [];
+        if (!paths.includes(file)) paths.push(file);
+        seats.set(seat, paths);
+        seen.add(seat);
+      }
     }
-  }
-  return out;
+    return seen;
+  };
+  const liveSeats = add(live);
+  const recentSeats = add(recent);
+  const ended = [...recentSeats].filter((s) => !liveSeats.has(s)).length;
+  return { seats, ended };
+}
+
+/** ADR 732 §2: the one sentence of what changed, from the hook's report — or nothing. */
+export function changedClause(report: LanePushReport): string {
+  const subjects = report.subjects ?? [];
+  const files = report.files ?? [];
+  if (subjects.length === 0 && files.length === 0) return '';
+  const what = subjects.length > 0 ? subjects.join('; ') : 'changes';
+  const where = files.length > 0 ? ` (files: ${files.join(', ')})` : '';
+  return ` — ${what}${where}`;
 }
 
 export async function recordPush(
@@ -98,6 +148,7 @@ export async function recordPush(
   }
   let acts = 0;
   const told = new Set<string>();
+  const { push_audience_ended_lane_window_ms: windowMs } = await getPolicy(ctx.db, team.id);
   for (const lane of lanes) {
     const { previous_head } = await recordLanePush(
       ctx.db,
@@ -108,7 +159,7 @@ export async function recordPush(
       now,
     );
     const watchers = await watchersOfLane(ctx.db, team.id, lane.id);
-    const covering = await coveringSeats(ctx.db, team, lane);
+    const { seats: covering, ended } = await coveringSeats(ctx.db, team, lane, windowMs, now);
     log.info({
       msg: 'lane_push_recorded',
       team: team.slug,
@@ -117,6 +168,7 @@ export async function recordPush(
       head: report.head,
       watchers: watchers.length,
       covering: covering.size,
+      ended,
       repeat: previous_head === report.head,
     });
     if (previous_head === report.head) continue;
@@ -154,7 +206,7 @@ export async function recordPush(
           from: voice.name,
           to: { kind: 'member', name: seat },
           act: 'message',
-          body: `[lane] ${member.name} pushed "${lane.title}": ${report.branch} at ${head} on ${report.remote} — ${tail}`,
+          body: `[lane] ${member.name} pushed "${lane.title}": ${report.branch} at ${head} on ${report.remote}${changedClause(report)} — ${tail}`,
           meta: {
             lane_pushed: {
               lane: lane.id,
@@ -163,6 +215,8 @@ export async function recordPush(
               head: report.head,
               remote: report.remote,
               paths,
+              ...(report.subjects ? { subjects: report.subjects } : {}),
+              ...(report.files ? { files: report.files } : {}),
             },
           },
         }),
