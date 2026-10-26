@@ -900,6 +900,7 @@ export class HttpClient {
       target: string;
       label?: string;
       expires_at?: number;
+      approval?: AuthorityProof;
     },
   ): Promise<{
     credential: BootstrapCredentialSummary;
@@ -1675,7 +1676,10 @@ export class HttpClient {
    * authorizes claiming the given seat/role; returned **once**. A `standing` grant survives until
    * revoked, so a persistent agent seat re-occupies on relaunch without an approval request.
    */
-  async issueGrant(slug: string, body: IssueGrant): Promise<GrantMint> {
+  async issueGrant(
+    slug: string,
+    body: IssueGrant & { approval?: AuthorityProof },
+  ): Promise<GrantMint> {
     const json = await this.request('POST', `/teams/${slug}/grants`, body);
     const parsed = GrantMintSchema.safeParse(json);
     if (!parsed.success) {

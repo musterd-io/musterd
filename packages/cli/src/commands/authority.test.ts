@@ -99,17 +99,38 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
     vi.restoreAllMocks();
   });
 
-  it('enroll --confirmed-by collects the admin countersign into the ceremony link', async () => {
+  it('enroll passes a hub-issued countersign proof into the ceremony link', async () => {
+    const proof = { key_id: 'admin-key', nonce: 'nonce-at-least-16-chars', signature: 'sig' };
+    h.createAuthorityDescriptor.mockClear();
     h.listDeviceKeys.mockResolvedValueOnce({ keys: [] }).mockResolvedValue({
       keys: [{ id: 'key-7', kind: 'passkey', created_at: 2, revoked_at: null }],
     });
     const out = captureStdout();
-    expect(await authorityCommand(parsed(['enroll'], { 'confirmed-by': 'root' }))).toBe(0);
-    expect(h.createAuthorityDescriptor).toHaveBeenCalledWith(
-      'revive',
-      expect.objectContaining({ act: 'device_key_admin', target: 'nick', actor: 'root' }),
+    expect(
+      await authorityCommand(
+        parsed(['enroll'], {
+          'confirmed-by': 'root',
+          'countersign-proof': JSON.stringify(proof),
+        }),
+      ),
+    ).toBe(0);
+    expect(h.createAuthorityDescriptor).not.toHaveBeenCalled();
+    const encoded = out.join('').match(/#countersign=([^\s]+)/)?.[1];
+    expect(encoded).toBeDefined();
+    expect(JSON.parse(Buffer.from(encoded!, 'base64url').toString('utf8'))).toEqual({
+      confirmer: 'root',
+      approval: proof,
+    });
+    vi.restoreAllMocks();
+  });
+
+  it('requires the countersign proof to be minted on the hub', async () => {
+    h.issueEnrollmentChallenge.mockClear();
+    h.listDeviceKeys.mockResolvedValue({ keys: [] });
+    await expect(authorityCommand(parsed(['enroll'], { 'confirmed-by': 'root' }))).rejects.toThrow(
+      /Countersigning must happen on the hub/,
     );
-    expect(out.join('')).toContain('#countersign=');
+    expect(h.issueEnrollmentChallenge).not.toHaveBeenCalled();
     vi.restoreAllMocks();
   });
 

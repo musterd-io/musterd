@@ -17,6 +17,7 @@ import {
   seatReachLines,
   writeSeatFile,
 } from '../roster.js';
+import { collectApproval } from './authority.js';
 import { resolve, resolveRead } from './helpers.js';
 
 /**
@@ -306,6 +307,8 @@ export async function agentCommand(
       driver,
       here: parsed.flags['here'] === true,
       path: flagStr(parsed.flags, 'path'),
+      authorityApproval: (act, target, payload) =>
+        collectApproval(http, team, act, target, payload),
     });
   } catch (err) {
     // ADR 591: the seat file is written first (ADR 058 §5), so a failure past it — the credential

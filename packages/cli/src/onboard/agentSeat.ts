@@ -1,4 +1,4 @@
-import type { HttpClient } from '../client.js';
+import type { AuthorityProof, HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
 import {
   seatFileExists,
@@ -23,6 +23,12 @@ export interface AgentSeatInput {
     HttpClient,
     'addMember' | 'roster' | 'mintBootstrapCredential' | 'issueGrant' | 'revokeBootstrapCredential'
   >;
+  /** A human-facing caller may collect A2 proofs for hub-local provisioning writes. */
+  authorityApproval?: (
+    act: 'credential_mint' | 'grant_issue',
+    target: string,
+    payload: unknown,
+  ) => Promise<AuthorityProof>;
   harnesses: string[];
   toolkit: string;
   /** Keep a Workspace's recorded desired set / toolkit (the caller named none). */
@@ -100,6 +106,7 @@ export async function provisionAgentSeat(input: AgentSeatInput): Promise<AgentSe
     name,
     server: input.server,
     http,
+    ...(input.authorityApproval ? { authorityApproval: input.authorityApproval } : {}),
     workspace: () =>
       provisionWorkspace(name, {
         here: input.here === true,
