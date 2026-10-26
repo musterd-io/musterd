@@ -45,7 +45,9 @@ by hand — written by git, not by a model turn.
    awaiting acceptance, ready for review) **and** over lanes that have left it — done, abandoned, parked,
    or reopened — within the team's `push_audience_ended_lane_window_ms` of the push, by `resolved_at`
    for a closed lane and `updated_at` otherwise, when the lane still has an owner on record. A released
-   lane has none and is out. Same project, never the pusher, never an unowned lane, named files only, as
+   lane has none and is out. _(Amended 2026-10-26: a released lane's owner on record is the
+   `owner_before` of its latest `lane.released` audit row inside the window, so it is in — finding 028
+   found 2 of 22 pushes unheard for exactly this.)_ Same project, never the pusher, never an unowned lane, named files only, as
    before. The window is a team policy knob (`PolicySchema`), default 30 minutes
    (`PUSH_AUDIENCE_ENDED_LANE_WINDOW_MS`), 0 to turn it off, at most 24 hours. The pusher's own lane is
    still found among claimed, active and blocked lanes (ADR 730 §2) — nothing changes about whose push
@@ -78,6 +80,11 @@ by hand — written by git, not by a model turn.
 
 ## Consequences
 
+- _2026-10-26:_ [finding 028](../research/028-cooperbench-rider6-run.md) read this ADR: 19 of 22 pushes
+  fired, 7 of them only by the ended-lane rule; the 3 silent were 2 after a `lane_release` and 1 after a
+  hand-off. The release case is closed by the amendment to §1 (lane `01M5WX2RRP`): the release row
+  names who had the lane, and that seat hears the push for the window. The hand-off case stands: the
+  pusher owns every lane, so there is no one else to tell.
 - An owner whose lane on a file just ended hears one act per new head for 30 minutes after. On a real
   team that is the reviewer or merger of a branch; on CooperBench it is the partner waiting to merge.
 - Two optional fields on an HTTP body the hook alone sends; a schema change under this ADR (hard rule

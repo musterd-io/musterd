@@ -2,7 +2,7 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
-import { listAudit } from '../store/audit.js';
+import { appendAudit, listAudit } from '../store/audit.js';
 import { openLane } from '../store/lanes.js';
 import { attach, release } from '../store/presence.js';
 import { upsertRole } from '../store/roles.js';
@@ -687,16 +687,34 @@ withDrivers('gate-http', (_o, kind) => {
             });
           });
 
-          it('a parked lane counts by its last change; a released lane has no owner and is out; the window is a policy knob', async () => {
+          it('a parked lane counts by its last change; a released lane keeps its last owner for the window (ADR 732 amended); the window is a policy knob', async () => {
             await boNames();
             const ada = await adaCovers();
             await ended(ada.id, 'parked', 60_000);
             expect((await push('Bo', 'bo/feat', 'abc123def4567890')).json.told).toEqual(['Ada']);
+            // Released a minute ago: no owner on the row, but the release row names who had it.
             await server.store.run('UPDATE lanes SET state = ?, owner_seat = NULL WHERE id = ?', [
               'open',
               ada.id,
             ]);
-            expect((await push('Bo', 'bo/feat', 'fedcba9876543210')).json.told).toEqual([]);
+            await appendAudit(server.store, (await team()).id, {
+              actor: 'Ada',
+              action: 'lane.released',
+              target: ada.id,
+              result: 'allow',
+              detail: { lane: ada.id, released_by: 'Ada', owner_before: 'Ada' },
+            });
+            expect((await push('Bo', 'bo/feat', 'fedcba9876543210')).json.told).toEqual(['Ada']);
+            // The same release two hours back: outside the window, so nobody is on record.
+            await server.store.run(
+              `UPDATE audit SET ts = ? WHERE action = 'lane.released' AND target = ?`,
+              [Date.now() - 2 * 60 * 60_000, ada.id],
+            );
+            await server.store.run('UPDATE lanes SET updated_at = ? WHERE id = ?', [
+              Date.now() - 2 * 60 * 60_000,
+              ada.id,
+            ]);
+            expect((await push('Bo', 'bo/feat', '1111111111111111')).json.told).toEqual([]);
             const again = await adaCovers();
             await ended(again.id, 'done', 60_000);
             await setPolicy(server.store, (await team()).id, {
