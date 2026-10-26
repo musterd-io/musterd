@@ -1143,5 +1143,33 @@ function registeredRedirect(client: { redirect_uris: string }, uri: string): boo
   } catch {
     return false;
   }
-  return Array.isArray(registered) && registered.includes(uri);
+  if (!Array.isArray(registered)) return false;
+  if (registered.includes(uri)) return true;
+  // ADR 743: RFC 8252 §7.3 — a native app listens on whatever loopback port it got, so an
+  // `http` redirect to a loopback IP literal matches a registered one that differs only by port.
+  // Codex CLI registers `http://127.0.0.1/callback/<id>` and authorizes from an ephemeral port.
+  // Token exchange stays bound to the exact URI used here (the code carries it).
+  const asked = loopbackIpRedirect(uri);
+  if (!asked) return false;
+  return registered.some((r) => {
+    const reg = typeof r === 'string' ? loopbackIpRedirect(r) : null;
+    return (
+      reg !== null &&
+      reg.hostname === asked.hostname &&
+      reg.pathname === asked.pathname &&
+      reg.search === asked.search
+    );
+  });
+}
+
+/** An `http` redirect to 127.0.0.1 or [::1] (RFC 8252 §7.3), or null. `localhost` is not one (§8.3). */
+function loopbackIpRedirect(uri: string): URL | null {
+  let u: URL;
+  try {
+    u = new URL(uri);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'http:' || u.hash || u.username || u.password) return null;
+  return u.hostname === '127.0.0.1' || u.hostname === '[::1]' ? u : null;
 }

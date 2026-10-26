@@ -45,7 +45,7 @@ shared contracts and require a numbered ADR before they change.
    POST. Require a URL no longer than 2,048 characters, using HTTPS on port 443, with no userinfo,
    query, or fragment, a non-empty path, and no `.` or `..` path segments (including percent-encoded
    forms). Require the fetched document's `client_id` to equal the exact requested URL. Apply the
-   existing redirect URI safety policy to every listed URI and exact-match the requested URI.
+   existing redirect URI safety policy to every listed URI and exact-match the requested URI. _(Amended 2026-10-26: a loopback-IP `http` redirect matches on any port — [ADR 743](743-oauth-loopback-redirect-any-port.md).)_
 3. Fetch only after the existing per-IP authorization rate limit. Resolve the host once; reject the
    URL if any DNS answer is not globally routable unicast, including IPv4-mapped IPv6 and special-
    use ranges. Pin the HTTPS connection to a validated address while retaining the original host
@@ -85,6 +85,11 @@ shared contracts and require a numbered ADR before they change.
   team-scoped binding row, so token exchange can verify it locally without retaining the fetched
   document or trusting a new client-provided URL at redemption time. A published client ID may be
   bound independently by more than one Team.
+- 2026-10-26, real-client acceptance (lane 01M3QQJENE): claude.ai and ChatGPT both chose CIMD on
+  their own, but Codex CLI 0.162 (also CIMD) was refused at authorize — its document registers
+  portless loopback redirects and it listens on an ephemeral port. The exact match in Decision 2
+  now admits any port on a loopback-IP `http` redirect, per RFC 8252 §7.3
+  ([ADR 743](743-oauth-loopback-redirect-any-port.md)).
 - The consent hostname gives the person a stable origin clue; it is not proof that the client name
   is trustworthy. Remote logos and `private_key_jwt` remain out of scope.
 - _(Settled 2026-10-21, lane `01M3Z44K46C3RBHJT3D2SS7EWY` / ADR 698: this record read `proposed`
