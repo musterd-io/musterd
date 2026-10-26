@@ -124,6 +124,26 @@ the `config.json` of `Qwen/Qwen3-4B`, `Qwen/Qwen3.5-4B`, `ibm-granite/granite-4.
   read 2026-10-19. ADR 663 names llama.cpp's `llama-server` as a local-serving provider, so Dory is
   not ruled out by the plumbing once a runtime ships.
 
+- **slotstream**, deferred 2026-10-26 (read by dolly). A Swift/MLX engine
+  ([github.com/carloslfu/slotstream](https://github.com/carloslfu/slotstream), MIT, one main
+  maintainer, created 2026-08-28) that runs one 125B mixture-of-experts model, a 4-bit
+  "Qwen3.8-Flash-Next" of about 105 GB, by streaming experts from SSD. It serves Ollama-, OpenAI- and
+  Anthropic-compatible APIs. It asks a different question from the gauntlet: whether a capable local
+  model can do real lane work, not whether a 4B can hold a seat. Why it waits:
+  - It needs 16 GB or more and about 110 GB of free SSD, and refuses to start on 8 GB. The team has
+    no Mac of 24 GB or more that is neither the hub nor hosting seats, and the hub is ruled out for
+    local models (ADR 169's standstill).
+    - no host for it (2026-10-26; falsify: a non-hub, non-seat Mac with ≥24 GB joins the team) <!-- claim: other -->
+  - Its own README reports about 5–16 tokens a second at 24–48 GB, and 54 s to read a 16k prompt at
+    a 10 GB budget. A seat's first turn is 15k–28k tokens (above), so a cold wake takes minutes; its
+    prefix cache would shorten repeat wakes. Read from the README, not measured here.
+  - The weights come from a third-party Hugging Face org (`pipenetwork/Qwen3.8-Flash-Next-MLX-4bit`),
+    not from Qwen, and the install is a single maintainer's binary. Both need vetting before it runs
+    on a machine that holds team credentials.
+  - Whether ADR 663 marks its Ollama-compatible endpoint `local` is untested.
+
+  Source: the repository README and GitHub metadata, read 2026-10-26.
+
 ## Related
 
 - [ADR 663](../decisions/663-local-model-wakes.md): how a wake is marked `local`.
