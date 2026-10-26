@@ -135,7 +135,11 @@ In each container (`adapter.py`):
   (rider 4 pre-flight, 2026-10-25): agent2's post-lapse retry is refused once as the hand-over
   (`denied_handover`), which the smoke, written before ADR 697, expects allowed; `hold_smoke_697.py` is
   the check until it is updated. And run the smokes with the host `musterd` on `PATH`, never
-  `/opt/musterd-seat/bin` first: that packed CLI has no sqlite binding, so the pair daemon never comes up.
+  `/opt/musterd-seat/bin` first: that packed CLI has no sqlite binding, so the pair daemon never comes up. A redeploy also resets the
+  world-writable bit on `/opt/cooperbench/src/cooperbench/agents/swe_agent/trajectories` (`chmod 1777` it again,
+  not `/data/runs/trajectories` — rider 5 pre-flight, 2026-10-26). And the arm's `agent*_stream.jsonl` carries no
+  PostToolUse hook output: ADR 731's line to the pusher is read from `agent*_session.jsonl`, Claude Code's own
+  transcript in the same pair directory (finding 027).
 - `tests/`: 39 tests on the hook drift, the prompts' shape, both adapters' flows, and the OpenHands shims, against
   a fake container and host.
 - **One task end to end in both arms** (done-when 4), on the run machine, `pallets_click` task 2068,

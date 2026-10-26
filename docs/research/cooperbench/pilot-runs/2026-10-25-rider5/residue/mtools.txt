@@ -1,0 +1,15 @@
+== r5-musterd
+   musterd:team_inbox_check (wait)            82 $ 1.52
+   musterd:team_inbox_check (plain)           46 $ 1.38
+   other:ToolSearch                           60 $ 1.17
+   gate:edit-refused                          28 $ 0.78
+   musterd:lane_board                         26 $ 0.44
+   musterd:lane_open                          19 $ 0.32
+   musterd:lane_resolve                       13 $ 0.25
+   musterd:team_status                         7 $ 0.13
+   musterd:lane_update                         4 $ 0.09
+   musterd:lane_submit                         4 $ 0.09
+   musterd:lane_claim                          2 $ 0.04
+   wait:bash-sleep                             1 $ 0.03
+   musterd:lane_release                        1 $ 0.02
+   musterd:lane_handoff                        1 $ 0.02

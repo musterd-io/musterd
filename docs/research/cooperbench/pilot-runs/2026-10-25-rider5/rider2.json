@@ -1,0 +1,303 @@
+{
+ "r5-musterd": {
+  "pairs": 10,
+  "pairs_with_held_refusal": 9,
+  "holder_signals_total": 18,
+  "holder_signals_per_pair": [
+   3,
+   1,
+   2,
+   0,
+   3,
+   2,
+   1,
+   4,
+   2
+  ],
+  "freed_to_edit_s": [
+   21.0,
+   25.2,
+   25.3,
+   67.5,
+   24.5,
+   36.4,
+   26.9,
+   36.7,
+   36.9
+  ],
+  "lane_freed_acts": 8,
+  "records": [
+   {
+    "pair": "r5-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1792988792800,
+      "holder_freed_at": 1792988864091,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1792988885101,
+      "freed_to_edit_s": 21.0
+     }
+    ],
+    "holder_signals": {
+     "agent1": [
+      "My changes to outlines/types/__init__.py are committed and pushed. I added hex_str, uuid4, and ipv4 after the whitespace line. You can fetch and merge my branch",
+      "Lane resolved. You can now edit outlines/types/__init__.py to add your octal_str type.",
+      "I've merged your changes. patch.txt now contains both our features: my hex_str/uuid4/ipv4 types and your octal_str type. Work complete on my end."
+     ]
+    },
+    "holder_signal_count": 3,
+    "lane_freed_acts": [
+     {
+      "ts": 1792988864091,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Add IPv4, UUID4, and Hex String regex types\" is done: 'outlines/types/__init__.py' is free. Their work is on agent1 at 4dd7802a8a50: bring it in before you edit.",
+      "receiver_next": "act not seen in stream"
+     }
+    ]
+   },
+   {
+    "pair": "r5-musterd/coop/dspy_task/8563/f1_f4",
+    "db": "musterd-musterd.db",
+    "refusals": 2,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent1",
+      "holder": "agent2",
+      "refused_at": 1792988799248,
+      "holder_freed_at": 1792988911566,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1792988936791,
+      "freed_to_edit_s": 25.2
+     }
+    ],
+    "holder_signals": {
+     "agent2": [
+      "Done with fingerprinting - committed and pushed to agent2. Added fingerprint/id fields to ToolCall class with model_validator. Your validate_input can go ahead."
+     ]
+    },
+    "holder_signal_count": 1,
+    "lane_freed_acts": [
+     {
+      "ts": 1792988911566,
+      "to": "agent1",
+      "body": "[lane] agent2's lane \"Add fingerprinting to ToolCalls\" is done: 'dspy/adapters/types/tool.py' is free. Their work is on agent2 at 80412ce96d70: bring it in before you edit.",
+      "receiver_next": "bash"
+     }
+    ]
+   },
+   {
+    "pair": "r5-musterd/coop/llama_index_task/17244/f5_f6",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1792989073658,
+      "holder_freed_at": 1792989103238,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1792989128578,
+      "freed_to_edit_s": 25.3
+     }
+    ],
+    "holder_signals": {
+     "agent1": [
+      "Already completed my changes to ImageBlock - added get_image_mimetype() method. My edits are committed to agent1 branch. We're modifying same file, will coordin",
+      "Merge complete. patch.txt generated with both features: get_image_mimetype() method and encoding field control."
+     ]
+    },
+    "holder_signal_count": 2,
+    "lane_freed_acts": [
+     {
+      "ts": 1792989103238,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Add lazy MIME type accessor to ImageBlock\" is done: 'llama-index-core/llama_index/core/base/llms/types.py' is free. Their work is on agent1 at b004ea099f70: bring it in before yo",
+      "receiver_next": "act not seen in stream"
+     }
+    ]
+   },
+   {
+    "pair": "r5-musterd/coop/openai_tiktoken_task/0/f4_f8",
+    "db": "musterd-musterd.db",
+    "refusals": 2,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1792989173705,
+      "holder_freed_at": 1792989279789,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1792989347296,
+      "freed_to_edit_s": 67.5
+     }
+    ],
+    "holder_signals": {
+     "agent1": []
+    },
+    "holder_signal_count": 0,
+    "lane_freed_acts": [
+     {
+      "ts": 1792989279789,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Add chunk_size parameter to encode methods\" is done: 'tiktoken/core.py' is free. Their work is on agent1 at 4560a8896f5f: bring it in before you edit.",
+      "receiver_next": "bash"
+     }
+    ]
+   },
+   {
+    "pair": "r5-musterd/coop/pallets_click_task/2800/f1_f4",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1792989350326,
+      "holder_freed_at": 1792989445245,
+      "holder_freed_how": "act: no longer naming the file",
+      "refused_next_edit_at": 1792989469762,
+      "freed_to_edit_s": 24.5
+     }
+    ],
+    "holder_signals": {
+     "agent1": [
+      "Already updated lane to just shell_completion.py. core.py is all yours. I've pushed my changes (03abe08) - just modified _resolve_context function with 'with' s",
+      "Merged your changes (430c186) successfully. No conflicts. patch.txt generated with both our changes.",
+      "Work complete. Fixed resource leak in shell completion by wrapping context creation in 'with' statements. Merged agent2's cleanup_timeout changes. All tests pas"
+     ]
+    },
+    "holder_signal_count": 3,
+    "lane_freed_acts": [
+     {
+      "ts": 1792989445245,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Fix shell completion resource leak\" is no longer naming the file: 'src/click/core.py' is free. Their work is on agent1 at d8763b93021c: bring it in before you edit.",
+      "receiver_next": "bash"
+     }
+    ]
+   },
+   {
+    "pair": "r5-musterd/coop/pallets_jinja_task/1559/f5_f8",
+    "db": "musterd-musterd.db",
+    "refusals": 2,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent1",
+      "holder": "agent2",
+      "refused_at": 1792989383623,
+      "holder_freed_at": 1792989529009,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1792989565361,
+      "freed_to_edit_s": 36.4
+     }
+    ],
+    "holder_signals": {
+     "agent2": [
+      "Lane resolved. You can now edit ext.py.",
+      "Merged your changes. Final patch.txt ready with both features (411 lines). ConditionalI18nExtension + validation methods."
+     ]
+    },
+    "holder_signal_count": 2,
+    "lane_freed_acts": [
+     {
+      "ts": 1792989529009,
+      "to": "agent1",
+      "body": "[lane] agent2's lane \"Add ctrans conditional translation tag\" is done: 'src/jinja2/ext.py' is free. Their work is on agent2 at 896a62135bcc: bring it in before you edit.",
+      "receiver_next": "bash"
+     }
+    ]
+   },
+   {
+    "pair": "r5-musterd/coop/pallets_jinja_task/1621/f6_f10",
+    "db": "musterd-musterd.db",
+    "refusals": 2,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1792989664474,
+      "holder_freed_at": 1792989736005,
+      "holder_freed_how": "lane.released",
+      "refused_next_edit_at": 1792989762891,
+      "freed_to_edit_s": 26.9
+     }
+    ],
+    "holder_signals": {
+     "agent1": [
+      "I'm NOT adding __init__ to BaseLoader - only modifying each specific loader's __init__ (FileSystemLoader, DictLoader, FunctionLoader, PackageLoader, PrefixLoade"
+     ]
+    },
+    "holder_signal_count": 1,
+    "lane_freed_acts": [
+     {
+      "ts": 1792989737922,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Add path_transform parameter to template loaders\" is released: 'src/jinja2/loaders.py' is free. Their work is on agent1 at a2920752fd11: bring it in before you edit.",
+      "receiver_next": "bash"
+     }
+    ]
+   },
+   {
+    "pair": "r5-musterd/coop/react_hook_form_task/153/f2_f6",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent1",
+      "holder": "agent2",
+      "refused_at": 1792989911079,
+      "holder_freed_at": 1792989931094,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1792989967817,
+      "freed_to_edit_s": 36.7
+     }
+    ],
+    "holder_signals": {
+     "agent2": [
+      "I'm adding TSubmitContext generic to UseFormHandleSubmit, SubmitHandler, SubmitErrorHandler. The returned function from handleSubmit will accept (e?, context?) ",
+      "Done! Pushed my changes to team/agent2 (commit 96a6606a). You can merge now - I've added TSubmitContext generic and context param support without touching onFin",
+      "Lane resolved. Files released - you can edit now.",
+      "Merged team/agent1 successfully. patch.txt created with both features (167 lines). Both context param and onFinally are working together."
+     ]
+    },
+    "holder_signal_count": 4,
+    "lane_freed_acts": [
+     {
+      "ts": 1792989931094,
+      "to": "agent1",
+      "body": "[lane] agent2's lane \"Feature 6: Pass Submission Context\" is done: 'src/types/form.ts' is free. Their work is on agent2 at cec3267e12aa: bring it in before you edit.",
+      "receiver_next": "act not seen in stream"
+     }
+    ]
+   },
+   {
+    "pair": "r5-musterd/coop/typst_task/6554/f2_f6",
+    "db": "musterd-musterd.db",
+    "refusals": 2,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent1",
+      "holder": "agent2",
+      "refused_at": 1792989763718,
+      "holder_freed_at": 1792989919442,
+      "holder_freed_how": "taken over by agent1 (handoff)",
+      "refused_next_edit_at": 1792989956351,
+      "freed_to_edit_s": 36.9
+     }
+    ],
+    "holder_signals": {
+     "agent2": [
+      "I've added skip_whitespace param to both methods. Ready to handoff - you can add your index param on top of my changes. The methods now take skip_whitespace: bo",
+      "Handing off str.rs lane. My skip_whitespace changes are committed and pushed on agent2 branch. You can build on top of them for the index parameter."
+     ]
+    },
+    "holder_signal_count": 2,
+    "lane_freed_acts": []
+   }
+  ]
+ }
+}

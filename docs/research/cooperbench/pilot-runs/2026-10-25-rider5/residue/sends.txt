@@ -1,0 +1,78 @@
+{
+ "r5-musterd": {
+  "total": 18.54,
+  "counts": {
+   "send_calls": 100,
+   "sends": 100,
+   "act:message": 85,
+   "signal": 43,
+   "act:status_update": 9,
+   "act:request_help": 4,
+   "act:accept": 1,
+   "act:handoff": 1
+  },
+  "usd": {
+   "send_calls": 2.12,
+   "signal": 0.92
+  },
+  "signal_kinds": {
+   "pushed/fetch": [
+    12,
+    0.25
+   ],
+   "lane done / you can edit": [
+    11,
+    0.24
+   ],
+   "merged/complete/submitted": [
+    16,
+    0.35
+   ],
+   "waiting / ETA": [
+    1,
+    0.02
+   ],
+   "thanks/ack": [
+    1,
+    0.02
+   ],
+   "other": [
+    2,
+    0.04
+   ]
+  },
+  "examples": {
+   "pushed/fetch": [
+    "My changes to outlines/types/__init__.py are committed and pushed. I added hex_str, uuid4, and ipv4 after the whitespace line. You can fetch and merge my branch",
+    "Both editing tool.py - you're adding fingerprint to ToolCall, I'm adding validate_input to ToolCalls. Can you commit + push when done so I can merge your change",
+    "Done with fingerprinting - committed and pushed to agent2. Added fingerprint/id fields to ToolCall class with model_validator. Your validate_input can go ahead.",
+    "Already completed my changes to ImageBlock - added get_image_mimetype() method. My edits are committed to agent1 branch. We're modifying same file, will coordin"
+   ],
+   "lane done / you can edit": [
+    "Lane resolved. You can now edit outlines/types/__init__.py to add your octal_str type.",
+    "I've merged your changes, but your lane still holds outlines/types/__init__.py. Can you submit/resolve your lane so I can make my edits?",
+    "I merged your changes but still can't edit - your lane 01M5V79YZGKH5WGA0Z6Z6WMEEJ holds the file. Can you release/resolve your lane so I can add my validate_inp",
+    "I've merged your changes but your lane still holds ext.py. Please resolve your lane with lane_resolve so I can proceed with my edits."
+   ],
+   "merged/complete/submitted": [
+    "I've merged your changes. patch.txt now contains both our features: my hex_str/uuid4/ipv4 types and your octal_str type. Work complete on my end.",
+    "Completed adding octal_str type to outlines/types/__init__.py. Merged agent1's changes and created final patch.txt with both features.",
+    "Merged your changes and added comprehensive tests for HandleFunc HTTP method pattern parsing. All tests pass. Ready to submit.",
+    "Feature complete: HTTP method pattern support in HandleFunc. Merged agent1's implementation + added 71 lines of tests. All tests passing. patch.txt ready (161 l"
+   ],
+   "waiting / ETA": [
+    "My edits to src/click/core.py are blocked because you hold the file. Can you either: (1) hand off core.py to me if you're mainly editing shell_completion.py, or"
+   ],
+   "thanks/ack": [
+    "Thanks! Can you handoff core.py to me or narrow your lane to just shell_completion.py? The block is still active on my end."
+   ],
+   "other": [
+    "We're both modifying str.first/last. You're adding skip_whitespace, I'm adding index param. Can we coordinate? Either handoff to me after your changes, or I can",
+    "I've added skip_whitespace param to both methods. Ready to handoff - you can add your index param on top of my changes. The methods now take skip_whitespace: bo"
+   ]
+  },
+  "cf_as_run": 18.54,
+  "cf_drop_wait": 16.34,
+  "cf_drop_signal": 17.62
+ }
+}

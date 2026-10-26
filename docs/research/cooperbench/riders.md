@@ -149,7 +149,9 @@ lanes in the block and the push act are the product every seat on every team get
 **Lanes:** `01M5V4GEP0` (this pre-registration), `01M5V4H40C` (the ADR and product change),
 `01M5V4HH6Z` (the run → finding 027); goal `coordination-cost`. **Status:** pre-registered 2026-10-25,
 before the product change has landed or run on CooperBench. Run manifest:
-[rider5-manifest.md](./rider5-manifest.md). Decided by nick, 2026-10-25, in session ("audience 3, head
+[rider5-manifest.md](./rider5-manifest.md). **Read 2026-10-26 → [finding 027](../027-cooperbench-rider5-run.md):**
+R5a 12 (did not act, at the bound), R5b 12 of 22 (part of it), R5c 8 of 12 (did not act); the hook's line
+reached the pusher 22 of 22 times; the 10 silent pushes all came after the partner's lane had ended. Decided by nick, 2026-10-25, in session ("audience 3, head
 addition in, run it — go ahead").
 
 **What changes.** Finding 026 read ADR 730 on the 10 `core` pairs: the hook reported 20 of 20 pushes
