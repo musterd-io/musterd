@@ -5,6 +5,9 @@ coverage/
 coverage-blobs/
 .DS_Store
 *.log
+# CooperBench run logs are research data the findings link to (finding 027's acceptance review found
+# every run's `run.log` unpublished since pilot 2 because of the line above).
+!docs/research/cooperbench/pilot-runs/**/*.log
 # ADR 058: the durable seat roster (.musterd/team.toml + seats/) is committed; only the
 # secret-bearing binding token is ignored — in any folder (** covers root + nested).
 **/.musterd/binding.json

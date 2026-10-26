@@ -1,0 +1,7 @@
+[2026-10-21T23:30:49Z] smoke start
+[2026-10-21T23:34:01Z] smoke ok= spent=0.48
+[2026-10-21T23:34:01Z] SMOKE FAIL — stopping
+[2026-10-21T23:37:36Z] smoke skipped: passed by hand at 23:34Z (Submitted, eval errors 0, $0.48)
+[2026-10-21T23:37:36Z] start solo arm
+[2026-10-21T23:52:09Z] run exit; eval
+[2026-10-21T23:55:58Z] spent=6.60 all done

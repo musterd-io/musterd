@@ -4,6 +4,7 @@
    {
     "pair": "r5-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3",
     "git_pushes": 2,
+    "recorded_pushes": 2,
     "announced_pushes": 1,
     "announced_holders": [
      "agent1"
@@ -24,6 +25,7 @@
    {
     "pair": "r5-musterd/coop/dspy_task/8563/f1_f4",
     "git_pushes": 2,
+    "recorded_pushes": 2,
     "announced_pushes": 1,
     "announced_holders": [
      "agent2"
@@ -44,6 +46,7 @@
    {
     "pair": "r5-musterd/coop/go_chi_task/27/f3_f4",
     "git_pushes": 2,
+    "recorded_pushes": 2,
     "announced_pushes": 2,
     "announced_holders": [
      "agent1",
@@ -66,6 +69,7 @@
    {
     "pair": "r5-musterd/coop/llama_index_task/17244/f5_f6",
     "git_pushes": 2,
+    "recorded_pushes": 2,
     "announced_pushes": 1,
     "announced_holders": [
      "agent1"
@@ -84,6 +88,7 @@
    {
     "pair": "r5-musterd/coop/openai_tiktoken_task/0/f4_f8",
     "git_pushes": 2,
+    "recorded_pushes": 2,
     "announced_pushes": 1,
     "announced_holders": [
      "agent1"
@@ -102,6 +107,7 @@
    {
     "pair": "r5-musterd/coop/pallets_click_task/2800/f1_f4",
     "git_pushes": 3,
+    "recorded_pushes": 3,
     "announced_pushes": 2,
     "announced_holders": [
      "agent1",
@@ -124,6 +130,7 @@
    {
     "pair": "r5-musterd/coop/pallets_jinja_task/1559/f5_f8",
     "git_pushes": 2,
+    "recorded_pushes": 2,
     "announced_pushes": 1,
     "announced_holders": [
      "agent2"
@@ -144,6 +151,7 @@
    {
     "pair": "r5-musterd/coop/pallets_jinja_task/1621/f6_f10",
     "git_pushes": 3,
+    "recorded_pushes": 3,
     "announced_pushes": 1,
     "announced_holders": [
      "agent1"
@@ -164,6 +172,7 @@
    {
     "pair": "r5-musterd/coop/react_hook_form_task/153/f2_f6",
     "git_pushes": 3,
+    "recorded_pushes": 2,
     "announced_pushes": 1,
     "announced_holders": [
      "agent2"
@@ -184,6 +193,7 @@
    {
     "pair": "r5-musterd/coop/typst_task/6554/f2_f6",
     "git_pushes": 2,
+    "recorded_pushes": 2,
     "announced_pushes": 1,
     "announced_holders": [
      "agent2"
@@ -204,8 +214,10 @@
   ],
   "totals": {
    "git_pushes": 23,
+   "recorded_pushes": 22,
    "announced_pushes": 12,
    "R5b_fraction": 0.522,
+   "R5b_fraction_recorded": 0.545,
    "announced_holders": 12,
    "holders_repeating_by_hand": 8,
    "R5c_fraction": 0.667,

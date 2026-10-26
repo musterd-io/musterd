@@ -1,0 +1,46 @@
+# CooperBench coordination-cost run — run log (lane 01M5QDHJEE, coordination-cost-manifest.md)
+
+## Pre-flight, 2026-10-24 (machine musterd-cooperbench, performance-8x)
+
+- **Spend:** nick approved the run in session ("approved, run it", 2026-10-24) — about $18, hard stop $25.
+- **Deploy** from main `c9ac2819` (carries #3289 `071691db`); `MUSTERD_REF=c9ac2819…`, Claude Code
+  `2.1.307` on the host (`claude --version`) and, through CooperBench's `setup.sh`, in every agent
+  container. Redeploy resets the root fs: `useradd smoke` again, and
+  `/opt/cooperbench/src/cooperbench/agents/swe_agent/trajectories` had to be created world-writable
+  before any smoke could import CooperBench as the `smoke` user (PermissionError otherwise).
+- **API check:** one `claude -p` (haiku) → `ok`.
+- **`hold_smoke_697.py`** as the `smoke` user: PASS, $0.0086. Rows: held → handover (denied) → lapsed (allowed, warned);
+  no deaf warning.
+- **`gate_smoke.py` as committed FAILs on this Claude Code, three times** (haiku ×2 $0.003 + $0.002, sonnet $0.11):
+  the smoke runs Claude Code with `--tools Edit,Write` and no `Read`, and 2.1.307's Edit/Write refuse a
+  file that was not read in the session ("File has not been read yet. Read it first before writing to
+  it."), so neither edit reached the gate (`gate_denies=0`, not a gate failure). Two prompt-only variants
+  (known file contents; Write instead of Edit) failed the same way ($0.003, $0.002). **`gate_smoke_read.py`**
+  (a copy beside this log: `--tools Read,Edit,Write`, `Read(src/**)` allowed, prompt reads each file first;
+  gate wiring unchanged): **PASS, $0.0035** — `src/a.py` edited inside the lane, `src/b.py` refused by the
+  gate ("'**' is a declared contended surface you have not claimed a lane for"), one `lane.gate` deny
+  audited, no deaf warning. This touches the smoke only, never an arm. Follow-up: `gate_smoke.py` needs
+  `Read` in its tool list (the committed smoke cannot pass on 2.1.307).
+- **Smokes total ≈ $0.135**, over the manifest's "under $0.10" because of the one Sonnet retry. The arm's
+  cap is lowered from $24.95 to **$24.80** so the $25 hard stop still holds over smokes + arm.
+- No smoke pair, as pre-registered.
+- Images: 6 of the 10 `core` images were on the volume; the rider run's non-core images were removed
+  (63 GB free) and the other 4 pulled by `coordcost.sh`.
+
+## Run
+
+- 22:18:00Z `coordcost.sh` started (`cc-musterd`, `-s core`, `-c 3`, `run_arms.py --cap 24.80`).
+- 22:22:17Z images pulled (4 of 10; 39 GB free). 22:22:18Z `cc-musterd` started; 22:49:18Z run exit 0 (26 min 43 s,
+  agent time 71 min); 22:53:10Z eval exit 0; **$17.94** model spend; `run_arms` exit 0; `readout.py` exit 0.
+  No errored pair, no API-limit line, nothing re-run. `MUSTERD_REF` c9ac2819 and `claude_code_version` 2.1.307
+  in every pair.
+- Residue: `boardreads.py`, `sends.py`, `mtools.py`, `cats.py` (the claim run's copies under `/app/docs/…`,
+  unchanged) on `claim-musterd-core` and `cc-musterd` → `residue/`. `rider2.py` (new, this folder) on the claim
+  run first (`rider2-claim.json`), then both (`rider2.json`); the machine was restarted once for a rerun after
+  the reader learned to take the ADR 724 act's time as the lane freeing the file where the audit rows did not
+  show it (a `lane_resolve` close or a scope narrowing).
+- Machine stopped 22:58Z; started again briefly for the rider 2 rerun and stopped.
+- Baselines re-read today differ from the manifest in two places: R3b's claim-run count is 45 non-signal
+  `status_update` calls ($1.02) by `sends.py`'s `is_signal` applied per call (the manifest wrote 40, $0.94 from
+  finding 022), and the claim run passed 4 of these 10 pairs by `readout.json` (the manifest wrote 3). Neither
+  changes a verdict; both are stated in the finding.

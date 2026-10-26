@@ -1,0 +1,13 @@
+[2026-10-25T17:04:12Z] api check: ok
+[2026-10-25T17:04:12Z] gate_smoke start
+[2026-10-25T17:04:58Z] gate_smoke exit=1 
+[2026-10-25T17:04:58Z] hold_smoke start
+[2026-10-25T17:05:41Z] hold_smoke exit=1 
+[2026-10-25T17:05:41Z] preflight done
+[2026-10-25T17:07:38Z] smokes rerun: host musterd on PATH (first try put /opt/musterd-seat/bin first: no sqlite binding, daemon never healthy)
+[2026-10-25T17:07:38Z] gate_smoke start
+[2026-10-25T17:08:09Z] gate_smoke exit=0 cost_usd=0.0034769000000000006 a_edited=True b_edited=False gate_denies=1 PASS 
+[2026-10-25T17:08:09Z] hold_smoke start
+[2026-10-25T17:10:43Z] hold_smoke exit=1 agent1_edited=True agent2_first_refused=True agent2_again_allowed=False held_deny_audited=True lapsed_warn_audited=False no_deaf_warning=True cost_usd=0.0042 FAIL 
+[2026-10-25T17:10:43Z] preflight done
+[2026-10-25T17:11:33Z] hold_smoke_697 exit=0 
