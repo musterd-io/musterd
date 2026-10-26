@@ -53,6 +53,7 @@ brand accent used by buttons, links and the rest of the UI.
    stem ends in a round **seat**, one per member. The stroke is 80 units and the seat radius 50, so
    the letter leads and the seats read as feet. It is one geometry, in
    `packages/web/src/brand/chipMark.ts`, centred in the ring and filling about half the tile width.
+   _(Amended 2026-10-26: [ADR 733](733-the-tile-mark-carries-the-sparks.md) sets the stroke to 74 and the seats to 46, the wordmark's `m`, and adds a mustard spark in each cut at full weight.)_
 5. **Weights and files.** Full weight (≥24px) is a file; the small weight (stroke +26, seats +13, so
    the cuts stay open) is for <24px and is the only one in code. Files in `docs/design/assets/`:
    `chip.svg` and `chip-sm.svg`; the web copies are byte-identical (`chipMark.test.ts`).
@@ -86,6 +87,8 @@ brand accent used by buttons, links and the rest of the UI.
   there is no longer a design source other than the SVG.
 
 _(2026-10-21: the derived art landed in lane 01M5GFDR0Z: `tile.svg`, `avatar.svg`, the console favicon and its design previews, and the raster icons re-rendered from the new files, with a 16px favicon frame that carries a firmer rim. Still open: social card / README header / deck art, the wordmark review, the clearance check.)_
+
+_(2026-10-26: [ADR 733](733-the-tile-mark-carries-the-sparks.md) gives the tile the wordmark's `m` and its two sparks, on every full-weight file and the raster icons from 24px up; the small weight takes the new base and no sparks.)_
 
 ## Observability & Evaluation
 

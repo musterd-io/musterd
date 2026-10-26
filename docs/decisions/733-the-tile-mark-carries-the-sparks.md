@@ -33,17 +33,18 @@ and say what happens at the sizes where a spark cannot fit.
    wordmark's values. At a 74 stroke the cut runs from 453 to 493, so an 18 leaves 2 units clear on
    each side.
 3. **The small weight has no sparks.** It thickens the stroke by 26 so the cuts stay open below
-   24px, which leaves a cut about 8 units tall: there is no room for a dot. A spark there would close
-   the cut it marks. The small weight also moves to the new base (stroke 74 + 26, seats 46 + 13).
-4. **Everything derived from the full weight takes the change:** `chip.svg`, `tile.svg`,
-   `avatar.svg`, `badge.svg`, the console favicon and its design previews, the MCP icon, the raster
-   icons from 32px up, and the deck and leave-behind art that draws the tile.
+   24px. On the new base (stroke 74 + 26 = 100, seats 46 + 13 = 59) that leaves a cut 14 units tall,
+   from 466 to 480: a spark would close the cut it marks.
+4. **Everything derived from the full weight takes the sparks:** `chip.svg`, `tile.svg`,
+   `avatar.svg`, the MCP icon, the raster icons from 24px up, and the deck art that draws the tile.
+   Everything on the small weight takes only the new base: `chip-sm.svg`, the console favicon, the
+   16px favicon frame and the in-code `MusterdChip`.
 
 ## Consequences
 
 - Changed here: `chipMark.ts` (the stroke, the seats and a `CHIP_SPARKS` constant), `MusterdChip` in
   `MusterdWord.tsx`, every file listed in §4, `brand.md` §1, and the tests that pin them.
-- The 16px favicon frame stays sparkless by §3. Every other raster frame shows the sparks.
+- The 16px favicon frame and the console's favicon stay sparkless by §3. Every other raster shows the sparks.
 - The sparks are mustard on sand. That is the same pair ADR 704 already ships in the wordmark, so
   no new colour is added to the brand.
 

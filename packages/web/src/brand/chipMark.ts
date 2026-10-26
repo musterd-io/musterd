@@ -1,6 +1,6 @@
 /**
  * The musterd mark, as data — a split `m` with a seat at the foot of each stem, in a white ring on a
- * flat sand tile (ADR 702, superseding the ADR 497 hand-drawn `m` and the ADR 154 chip).
+ * flat sand tile, with a spark in each cut at full weight (ADR 702 and 733, superseding the ADR 497 hand-drawn `m` and the ADR 154 chip).
  *
  * It lives here rather than inside `MusterdWord.tsx` because two very different renderers need the
  * same mark and only one of them is React. The office scene builds raw DOM in a lazily-loaded chunk
@@ -26,9 +26,9 @@ export const CHIP_RADIUS = 307;
 export const CHIP_VIEWBOX = 1024;
 /** The white ring: a rounded square stroke, centred on the tile. 48 wide, so the m can fill the tile. */
 export const CHIP_RING = { x: 83, size: 858, radius: 218, stroke: 48 };
-/** Stroke of the `m`, and the seat radius, in viewBox units. */
-export const CHIP_STROKE = 80;
-export const CHIP_DOT_RADIUS = 50;
+/** Stroke of the `m`, and the seat radius, in viewBox units — the wordmark's `m` (ADR 733). */
+export const CHIP_STROKE = 74;
+export const CHIP_DOT_RADIUS = 46;
 /** What the small cut adds to each so the cuts between the stems stay open. */
 export const CHIP_SMALL_EXTRA = 26;
 export const CHIP_SMALL_DOT_EXTRA = 13;
@@ -37,6 +37,17 @@ export const CHIP_DOTS = [
   [295, 660],
   [512, 660],
   [729, 660],
+] as const;
+/**
+ * The sparks: a mustard-700 dot in each cut, the wordmark's values (ADR 733, after ADR 704). The full
+ * weight only — the small cut's cuts are ~14 units tall at its thicker stroke, so a dot there would
+ * close the cut it marks.
+ */
+export const CHIP_SPARK = '#B8860B';
+export const CHIP_SPARK_RADIUS = 18;
+export const CHIP_SPARKS = [
+  [512, 473],
+  [729, 473],
 ] as const;
 /**
  * The `m`: the left stem runs into the first shoulder, the second shoulder starts where the first
