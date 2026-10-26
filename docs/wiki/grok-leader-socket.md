@@ -50,6 +50,15 @@ Isolated leader, custom `--leader-socket`, grok 1.0.62 (`1474f9cbdd91`), n=1. Th
 - `session/list` with `{}` returned rows with `sessionId`, `cwd`, and `updatedAt`, including sessions this leader did not create. A client prompts only a row whose cwd is the binding directory.
 - `session/prompt` for an unknown session id with `prompt: [{type:"text", text:"ping"}]` returned JSON-RPC code -32602. That is a rejected prompt. It is not a busy signal. A running turn's reply shape was not measured on this build. The successful prompt remains the 1.0.52 turn above.
 
+## session/list is paged on 1.0.70 (2026-10-26; falsify: `session/list` with `{}` on grok 1.0.70 returns every session and no `nextCursor`, or `{cursor: <nextCursor>}` is rejected) <!-- claim: other -->
+
+Grok 1.0.70 (`f50904eaee6c`), n=1 for the page shape and n=1 for a completed push. Private socket `/tmp/grok-idle-push-d.sock`. `~/.grok/leader.sock` was absent and `[cli] use_leader` stayed false. The TUI was started with `--leader --leader-socket` that path and spawned `grok agent leader --no-exit-on-disconnect --relay-on-demand`. Leader cwd and session cwd were the same `/tmp` directory.
+
+- The first `session/list` `{}` returned 30 rows, key `nextCursor`, and the probe session. The follow-up `{cursor: <nextCursor>}` returned 13 rows and no cursor.
+- An earlier run the same day, same binary, omitted the session that leader had just created from the first page of 30. Prompting a listed session that leader had not created returned JSON-RPC `-32602`.
+- `session/prompt` on the session the leader's own log named returned `stopReason: end_turn`. The assistant turn was stored. The model declined to repeat a probe token. The turn itself completed (`ttft_ms` about 8 s, `stop_reason=stop`, no tool call).
+- `grokLeader` follows `nextCursor` until it is absent, repeated, or 8 pages have been read, then prompts the newest resolved-cwd match across those pages. A rejected cursor is `list-failed` and prompts nothing.
+
 ## What this does not settle
 
 - A default musterd Grok seat stays deaf. Nothing in this repo starts `grok` with `--leader`, and `use_leader` is off unless someone sets it. `grokLeader` probes `no-leader-socket` when the socket is absent and prompts a `--leader` session whose cwd is the binding directory.

@@ -12,8 +12,10 @@ import type { InjectAdapter, InjectResult } from './inject.js';
  * `{type:"register", mode:"stdio", client_type:"musterd"}`. 1.0.62 closes a register that omits
  * `client_type`. ACP is `{"type":"acp","payload":"<json-rpc string>"}`.
  *
- * `session/list` on a leader returns sessions that leader did not create. Only a row whose
- * resolved cwd is this binding directory is prompted, and the newest `updatedAt` when several match.
+ * `session/list` on a leader returns sessions that leader did not create. On grok 1.0.70
+ * (2026-10-26) the list is paged: the result carries `nextCursor`, and the next page is
+ * `{cursor: <that value>}`. The client follows that cursor, and prompts only a row whose
+ * resolved cwd is this binding directory — the newest `updatedAt` across the pages.
  *
  * The prompt's JSON-RPC result arrives when the turn stops (1.0.52: `stopReason` about 2 s later).
  * `inject` returns once the prompt is accepted — a later frame, or a short quiet with the socket
@@ -27,6 +29,8 @@ const MAX_FRAME = 4 * 1024 * 1024;
 const INIT_ID = 1;
 const LIST_ID = 2;
 const PROMPT_ID = 3;
+/** Eight pages of the measured 30-row page. A repeated cursor stops the walk sooner. */
+const MAX_LIST_PAGES = 8;
 
 const Registered = z
   .object({
@@ -123,17 +127,22 @@ function readRpc(frame: unknown): RpcView | undefined {
   return view;
 }
 
-/** Newest session whose resolved cwd is `dir`, or a miss. `'bad'` means the list did not parse. */
-function pickSession(result: unknown, dir: string): string | 'bad' | undefined {
+interface ListedSession {
+  sessionId: string;
+  updatedAt: string;
+}
+
+/** Cwd matches on one page. `'bad'` means the list did not parse. A missing directory is a miss. */
+function pageMatches(result: unknown, dir: string): ListedSession[] | 'bad' {
   const parsed = SessionList.safeParse(result);
   if (!parsed.success) return 'bad';
   let want: string;
   try {
     want = realpathSync(dir);
   } catch {
-    return undefined;
+    return [];
   }
-  const matches: { sessionId: string; updatedAt: string }[] = [];
+  const matches: ListedSession[] = [];
   for (const row of parsed.data.sessions) {
     const session = SessionRow.safeParse(row);
     if (!session.success) continue;
@@ -146,8 +155,21 @@ function pickSession(result: unknown, dir: string): string | 'bad' | undefined {
     if (cwd !== want) continue;
     matches.push({ sessionId: session.data.sessionId, updatedAt: session.data.updatedAt ?? '' });
   }
-  matches.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
-  return matches[0]?.sessionId;
+  return matches;
+}
+
+function newestSession(matches: readonly ListedSession[]): string | undefined {
+  const sorted = [...matches].sort((a, b) =>
+    a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0,
+  );
+  return sorted[0]?.sessionId;
+}
+
+/** grok 1.0.70 names the next page `nextCursor`. The following request sends it as `cursor`. */
+function nextCursorOf(result: unknown): string | undefined {
+  if (typeof result !== 'object' || result === null) return undefined;
+  const cursor = (result as { nextCursor?: unknown }).nextCursor;
+  return typeof cursor === 'string' && cursor.length > 0 ? cursor : undefined;
 }
 
 function injectLine(socketPath: string, dir: string, line: string): Promise<InjectResult> {
@@ -157,6 +179,11 @@ function injectLine(socketPath: string, dir: string, line: string): Promise<Inje
     let connected = false;
     let stage: 'register' | 'initialize' | 'list' | 'prompt' | 'drain' = 'register';
     let buf = Buffer.alloc(0);
+    let listId = LIST_ID;
+    let promptId = PROMPT_ID;
+    let listPages = 0;
+    const found: ListedSession[] = [];
+    const followed = new Set<string>();
     const sock = new Socket();
     let acceptTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -215,16 +242,27 @@ function injectLine(socketPath: string, dir: string, line: string): Promise<Inje
         return;
       }
       if (stage === 'list') {
-        if (!sameId(rpc.id, LIST_ID)) return;
+        if (!sameId(rpc.id, listId)) return;
         if (rpc.error) {
           finish({ ok: false, reason: 'list-failed' });
           return;
         }
-        const picked = pickSession(rpc.result, dir);
-        if (picked === 'bad') {
+        listPages += 1;
+        const page = pageMatches(rpc.result, dir);
+        if (page === 'bad') {
           finish({ ok: false, reason: 'list-failed' });
           return;
         }
+        found.push(...page);
+        const cursor = nextCursorOf(rpc.result);
+        if (cursor && !followed.has(cursor) && listPages < MAX_LIST_PAGES) {
+          followed.add(cursor);
+          listId += 1;
+          promptId = listId + 1;
+          writeFrame(sock, acp(listId, 'session/list', { cursor }));
+          return;
+        }
+        const picked = newestSession(found);
         if (!picked) {
           finish({ ok: false, reason: 'no-session' });
           return;
@@ -232,7 +270,7 @@ function injectLine(socketPath: string, dir: string, line: string): Promise<Inje
         stage = 'prompt';
         writeFrame(
           sock,
-          acp(PROMPT_ID, 'session/prompt', {
+          acp(promptId, 'session/prompt', {
             sessionId: picked,
             prompt: [{ type: 'text', text: line }],
           }),
@@ -245,7 +283,7 @@ function injectLine(socketPath: string, dir: string, line: string): Promise<Inje
           finish({ ok: true }, true);
           return;
         }
-        if (!sameId(rpc.id, PROMPT_ID)) return;
+        if (!sameId(rpc.id, promptId)) return;
         if (rpc.error) finish({ ok: false, reason: 'prompt-rejected' });
         else finish({ ok: true });
       }
@@ -272,7 +310,7 @@ function injectLine(socketPath: string, dir: string, line: string): Promise<Inje
         }
         if (stage === 'drain') {
           const rpc = readRpc(raw);
-          if (rpc && sameId(rpc.id, PROMPT_ID)) sock.destroy();
+          if (rpc && sameId(rpc.id, promptId)) sock.destroy();
           continue;
         }
         handle(raw);

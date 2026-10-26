@@ -54,10 +54,14 @@ function listen(
   });
 }
 
-function rpc(frame: unknown): { method?: string; params?: Record<string, unknown> } {
+function rpc(frame: unknown): { id?: number; method?: string; params?: Record<string, unknown> } {
   const wrapped = frame as { type?: string; payload?: unknown };
   if (wrapped.type !== 'acp' || typeof wrapped.payload !== 'string') return {};
-  return JSON.parse(wrapped.payload) as { method?: string; params?: Record<string, unknown> };
+  return JSON.parse(wrapped.payload) as {
+    id?: number;
+    method?: string;
+    params?: Record<string, unknown>;
+  };
 }
 
 function acp(id: number, result: unknown): { type: 'acp'; payload: string } {
@@ -254,6 +258,140 @@ describe('grok leader inject (ADR 558 §6)', () => {
     expect(result).toEqual({ ok: true });
     expect(elapsed).toBeGreaterThanOrEqual(350);
     expect(elapsed).toBeLessThan(1_500);
+  });
+
+  it('prompts the newest cwd match from a later page, not a stale row on the first', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'grok-cwd-'));
+    const mine = join(root, 'mine');
+    const other = join(root, 'other');
+    mkdirSync(mine);
+    mkdirSync(other);
+    const seen: unknown[] = [];
+    const path = await listen((frame, send) => {
+      seen.push(frame);
+      const call = rpc(frame);
+      if (!call.method) {
+        send({ type: 'registered', ready: true });
+        return;
+      }
+      if (call.method === 'initialize') {
+        send(acp(1, { protocolVersion: 1 }));
+        return;
+      }
+      if (call.method !== 'session/list') return;
+      const id = call.id ?? 2;
+      if (!call.params?.['cursor']) {
+        send(
+          acp(id, {
+            sessions: [
+              { sessionId: 'mine-old', cwd: mine, updatedAt: '2026-10-01T00:00:00.000Z' },
+              { sessionId: 'elsewhere', cwd: other, updatedAt: '2026-10-20T00:00:00.000Z' },
+            ],
+            nextCursor: 'page-2',
+          }),
+        );
+        return;
+      }
+      send(
+        acp(id, {
+          sessions: [{ sessionId: 'mine-new', cwd: mine, updatedAt: '2026-10-16T00:00:00.000Z' }],
+        }),
+      );
+    });
+    const result = await grokLeader({ GROK_LEADER_SOCKET: path }, mine).inject('x');
+    expect(result).toEqual({ ok: true });
+    const lists = seen.map((frame) => rpc(frame)).filter((call) => call.method === 'session/list');
+    expect(lists.map((call) => call.params)).toEqual([{}, { cursor: 'page-2' }]);
+    const prompt = seen.map((frame) => rpc(frame)).find((call) => call.method === 'session/prompt');
+    expect(prompt?.params).toEqual({
+      sessionId: 'mine-new',
+      prompt: [{ type: 'text', text: 'x' }],
+    });
+  });
+
+  it('a rejected cursor is list-failed and prompts nothing', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'grok-cwd-'));
+    const mine = join(root, 'mine');
+    const other = join(root, 'other');
+    mkdirSync(mine);
+    mkdirSync(other);
+    const seen: unknown[] = [];
+    const path = await listen((frame, send) => {
+      seen.push(frame);
+      const call = rpc(frame);
+      if (!call.method) {
+        send({ type: 'registered', ready: true });
+        return;
+      }
+      if (call.method === 'initialize') {
+        send(acp(1, { protocolVersion: 1 }));
+        return;
+      }
+      if (call.method !== 'session/list') return;
+      const id = call.id ?? 2;
+      if (!call.params?.['cursor']) {
+        send(
+          acp(id, {
+            sessions: [
+              { sessionId: 'elsewhere', cwd: other, updatedAt: '2026-10-20T00:00:00.000Z' },
+            ],
+            nextCursor: 'page-2',
+          }),
+        );
+        return;
+      }
+      send({
+        type: 'acp',
+        payload: JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32602, message: 'bad cursor SUPERSECRET' },
+        }),
+      });
+    });
+    const result = await grokLeader({ GROK_LEADER_SOCKET: path }, mine).inject('x');
+    expect(result).toEqual({ ok: false, reason: 'list-failed' });
+    expect(JSON.stringify(result)).not.toContain('SUPERSECRET');
+    expect(seen.map((frame) => rpc(frame).method).filter(Boolean)).toEqual([
+      'initialize',
+      'session/list',
+      'session/list',
+    ]);
+  });
+
+  it('stops after eight pages when every page names a new cursor', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'grok-cwd-'));
+    const seen: unknown[] = [];
+    const path = await listen((frame, send) => {
+      seen.push(frame);
+      const call = rpc(frame);
+      if (!call.method) {
+        send({ type: 'registered', ready: true });
+        return;
+      }
+      if (call.method === 'initialize') {
+        send(acp(1, { protocolVersion: 1 }));
+        return;
+      }
+      if (call.method !== 'session/list') return;
+      const page = seen.filter((item) => rpc(item).method === 'session/list').length;
+      send(
+        acp(call.id ?? 2, {
+          sessions:
+            page === 1
+              ? [{ sessionId: 'mine', cwd: root, updatedAt: '2026-10-01T00:00:00.000Z' }]
+              : [],
+          nextCursor: `page-${page + 1}`,
+        }),
+      );
+    });
+    const result = await grokLeader({ GROK_LEADER_SOCKET: path }, root).inject('x');
+    expect(result).toEqual({ ok: true });
+    const lists = seen.map((frame) => rpc(frame)).filter((call) => call.method === 'session/list');
+    expect(lists).toHaveLength(8);
+    expect(lists[7]?.params).toEqual({ cursor: 'page-8' });
+    const prompt = seen.map((frame) => rpc(frame)).find((call) => call.method === 'session/prompt');
+    expect(prompt?.params?.['sessionId']).toBe('mine');
   });
 
   it('a path that exists and is not a socket names the errno only', async () => {
