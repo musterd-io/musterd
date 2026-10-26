@@ -107,12 +107,33 @@ export type GateCheckRequest = z.infer<typeof GateCheckRequestSchema>;
  * as the pushing seat. The hook sends it only once `refs/remotes/<remote>/<branch>` equals HEAD, so
  * the daemon records a push that happened, on the seat's contending lane whose branch this is.
  */
+export const PUSH_SUBJECTS_MAX = 5;
+export const PUSH_SUBJECT_MAX = 120;
+export const PUSH_FILES_MAX = 20;
+
 export const LanePushReportSchema = z.object({
   remote: z.string().min(1).max(255),
   branch: z.string().min(1).max(255),
   head: z.string().regex(/^[0-9a-f]{7,64}$/),
+  /**
+   * ADR 732 §2: what the push carried — the subjects of the commits the remote-tracking ref moved
+   * over (its reflog's previous value; on a first push, the pushed commits), newest first, at most
+   * five; and the files those commits changed, at most twenty. The push act's body reads them to the
+   * receiver, so the one sentence every hand-sent "pushed" message opened with (finding 027) is
+   * written by git. Absent when the hook could not read them; never more than git says.
+   */
+  subjects: z.array(z.string().min(1).max(PUSH_SUBJECT_MAX)).max(PUSH_SUBJECTS_MAX).optional(),
+  files: z.array(z.string().min(1).max(512)).max(PUSH_FILES_MAX).optional(),
 });
 export type LanePushReport = z.infer<typeof LanePushReportSchema>;
+
+/**
+ * ADR 732 §1: how long after a lane leaves the contending states its owner still hears a push of a
+ * lane naming a file it covered — the default for team policy `push_audience_ended_lane_window_ms`.
+ * Finding 027: all 10 silent pushes on CooperBench came minutes after the partner's lane had ended,
+ * and that partner merged the branch. 30 minutes covers a two-seat task's life; it is a policy knob.
+ */
+export const PUSH_AUDIENCE_ENDED_LANE_WINDOW_MS = 30 * 60_000;
 
 /**
  * ADR 731: what the daemon did with a reported push — the seat's lanes it was recorded on, the acts

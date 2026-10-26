@@ -640,6 +640,107 @@ withDrivers('gate-http', (_o, kind) => {
           });
         });
 
+        describe('ADR 732: the audience keeps the owner whose lane on the file just ended, and the act says what changed', () => {
+          const adaCovers = async () =>
+            openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+              title: 'ada around here',
+              scope: ['src/**'],
+              claim: true,
+            });
+          const boNames = async () => {
+            await bo();
+            await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+              title: 'bo names it',
+              scope: ['src/tariff.ts'],
+              claim: true,
+            });
+            await gateA('block', 'src/tariff.ts', 'Bo', {
+              git_branch: 'bo/feat',
+              git_head: 'abc123def4567890',
+            });
+          };
+          const ended = (id: string, state: string, agoMs: number) =>
+            server.store.run(
+              'UPDATE lanes SET state = ?, resolved_at = ?, updated_at = ? WHERE id = ?',
+              [
+                state,
+                state === 'done' || state === 'abandoned' ? Date.now() - agoMs : null,
+                Date.now() - agoMs,
+                id,
+              ],
+            );
+
+          it('a lane that covered the file and resolved minutes ago is still told; one that ended hours ago is not', async () => {
+            await boNames();
+            const ada = await adaCovers();
+            await ended(ada.id, 'done', 5 * 60_000);
+            expect((await push('Bo', 'bo/feat', 'abc123def4567890')).json).toEqual({
+              lanes: 1,
+              acts: 1,
+              told: ['Ada'],
+            });
+            await ended(ada.id, 'done', 2 * 60 * 60_000);
+            expect((await push('Bo', 'bo/feat', 'fedcba9876543210')).json).toEqual({
+              lanes: 1,
+              acts: 0,
+              told: [],
+            });
+          });
+
+          it('a parked lane counts by its last change; a released lane has no owner and is out; the window is a policy knob', async () => {
+            await boNames();
+            const ada = await adaCovers();
+            await ended(ada.id, 'parked', 60_000);
+            expect((await push('Bo', 'bo/feat', 'abc123def4567890')).json.told).toEqual(['Ada']);
+            await server.store.run('UPDATE lanes SET state = ?, owner_seat = NULL WHERE id = ?', [
+              'open',
+              ada.id,
+            ]);
+            expect((await push('Bo', 'bo/feat', 'fedcba9876543210')).json.told).toEqual([]);
+            const again = await adaCovers();
+            await ended(again.id, 'done', 60_000);
+            await setPolicy(server.store, (await team()).id, {
+              push_audience_ended_lane_window_ms: 0,
+            });
+            expect((await push('Bo', 'bo/feat', '0123456789abcdef')).json.told).toEqual([]);
+          });
+
+          it('a partner awaiting acceptance is still an audience (the protocol contending set, not ADR 731 local list)', async () => {
+            await boNames();
+            const ada = await adaCovers();
+            await server.store.run('UPDATE lanes SET state = ? WHERE id = ?', [
+              'awaiting_acceptance',
+              ada.id,
+            ]);
+            expect((await push('Bo', 'bo/feat', 'abc123def4567890')).json.told).toEqual(['Ada']);
+          });
+
+          it('the act body and meta carry the commit subjects and files the hook read', async () => {
+            await boNames();
+            await adaCovers();
+            const r = await post(
+              '/teams/dawn/lanes/push',
+              {
+                remote: 'team',
+                branch: 'bo/feat',
+                head: 'abc123def4567890',
+                subjects: ['Add hex_str and uuid4', 'Fix whitespace'],
+                files: ['src/tariff.ts', 'src/types.py'],
+              },
+              seatHeaders('Bo'),
+            );
+            expect(r.json.told).toEqual(['Ada']);
+            const [act] = await pushes();
+            expect(act!.body).toContain(
+              "at abc123def456 on team — Add hex_str and uuid4; Fix whitespace (files: src/tariff.ts, src/types.py) — fetch it before you edit; 'src/tariff.ts' is still held.",
+            );
+            expect(act!.meta).toMatchObject({
+              subjects: ['Add hex_str and uuid4', 'Fix whitespace'],
+              files: ['src/tariff.ts', 'src/types.py'],
+            });
+          });
+        });
+
         it('ADR 731: a refusal after the push names where the branch already is', async () => {
           await bo();
           const boLane = await openLane(server.store, (await team()).id, 'dawn', 'Bo', {

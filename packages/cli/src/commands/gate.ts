@@ -17,6 +17,9 @@ import {
   pushSpec,
   SUBAGENT_CHANNEL_TOOLS,
   textFingerprint,
+  PUSH_FILES_MAX,
+  PUSH_SUBJECT_MAX,
+  PUSH_SUBJECTS_MAX,
 } from '@musterd/protocol';
 import { gitOutput } from '@musterd/protocol/project';
 import type { Parsed } from '../args.js';
@@ -506,10 +509,7 @@ async function recordSubagentCommand(): Promise<number> {
  * interrupted flag, a non-zero or interrupted command reports nothing either. One `rev-parse`
  * beyond `gitHere`'s, and only on a `git push`.
  */
-export function pushReportFor(
-  stdin: string,
-  cwd: string,
-): { remote: string; branch: string; head: string } | null {
+export function pushReportFor(stdin: string, cwd: string): LanePushReport | null {
   const call = parseToolCall(stdin);
   if (!call || call.tool !== 'Bash' || call.command === undefined) return null;
   if (commandFailed(stdin)) return null;
@@ -529,7 +529,53 @@ export function pushReportFor(
     cwd,
   );
   if (!tracking || tracking.trim() !== head) return null;
-  return { remote: spec.remote, branch, head };
+  return { remote: spec.remote, branch, head, ...pushChanges(spec.remote, branch, head, cwd) };
+}
+
+/**
+ * ADR 732 §2: what the push carried. The remote-tracking ref's reflog holds where the remote WAS
+ * (`@{1}`, written by the push that just moved it), so the range is exact: the commit subjects and
+ * files between there and HEAD. On a first push, or a force that moved it off history, the last few
+ * commits at HEAD and their files. Capped to the schema's limits; empty when git says nothing. Two to
+ * three more git reads, only on a recorded push.
+ */
+export function pushChanges(
+  remote: string,
+  branch: string,
+  head: string,
+  cwd: string,
+): Pick<LanePushReport, 'subjects' | 'files'> {
+  const previous = gitOutput(
+    ['rev-parse', '--verify', '-q', `refs/remotes/${remote}/${branch}@{1}`],
+    cwd,
+  )?.trim();
+  const exact =
+    previous &&
+    previous !== head &&
+    gitOutput(['merge-base', '--is-ancestor', previous, head], cwd) !== null;
+  const range = exact ? `${previous}..${head}` : head;
+  const subjects = (
+    gitOutput(['log', `--max-count=${PUSH_SUBJECTS_MAX}`, '--format=%s', range], cwd) ?? ''
+  )
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .map((l) => l.slice(0, PUSH_SUBJECT_MAX));
+  const filesOut = exact
+    ? gitOutput(['diff', '--name-only', previous!, head], cwd)
+    : gitOutput(['log', `--max-count=${PUSH_SUBJECTS_MAX}`, '--format=', '--name-only', head], cwd);
+  const files = [
+    ...new Set(
+      (filesOut ?? '')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && l.length <= 512),
+    ),
+  ].slice(0, PUSH_FILES_MAX);
+  return {
+    ...(subjects.length > 0 ? { subjects } : {}),
+    ...(files.length > 0 ? { files } : {}),
+  };
 }
 
 /** `<src>[:<dst>]` moves `branch` on the remote: src is the branch (by name or as HEAD), dst too. */
