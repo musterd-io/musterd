@@ -30,6 +30,9 @@ Rules for the string, on top of §0.2:
 For miley: one text line, about 30 words. If the JS budget cannot take it
 (`docs/perf/web-live-baseline.md`), the line is cut and nothing else on the page changes.
 
+Built 2026-10-26 (lane `01M5WHV54R`): a second `ss__body` paragraph in `StreamSection.tsx`, pinned by
+`streamSection.test.ts`.
+
 ## 0b. Revision of 2026-10-13 — the office, and knowledge work
 
 Lane `01M4V6TP8NQYRHPVBWG48019FX`, on nick's direction of 2026-10-13, decided in
