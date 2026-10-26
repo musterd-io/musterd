@@ -2415,3 +2415,37 @@ beside `Broadcast` and not merged into it, because `Broadcast.css` is held by an
 over its ceiling, so the ceiling moves by the bundle's own size and no more. No JS budget moved; the card runs no
 animation loop (one custom property, set when the minutes change). Measured + 15% would loosen it (ADR 183). Folding
 the card's rules into `Broadcast.css` once that lane lands drops one stylesheet request; it does not change the bytes.
+
+## 2026-10-26 — /broadcast frame time on the hosted stream seat (lanes 01M5QE7HXP, 01M5WN8NB8)
+
+The run 2026-10-23's entry left open: `/broadcast` on a real stream seat, measured on the stream itself
+rather than a local capture. The A/B that office-realism plan Task 20 describes has no B any more — the
+painters were deleted in #3295 — so this is the rendered office's standing number on its production box.
+
+**Method.** `musterd stream start --perf` (#3336) on the hub, Fly `performance-4x` in sjc, `--capture
+x11` at 1080p30, machine `784161da167238`, the revive team live (13 sessions). The recorder writes
+one sample a second to the machine's stdout; 301 samples were taken from a live `fly logs` tail
+from t = 300 s to t = 602 s. `stream perf` alone returned only the last ~90 s (Fly keeps a short
+log buffer), which is why the tail. Follows-up: `stream perf --follow`, lane 01M5WREJBE.
+
+| Metric | Value |
+| ------ | ----- |
+| Draws/s (mean · p50 · p5), 297 samples | 27.6 · 29.0 · 23.0 |
+| Chrome CPU (mean) | 157% |
+| ffmpeg CPU (mean) | 65% |
+| Everything else on the box | 2.5% (not contaminated) |
+| load1 (mean · peak) | 3.13 · 3.7 |
+| ffmpeg at 10:00 | `fps=30 … dup=0 drop=24 speed=1x` |
+
+`encodedFps`, `deliveredFps` and the queue read 0 on this path, correctly: under `--capture x11`
+there is no screencast and no frame pump, so the counters they come from never move. The encoder's
+own progress line is the output rate here, and it holds 30 fps at 1× with 24 frames dropped in ten
+minutes.
+
+At t ≈ 598 s the page reloaded — the office stats went missing for one sample and the draw counters
+restarted from zero (four samples excluded above). The likeliest cause is `buildSync`'s reload on a
+newly published `/live` bundle, as merges were landing at the time; draws recovered within two
+seconds.
+
+Read: the rendered office holds a median 29 draws/s against a 30 fps capture on the stream box, with
+the p5 dips at 23. Chrome at ~1.6 cores is the cost; nothing else on the machine competes with it.
