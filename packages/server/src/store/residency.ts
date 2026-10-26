@@ -1551,12 +1551,17 @@ export async function listDirectedSince(
   db: Driver,
   member: { id: string; team_id: string },
   cursorTs: number,
+  /** The act-lane horizon (ADR 735 §1 amended): received at or after the (re-)enrollment. `>=`, not
+   *  `>`: the cursor is the last READ row, so it is strict; the horizon is a point in time an act may
+   *  share to the millisecond with the enroll that set it. */
+  since = 0,
 ): Promise<MessageRow[]> {
   return db.all<MessageRow>(
     `SELECT * FROM messages
-        WHERE team_id = ? AND to_member = ? AND from_member != ? AND created_at > ?
+        WHERE team_id = ? AND to_member = ? AND from_member != ?
+          AND created_at > ? AND created_at >= ?
         ORDER BY created_at ASC LIMIT 200`,
-    [member.team_id, member.id, member.id, cursorTs],
+    [member.team_id, member.id, member.id, cursorTs, since],
   );
 }
 
@@ -1691,8 +1696,7 @@ async function dueCandidates(
   // the report and the ledger need no new value, and the order's `act_ts` says what the host prints.
   if (lanes.act) {
     const cursor = await getCursor(db, member.id);
-    const since = Math.max(cursor.last_read_ts, lanes.actSince);
-    for (const r of await listDirectedSince(db, member, since)) {
+    for (const r of await listDirectedSince(db, member, cursor.last_read_ts, lanes.actSince)) {
       if (seen.has(r.id)) continue;
       seen.add(r.id);
       batched.push({

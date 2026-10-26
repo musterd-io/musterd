@@ -831,7 +831,11 @@ withDrivers('residency', (o, kind) => {
       // An act received BEFORE the (re-)enrollment is backlog, not the next act: it never wakes.
       const { db: db4, team: team4, nick: nick4, ada: ada4 } = await seed();
       await msg(db4, team4, nick4, ada4, 'message', 'old', Date.now() - 10 * 60_000);
-      await new Promise((r) => setTimeout(r, 5));
+      // Received ten minutes before the switch (receipt order is `created_at`, stamped at insert).
+      await db4.run('UPDATE messages SET created_at = ? WHERE id = ?', [
+        Date.now() - 10 * 60_000,
+        'old',
+      ]);
       await enroll(db4, team4, ada4, HOST, { lane: 'act' });
       expect(
         await claimWakeLeases(db4, team4.id, team4.slug, HOST, PRESENCE_TIMEOUT_MS),
