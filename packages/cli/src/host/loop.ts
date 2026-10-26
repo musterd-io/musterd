@@ -595,8 +595,9 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
       if (entry) deps.deferralsLogged?.delete(order.seat);
       if (!repeat)
         deps.log(
-          `wake due: ${order.seat} [${order.lane}] — ${order.act ?? 'work_order'} from ${order.sender ?? 'board'} ` +
-            `(lease ${order.lease_id})`,
+          `wake due: ${order.seat} [${order.lane}] — ${order.act ?? 'work_order'} from ${order.sender ?? 'board'}` +
+            waitedClause(order.act_ts, Date.now()) +
+            ` (lease ${order.lease_id})`,
         );
       // Every failed wake is loud HERE, in the one place every outcome funnels through, rather than
       // only on the actuation path. The pre-actuation branches below (no registry entry, dead
@@ -1003,4 +1004,21 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
 
   await settleAll([...pollGroups(registry.entries, deps.hostLabel).values()].map(pollGroup));
   return { registered: registry.entries.length, orders, settled };
+}
+
+/**
+ * ADR 735: how long the triggering act waited for this wake, for the `wake due` line — the act lane's
+ * one measurement, read off the host's own log. `''` when the order names no act time (board
+ * continuation, an older daemon) or the clock disagrees.
+ */
+export function waitedClause(actTs: number | undefined, now: number): string {
+  if (actTs === undefined || !Number.isFinite(actTs) || now < actTs) return '';
+  const s = Math.round((now - actTs) / 1000);
+  const text =
+    s < 60
+      ? `${s}s`
+      : s < 3600
+        ? `${Math.floor(s / 60)}m${s % 60}s`
+        : `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60)}m`;
+  return `, waited ${text}`;
 }

@@ -808,6 +808,44 @@ withDrivers('residency', (o, kind) => {
       ).toHaveLength(1);
     });
 
+    it('ADR 735: the act lane wakes a plain message inside the cooldown, the order carries the act time, and the hourly cap still holds', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada, HOST, { lane: 'act' });
+      const now = Date.now();
+      // A wake completed 5 minutes ago — inside the 30-minute batched cooldown the act lane ignores.
+      await wakeOutcomeRow(db, team, 'Ada', 'old-act', 'residency.woke', now - 5 * 60_000);
+      // A plain directed `message`: inert on both launch lanes (the note on the desk), a wake here.
+      await msg(db, team, nick, ada, 'message', 'm1', now - 90_000);
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders).toHaveLength(1);
+      expect(orders[0]).toMatchObject({
+        seat: 'Ada',
+        act_id: 'm1',
+        act: 'message',
+        lane: 'batched',
+      });
+      expect(orders[0]!.act_ts).toBe(now - 90_000);
+
+      // The same message on the launch lanes: nothing, as the wiki page says.
+      const { db: db2, team: team2, nick: nick2, ada: ada2 } = await seed();
+      await enroll(db2, team2, ada2);
+      await msg(db2, team2, nick2, ada2, 'message', 'm1', now - 90_000);
+      expect(
+        await claimWakeLeases(db2, team2.id, team2.slug, HOST, PRESENCE_TIMEOUT_MS),
+      ).toHaveLength(0);
+
+      // The hourly cap is not waived: at the cap, an act-lane seat waits like any other.
+      const { db: db3, team: team3, nick: nick3, ada: ada3 } = await seed();
+      await enroll(db3, team3, ada3, HOST, { lane: 'act' });
+      for (let i = 0; i < WAKE_HOURLY_CAP; i++) {
+        await wakeOutcomeRow(db3, team3, 'Ada', `past-${i}`, 'residency.woke', now - 10 * 60_000);
+      }
+      await msg(db3, team3, nick3, ada3, 'message', 'm2', now - 1_000);
+      expect(
+        await claimWakeLeases(db3, team3.id, team3.slug, HOST, PRESENCE_TIMEOUT_MS),
+      ).toHaveLength(0);
+    });
+
     it('enforces the hourly cap across both lanes', async () => {
       const { db, team, nick, ada } = await seed();
       await enroll(db, team, ada);
