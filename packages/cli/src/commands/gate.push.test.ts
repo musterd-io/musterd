@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { pushReportFor } from './gate.js';
+import { pushContextLine, pushReportFor } from './gate.js';
 
 /**
  * ADR 730 §1: the Bash PostToolUse hook reports a push only when git's own remote-tracking ref says
@@ -108,5 +108,24 @@ describe('pushReportFor (ADR 730)', () => {
     git(repo, 'push', '-q', 'team', 'agent1');
     git(repo, 'checkout', '-q', '--detach');
     expect(pushReportFor(payload('git push team HEAD:agent1'), repo)).toBeNull();
+  });
+});
+
+describe('pushContextLine (ADR 731)', () => {
+  const report = { remote: 'team', branch: 'agent1', head: 'abc123def4567890abcdef' };
+  it('names the seats told, so the pusher does not say it again', () => {
+    expect(pushContextLine(report, { lanes: 1, acts: 1, told: ['agent2'] })).toBe(
+      'musterd: your push of agent1 at abc123def456 on team is recorded on your lane; agent2 was told to fetch it before editing the files your lane names — no need to say so by hand.',
+    );
+    expect(pushContextLine(report, { lanes: 1, acts: 2, told: ['agent2', 'agent3'] })).toContain(
+      'agent2, agent3 were told',
+    );
+  });
+  it('says nobody was told when the lane has no audience, and nothing at all for no lane or no answer', () => {
+    expect(pushContextLine(report, { lanes: 1, acts: 0, told: [] })).toContain(
+      'no other lane covers the files it names and nobody is waiting on it, so no one was told',
+    );
+    expect(pushContextLine(report, { lanes: 0, acts: 0, told: [] })).toBeNull();
+    expect(pushContextLine(report, null)).toBeNull();
   });
 });

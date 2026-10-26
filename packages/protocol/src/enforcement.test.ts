@@ -7,6 +7,7 @@ import {
   globToRegExp,
   isSessionReachTool,
   isWriteShaped,
+  LanePushOutcomeSchema,
   matchEnforcement,
   normalizeCommand,
   SESSION_REACH_TOOLS,
@@ -392,5 +393,18 @@ describe('session reach (ADR 442) — the wall', () => {
         harness: 'vim',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('LanePushOutcomeSchema (ADR 731)', () => {
+  it('accepts the daemon answer and refuses a negative count or a nameless seat', () => {
+    expect(LanePushOutcomeSchema.parse({ lanes: 1, acts: 2, told: ['agent2', 'agent3'] })).toEqual({
+      lanes: 1,
+      acts: 2,
+      told: ['agent2', 'agent3'],
+    });
+    expect(LanePushOutcomeSchema.safeParse({ lanes: -1, acts: 0, told: [] }).success).toBe(false);
+    expect(LanePushOutcomeSchema.safeParse({ lanes: 1, acts: 1, told: [''] }).success).toBe(false);
+    expect(LanePushOutcomeSchema.safeParse({ lanes: 1, acts: 1 }).success).toBe(false);
   });
 });

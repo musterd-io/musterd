@@ -161,6 +161,24 @@ export async function watchersOfLane(
   );
 }
 
+/** The lane's last recorded push (ADR 730 §2), or null when none has been reported. */
+export async function lanePushed(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<{ head: string; remote: string; at: number } | null> {
+  const row = await db.get<{
+    pushed_head: string | null;
+    pushed_remote: string | null;
+    pushed_at: number | null;
+  }>(
+    'SELECT pushed_head, pushed_remote, pushed_at FROM lane_heads WHERE team_id = ? AND lane_id = ?',
+    [teamId, laneId],
+  );
+  if (!row?.pushed_head || !row.pushed_remote || row.pushed_at === null) return null;
+  return { head: row.pushed_head, remote: row.pushed_remote, at: row.pushed_at };
+}
+
 /**
  * ADR 730 §2: record that the lane's branch reached `remote` at `head` (ladder v132 columns on the
  * ADR 697 row). Returns the head announced before, so the caller sends nothing for a repeat push of

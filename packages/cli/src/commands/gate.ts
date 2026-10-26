@@ -9,6 +9,8 @@ import {
   extractUlid,
   type GateToolCall,
   isMergeShapedCommand,
+  type LanePushOutcome,
+  type LanePushReport,
   isSessionReachTool,
   isWriteShaped,
   matchEnforcement,
@@ -564,11 +566,51 @@ async function recordPushCommand(): Promise<number> {
       {},
       { claimSeatPerRequest: false, timeoutMs: HOOK_HTTP_TIMEOUT_MS },
     );
-    if (explicit && identity) await http.reportPush(team, report);
+    if (!explicit || !identity) return 0;
+    const outcome = await http.reportPush(team, report);
+    // ADR 731 §2: the pusher hears what the daemon did — who was told, or that nobody needed to
+    // be — so a holder does not announce by hand what the partner has already read. Nothing when
+    // no lane of the seat was on that branch: there is nothing to say.
+    const line = pushContextLine(report, outcome);
+    if (line) emitPostToolUseContext(line);
   } catch {
     // Always exit 0.
   }
   return 0;
+}
+
+/**
+ * The one line the pusher reads after a recorded push (ADR 731 §2). Null when the push landed on no
+ * lane of the seat (`lanes: 0`) or the daemon did not answer: the hook says nothing it cannot stand
+ * behind. Finding 026: 3 of the 4 holders whose push the daemon had announced said it again by hand,
+ * because the hook told them nothing.
+ */
+export function pushContextLine(
+  report: LanePushReport,
+  outcome: LanePushOutcome | null,
+): string | null {
+  if (!outcome || outcome.lanes === 0) return null;
+  const where = `${report.branch} at ${report.head.slice(0, 12)} on ${report.remote}`;
+  if (outcome.told.length > 0) {
+    const who = outcome.told.join(', ');
+    const verb = outcome.told.length === 1 ? 'was' : 'were';
+    return `musterd: your push of ${where} is recorded on your lane; ${who} ${verb} told to fetch it before editing the files your lane names — no need to say so by hand.`;
+  }
+  if (outcome.acts === 0) {
+    return `musterd: your push of ${where} is recorded on your lane; no other lane covers the files it names and nobody is waiting on it, so no one was told.`;
+  }
+  return null;
+}
+
+/** PostToolUse `additionalContext`: the note proceeds, never decides (Claude Code reads
+ *  `hookSpecificOutput`; Cursor Agent reads `additional_context`). */
+function emitPostToolUseContext(text: string): void {
+  process.stdout.write(
+    JSON.stringify({
+      additional_context: text,
+      hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text },
+    }) + '\n',
+  );
 }
 
 /**

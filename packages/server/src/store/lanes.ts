@@ -1767,7 +1767,7 @@ export async function laneHoldingFile(
  * blind the day derivation shipped — `project` is stamped at open and the board would simply stop
  * warning, which is the exact failure the scoping exists to prevent, inverted.
  */
-function projectsContend(a: string, b: string): boolean {
+export function projectsContend(a: string, b: string): boolean {
   return a === b || a === DEFAULT_PROJECT || b === DEFAULT_PROJECT;
 }
 

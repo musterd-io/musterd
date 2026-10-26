@@ -441,28 +441,31 @@ withDrivers('gate-http', (_o, kind) => {
           const boLane = await heldByBo();
           const first = await push('Bo', 'bo/feat', 'abc123def4567890');
           expect(first.status).toBe(200);
-          expect(first.json).toEqual({ lanes: 1, acts: 1 });
+          expect(first.json).toEqual({ lanes: 1, acts: 1, told: ['Ada'] });
           const [act] = await pushes();
+          // ADR 731: Ada's lane names rates.ts too, so the covering relation adds it to the refused path.
           expect(act!.meta).toEqual({
             lane: boLane.id,
             holder: 'Bo',
             branch: 'bo/feat',
             head: 'abc123def4567890',
             remote: 'team',
-            paths: ['src/tariff.ts'],
+            paths: ['src/rates.ts', 'src/tariff.ts'],
           });
           expect(act!.body).toContain('Bo pushed "bo first": bo/feat at abc123def456 on team');
-          expect(act!.body).toContain("'src/tariff.ts' is still held");
+          expect(act!.body).toContain("'src/rates.ts', 'src/tariff.ts' are still held");
           // The same head again: recorded, not announced.
           expect((await push('Bo', 'bo/feat', 'abc123def4567890')).json).toEqual({
             lanes: 1,
             acts: 0,
+            told: [],
           });
           expect(await pushes()).toHaveLength(1);
           // A new head: announced again.
           expect((await push('Bo', 'bo/feat', 'fedcba9876543210')).json).toEqual({
             lanes: 1,
             acts: 1,
+            told: ['Ada'],
           });
           expect((await pushes())[1]!.meta.head).toBe('fedcba9876543210');
           // The watch is still open: the resolve frees the file as before (ADR 724).
@@ -476,15 +479,17 @@ withDrivers('gate-http', (_o, kind) => {
           expect((await push('Bo', 'bo/other', 'abc123def4567890')).json).toEqual({
             lanes: 0,
             acts: 0,
+            told: [],
           });
           expect((await push('Ada', 'bo/feat', 'abc123def4567890')).json).toEqual({
             lanes: 0,
             acts: 0,
+            told: [],
           });
           expect(await pushes()).toHaveLength(0);
         });
 
-        it('a seat with no refusal on record is not told', async () => {
+        it('a seat with no refusal on record and no lane covering the file is not told', async () => {
           await bo();
           await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
             title: 'bo alone',
@@ -498,6 +503,7 @@ withDrivers('gate-http', (_o, kind) => {
           expect((await push('Bo', 'bo/solo', 'abc123def4567890')).json).toEqual({
             lanes: 1,
             acts: 0,
+            told: [],
           });
           expect(await pushes()).toHaveLength(0);
         });
@@ -505,6 +511,159 @@ withDrivers('gate-http', (_o, kind) => {
         it('rejects a malformed report', async () => {
           await heldByBo();
           expect((await push('Bo', 'bo/feat', 'not-a-sha')).status).toBe(400);
+        });
+
+        describe('ADR 731: the audience is every lane that covers a file the pushing lane names', () => {
+          it('a seat whose lane covers the named file by glob is told before any refusal, and the response names it', async () => {
+            await bo();
+            await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+              title: 'bo names it',
+              scope: ['src/tariff.ts'],
+              claim: true,
+            });
+            await gateA('block', 'src/tariff.ts', 'Bo', {
+              git_branch: 'bo/feat',
+              git_head: 'abc123def4567890',
+            });
+            await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+              title: 'ada around here',
+              scope: ['src/**'],
+              claim: true,
+            });
+            // Ada has never been refused: no ADR 724 watch exists. The covering relation is enough.
+            const r = await push('Bo', 'bo/feat', 'abc123def4567890');
+            expect(r.json).toEqual({ lanes: 1, acts: 1, told: ['Ada'] });
+            const [act] = await pushes();
+            expect(act!.meta.paths).toEqual(['src/tariff.ts']);
+            expect(act!.body).toContain("'src/tariff.ts' is still held");
+            // Same head again: nothing; a new head: Ada again, once.
+            expect((await push('Bo', 'bo/feat', 'abc123def4567890')).json).toEqual({
+              lanes: 1,
+              acts: 0,
+              told: [],
+            });
+            expect((await push('Bo', 'bo/feat', 'fedcba9876543210')).json).toEqual({
+              lanes: 1,
+              acts: 1,
+              told: ['Ada'],
+            });
+            expect(await pushes()).toHaveLength(2);
+          });
+
+          it('a refused seat whose lane also covers the file is told once, not twice', async () => {
+            await heldByBo();
+            // Ada's lane names tariff.ts too (heldByBo), so she is both watcher and coverer.
+            expect((await push('Bo', 'bo/feat', 'abc123def4567890')).json).toEqual({
+              lanes: 1,
+              acts: 1,
+              told: ['Ada'],
+            });
+            const [act] = await pushes();
+            expect(act!.meta.paths).toEqual(['src/rates.ts', 'src/tariff.ts']);
+          });
+
+          it("the refused seat's own push reaches the holder, whose lane names the file", async () => {
+            const boLane = await heldByBo();
+            // Ada edits another file her lane covers, teaching her lane its branch (ADR 697).
+            expect(
+              (
+                await gateA('block', 'src/rates.ts', 'Ada', {
+                  git_branch: 'ada/feat',
+                  git_head: '1111111111111111',
+                })
+              ).json.outcome,
+            ).toBe('denied');
+            await server.store.run('UPDATE lanes SET branch = ? WHERE owner_seat = ? AND id != ?', [
+              'ada/feat',
+              'Ada',
+              boLane.id,
+            ]);
+            const r = await push('Ada', 'ada/feat', '1111111111111111');
+            expect(r.json).toEqual({ lanes: 1, acts: 1, told: ['Bo'] });
+            const [act] = await pushes();
+            // Bo holds both files (claimed first), so nothing Ada names is "still held" by Ada's lane.
+            expect(act!.body).toContain(
+              "fetch it before you edit 'src/rates.ts', 'src/tariff.ts'.",
+            );
+            expect(act!.body).not.toContain('still held');
+          });
+
+          it('a lane that only covers by glob, an unowned lane, another project and the pusher itself are not an audience', async () => {
+            await bo();
+            await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+              title: 'bo area only',
+              scope: ['src/**'],
+              claim: true,
+            });
+            await gateA('block', 'src/tariff.ts', 'Bo', {
+              git_branch: 'bo/area',
+              git_head: 'abc123def4567890',
+            });
+            await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+              title: 'ada names it',
+              scope: ['src/tariff.ts'],
+              claim: true,
+            });
+            // Bo's lane names nothing: no covering audience, and Ada has no refusal on record.
+            expect((await push('Bo', 'bo/area', 'abc123def4567890')).json).toEqual({
+              lanes: 1,
+              acts: 0,
+              told: [],
+            });
+            await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+              title: 'bo names it elsewhere',
+              scope: ['lib/core.ts'],
+              project: 'other-repo',
+              claim: true,
+            });
+            await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+              title: 'ada covers lib in a third project',
+              scope: ['lib/**'],
+              project: 'third-repo',
+              claim: true,
+            });
+            await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+              title: 'nobody covers lib',
+              scope: ['lib/**'],
+              project: 'other-repo',
+            });
+            await server.store.run(
+              `UPDATE lanes SET branch = ? WHERE owner_seat = ? AND title = ?`,
+              ['bo/other', 'Bo', 'bo names it elsewhere'],
+            );
+            expect((await push('Bo', 'bo/other', 'abc123def4567890')).json).toEqual({
+              lanes: 1,
+              acts: 0,
+              told: [],
+            });
+            expect(await pushes()).toHaveLength(0);
+          });
+        });
+
+        it('ADR 731: a refusal after the push names where the branch already is', async () => {
+          await bo();
+          const boLane = await openLane(server.store, (await team()).id, 'dawn', 'Bo', {
+            title: 'bo first',
+            scope: ['src/tariff.ts'],
+            claim: true,
+          });
+          await gateA('block', 'src/tariff.ts', 'Bo', {
+            git_branch: 'bo/feat',
+            git_head: 'abc123def4567890',
+          });
+          await push('Bo', 'bo/feat', 'abc123def4567890');
+          await new Promise((r) => setTimeout(r, 5));
+          await openLane(server.store, (await team()).id, 'dawn', 'Ada', {
+            title: 'ada second',
+            scope: ['src/tariff.ts'],
+            claim: true,
+          });
+          const refused = await gateA('block', 'src/tariff.ts');
+          expect(refused.json.decision).toBe('deny');
+          expect(refused.json.reason).toContain(`until_lane: "${boLane.id}"`);
+          expect(refused.json.reason).toContain(
+            'Their branch bo/feat is on team at abc123def456 — fetch it before you edit.',
+          );
         });
       });
 
