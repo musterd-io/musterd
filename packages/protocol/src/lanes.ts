@@ -680,7 +680,9 @@ const PART_SIGNALS: readonly RegExp[] = [
   // inside a grouped number. 2026-10-13 (lane 01M4VY3DQ2): "3 of 4 red PRs" is a count, and
   // "1,127 of 1,232 rows" matched as "127 of 1" because `\b` falls at the comma in a digit group.
   /(?<![\d,.])\b\d+\s+of\s+\d+(?![,.]?\d)(?=\s*(?:$|[^\w\s]|(?:parts?|increments?|phases?|steps?|lanes?)\b))/i,
-  /(?<![\d/.-])\b\d{1,2}\/\d{1,2}\b(?![\d/.-])/,
+  // `N/M` takes the same rule. 2026-10-26 (lane 01M5GEMZ07): "musterd 4/10 can be read" and
+  // "20/20 agents" are scores, and both closes were refused; "OpenCode 2/4 — setup" is a part.
+  /(?<![\d/.-])\b\d{1,2}\/\d{1,2}\b(?![\d/.-])(?=\s*(?:$|[^\w\s]|(?:parts?|increments?|phases?|steps?|lanes?)\b))/i,
   /\bincrements?\s+\d+/i,
   /\bphases?\s+\d+/i,
   /\b\d{1,2}[A-H]\b/,
