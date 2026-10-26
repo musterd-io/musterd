@@ -265,7 +265,7 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'stream',
     signature:
-      '<doctor|build|start|stop|status> [--app <name>] [--team <slug>] [--args <flags>] [--json]',
+      '<doctor|build|start|stop|status|perf> [--app <name>] [--team <slug>] [--args <flags>] [--perf] [--out <file>] [--json]',
     summary: 'run the broadcast on a rented machine — hosted capture, one verb',
     group: 'setup',
     primary: false,
@@ -280,8 +280,15 @@ export const CATALOG: readonly CommandEntry[] = [
       'pushes the capture image on Fly’s remote builders and records the pushed DIGEST — `start` runs ' +
       'that digest, never the tag, because a rebuilt tag can resolve to the previous image. `start` ' +
       'discovers the tailnet address itself. Secrets stay the operator’s: musterd checks that ' +
-      'TS_AUTHKEY and MUSTERD_STREAM_KEY are set and never reads, prints, or accepts their values.',
-    examples: ['musterd stream doctor', 'musterd stream build', 'musterd stream start'],
+      'TS_AUTHKEY and MUSTERD_STREAM_KEY are set and never reads, prints, or accepts their values. ' +
+      '`start --perf` records capture timings into the machine’s log, and `perf --out <file>` reads ' +
+      'them back as JSONL with a one-line summary — the machine and any file on it end with the stream.',
+    examples: [
+      'musterd stream doctor',
+      'musterd stream build',
+      'musterd stream start',
+      'musterd stream perf --out perf.jsonl',
+    ],
   },
   {
     name: 'integration',

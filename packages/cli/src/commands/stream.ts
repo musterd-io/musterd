@@ -17,7 +17,7 @@
  * failure modes, different preconditions, so a different verb.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
@@ -58,11 +58,12 @@ import { CliError } from '../errors.js';
 import { probeUpgradeHost, parseTailscaleSelf } from '../integrations/tailscale.js';
 import { realExec, type Exec } from '../process.js';
 import { theme } from '../render/theme.js';
+import { summarize, type PerfSample } from './broadcast-perf.js';
 import { mintBroadcastSeat, seatFromEnv, type BroadcastSeat } from './broadcast.js';
 import { resolveRead } from './helpers.js';
 
 const USAGE =
-  'usage: musterd stream <doctor|build|start|stop|status|ensure> [--app <name>] [--team <slug>] [--here] [--once] [--reason <text>] [--now] [--cancel] [--json]';
+  'usage: musterd stream <doctor|build|start|stop|status|ensure|perf> [--app <name>] [--team <slug>] [--here] [--once] [--perf] [--out <file>] [--reason <text>] [--now] [--cancel] [--json]';
 
 export interface StreamDeps {
   exec?: Exec;
@@ -146,6 +147,8 @@ export const STREAM_FLAGS = [
   'image',
   'inherit',
   'now',
+  'out',
+  'perf',
   'pipe',
   'reason',
   'response',
@@ -242,6 +245,13 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
       return statusVerb({ exec, app, out, ...sup });
     case 'ensure':
       return ensureVerb({ exec, app, repoRoot, parsed, out, err, ...sup });
+    case 'perf':
+      return perfVerb({
+        exec,
+        app,
+        out,
+        file: typeof parsed.flags['out'] === 'string' ? parsed.flags['out'] : undefined,
+      });
     default:
       throw new CliError(`unknown subcommand \`${sub}\`\n${USAGE}`, 2);
   }
@@ -454,6 +464,8 @@ function launchArgs(a: {
   addr: string;
   team: string;
   extra?: string | undefined;
+  /** Record capture perf (`start --perf`). */
+  perf?: boolean;
 }): string[] {
   return [
     'machine',
@@ -476,7 +488,62 @@ function launchArgs(a: {
     '--env',
     `MUSTERD_TEAM=${a.team}`,
     ...(a.extra ? ['--env', `BROADCAST_ARGS=${a.extra}`] : []),
+    // The recorder's JSONL goes to the machine's own stdout: a file on the machine dies with `--rm`,
+    // and the log is the one thing that outlives it. `stream perf` reads it back.
+    ...(a.perf ? ['--env', 'MUSTERD_BROADCAST_PERF=/dev/stdout'] : []),
   ];
+}
+
+/** A capture-perf sample, found in one line of `fly logs`; null for every other line. Fly prefixes
+ * each line with a timestamp, the machine and a level, so the sample is the JSON from its first `{`. */
+export function perfSampleFromLogLine(line: string): Record<string, unknown> | null {
+  const at = line.indexOf('{"t":');
+  if (at < 0) return null;
+  try {
+    const v = JSON.parse(line.slice(at)) as unknown;
+    return v && typeof v === 'object' && 'deliveredFps' in v && 'cpu' in v
+      ? (v as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `stream perf`: the samples a `start --perf` run wrote to its machine log, as JSONL — to `--out`,
+ * else stdout — summarized with the recorder's own `summarize` when written to a file. */
+function perfVerb(a: {
+  exec: Exec;
+  app: string;
+  out: (s: string) => void;
+  file: string | undefined;
+}): number {
+  const r = a.exec('fly', ['logs', '-a', a.app, '--no-tail']);
+  if (r.code !== 0) throw new CliError(`could not read the machine log — ${r.stderr.trim()}`, 1);
+  const samples = r.stdout
+    .split('\n')
+    .map(perfSampleFromLogLine)
+    .filter((s): s is Record<string, unknown> => s !== null);
+  if (samples.length === 0) {
+    throw new CliError(
+      'no perf samples in the machine log — was the stream started with `--perf`?',
+      1,
+    );
+  }
+  const jsonl = samples.map((s) => JSON.stringify(s)).join('\n') + '\n';
+  if (a.file) {
+    writeFileSync(a.file, jsonl);
+    const m = summarize(samples as unknown as PerfSample[]);
+    a.out(`${theme.ok('✓')} ${samples.length} samples → ${a.file}\n`);
+    a.out(
+      theme.meta(
+        `  ${m.durationSec.toFixed(0)}s · draws ${m.meanDrawFps?.toFixed(1) ?? '—'}/s · encoded ${m.encodedFps.toFixed(1)}/s` +
+          ` · queue ${m.queueGrowthBytesPerSec.toFixed(0)} B/s · chrome ${m.meanCpu.chrome.toFixed(0)}% · other ${m.meanCpu.other.toFixed(0)}%\n`,
+      ),
+    );
+  } else {
+    a.out(jsonl);
+  }
+  return 0;
 }
 
 /** Resolve the launch preconditions (image digest + tailnet address) or throw the doctor hint. */
@@ -572,7 +639,10 @@ async function startVerb(
   a.out(
     `${theme.accent('stream')} ${theme.meta(`${team} · via ${addr} · ${VM_SIZE} ${REGION}`)}\n`,
   );
-  const args = launchArgs({ app: a.app, digest, addr, team, extra });
+  // Not recorded in the state file: a measured run is one deliberate start, and a supervisor
+  // relaunch is not part of the measurement.
+  const perf = a.parsed.flags['perf'] === true;
+  const args = launchArgs({ app: a.app, digest, addr, team, extra, perf });
   // Captured across every attempt so the `finally` can record whichever machine the attempt left,
   // including one whose output named an id and then threw.
   let launchedOutput = '';
