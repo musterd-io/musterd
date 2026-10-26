@@ -132,6 +132,29 @@ def hair_mat(name: str, v: float) -> bpy.types.Material:
     return m
 
 
+def stripe_mat(name: str, period: float) -> bpy.types.Material:
+    """Neutral cloth in two greys, banded on world height every `period` (world units): painted on the
+    fused surface, so the stripes follow the body instead of floating as discs in front of it (v2-2)."""
+    m = bpy.data.materials.new(name)
+    nt, nodes, links, bsdf = scene._nodes(m)
+    bsdf.inputs["Roughness"].default_value = 0.95
+    bsdf.inputs["Specular IOR Level"].default_value = 0.1
+    bsdf.inputs["Sheen Weight"].default_value = 0.4
+    tc = nodes.new("ShaderNodeTexCoord")
+    wave = nodes.new("ShaderNodeTexWave")
+    wave.bands_direction = "Z"
+    wave.inputs["Scale"].default_value = 2 * math.pi / (20 * period)  # Blender's bands: sin(20 · scale · z)
+    ramp = nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.interpolation = "CONSTANT"
+    ramp.color_ramp.elements[0].color = (0.8, 0.8, 0.8, 1)
+    ramp.color_ramp.elements[1].position = 0.62  # the dark band is the narrower one
+    ramp.color_ramp.elements[1].color = (0.5, 0.5, 0.5, 1)
+    links.new(tc.outputs["Object"], wave.inputs["Vector"])
+    links.new(wave.outputs["Fac"], ramp.inputs["Fac"])
+    links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
+    return m
+
+
 def flat(name: str, rgb) -> bpy.types.Material:
     """An untinted layer's own colour, matte."""
     return scene.matte(name, rgb, 0.3)
@@ -373,6 +396,11 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.frustum("torso", "spine", layer, mat, 0.3, 0, z0, waist * FIG, chest * FIG, SHOULDER - z0, sy=1.7)["fuse"] = layer
         r.orb("yoke", "spine", layer, mat, 0.3, 0, SHOULDER, 6.2 * FIG, 12.6 * FIG, 3.4 * FIG, layer)
         r.orb("belly", "hips", layer, mat, 0.5, 0, HIP + 2 * FIG, 5.6 * FIG, 8.4 * FIG, 4.0 * FIG, layer)
+        # over the skin's trapezius slopes, a size up: the smoothed yoke fell just under them and two
+        # dots of skin showed through every top from behind (seen at the v2-2 look check, 2026-10-26)
+        for sy in (1, -1):
+            r.turn(r.orb("trap", "spine", layer, mat, -0.4 * FIG, sy * 4.6 * FIG, SHOULDER + 1.1 * FIG, 3.6 * FIG, 5.4 * FIG, 2.3 * FIG, layer),
+                   (math.radians(sy * 18), 0, 0))
 
     def sleeves(layer, long: bool, mat=cloth):
         for side, sy in (("L", 1), ("R", -1)):
@@ -383,17 +411,53 @@ def build_figure(zs: float, origin: Vector) -> Rig:
                 r.orb("elbow", f"elbow{side}", layer, mat, 0, y, SHOULDER - UPPER_ARM, 3.0 * FIG, 3.0 * FIG, 3.0 * FIG, layer)
                 r.cyl("cuff", f"elbow{side}", layer, mat, 0, y, WRIST + 1.2 * FIG, 2.5 * FIG, 3.0 * FIG, FORE_ARM - 1.2 * FIG)["fuse"] = layer
 
+    # v2-2 (spec §2.4): the finishing a garment has — a ribbed neck and hem bands, cuffs, a hoodie's
+    # drawstrings. Each is its own mesh, NOT in the fuse group: the remesh would melt a band this thin
+    # back into the cloth, and a separate band keeps its edge, which is what reads at 1.5 px a unit.
+    rib = scene.fabric("fig-rib", (0.68, 0.68, 0.68), 6.0)
+
+    def neck_rib(layer):
+        r.torus("neckrib", "spine", layer, rib, HEAD_X * 0.4, 0, NECK - 2.3 * FIG, 4.2 * FIG, 0.6)
+
+    def hem_band(layer, z, rad):
+        """A short band round the sleeve at `z`, a touch proud of it, on the arm (so it rides the overlay)."""
+        for side, sy in (("L", 1), ("R", -1)):
+            joint = f"shoulder{side}" if z > SHOULDER - UPPER_ARM - 0.5 else f"elbow{side}"
+            r.cyl("band", joint, layer, rib, 0, sy * SHOULDER_W, z, rad, rad, 1.3 * FIG)
+
+    def waist_band(layer, mat=rib):
+        o = r.torus("hem", "hips", layer, mat, 0.45, 0, HIP - 0.8 * FIG, 5.5 * FIG, 1.0)
+        o.scale = (1.0, 1.5, o.scale.z)
+
     torso("top/tee"); sleeves("top/tee", False)
+    neck_rib("top/tee")
+    hem_band("top/tee", SHOULDER - UPPER_ARM - 0.1 * FIG, 3.3 * FIG)
     torso("top/long"); sleeves("top/long", True)
-    torso("top/stripe"); sleeves("top/stripe", True)
-    for dz in (3, 9, 15, 20):
-        z = HIP + dz * FIG * _K
-        on_chest = z > CHEST - 5 * FIG
-        r.ball("stripe", "spine" if dz > 5 else "hips", "top/stripe", cloth_dark, 0.5 if on_chest else 0, 0, z + 1.3 * FIG, (6.9 if on_chest else 6.0) * FIG, (11.6 if on_chest else 8.6) * FIG, 1.3 * FIG)
+    neck_rib("top/long")
+    hem_band("top/long", WRIST + 0.8 * FIG, 2.75 * FIG)  # cuffs
+    # stripes painted on the cloth (`stripe_mat`), so they follow the fused surface; the period is the
+    # discs' old spacing, about five units
+    breton = stripe_mat("fig-stripe", 5.2 * FIG * zs)
+    torso("top/stripe", breton); sleeves("top/stripe", True, breton)
+    neck_rib("top/stripe")
     torso("top/hoodie"); sleeves("top/hoodie", True)
+    hem_band("top/hoodie", WRIST + 0.8 * FIG, 2.8 * FIG)
+    waist_band("top/hoodie")
     r.orb("pocket", "hips", "top/hoodie", cloth_dark, 5.4 * FIG, 0, HIP + 2.6 * FIG, 0.8, 5.0 * FIG, 2.6 * FIG)
     r.orb("hood", "spine", "top/hoodie", cloth, -4.2 * FIG, 0, NECK + 0.4 * FIG, 5.0 * FIG, 8.6 * FIG, 4.0 * FIG, "top/hoodie")
+    # drawstrings from the hood's front down the chest, each ending in a pale aglet
+    aglet = grey("fig-aglet", 0.92, 0.4)
+    for sy in (1, -1):
+        x, y = 0.3 + 6.7 * FIG, sy * 1.7 * FIG
+        cord_o = r.cyl("string", "spine", "top/hoodie", rib, x, y, CHEST - 3.5 * FIG, 0.32, 0.32, SHOULDER - CHEST + 4.5 * FIG)
+        r.turn(cord_o, (math.radians(sy * 4), math.radians(-6), 0))
+        r.orb("aglet", "spine", "top/hoodie", aglet, x + 0.4, y, CHEST - 4.0 * FIG, 0.45, 0.45, 0.8 * FIG)
     torso("top/vest", cloth_dark)
+    neck_rib("top/vest")
+    # the armholes: a band round each, standing in the side plane where the arm leaves the vest
+    for side, sy in (("L", 1), ("R", -1)):
+        r.torus("armhole", "spine", "top/vest", rib, 0.3, sy * (SHOULDER_W - 1.0 * FIG), SHOULDER - 2.6 * FIG,
+                3.5 * FIG, 0.8, (math.radians(90), 0, 0))
 
     # ── bottom: a pelvis with a seat and trouser legs that taper to the ankle, one fused shape
     r.orb("pelvis", "hips", "bottom", denim, 0, 0, HIP + 2.5 * FIG, 5.6 * FIG, 8.2 * FIG, 5.0 * FIG, "bottom")
