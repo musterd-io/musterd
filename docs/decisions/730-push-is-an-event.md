@@ -52,7 +52,9 @@ nothing that wakes a seat whose file is still held into editing it.
    nullable columns, ladder v132; daemon-local like the row). A push of a branch no lane of the seat
    knows records nothing: a lane that was never edited through the gate has no branch, and the daemon
    does not guess one.
-3. **One directed act per waiting seat and lane, once per head.** For every seat with an open
+3. **One directed act per waiting seat and lane, once per head.** _(Superseded in part 2026-10-25 by
+   [ADR 731](731-push-reaches-covering-lanes.md): the audience also includes every other seat whose
+   contending lane covers a file this lane names, and the response names the seats told.)_ For every seat with an open
    ADR 724 watch on that lane (a held refusal not yet answered), the board seat (ADR 649) sends one
    directed `message`: `[lane] <holder> pushed "<title>": <branch> at <head> on <remote> — fetch it
    before you edit; '<path(s)>' is still held.` with `meta.lane_pushed {lane, holder, branch, head,
@@ -99,6 +101,9 @@ nothing that wakes a seat whose file is still held into editing it.
   head. On CooperBench `core` that is bounded by the held refusals (15 on finding 025's run).
 - `lane_heads` gains `pushed_head`, `pushed_remote`, `pushed_at` (ladder v132, daemon-local, not
   replicated).
+- _2026-10-25 (ADR 731):_ the audience question finding 026 raised is decided — the covering lanes
+  join the watchers, the hook tells the pusher who was told, and the ADR 691 refusal carries the last
+  pushed head ([ADR 731](731-push-reaches-covering-lanes.md)); rider 5 reads it.
 - _2026-10-25 (rider 4, [finding 026](../research/026-cooperbench-rider4-run.md)):_ on 10 CooperBench
   `core` pairs the hook reported 20 of 20 pushes and the daemon recorded each; 4 acts went out, because
   16 pushes had no open ADR 724 watch on the lane (the refused seat's own push never has one; a

@@ -114,6 +114,18 @@ export const LanePushReportSchema = z.object({
 });
 export type LanePushReport = z.infer<typeof LanePushReportSchema>;
 
+/**
+ * ADR 731: what the daemon did with a reported push — the seat's lanes it was recorded on, the acts
+ * sent, and the seats told (once each). The hook reads `told` back to the pusher as one PostToolUse
+ * context line, so a holder knows the partner has already heard and need not say it again.
+ */
+export const LanePushOutcomeSchema = z.object({
+  lanes: z.number().int().nonnegative(),
+  acts: z.number().int().nonnegative(),
+  told: z.array(z.string().min(1)),
+});
+export type LanePushOutcome = z.infer<typeof LanePushOutcomeSchema>;
+
 /** The audit `outcome` a gate decision records (in `detail.outcome`). Gate A uses
  *  `allowed`/`warned`/`denied`; Gate B adds the ask-lifecycle outcomes. `allowed` = an owned lane or a
  *  released ask; `warned` = warn posture proceeded (the un-asked-costly-action query keys on it). */

@@ -79,6 +79,9 @@ look the same at claim time.
 
 ## Consequences
 
+- _2026-10-25 ([ADR 731](731-push-reaches-covering-lanes.md)):_ the held refusal (§3) ends with the
+  holder's branch, remote and last pushed head when the daemon has recorded a push of that lane, so a
+  seat refused after the push knows where the work already is.
 - `packages/server/src/store/lanes.ts`: `isNamedFile`, `laneHoldingFile`, the hold note on the
   claim-time warning. `packages/server/src/protocol/gate.ts`: the hold check inside `gateA`.
   No protocol change; the `lane.gate` audit row is unchanged in shape.

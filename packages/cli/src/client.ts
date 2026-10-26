@@ -59,6 +59,8 @@ import {
   type ActorAttestation,
   type GateCheckRequest,
   type LanePushReport,
+  type LanePushOutcome,
+  LanePushOutcomeSchema,
   type GateDecision,
   RequestsResponseSchema,
   EnrollResidencyResponseSchema,
@@ -2374,11 +2376,16 @@ export class HttpClient {
    * the pushing seat. The daemon records it on the seat's lane on that branch and tells the seats
    * waiting on the lane. Swallows every error: it observes a push, it never fails one.
    */
-  async reportPush(slug: string, body: LanePushReport): Promise<void> {
+  async reportPush(slug: string, body: LanePushReport): Promise<LanePushOutcome | null> {
     try {
-      await this.request('POST', `/teams/${slug}/lanes/push`, body);
+      // ADR 731: the daemon answers with the seats it told, read back to the pusher by the hook.
+      const parsed = LanePushOutcomeSchema.safeParse(
+        await this.request('POST', `/teams/${slug}/lanes/push`, body),
+      );
+      return parsed.success ? parsed.data : null;
     } catch {
       // Deliberately silent, like recordActor.
+      return null;
     }
   }
 

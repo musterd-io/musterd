@@ -15,7 +15,13 @@ import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import { appendAudit } from '../store/audit.js';
 import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
-import { laneHead, recordHoldRefusal, recordLaneHead, takeHandover } from '../store/handover.js';
+import {
+  laneHead,
+  lanePushed,
+  recordHoldRefusal,
+  recordLaneHead,
+  takeHandover,
+} from '../store/handover.js';
 import { pricedWakeCostUsd, unpricedWakeCount, WAKE_WINDOW_DAYS } from '../store/insights.js';
 import {
   getLane,
@@ -169,12 +175,19 @@ export async function gateA(ctx: GateContext): Promise<GateDecision & HoldTag> {
       }
       // The wait leads, with the call spelled out (finding 022): led by "ask them", 19 of the claim
       // run's 29 refused agents messaged the holder first, and 2 waited on the lane in one call.
+      // ADR 731: a seat refused after the holder pushed is told where the work already is, so a
+      // watch that opens after the push needs no replay of it.
+      const pushed = await lanePushed(db, teamId, holder.id);
+      const pushedNote =
+        pushed && holder.branch
+          ? ` Their branch ${holder.branch} is on ${pushed.remote} at ${pushed.head.slice(0, 12)} — fetch it before you edit.`
+          : '';
       const detail =
         `'${path}' is held by ${holder.owner_seat} (lane ${holder.id} "${holder.title}", named it first, ` +
         `since ${since}). Wait for that lane to finish in one call — team_inbox_check ` +
         `{wait: 45, until_lane: "${holder.id}"} wakes when it resolves, with their branch — rather ` +
         `than messaging them; or ask them to hand it off or narrow their lane; or split the work by ` +
-        `handoff. Your lane "${owned.title}" covers it but does not hold it (ADR 691).`;
+        `handoff. Your lane "${owned.title}" covers it but does not hold it (ADR 691).${pushedNote}`;
       const hold = { state: 'held' as const, holder: holder.owner_seat! };
       await recordHoldRefusal(db, teamId, ctx.member.name, path, holder.owner_seat!, holder.id);
       if (ctx.req.posture === 'warn') {
