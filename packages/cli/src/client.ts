@@ -406,6 +406,36 @@ export function isDaemonUnreachable(err: unknown): boolean {
   );
 }
 
+/**
+ * Parse a reply body as JSON, or say plainly what came back instead. A team server always answers
+ * JSON, so a body that is not JSON was written by something in front of it: a Cloudflare or Fly
+ * error page, or a web shell that took an unknown route. Before this, `JSON.parse` threw its own
+ * SyntaxError and the CLI printed only "Unexpected token '<', "<!DOCTYPE "... is not valid JSON",
+ * with no status and no route (lane 01M5D7TW69, a `send --act steer` to a hosted team on
+ * 2026-10-20). Falsify: a non-JSON reply that still prints a bare SyntaxError.
+ */
+export function parseReplyBody(
+  res: Response,
+  text: string,
+  server: string,
+  method: string,
+  path: string,
+): unknown {
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    const type = res.headers.get('content-type')?.split(';')[0]?.trim() || 'no content-type';
+    const head = text.trim().slice(0, 60).replace(/\s+/g, ' ');
+    throw new CliError(
+      `${method} ${path} answered HTTP ${String(res.status)} with ${type}, not JSON — ` +
+        `something in front of the team server at ${server} replied (a proxy error page or a ` +
+        `web route), not the server itself. Body starts: ${JSON.stringify(head)}`,
+      1,
+    );
+  }
+}
+
 /** `GET /members/me/doorbell` (ADR 443): your prefs, the team's allow-list and defaults, whether
  *  the team set each off-machine URL (never the URL), and the route those resolve to. Parsed at the
  *  boundary, like {@link HttpClient.doorbellRings}, so a drifted daemon cannot hand `show` a shape
@@ -724,7 +754,8 @@ export class HttpClient {
       throw err;
     }
     const text = await res.text();
-    const json = text ? JSON.parse(text) : {};
+    // `any` as before: JSON.parse returned it, and this method's callers type their own result.
+    const json: any = parseReplyBody(res, text, this.opts.server, method, path);
     if (!res.ok) {
       const parsed = ErrorBodySchema.safeParse(json);
       if (parsed.success) {
@@ -2587,7 +2618,7 @@ export class HttpClient {
       throw err;
     }
     const text = await res.text();
-    const json: unknown = text ? JSON.parse(text) : {};
+    const json = parseReplyBody(res, text, this.opts.server, 'POST', `/teams/${slug}/claim`);
     if (res.status === 200 || res.status === 202 || (res.status >= 400 && res.status < 500)) {
       try {
         return parseClaimResponse(json);
