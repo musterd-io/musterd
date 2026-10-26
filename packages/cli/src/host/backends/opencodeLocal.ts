@@ -108,3 +108,42 @@ export function readLocalServing(
   if (provider.length > 64 || model.length > 120 || baseUrl.length > 200) return null;
   return { provider, model, base_url: baseUrl };
 }
+
+/**
+ * Doctor notes for a seat that declares `local: true` but whose wakes will not be marked `local`
+ * (the read above answers `null`), so the miss is seen before a wake is priced as unverified.
+ *
+ * OpenCode 2.1's schema deprecates `provider` for `providers`, which has no documented base-URL
+ * field (read 2026-10-26). This read takes only `provider.<id>.options.baseURL`, so a workspace
+ * config in the new shape is named as the cause. Supporting `providers` waits for OpenCode to
+ * document where its base URL goes; guessing a key would mark a wake `local` on an unproven claim.
+ * Follows-up: read `providers` once OpenCode documents its base URL (lane 01M5X40AJD).
+ */
+export function localServingNotes(
+  workspace: string,
+  binding: Pick<Binding, 'local'> | null | undefined,
+  io: LocalServingIo = defaultIo,
+): string[] {
+  if (binding?.local !== true || readLocalServing(workspace, binding, io) !== null) return [];
+  const paths = [join(workspace, '.opencode', 'opencode.json'), join(workspace, 'opencode.json')];
+  const newShape = paths.some((p) => {
+    if (!io.exists(p)) return false;
+    try {
+      const parsed: unknown = JSON.parse(io.read(p));
+      return (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        'providers' in parsed &&
+        !('provider' in parsed)
+      );
+    } catch {
+      return false;
+    }
+  });
+  const why = newShape
+    ? 'its opencode.json uses the `providers` key, and musterd reads only `provider.<id>.options.baseURL` (ADR 663) — add a `provider` block for the local server'
+    : 'its opencode.json does not pin one `ollama/` or `llama.cpp/` model to a loopback `provider.<id>.options.baseURL` (ADR 663)';
+  return [
+    `this seat's binding declares \`local: true\`, but its wakes will be recorded as \`harness_price_unverified\`, not \`local\`: ${why}.`,
+  ];
+}

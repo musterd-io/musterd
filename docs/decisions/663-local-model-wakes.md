@@ -73,6 +73,12 @@ Follows-up: `01M5APAM3AMT67WF3859GT53ZE`
   Follows-up: `01M55R1FN3M1BPFQ5J5RH2QGX1`
 - Adding a provider to `LOCAL_SERVING_PROVIDERS` is a one-line change, and it needs a dated note
   here naming the server it stands for.
+- _(2026-10-26, dolly, lane `01M5X3XED3`)_ OpenCode 2.1.4's schema deprecates `provider` for
+  `providers`, which has no documented base-URL field. The read stays on
+  `provider.<id>.options.baseURL`. `musterd doctor` now notes a seat whose binding declares
+  `local: true` while the read answers null, and names the `providers` shape when that is the
+  cause (`localServingNotes`), so the miss shows before a wake is priced as unverified.
+  Follows-up: `01M5X40AJDEYAN8KJFX0ZMM0C1`
 - The resident engine (`pi.ts`) still has no local provider. That is the spec's second step, taken
   only if the main run says a local model deserves a first-class seat.
 
