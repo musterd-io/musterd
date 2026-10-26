@@ -1459,6 +1459,59 @@ describe('musterd stream perf (lane 01M5WN8NB8)', () => {
     }
   });
 
+  // Lane 01M5WREJBE: Fly keeps ~90 s of log, so a full window is read live.
+  it('--follow tails the live log until the samples span --secs, then stops', async () => {
+    const lines = [0, 1000, 2000, 3000, 4000].map(
+      (t) => `2026-10-26T10:00:0${t / 1000}Z app[d8d2] ord [info]${JSON.stringify(sample(t))}`,
+    );
+    let fed = 0;
+    const followLog = async (_app: string, onLine: (l: string) => boolean) => {
+      for (const l of ['▸ noise', ...lines]) {
+        fed += 1;
+        if (onLine(l)) return;
+      }
+    };
+    const out: string[] = [];
+    const err: string[] = [];
+    expect(
+      await streamCommand(parseArgs(['perf', '--follow', '--secs', '2']), {
+        exec,
+        followLog,
+        out: (s) => void out.push(s),
+        err: (s) => void err.push(s),
+      }),
+    ).toBe(0);
+    expect(out.join('').trim().split('\n')).toHaveLength(3); // t 0, 1000, 2000 → 2 s span
+    expect(fed).toBe(4); // stopped as soon as the window was full
+  });
+
+  it('--follow says when the log ended before the window filled', async () => {
+    const followLog = async (_app: string, onLine: (l: string) => boolean) => {
+      onLine(`x [info]${JSON.stringify(sample(0))}`);
+      onLine(`x [info]${JSON.stringify(sample(1000))}`);
+    };
+    const err: string[] = [];
+    await streamCommand(parseArgs(['perf', '--follow', '--secs', '60']), {
+      exec,
+      followLog,
+      out: () => {},
+      err: (s) => void err.push(s),
+    });
+    expect(err.join('')).toMatch(/log ended after 1s/);
+  });
+
+  it('the one-shot read warns when Fly handed back a short window', async () => {
+    const err: string[] = [];
+    await streamCommand(parseArgs(['perf']), { exec, out: () => {}, err: (s) => void err.push(s) });
+    expect(err.join('')).toMatch(/only 1s of samples .*--follow/);
+  });
+
+  it('--secs must be whole seconds', async () => {
+    await expect(
+      streamCommand(parseArgs(['perf', '--follow', '--secs', 'x']), { exec }),
+    ).rejects.toThrow(/whole seconds/);
+  });
+
   it('says so when the run was not started with --perf', async () => {
     const quiet: Exec = () => ok('2026-10-26T10:00:00Z app[d8d2] ord [info]▸ tailnet up\n');
     await expect(streamCommand(parseArgs(['perf']), { exec: quiet })).rejects.toThrow(/--perf/);

@@ -265,7 +265,7 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'stream',
     signature:
-      '<doctor|build|start|stop|status|perf> [--app <name>] [--team <slug>] [--args <flags>] [--perf] [--out <file>] [--json]',
+      '<doctor|build|start|stop|status|perf> [--app <name>] [--team <slug>] [--args <flags>] [--perf] [--out <file>] [--follow] [--secs <n>] [--json]',
     summary: 'run the broadcast on a rented machine — hosted capture, one verb',
     group: 'setup',
     primary: false,
@@ -282,12 +282,14 @@ export const CATALOG: readonly CommandEntry[] = [
       'discovers the tailnet address itself. Secrets stay the operator’s: musterd checks that ' +
       'TS_AUTHKEY and MUSTERD_STREAM_KEY are set and never reads, prints, or accepts their values. ' +
       '`start --perf` records capture timings into the machine’s log, and `perf --out <file>` reads ' +
-      'them back as JSONL with a one-line summary — the machine and any file on it end with the stream.',
+      'them back as JSONL with a one-line summary — the machine and any file on it end with the stream. ' +
+      'Fly keeps only about 90 s of log, so `perf --follow` reads the log live until it holds `--secs` ' +
+      '(default 300) of samples.',
     examples: [
       'musterd stream doctor',
       'musterd stream build',
       'musterd stream start',
-      'musterd stream perf --out perf.jsonl',
+      'musterd stream perf --follow --out perf.jsonl',
     ],
   },
   {

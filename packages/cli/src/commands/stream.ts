@@ -67,7 +67,7 @@ import { mintBroadcastSeat, seatFromEnv, type BroadcastSeat } from './broadcast.
 import { resolveRead } from './helpers.js';
 
 const USAGE =
-  'usage: musterd stream <doctor|build|start|stop|status|ensure|perf> [--app <name>] [--team <slug>] [--here] [--once] [--perf] [--out <file>] [--reason <text>] [--now] [--cancel] [--json]';
+  'usage: musterd stream <doctor|build|start|stop|status|ensure|perf> [--app <name>] [--team <slug>] [--here] [--once] [--perf] [--out <file>] [--follow] [--secs <n>] [--reason <text>] [--now] [--cancel] [--json]';
 
 export interface StreamDeps {
   exec?: Exec;
@@ -98,6 +98,9 @@ export interface StreamDeps {
   /** Tell the daemon when the stream will stop (null: no stop queued), so /broadcast can show the
    * wind-down card (lane 01M5GDACC0). False when the daemon could not be told. */
   postWindDown?: (team: string, stopAt: number | null) => Promise<boolean>;
+  /** Tail the app's live log (`fly logs -a <app>`), calling `onLine` per line until it returns
+   * true or the log ends. Injected so tests never reach Fly (`stream perf --follow`). */
+  followLog?: (app: string, onLine: (line: string) => boolean) => Promise<void>;
 }
 
 /** The daemon's loopback origin — the upgrade probe aims here and spoofs only the `Host` header. */
@@ -147,6 +150,7 @@ export const STREAM_FLAGS = [
   'error',
   'fly',
   'fly-auth',
+  'follow',
   'git',
   'image',
   'inherit',
@@ -155,6 +159,7 @@ export const STREAM_FLAGS = [
   'perf',
   'pipe',
   'reason',
+  'secs',
   'response',
   'secrets',
   'serve',
@@ -249,13 +254,20 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
       return statusVerb({ exec, app, out, ...sup });
     case 'ensure':
       return ensureVerb({ exec, app, repoRoot, parsed, out, err, ...sup });
-    case 'perf':
+    case 'perf': {
+      const rawSecs = parsed.flags['secs'];
+      const secs = rawSecs === undefined ? PERF_FOLLOW_SECS : Number(rawSecs);
+      if (!Number.isInteger(secs) || secs < 1) throw new CliError('--secs takes whole seconds', 2);
       return perfVerb({
         exec,
         app,
         out,
+        err,
         file: typeof parsed.flags['out'] === 'string' ? parsed.flags['out'] : undefined,
+        follow:
+          parsed.flags['follow'] === true ? { secs, tail: deps.followLog ?? realFollowLog } : null,
       });
+    }
     default:
       throw new CliError(`unknown subcommand \`${sub}\`\n${USAGE}`, 2);
   }
@@ -515,18 +527,47 @@ export function perfSampleFromLogLine(line: string): Record<string, unknown> | n
 
 /** `stream perf`: the samples a `start --perf` run wrote to its machine log, as JSONL — to `--out`,
  * else stdout — summarized with the recorder's own `summarize` when written to a file. */
-function perfVerb(a: {
+async function perfVerb(a: {
   exec: Exec;
   app: string;
   out: (s: string) => void;
+  err: (s: string) => void;
   file: string | undefined;
-}): number {
-  const r = a.exec('fly', ['logs', '-a', a.app, '--no-tail']);
-  if (r.code !== 0) throw new CliError(`could not read the machine log — ${r.stderr.trim()}`, 1);
-  const samples = r.stdout
-    .split('\n')
-    .map(perfSampleFromLogLine)
-    .filter((s): s is Record<string, unknown> => s !== null);
+  follow: { secs: number; tail: NonNullable<StreamDeps['followLog']> } | null;
+}): Promise<number> {
+  let samples: Record<string, unknown>[];
+  if (a.follow) {
+    // Live, because Fly's buffer holds only the last ~90 s of a `--perf` run (lane 01M5WREJBE).
+    const want = a.follow.secs * 1000;
+    samples = [];
+    a.err(theme.meta(`following ${a.app}'s log for ${a.follow.secs}s of samples…\n`));
+    await a.follow.tail(a.app, (line) => {
+      const s = perfSampleFromLogLine(line);
+      if (!s) return false;
+      samples.push(s);
+      return sampleSpanMs(samples) >= want;
+    });
+    const got = Math.round(sampleSpanMs(samples) / 1000);
+    if (samples.length > 0 && got < a.follow.secs) {
+      a.err(
+        `${theme.warn('!')} the log ended after ${got}s of samples — the stream stopped first\n`,
+      );
+    }
+  } else {
+    const r = a.exec('fly', ['logs', '-a', a.app, '--no-tail']);
+    if (r.code !== 0) throw new CliError(`could not read the machine log — ${r.stderr.trim()}`, 1);
+    samples = r.stdout
+      .split('\n')
+      .map(perfSampleFromLogLine)
+      .filter((s): s is Record<string, unknown> => s !== null);
+    // Fly's buffer is short; say so rather than hand back 90 s as if it were the run.
+    const span = Math.round(sampleSpanMs(samples) / 1000);
+    if (samples.length > 0 && span < PERF_FOLLOW_SECS) {
+      a.err(
+        `${theme.warn('!')} only ${span}s of samples — Fly keeps a short log buffer; \`stream perf --follow\` reads a full window live\n`,
+      );
+    }
+  }
   if (samples.length === 0) {
     throw new CliError(
       'no perf samples in the machine log — was the stream started with `--perf`?',
@@ -548,6 +589,42 @@ function perfVerb(a: {
     a.out(jsonl);
   }
   return 0;
+}
+
+/** How long `stream perf --follow` reads by default: the five minutes a measured run records. */
+const PERF_FOLLOW_SECS = 300;
+
+/** The time the samples cover, from the recorder's own `t` (ms since the capture started). */
+function sampleSpanMs(samples: Record<string, unknown>[]): number {
+  const ts = samples.map((s) => s['t']).filter((t): t is number => typeof t === 'number');
+  return ts.length < 2 ? 0 : Math.max(...ts) - Math.min(...ts);
+}
+
+/** `fly logs -a <app>` in tail mode, line by line, until `onLine` says stop or fly exits. */
+function realFollowLog(app: string, onLine: (line: string) => boolean): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('fly', ['logs', '-a', app], { stdio: 'pipe' });
+    child.stdin.end();
+    child.stderr.pipe(process.stderr);
+    let buf = '';
+    let done = false;
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      if (done) return;
+      buf += chunk;
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        if (onLine(line)) {
+          done = true;
+          child.kill('SIGTERM');
+          return;
+        }
+      }
+    });
+    child.on('error', reject);
+    child.on('close', () => resolve());
+  });
 }
 
 /** Resolve the launch preconditions (image digest + tailnet address) or throw the doctor hint. */
