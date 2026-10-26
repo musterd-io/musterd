@@ -56,15 +56,28 @@ export const TOOL_NAMES = [
 export const REMOTE_TOOL_NAMES = ['team_agent_create', 'team_agent_connect'] as const;
 
 /**
- * The tools a session needs before it can do anything else (lane 01M4S53E79): join the team, read
- * what waits, say what it is doing, see the room. A harness that defers MCP tools behind a schema
- * search (Claude Code's ToolSearch) is asked to load these four up front, via `_meta`
- * `anthropic/alwaysLoad` on their `tools/list` entries, so the first call of a session is the call
- * itself. The rest stay deferred: every always-loaded schema is standing context in every turn.
+ * The tools a working seat reaches for in nearly every session: join the team, read what waits, say
+ * what it is doing, see the room (lane 01M4S53E79), then orient, open/claim/update/submit/resolve a
+ * lane, read the board, and read/save seat memory (ADR 741). A harness that defers MCP tools behind
+ * a schema search (Claude Code's ToolSearch) is asked to load these up front, via `_meta`
+ * `anthropic/alwaysLoad` on their `tools/list` entries, so the call is the call itself: a deferred
+ * tool costs a whole extra turn at the session's full context the first time it is needed (median
+ * $0.30 and 2.7 s on revive, ADR 741), while its schema is cached standing context either way. The
+ * rest stay deferred: each is reached in a handful of sessions, and every always-loaded schema is
+ * standing context in every turn. Pinned by `hotTools.test.ts`; grow it with a measurement.
  */
 export const HOT_TOOLS = [
   'team_join',
   'team_inbox_check',
   'team_send',
   'team_status',
+  'team_next',
+  'lane_board',
+  'lane_open',
+  'lane_claim',
+  'lane_update',
+  'lane_submit',
+  'lane_resolve',
+  'team_memory_read',
+  'team_memory_save',
 ] as const satisfies readonly (typeof TOOL_NAMES)[number][];

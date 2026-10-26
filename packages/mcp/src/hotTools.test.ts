@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { ALWAYS_LOAD_META_KEY, HOT_TOOLS, TOOL_NAMES } from './index.js';
 
 /**
- * Lane 01M4S53E79: the hot tools carry Claude Code's per-tool upfront-load key on the real
+ * Lane 01M4S53E79, ADR 741: the hot tools carry Claude Code's per-tool upfront-load key on the real
  * `tools/list` listing, and nothing else does. Every always-loaded schema is standing context in
- * every turn, so the set is pinned rather than allowed to grow by accident.
+ * every turn, so the set is pinned rather than allowed to grow by accident — ADR 741 grew it from
+ * four to thirteen on a measured trade (docs/research/hot-tools/toolsearch.py).
  */
 describe('hot tools load without a schema search', () => {
   it('marks exactly the hot tools with anthropic/alwaysLoad on the wire', async () => {
