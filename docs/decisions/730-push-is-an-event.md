@@ -52,9 +52,9 @@ nothing that wakes a seat whose file is still held into editing it.
    nullable columns, ladder v132; daemon-local like the row). A push of a branch no lane of the seat
    knows records nothing: a lane that was never edited through the gate has no branch, and the daemon
    does not guess one.
-3. **One directed act per waiting seat and lane, once per head.** _(Superseded in part 2026-10-25 by
-   [ADR 731](731-push-reaches-covering-lanes.md): the audience also includes every other seat whose
-   contending lane covers a file this lane names, and the response names the seats told.)_ For every seat with an open
+3. **One directed act per waiting seat and lane, once per head.** _(Amended 2026-10-25: superseded in part by
+   [ADR 731](731-push-reaches-covering-lanes.md) — the audience also includes every other seat whose
+   contending lane covers a file this lane names, and the response names the seats told. See the amendment below.)_ For every seat with an open
    ADR 724 watch on that lane (a held refusal not yet answered), the board seat (ADR 649) sends one
    directed `message`: `[lane] <holder> pushed "<title>": <branch> at <head> on <remote> — fetch it
    before you edit; '<path(s)>' is still held.` with `meta.lane_pushed {lane, holder, branch, head,
