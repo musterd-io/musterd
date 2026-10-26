@@ -253,16 +253,80 @@ describe('acquireWatchLinkObserver (ADR 580: minted by a signed-in human, public
     return map;
   };
 
-  it('reuses the cached link seat without a credential or a request', async () => {
+  it('reuses a cached link seat that still answers, without a credential or a mint', async () => {
     store({
       'musterd.live.watchlink.v1.revive': JSON.stringify({ name: 'watch-zz', token: 'mscr_pub' }),
     });
-    const fetchSpy = vi.fn();
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
     await expect(acquireWatchLinkObserver('revive', null)).resolves.toEqual({
       name: 'watch-zz',
       token: 'mscr_pub',
     });
+    // One probe, made as the cached seat itself — never a mint.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain('/lanes');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer mscr_pub');
+  });
+
+  // Lane 01M5QE7HXP: the cache outlived the seat (reaped at the 24h TTL), and the copied link was
+  // refused not_found. A 401 on the probe drops the cache and mints a fresh seat.
+  it('re-mints when the cached seat was reaped', async () => {
+    const map = store({
+      'musterd.live.watchlink.v1.revive': JSON.stringify({ name: 'watch-zz', token: 'mscr_old' }),
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 401 })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ human_credential: 'mscr_new' }),
+      });
+    vi.stubGlobal('fetch', fetchSpy);
+    const creds = await acquireWatchLinkObserver('revive', 'mscr_admin');
+    expect(creds.token).toBe('mscr_new');
+    expect(map.get('musterd.live.watchlink.v1.revive')).toContain('mscr_new');
+  });
+
+  it('keeps the cached seat when the probe cannot reach the daemon', async () => {
+    store({
+      'musterd.live.watchlink.v1.revive': JSON.stringify({ name: 'watch-zz', token: 'mscr_pub' }),
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
+    await expect(acquireWatchLinkObserver('revive', null)).resolves.toMatchObject({
+      token: 'mscr_pub',
+    });
+  });
+
+  // ADR 662: minting an observer is `admin.roster`; the signer's proof rides the mint as `approval`.
+  it('attaches the signer’s proof, made for the minted name', async () => {
+    store({});
+    const proof = { key_id: 'k', nonce: 'n', signature: 's' };
+    const sign = vi.fn(async () => proof);
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ human_credential: 'mscr_pub' }),
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+    await acquireWatchLinkObserver('revive', 'mscr_admin', 'public', sign as never);
+    const body = JSON.parse((fetchSpy.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(sign).toHaveBeenCalledWith(body.name);
+    expect(body.approval).toEqual(proof);
+  });
+
+  it('sends nothing when the signer throws (a cancelled passkey)', async () => {
+    store({});
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const sign = vi.fn(async () => {
+      throw new Error('passkey cancelled; nothing was sent');
+    });
+    await expect(
+      acquireWatchLinkObserver('revive', 'mscr_admin', 'public', sign),
+    ).rejects.toThrow('passkey cancelled');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
