@@ -55,15 +55,19 @@ deferral is tool-selection accuracy with hundreds of tools, which 13 of 31 does 
    before it is first used. Priced at cache-read rates against the baseline sessions, the nine added
    here remove $89.83 of turns and add $34.62 of standing schema — net $55 over twelve days on one
    machine, about $0.80 a session — and remove a median 2.7 s detour three to four times a session.
-3. The standing-context budget (`docs/perf/context-budgets.json`) is unchanged: `toolsListDefaultBytes`
-   already counts the whole listing, which is what a harness without deferral holds. What changes is
-   only which schemas Claude Code keeps in the prompt: 12.4 KB (~3,100 tokens) instead of 3.0 KB.
+3. The standing-context budgets (`docs/perf/context-budgets.json`) rise by the key's wire bytes
+   only: `toolsListDefaultBytes` 21725 → 22060 (+335 B, nine `_meta` entries), `toolsListMutedBytes`
+   8499 → 8601 (the three read tools that stay on a muted seat), and the two composites with them,
+   no headroom added. `_meta` is never shown to the model, so a harness without deferral holds the
+   same schema text it did. What changes for Claude Code is which schemas stay in the prompt:
+   12.4 KB (~3,100 tokens) instead of 3.0 KB.
 
 ## Consequences
 
 - One list and its doc: `toolNames.ts`, the `hotTools.test.ts` comment (the pin derives from the
-  list), `05-mcp.md` § hot tools, the CooperBench README note that cited four. No protocol change,
-  no new dependency, nothing a user configures; a server-level `"alwaysLoad": false` still
+  list), `05-mcp.md` § hot tools, the CooperBench README note that cited four, and the four budget
+  lines above with this ADR's falsifier as their rent. No protocol change, no new dependency,
+  nothing a user configures; a server-level `"alwaysLoad": false` still
   overrides it, and other harnesses ignore the key.
 - Every Claude Code seat carries ~2,350 more cached tokens per turn from its first turn. In a
   session that never touches a lane or memory — a read-only look at the board — that is pure cost,
