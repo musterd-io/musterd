@@ -44,7 +44,7 @@ PODS = [  # id, cx, cy, axis, size, rug fill, rug mark, weave
 POD_RUG = (230, 250)        # along, across
 POD_RUG_DUO = (170, 140)
 POD_RUG_SOLO = (130, 120)
-BENCH = dict(lx=320, ly=62, long=300, deep=30)
+BENCH = dict(lx=320, ly=56, long=300, deep=30)
 NOOK = (725, 175)
 NOOK_RUG_R = 150
 NOOK_RUG = ("#ce9256", "#b2743c")

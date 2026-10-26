@@ -28,10 +28,10 @@ import {
 } from './layout';
 
 describe('desk pods', () => {
-  it('seats 26: bench 4, pinwheel 4, spine 10, zigzag 3, solo 1, corner duo 2, window 2', () => {
-    // 20 on 2026-08-02; 18 → 17 as the floor read crowded; 26 on 2026-10-26 (office v3, spec
+  it('seats 23: bench 4, pinwheel 4, spine 8, zigzag 3, corner duo 2, window 2', () => {
+    // 20 on 2026-08-02; 18 → 17 as the floor read crowded; 23 on 2026-10-26 (office v3, spec
     // 2026-10-26-office-v3-design.md §2.1): the v2 figure is smaller and the room has air again.
-    expect(DESK_SLOTS).toHaveLength(26);
+    expect(DESK_SLOTS).toHaveLength(23);
     const podSeats = PODS.reduce((n, p) => n + POD_SHAPE_SEATS[p.shape], 0);
     expect(DESK_SLOTS).toHaveLength(podSeats + BENCH.seats + WINDOW_DESKS.length);
     expect(new Set(DESK_SLOTS.map((s) => s.id)).size).toBe(DESK_SLOTS.length);

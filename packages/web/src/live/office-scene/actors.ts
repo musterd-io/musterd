@@ -19,7 +19,7 @@ import {
 } from './layout';
 import { FLOOR } from './iso';
 import { CANVAS_EASE } from './motion';
-import { findPath, walkable, type P } from './nav';
+import { findPath, walkable, type P, nearestWalkable } from './nav';
 import { carriesLaptop, workingAtDesk, type Placement } from './seating';
 import { chairShift, chairYaw, GESTURE, type IdleGesture, STRIDE } from './skeleton';
 import type { Bubble, CarryKind, Dir, OfficeNode, Pose } from './types';
@@ -1601,7 +1601,9 @@ export function createActors(): Actors {
       // Where they meet: the walkable end of a's route toward the midpoint, which the nav grid nudges
       // into the aisle when the midpoint lands in a desk. b stops one body short of a, so they stand
       // facing each other with air between — not inside each other.
-      const mid = { lx: (ha.lx + hb.lx) / 2, ly: (ha.ly + hb.ly) / 2 };
+      // Nudged onto open floor: two bench seats' midpoint is the seat between them, and a stand
+      // point inside a chair put both of them in it (office v3, 2026-10-26).
+      const mid = nearestWalkable({ lx: (ha.lx + hb.lx) / 2, ly: (ha.ly + hb.ly) / 2 });
       const avoid = othersAt(a).filter((p) => p.lx !== hb.lx || p.ly !== hb.ly);
       const outA = legsAlong(findPath({ lx: ha.lx, ly: ha.ly }, mid, avoid), ERRAND_SPEED, 1.2, 5, null);
       const standA = outA.length ? endOf(outA) : { lx: ha.lx, ly: ha.ly };
