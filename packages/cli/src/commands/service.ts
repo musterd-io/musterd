@@ -668,9 +668,15 @@ export function daemonServer(ctx: Pick<ServiceCtx, 'plistPath' | 'readFile'>): s
   return (xml && installedDaemonServer(xml)) || loadConfig().server;
 }
 
+/**
+ * A `/health` read. `timeoutMs` is how long one poll may take; omitted, the caller gets the short
+ * default. Only the post-bounce verify asks for longer — see `POST_BOUNCE_POLL_TIMEOUT_MS`.
+ */
+export type HealthProbe = (timeoutMs?: number) => Promise<DaemonHealth>;
+
 /** Fetch the daemon's `/health` (ADR 016 + 047): the live `connections` count drives the guard below. */
-async function fetchHealth(server: string): Promise<DaemonHealth> {
-  const res = await fetch(`${server}/health`, { signal: AbortSignal.timeout(2000) });
+async function fetchHealth(server: string, timeoutMs = 2000): Promise<DaemonHealth> {
+  const res = await fetch(`${server}/health`, { signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`health ${res.status}`);
   return (await res.json()) as DaemonHealth;
 }
@@ -733,23 +739,51 @@ function delay(ms: number): Promise<void> {
  * caller decides how loud to be, since `install` and `refresh` want different repair text.
  */
 export async function awaitDaemon(
-  health: () => Promise<DaemonHealth>,
-  opts: { tries?: number; delayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+  health: HealthProbe,
+  opts: {
+    tries?: number;
+    delayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    /** Wall-clock cap on the whole wait; polling stops at whichever of this and `tries` comes first. */
+    budgetMs?: number;
+    /** Per-poll timeout handed to `health`; omitted, `health` uses its own default. */
+    pollTimeoutMs?: number;
+    now?: () => number;
+  } = {},
 ): Promise<DaemonHealth | null> {
   const tries = opts.tries ?? 20;
   const delayMs = opts.delayMs ?? 500;
   const sleep = opts.sleep ?? delay;
+  const now = opts.now ?? Date.now;
+  const deadline = opts.budgetMs === undefined ? Infinity : now() + opts.budgetMs;
   for (let i = 0; i < tries; i++) {
     try {
-      return await health();
+      return await health(opts.pollTimeoutMs);
     } catch {
       // Not up yet (connection refused, or /health not serving) — launchd boots asynchronously,
       // so the first poll failing is normal, not a verdict.
     }
-    if (i < tries - 1) await sleep(delayMs);
+    if (i < tries - 1) {
+      if (now() + delayMs >= deadline) break;
+      await sleep(delayMs);
+    }
   }
   return null;
 }
+
+/**
+ * The post-bounce verify budget when the daemon answered before the bounce. Both false DOWNs it
+ * replaces came from a daemon that was serving: on 2026-10-20 (15 live sessions) the old 20x500ms
+ * gave up 10s after the bounce while the new process was still coming up, and /health took 4.9s to
+ * answer three minutes later; on 2026-10-23 (13 sessions) every 2s poll timed out under the
+ * reconnect storm. The next guardian tick found the daemon up both times. So the wait is a
+ * wall-clock minute, and one poll may take 10s. A daemon that is really down still fails inside the
+ * minute: launchd's refused connection costs a poll nothing, so it is the clock that runs out.
+ * Falsify: a refresh with 15+ live sessions whose verify still reports DOWN on a daemon the next
+ * tick finds serving.
+ */
+export const POST_BOUNCE_BUDGET_MS = 60_000;
+export const POST_BOUNCE_POLL_TIMEOUT_MS = 10_000;
 
 /**
  * Confirm the daemon came back after a bounce, or fail with the exact command that restores it.
@@ -761,7 +795,7 @@ export async function awaitDaemon(
  */
 async function verifyDaemonUp(
   ctx: ServiceCtx,
-  health: () => Promise<DaemonHealth>,
+  health: HealthProbe,
   what: string,
   ok: (s: string) => void,
   sleep?: (ms: number) => Promise<void>,
@@ -783,7 +817,13 @@ async function verifyDaemonUp(
   // we can only ever warn, so a long wait buys nothing but latency on every no-daemon install.
   const up = await awaitDaemon(health, {
     ...(sleep ? { sleep } : {}),
-    ...(wasUp ? {} : { tries: 4 }),
+    ...(wasUp
+      ? {
+          tries: Math.ceil(POST_BOUNCE_BUDGET_MS / 500),
+          budgetMs: POST_BOUNCE_BUDGET_MS,
+          pollTimeoutMs: POST_BOUNCE_POLL_TIMEOUT_MS,
+        }
+      : { tries: 4 }),
   });
   if (!up && !wasUp) {
     process.stdout.write(
@@ -1258,7 +1298,7 @@ export async function serviceCommand(
     guardianCtx?: AutoRefreshCtx;
     sweepCtx?: SweepCtx;
     streamwatchCtx?: StreamwatchCtx;
-    health?: () => Promise<DaemonHealth>;
+    health?: HealthProbe;
     /** Probe whether the daemon serves /live (injected so tests skip the network). */
     probeViewer?: (url: string) => Promise<boolean>;
     /** Fire an OS notice (injected so the `--auto --mode notice` tick is testable). */
@@ -1342,7 +1382,8 @@ export async function serviceCommand(
       otlpEndpoint,
     ),
   };
-  const health = deps.health ?? (() => fetchHealth(daemonServer(ctx)));
+  const health: HealthProbe =
+    deps.health ?? ((timeoutMs) => fetchHealth(daemonServer(ctx), timeoutMs));
   const force = parsed.flags['force'] === true;
 
   const ok = (s: string) => process.stdout.write(`${theme.ok('✓')} ${s}\n`);
@@ -1686,7 +1727,7 @@ function porcelainFileList(porcelain: string, maxFiles = 10): string {
 
 async function refreshDaemon(
   ctx: ServiceCtx,
-  health: () => Promise<DaemonHealth>,
+  health: HealthProbe,
   force: boolean,
   ok: (s: string) => void,
   fail: (step: string, r: RunResult) => never,

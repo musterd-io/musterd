@@ -79,7 +79,8 @@ describe('serviceCommand', () => {
    * listening on this machine and really waits between polls.
    *
    * That is not hypothetical (2026-08-13): `awaitDaemon` retries 20x500ms when the baseline health
-   * call SUCCEEDED, and only 4x500ms when it failed. So on a machine with a live daemon, an
+   * call SUCCEEDED, and only 4x500ms when it failed. (Since lane 01M5D7TZG7 the succeeded case is a
+   * 60s wall-clock budget, so an un-injected test can now sleep for up to a minute.) So on a machine with a live daemon, an
    * autorefresh bounce landing between the baseline and the retries flips a ~20ms test into ~9.5s of
    * real sleeping and blows vitest's 5s default. Reproduced deterministically with a stub answering
    * 200 once then 503. Falsify: `MUSTERD_SERVER=http://127.0.0.1:1 vitest run src/commands/service.test.ts`
