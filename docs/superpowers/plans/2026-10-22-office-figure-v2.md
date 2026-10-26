@@ -197,6 +197,7 @@ it('a stretched figure keeps its floor point, mirrored or not', () => {
   - **hoodie:** a hood, a ribbed hem and cuffs, drawstrings with aglets, a pocket;
   - **vest:** armholes with a band.
 - [ ] Run stills, nick looks, then a full `--figure` run. Expected in the log: only `top/*` calls render, every other call is `reused`.
+  - _(2026-10-26, lane 01M5JHEGY8)_ Wrong by 5×: the tee is the holdout torso for every hair, facial, hat, accessory, carry and lanyard call (`holdout_for` in `render.py`), so a tee change re-renders 24 of 32 layers a frame — measured on `g-wave:0:E` at 1.5: 24 rendered, 8 reused. Budget a tee change as a full render (~5 h at 1.5), or first give the pipeline a holdout torso of its own; hair, facial hair, hats and accessories hold nothing else out, so v2-3 and v2-4 stay small.
 - [ ] Bytes as in Task 8 Step 3; PR as in Task 8 Step 4, with `Lane \`01M5JHEGY8S4BSJDWS1M6SYZMG\`.`.
 
 ### Task 10 (v2-3): Hair and facial hair, polished and relaxed
