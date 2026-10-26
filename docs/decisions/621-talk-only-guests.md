@@ -116,6 +116,11 @@ None of this exists yet, and three things in the code shape how it can be built.
   grade because the connection's grade comes from `messageVisibilityOf`. Narrowing it would only
   remove ADR 616's live view, so the ceiling narrows `can_coordinate`, `can_create_agents` and
   `can_flag_urgent` only.
+- **2026-10-26 — a guest's own tool-call telemetry is talk.** The real-client CIMD run (lane
+  01M3QQJENE) found every remote MCP tool call from a guest followed by a 403 on
+  `POST /telemetry/tool-calls`: the allowlist had omitted the adapter's flush. It is none of the
+  routes decision 2 refuses — it records the seat's own calls, presence-neutral, stamped from the
+  member row — so it joins the talk routes, and guest usage is measured like everyone else's.
 
 ## Observability & Evaluation
 

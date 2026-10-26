@@ -1287,6 +1287,14 @@ withDrivers('oauth-http', (_o, kind) => {
       );
       expect(lane.status).toBe(403);
       expect(JSON.stringify(lane.json)).toContain('talk-only seat');
+      // The adapter's flush of the guest's own tool calls is measurement, not coordination: the
+      // remote MCP sends it after every tool call (lane 01M5X8P335).
+      const telemetry = await postJson(
+        '/teams/dawn/telemetry/tool-calls',
+        { events: [] },
+        { authorization: `Bearer ${tok}`, 'x-musterd-no-touch': '1' },
+      );
+      expect(telemetry.status, telemetry.text).toBe(200);
       // A guest reads at broadcast grade (§7, ADR 616 §4).
       const history = await get('/teams/dawn/messages', { authorization: `Bearer ${tok}` });
       expect(history.status).toBe(200);
