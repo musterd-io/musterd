@@ -7,7 +7,7 @@ import {
   homePoses,
   travelDir,
 } from './actors';
-import { BOARD_STAND, COFFEE_STAND, DESK_SLOTS, ENTRANCE, NOOK, NOOK_RUG_R, STRIP_CAP } from './layout';
+import { BOARD_STAND, COFFEE_STAND, DESK_SLOTS, ENTRANCE, insideCafe, STRIP_CAP } from './layout';
 import { GESTURE, IDLE_GESTURES } from './skeleton';
 import { LEISURE_SPOTS } from './layout';
 import { REPLAY_TEMPO } from './replay';
@@ -129,11 +129,15 @@ describe('homePoses', () => {
 
   it('queues overflow (past every desk) single-file receding from the entrance', () => {
     // Three more present-and-working members than the floor has desks → 3 spill onto the queue.
-    const nodes = Array.from({ length: DESK_SLOTS.length + 3 }, (_, i) => node(`M${String(i).padStart(2, '0')}`));
+    const nodes = Array.from({ length: DESK_SLOTS.length + 3 }, (_, i) =>
+      node(`M${String(i).padStart(2, '0')}`),
+    );
     const { placements, byName } = world(nodes);
     const poses = homePoses(placements, byName);
     const strip = [...placements.entries()]
-      .flatMap(([name, p]) => (p.kind === 'strip' ? [{ name, index: p.index, pose: poses.get(name)! }] : []))
+      .flatMap(([name, p]) =>
+        p.kind === 'strip' ? [{ name, index: p.index, pose: poses.get(name)! }] : [],
+      )
       .sort((a, b) => a.index - b.index);
 
     expect(strip.length).toBeGreaterThanOrEqual(2);
@@ -150,7 +154,9 @@ describe('homePoses', () => {
 
   it('caps the queue avatars past STRIP_CAP (rest collapse into the "+N" pill)', () => {
     // every desk + a big overflow → only STRIP_CAP queued avatars get a pose; the rest are placed but undrawn.
-    const nodes = Array.from({ length: DESK_SLOTS.length + STRIP_CAP + 4 }, (_, i) => node('Q' + String(i).padStart(2, '0')));
+    const nodes = Array.from({ length: DESK_SLOTS.length + STRIP_CAP + 4 }, (_, i) =>
+      node('Q' + String(i).padStart(2, '0')),
+    );
     const { placements, byName } = world(nodes);
     const poses = homePoses(placements, byName);
     const strip = [...placements.entries()].filter(([, p]) => p.kind === 'strip');
@@ -174,7 +180,7 @@ describe('homePoses', () => {
     for (const n of nook) {
       const p = poses.get(n.name)!;
       expect(p.small).toBe(true);
-      expect(Math.abs(p.lx - NOOK.lx) + Math.abs(p.ly - NOOK.ly)).toBeLessThan(NOOK_RUG_R);
+      expect(insideCafe(p.lx, p.ly)).toBe(true);
     }
   });
 });
@@ -248,7 +254,7 @@ describe('walk choreography', () => {
     expect(Math.hypot(at.lx - home.lx, at.ly - home.ly)).toBeLessThan(8); // ends at the NEW home
   });
 
-  it('an act yields only its own member\'s ambient — a stranger\'s gesture plays out', () => {
+  it("an act yields only its own member's ambient — a stranger's gesture plays out", () => {
     const { placements, byName } = world([node('Ada'), node('Bo'), node('Cy')]);
     const actors = createActors();
     actors.setHomes(placements, byName, true);
@@ -269,7 +275,13 @@ describe('walk choreography', () => {
    * drains, since the backlog guard caps `pending` at three and MAX_ELIGIBLE is four.
    */
   it('walks the sender to every seat of an eligible set, one desk after another', () => {
-    const { placements, byName } = world([node('Ada'), node('Bo'), node('Cy'), node('Dee'), node('Eve')]);
+    const { placements, byName } = world([
+      node('Ada'),
+      node('Bo'),
+      node('Cy'),
+      node('Dee'),
+      node('Eve'),
+    ]);
     const actors = createActors();
     actors.setHomes(placements, byName, true);
     const home = actors.poses().get('Ada')!;
@@ -326,7 +338,13 @@ describe('walk choreography', () => {
    * sets. Recorded here so the next reader knows the fit is exact and not comfortable.
    */
   it('has no headroom at the eligible cap — a busy sender loses the last leg of a four-name set', () => {
-    const { placements, byName } = world([node('Ada'), node('Bo'), node('Cy'), node('Dee'), node('Eve')]);
+    const { placements, byName } = world([
+      node('Ada'),
+      node('Bo'),
+      node('Cy'),
+      node('Dee'),
+      node('Eve'),
+    ]);
     const actors = createActors();
     actors.setHomes(placements, byName, true);
 
@@ -502,7 +520,8 @@ describe('ambient micro-choreography', () => {
     while (actors.active() && guard++ < 2000) {
       actors.step(0.05);
       const p = actors.poses().get('Ada');
-      if (p) nearest = Math.min(nearest, Math.hypot(p.lx - COFFEE_STAND.lx, p.ly - COFFEE_STAND.ly));
+      if (p)
+        nearest = Math.min(nearest, Math.hypot(p.lx - COFFEE_STAND.lx, p.ly - COFFEE_STAND.ly));
     }
     expect(nearest).toBeLessThan(10); // paused at the coffee stand mid-trip
 
@@ -766,7 +785,10 @@ describe('errands', () => {
     actors.errandFridge('Ada');
     // run until seated with the plate (mid-meal)
     let guard = 0;
-    while (guard++ < 2000 && !(actors.poses().get('Ada')!.carry === 'plate' && actors.poses().get('Ada')!.sit > 0.9)) {
+    while (
+      guard++ < 2000 &&
+      !(actors.poses().get('Ada')!.carry === 'plate' && actors.poses().get('Ada')!.sit > 0.9)
+    ) {
       actors.step(0.05);
     }
     expect(actors.poses().get('Ada')!.carry).toBe('plate');
@@ -1368,14 +1390,18 @@ describe('the gesture window table', () => {
    * this is the runtime half of the same claim, so a new beat cannot slip past either.
    */
   it('declares a window for every beat the scheduler can pick — and for nothing else', () => {
-    expect(Object.keys(GESTURE_DUR).map(Number).sort((a, b) => a - b)).toEqual(
-      [...IDLE_GESTURES].sort((a, b) => a - b),
-    );
+    expect(
+      Object.keys(GESTURE_DUR)
+        .map(Number)
+        .sort((a, b) => a - b),
+    ).toEqual([...IDLE_GESTURES].sort((a, b) => a - b));
   });
 
   it('no beat rides the old 2.4s fallback by accident — every window is one somebody chose', () => {
     for (const kind of IDLE_GESTURES) {
-      expect(GESTURE_DUR[kind], `gesture ${String(kind)} has no declared window`).toBeGreaterThan(0);
+      expect(GESTURE_DUR[kind], `gesture ${String(kind)} has no declared window`).toBeGreaterThan(
+        0,
+      );
     }
   });
 
@@ -1552,12 +1578,21 @@ describe('claiming a lane at the board', () => {
   it('walks to the board, thinks there, takes the card, and carries it home', () => {
     const { actors, home } = run();
     expect(actors.claim('Ada', SEED)).toBe(true);
-    const seen = { nearBoard: Infinity, chin: false, reach: false, cardCarried: false, takenEarly: false };
+    const seen = {
+      nearBoard: Infinity,
+      chin: false,
+      reach: false,
+      cardCarried: false,
+      takenEarly: false,
+    };
     let guard = 0;
     while (actors.active() && guard++ < 4000) {
       actors.step(0.05);
       const p = actors.poses().get('Ada')!;
-      seen.nearBoard = Math.min(seen.nearBoard, Math.hypot(p.lx - BOARD_STAND.lx, p.ly - BOARD_STAND.ly));
+      seen.nearBoard = Math.min(
+        seen.nearBoard,
+        Math.hypot(p.lx - BOARD_STAND.lx, p.ly - BOARD_STAND.ly),
+      );
       if (p.gesture === GESTURE.chin) {
         seen.chin = true;
         if (actors.takenSeeds().includes(SEED)) seen.takenEarly = true;
@@ -1642,7 +1677,14 @@ describe('pinning a finished lane on the board', () => {
   it('carries the card to the board, pins it, and comes home without it', () => {
     const { actors, home } = run();
     expect(actors.pin('Ada', SEED, 'done')).toBe(true);
-    const seen = { nearBoard: Infinity, carriedOut: false, reach: false, chin: false, pinnedEarly: false, carriedBack: false };
+    const seen = {
+      nearBoard: Infinity,
+      carriedOut: false,
+      reach: false,
+      chin: false,
+      pinnedEarly: false,
+      carriedBack: false,
+    };
     let guard = 0;
     while (actors.active() && guard++ < 4000) {
       actors.step(0.05);
@@ -1650,7 +1692,8 @@ describe('pinning a finished lane on the board', () => {
       const d = Math.hypot(p.lx - BOARD_STAND.lx, p.ly - BOARD_STAND.ly);
       seen.nearBoard = Math.min(seen.nearBoard, d);
       if (p.carry === 'card' && d > 12) {
-        if (actors.pinnedSeeds().length) seen.carriedBack = true; // in hand after the pin = wrong
+        if (actors.pinnedSeeds().length)
+          seen.carriedBack = true; // in hand after the pin = wrong
         else seen.carriedOut = true;
         if (actors.pinnedSeeds().length) seen.pinnedEarly = true;
       }
@@ -1713,7 +1756,10 @@ describe('meeting in the aisle', () => {
     const { placements, byName } = world([node('Ada'), node('Bo'), node('Cy')]);
     const actors = createActors();
     actors.setHomes(placements, byName, true);
-    return { actors, homes: new Map([...actors.poses()].map(([n, p]) => [n, { lx: p.lx, ly: p.ly }])) };
+    return {
+      actors,
+      homes: new Map([...actors.poses()].map(([n, p]) => [n, { lx: p.lx, ly: p.ly }])),
+    };
   };
 
   it('both leave home, stand near each other, exchange gestures, and both come back', () => {
@@ -1731,7 +1777,11 @@ describe('meeting in the aisle', () => {
       closest = Math.min(closest, d);
       const ha = homes.get('Ada')!;
       const hb = homes.get('Bo')!;
-      if (Math.hypot(a.lx - ha.lx, a.ly - ha.ly) > 10 && Math.hypot(b.lx - hb.lx, b.ly - hb.ly) > 10) bothOut = true;
+      if (
+        Math.hypot(a.lx - ha.lx, a.ly - ha.ly) > 10 &&
+        Math.hypot(b.lx - hb.lx, b.ly - hb.ly) > 10
+      )
+        bothOut = true;
       if (a.gesture && b.gesture && d < 60) gestured = true;
     }
     expect(actors.active()).toBe(false);

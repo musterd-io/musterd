@@ -292,7 +292,10 @@ function podDesks(pod: Pod): Omit<DeskSlot, 'id'>[] {
       const lo: Dir = ns ? 'E' : 'S';
       const hi: Dir = ns ? 'W' : 'N';
       const alongs = [-150, -50, 50, 150];
-      return [...alongs.map((along) => at(along, POD_ACROSS, hi)), ...alongs.map((along) => at(along, -POD_ACROSS, lo))];
+      return [
+        ...alongs.map((along) => at(along, POD_ACROSS, hi)),
+        ...alongs.map((along) => at(along, -POD_ACROSS, lo)),
+      ];
     }
     case 'pinwheel':
       return PINWHEEL_ARMS.map(off);
@@ -361,9 +364,11 @@ const windowSlots: Omit<DeskSlot, 'id'>[] = WINDOW_DESKS.map((w) => ({
 }));
 
 /** Every seat on the floor: pods first, then bench, then window; ids are the index. */
-export const DESK_SLOTS: DeskSlot[] = [...PODS.flatMap(podDesks), ...benchSlots, ...windowSlots].map(
-  (s, id) => ({ id, ...s }),
-);
+export const DESK_SLOTS: DeskSlot[] = [
+  ...PODS.flatMap(podDesks),
+  ...benchSlots,
+  ...windowSlots,
+].map((s, id) => ({ id, ...s }));
 
 /** The break nook — where `away` members drift; also the broadcast megaphone spot.
  *
@@ -372,20 +377,16 @@ export const DESK_SLOTS: DeskSlot[] = [...PODS.flatMap(podDesks), ...benchSlots,
  * Pod 3 becoming a solo desk is what let it come back off the walls. */
 export const NOOK = { lx: 725, ly: 175 };
 
-/** The nook rug's iso radius — furniture and the away cluster stay inside it. Shrunk 192 → 148 with
- * the armchairs it was sized around (2026-08-02): the rug only needs to cover the kitchenette run and
- * the couch now, and a rug much wider than its furniture reads as a stain rather than a zone.
- * 142 → 150 once pod 3 stopped crowding it.
- *
- * It is sized to the SEATING — couch, coffee table, and the arc of away members — and NOT to the
- * kitchenette, which stands proud of it on bare floor. That is deliberate and it is why this rug can
- * stay modest: the run is 200 units wide sitting 70 back from centre, so a diamond that reached its
- * far corner would need r≈195 and would swallow the whole corner of the room. Nobody puts a rug under
- * a kitchen counter anyway. */
-export const NOOK_RUG_R = 150;
-
-/** The nook's rug: the room's one big diamond, bound with a darker edge. */
-export const NOOK_RUG: Rug = { shape: 'diamond', weave: 'border', fill: '#ce9256', mark: '#b2743c' };
+/**
+ * The café (office v3-2): the north-east corner is ceramic tile where the rest of the floor is
+ * planks, and that material change is the zone — the nook's diamond rug is gone. Fridge to the east
+ * wall, north wall down past the stools and the couch. Mirrored by `scene.py` `CAFE`, which paints
+ * it; `nav.test.ts` holds every away standing spot inside it.
+ */
+export const CAFE = { x0: 620, y0: 4, x1: 896, y1: 330 } as const;
+export function insideCafe(lx: number, ly: number): boolean {
+  return lx >= CAFE.x0 && lx <= CAFE.x1 && ly >= CAFE.y0 && ly <= CAFE.y1;
+}
 
 /**
  * The lounge set, as *data* (offsets from NOOK, logical sizes) shared by drawing (render.ts) and
@@ -455,7 +456,10 @@ export const NOOK_SPOTS: ReadonlyArray<{ dx: number; dy: number }> = [
  * Phase 2). Nudged 8 east of the machine itself — the lane runs out where the fridge's footprint starts,
  * so the spot directly in front of the machine is the one place along the counter a body cannot stand.
  */
-export const COFFEE_STAND = { lx: NOOK.lx + LOUNGE.machine.dx + 8, ly: NOOK.ly + LOUNGE.counter.dy + 38 };
+export const COFFEE_STAND = {
+  lx: NOOK.lx + LOUNGE.machine.dx + 8,
+  ly: NOOK.ly + LOUNGE.counter.dy + 38,
+};
 
 /** The kitchenette sink's spot on the counter (centre-run, between the machine and the bean bag) —
  * shared by the counter painter and the fridge errand's plate drop-off. */
@@ -475,7 +479,10 @@ export const SINK = { dx: -49, dy: -86 };
  * counter run, and its own footprint fills the lane in front of it. */
 export const FRIDGE_STAND = { lx: NOOK.lx + LOUNGE.fridge.dx, ly: NOOK.ly + LOUNGE.fridge.dy + 44 };
 /** In front of the water cooler, for the bottle-fill dwell. */
-export const COOLER_STAND = { lx: NOOK.lx + LOUNGE.cooler.dx, ly: NOOK.ly + LOUNGE.counter.dy + 38 };
+export const COOLER_STAND = {
+  lx: NOOK.lx + LOUNGE.cooler.dx,
+  ly: NOOK.ly + LOUNGE.counter.dy + 38,
+};
 /** In front of the counter sink, where an empty plate is set down. */
 export const SINK_STAND = { lx: NOOK.lx + SINK.dx + 6, ly: NOOK.ly + LOUNGE.counter.dy + 38 };
 
@@ -561,7 +568,16 @@ export const RECEPTION = {
   // the lane: at 290 it left 15 units to the front duo's rug, which is not a walkway, it is a gap.
   // At 255 there are 110 clear units between this rug and the meeting rug, and that band runs
   // unbroken from the door to the middle of the room.
-  rug: { lx: 140, ly: 810, w: 200, d: 120, shape: 'rect', weave: 'border', fill: '#c07a55', mark: '#9c5c3c' },
+  rug: {
+    lx: 140,
+    ly: 810,
+    w: 200,
+    d: 120,
+    shape: 'rect',
+    weave: 'border',
+    fill: '#c07a55',
+    mark: '#9c5c3c',
+  },
   // ONE chair now (2026-08-03), on the rug's SOUTH EDGE facing north into the room. `ly` is the
   // load-bearing number: the door is at ly 815, so anything whose padded footprint reaches that band
   // walls the entrance off from the room — at 838 you could not walk a single step east out of the
@@ -717,7 +733,14 @@ export const ART: readonly ArtPiece[] = [
  * about the copy wanted it small — the first version was small *and* overfull, which is how it ended
  * up illegible.
  */
-export const WORKING_HOURS_CALENDAR = { wall: 1 as const, tc: 0.52, uc: 0.3, w: 92, h: 52, loopOverhang: 4 };
+export const WORKING_HOURS_CALENDAR = {
+  wall: 1 as const,
+  tc: 0.52,
+  uc: 0.3,
+  w: 92,
+  h: 52,
+  loopOverhang: 4,
+};
 /**
  * Two windows per back wall — spaced so the wall reads as a facade, not a single porthole.
  *
