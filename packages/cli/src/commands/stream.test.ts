@@ -504,6 +504,20 @@ describe('musterd stream', () => {
       expect(flyArgs).toContain('BROADCAST_ARGS=--duration 600');
     });
 
+    // Lane 01M5WN8NB8: a file on the machine dies with `--rm`, so the recorder writes to the log.
+    it('start --perf points the recorder at the machine log, and a plain start does not', async () => {
+      withImage();
+      let flyArgs: string[] = [];
+      const launch = (args: string[]) => {
+        flyArgs = args;
+        launches += 1;
+        return { code: 0, output: '' };
+      };
+      expect(await run(['start', '--perf'], { ...sup(), launch })).toBe(0);
+      expect(flyArgs).toContain('MUSTERD_BROADCAST_PERF=/dev/stdout');
+      expect(readStreamState(join(repo, 'stream-state.json'))).not.toHaveProperty('perf');
+    });
+
     // ADR 594: since ADR 580 the page cannot mint its own observer, so start mints one and stages it
     // as a Fly secret — never on the `fly machine run` argv, where `ps` and the machine config show it.
     it('start stages a minted observer as a Fly secret and keeps it off the machine run argv', async () => {
@@ -1313,5 +1327,62 @@ describe('stream build uploads origin/main, not the folder it runs in', () => {
     expect(src.commit).toBe('71f1759000000000000000000000000000000000');
     expect(src.label).toBe('this folder (--here): 71f1759 plus uncommitted edits');
     expect(calls.some((c) => c.includes('fetch'))).toBe(false);
+  });
+});
+
+describe('musterd stream perf (lane 01M5WN8NB8)', () => {
+  const sample = (t: number) => ({
+    t,
+    frames: 30,
+    bytes: 3_000_000,
+    deliveredFps: 30,
+    kbPerFrame: 100,
+    queueBytes: 0,
+    emitted: t / 33,
+    draws: t / 50,
+    drawFps: 20,
+    load1: 1,
+    cpu: { chrome: 80, ffmpeg: 40, pipeline: 140, other: 5 },
+  });
+  const log = [
+    '2026-10-26T10:00:00Z app[d8d2] ord [info]▸ tailnet up · nicks-laptop → 100.100.246.14',
+    `2026-10-26T10:00:01Z app[d8d2] ord [info]${JSON.stringify(sample(1000))}`,
+    '2026-10-26T10:00:01Z app[d8d2] ord [info]{"not":"a sample"}',
+    `2026-10-26T10:00:02Z app[d8d2] ord [info]${JSON.stringify(sample(2000))}`,
+  ].join('\n');
+  const exec: Exec = (cmd, args) =>
+    [cmd, ...args].join(' ') === 'fly logs -a musterd-broadcast --no-tail'
+      ? ok(log)
+      : { code: 1, stdout: '', stderr: 'unexpected' };
+
+  it('keeps only the recorder samples from the machine log, as JSONL', async () => {
+    const out: string[] = [];
+    expect(await streamCommand(parseArgs(['perf']), { exec, out: (s) => void out.push(s) })).toBe(
+      0,
+    );
+    const lines = out.join('').trim().split('\n');
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[1]!)).toMatchObject({ t: 2000, drawFps: 20 });
+  });
+
+  it('writes --out and prints a summary line', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'musterd-perf-'));
+    const file = join(dir, 'perf.jsonl');
+    const out: string[] = [];
+    try {
+      await streamCommand(parseArgs(['perf', '--out', file]), {
+        exec,
+        out: (s) => void out.push(s),
+      });
+      expect(out.join('')).toMatch(/2 samples/);
+      expect(out.join('')).toMatch(/draws 20\.0\/s/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('says so when the run was not started with --perf', async () => {
+    const quiet: Exec = () => ok('2026-10-26T10:00:00Z app[d8d2] ord [info]▸ tailnet up\n');
+    await expect(streamCommand(parseArgs(['perf']), { exec: quiet })).rejects.toThrow(/--perf/);
   });
 });
