@@ -3,8 +3,12 @@
 **Lanes:** `01M5WRYTMK` (this page), `01M5WS00G1` (ADR 735, the product change), the read → finding
 029 (lane opened at the switch); goal `coordination-cost`, asked by nick ("lets build the act lane and
 measure it where idle time is real, but remember we dont have that much time to wait around").
-**Status:** pre-registered 2026-10-26, before any seat is enrolled on the lane. Nothing below changes
-once a seat is on it; what the read teaches goes in the finding, not here. **Before this:** [finding
+**Status:** pre-registered 2026-10-26, before any seat is enrolled on the lane. _(Amended 2026-10-26
+19:35Z, before the first act-lane wake: nick enrolled `izzo` on the lane at once instead of after the
+baseline day — "we dont have that much time to wait around" — so the baseline is concurrent, not
+prior; see the amended Procedure and R7a. No act-lane wake had happened when this was written; the
+amendment is a design change, not a reading.)_ Nothing below changes once an act-lane wake has
+happened; what the read teaches goes in the finding, not here. **Before this:** [finding
 028](./028-cooperbench-rider6-run.md), whose R6b said the wait call is the cost and the loop is the lever.
 
 ## Why
@@ -43,7 +47,7 @@ time, not by the line's `[batched]`.
 
 | | Count | Baseline | Acted | Did not |
 | --- | --- | --- | --- | --- |
-| R7a | median `waited` on act-lane seats' wakes | the launch lanes' median `waited` over the baseline day, all enrolled seats | **≤ 2 min** | **≥ 15 min** |
+| R7a | median `waited` on act-lane seats' wakes | the launch-lane seats' median `waited` over the **same 48 h** (concurrent, amended 2026-10-26; the originally registered prior baseline day was dropped at the switch), plus any launch-lane `waited` lines before each seat's switch | **≤ 2 min** | **≥ 15 min** |
 | R7b | wakes per act-lane seat per day, and $ per wake (median) | the same seats' last 14 days on the launch lanes | report; kill rule only | — |
 
 Between R7a's bounds: "part of it", with the distribution. R7b has no verdict rule: the lane is expected
@@ -54,14 +58,21 @@ launch lanes never wake on), failed wakes, and the per-wake cost on the launch l
 
 ## Procedure
 
-1. ADR 735 lands on `main`; the auto-refresher carries it to the hub daemon and the host loops.
-2. **Baseline day (24 h):** no enrollment changes. Every wake's `waited` is now on the host line.
+1. ADR 735 lands on `main` (#3346, `9eeaebd8`, 2026-10-26 19:13Z); the auto-refresher carries it to the
+   hub daemon and the host loops (this machine's host restarted on it at 19:13Z).
+2. ~~**Baseline day (24 h):** no enrollment changes.~~ _Amended 2026-10-26: dropped at the switch. The
+   baseline is the launch-lane seats over the same 48 h (R7a), and every wake's `waited` is on the host
+   line from step 1 on, whichever lane._
 3. **The switch:** nick, from his own Workspace (ADR 442), enrolls two or three agent seats on the act
    lane — proposed, by directed acts received while offline over the 14 days: `izzo` and `miley`
    (claude-code, mac.lan), and `grokbot` (grok, mac.lan) — `musterd residency on --seat <s> --workspace
    <its folder> --lane act`. The hourly cap stays at the team default (2) unless nick raises it; if he
-   does, the manifest's finding records the value.
-4. **48 h on the lane.** The kill rule is checked at the day boundary.
+   does, the manifest's finding records the value. _Done for `izzo` at 2026-10-26 ~19:33Z from nick's
+   Workspace on his Mac (`/Users/nick/musterd/revive/agents/izzo`); the re-enrollment recorded the
+   harness as **codex** (the row had said claude-code), overrides `{"lane":"act"}`, and noted a live
+   session that keeps its old grant until its next wake. `miley` and `grokbot` are nick's call._
+4. **48 h on the lane**, counted from the first seat's switch. The kill rule is checked at the day
+   boundary.
 5. **Read once**, write finding 029, and leave the seats on the lane or not as nick decides.
 
 ## Spend
@@ -77,5 +88,5 @@ CooperBench spend.
 | --- | --- |
 | Build the act lane; measure on the team, not CooperBench | nick, 2026-10-26, in session |
 | Seats on the lane and the hourly cap | nick, at the switch (step 3); this page proposes three |
-| Window: 24 h baseline + 48 h on the lane | this manifest, from "not much time to wait around" |
+| Window: ~~24 h baseline +~~ 48 h on the lane with a concurrent launch-lane baseline | this manifest; amended at the switch 2026-10-26 on nick's enrolling izzo at once |
 | Finding number | 029 |
