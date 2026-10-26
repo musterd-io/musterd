@@ -15,6 +15,7 @@ import { getMemberById, haltedSentence } from '../store/members.js';
 import { replaceSeatBindings } from '../store/nodes.js';
 import { listActiveTeams } from '../store/teams.js';
 import { foldBatch, foldNodeLiveness, readPullCursor, type FoldStop } from './fold.js';
+import { noteHubLinkFailure, noteHubLinkOk } from './hubLink.js';
 import { noteHubStop } from './hubStop.js';
 import { hasEnrolledJoiners, laneGenesis, readStaged } from './log.js';
 
@@ -411,6 +412,24 @@ export async function adoptPreGenesisLanes(
   return adopted;
 }
 
+/** ADR 738: a joiner's page fetch, recorded on the hub link either way it goes. */
+async function fetchPageNoting(
+  ctx: Ctx,
+  teamId: string,
+  enrollment: { hub_url: string; credential: string },
+  slug: string,
+  cursor: number,
+): Promise<SyncPullResponse> {
+  try {
+    const page = await fetchPage(enrollment.hub_url, enrollment.credential, slug, cursor);
+    noteHubLinkOk(ctx, teamId, enrollment.hub_url);
+    return page;
+  } catch (err) {
+    await noteHubLinkFailure(ctx, teamId, enrollment.hub_url, err);
+    throw err;
+  }
+}
+
 export async function pullPage(
   ctx: Ctx,
   team: { id: string; slug: string },
@@ -435,7 +454,7 @@ export async function pullPage(
     SyncPullResponse,
     'events' | 'nodes' | 'seat_nodes' | 'lane_genesis' | 'pre_genesis_lanes' | 'fold_stopped'
   > = enrollment
-    ? await fetchPage(enrollment.hub_url, enrollment.credential, team.slug, cursor)
+    ? await fetchPageNoting(ctx, team.id, enrollment, team.slug, cursor)
     : {
         events: await readStaged(ctx.db, team.id, cursor, SYNC_PULL_MAX_BATCH),
         nodes: [],

@@ -634,6 +634,7 @@ import {
   trustAtHub,
   TrustRefusedError,
 } from '../sync/claim.js';
+import { readHubLink } from '../sync/hubLink.js';
 import { readHubStop } from '../sync/hubStop.js';
 import {
   hasEnrolledJoiners,
@@ -3621,6 +3622,9 @@ export async function handleHttp(
             // ADR 591: and the HUB's stop as this joiner last heard it — the one that holds every
             // lane claim from every machine. Null on the hub and on a machine without one.
             hub_stopped: readHubStop(ctx.config, team.id),
+            // ADR 738: and this joiner's link to its hub — last good sync, or the failure and its
+            // cause, from its own pull ticks. Null on the hub and on a machine without one.
+            hub_link: readHubLink(ctx.config, team.id),
           },
         });
       }
