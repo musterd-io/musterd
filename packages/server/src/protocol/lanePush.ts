@@ -70,8 +70,10 @@ function endedAt(lane: Lane): number {
  * glob-overlap set ADR 575 measured at 27% precision.
  *
  * ADR 732 §1: a lane that covered the file and ended within `windowMs` of `now` still counts, if it
- * still has an owner on record — a released lane has none and is out. `ended` reports how many of the
- * seats came in only that way, for the log.
+ * still has an owner on record. A released lane has `owner_seat` null, so its owner on record is the
+ * `owner_before` of its latest `lane.released` audit row inside the window (ADR 732 amended
+ * 2026-10-26; finding 028: 2 of 22 pushes went unheard for exactly this). `ended` reports how many of
+ * the seats came in only that way, for the log.
  */
 export async function coveringSeats(
   db: Driver,
@@ -83,24 +85,46 @@ export async function coveringSeats(
   const named = lane.scope.filter(isNamedFile);
   const seats = new Map<string, string[]>();
   if (named.length === 0) return { seats, ended: 0 };
-  const eligible = (o: Lane) =>
-    o.id !== lane.id &&
-    o.owner_seat !== null &&
-    o.owner_seat !== lane.owner_seat &&
-    projectsContend(lane.project, o.project);
+  // The owner on record: the lane's owner, or — for a lane released inside the window — the seat the
+  // release took it from. Filled only for recent ended lanes with no owner.
+  const releasedOwner = new Map<string, string>();
+  const ownerOf = (o: Lane): string | null => o.owner_seat ?? releasedOwner.get(o.id) ?? null;
+  const eligible = (o: Lane) => {
+    const owner = ownerOf(o);
+    return (
+      o.id !== lane.id &&
+      owner !== null &&
+      owner !== lane.owner_seat &&
+      projectsContend(lane.project, o.project)
+    );
+  };
   const live = (await listLanes(db, team.id, team.slug, { states: AUDIENCE_LIVE })).filter(
     eligible,
   );
-  const recent =
-    windowMs > 0
-      ? (await listLanes(db, team.id, team.slug, { states: ENDED })).filter(
-          (o) => eligible(o) && endedAt(o) >= now - windowMs,
-        )
-      : [];
+  let recent: Lane[] = [];
+  if (windowMs > 0) {
+    const endedRecently = (await listLanes(db, team.id, team.slug, { states: ENDED })).filter(
+      (o) => o.id !== lane.id && endedAt(o) >= now - windowMs,
+    );
+    for (const o of endedRecently) {
+      if (o.owner_seat !== null) continue;
+      const row = await db.get<{ detail: string | null }>(
+        `SELECT detail FROM audit
+           WHERE team_id = ? AND action = 'lane.released' AND target = ? AND ts >= ?
+           ORDER BY ts DESC, id DESC LIMIT 1`,
+        [team.id, o.id, now - windowMs],
+      );
+      const before = row?.detail
+        ? (JSON.parse(row.detail) as { owner_before?: unknown }).owner_before
+        : undefined;
+      if (typeof before === 'string' && before.length > 0) releasedOwner.set(o.id, before);
+    }
+    recent = endedRecently.filter(eligible);
+  }
   const add = (others: Lane[]) => {
     const seen = new Set<string>();
     for (const other of others) {
-      const seat = other.owner_seat!;
+      const seat = ownerOf(other)!;
       for (const file of named) {
         if (!other.scope.some((g) => pathGlobMatches(g, file))) continue;
         const paths = seats.get(seat) ?? [];
