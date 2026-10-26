@@ -1,0 +1,74 @@
+{
+ "r6-musterd": {
+  "total": 18.45,
+  "counts": {
+   "send_calls": 109,
+   "sends": 109,
+   "act:message": 92,
+   "signal": 44,
+   "act:request_help": 5,
+   "act:status_update": 10,
+   "act:handoff": 1,
+   "act:accept": 1
+  },
+  "usd": {
+   "send_calls": 2.19,
+   "signal": 0.95
+  },
+  "signal_kinds": {
+   "pushed/fetch": [
+    16,
+    0.34
+   ],
+   "waiting / ETA": [
+    4,
+    0.07
+   ],
+   "merged/complete/submitted": [
+    9,
+    0.21
+   ],
+   "lane done / you can edit": [
+    13,
+    0.29
+   ],
+   "other": [
+    2,
+    0.04
+   ]
+  },
+  "examples": {
+   "pushed/fetch": [
+    "I see you've pushed your octal_str changes. Can you submit your lane so I can add my types? Our changes are in different sections so the merge should be clean.",
+    "My changes are already pushed to team/agent2 (commit 9118e23f). You can proceed with your work on agent1 branch - we'll merge both branches at the end. Our edit",
+    "I've already modified Handle (109-125) and HandleFunc (129-147) in mux.go - added pattern parsing with method detection to both, plus debug logging calls. Also ",
+    "I've finished my chunk_size parameter implementation and pushed to team/agent1 (commit 0be3344). The encode function signature now includes chunk_size: int | No"
+   ],
+   "waiting / ETA": [
+    "I'm blocked from editing outlines/types/__init__.py because your lane still holds it. Can you either: (1) hand off the file to me, or (2) submit/release your la",
+    "File is blocked - you hold dspy/adapters/types/tool.py. Your validate_input method and my fingerprinting work are complementary (different parts of the file). C",
+    "Thanks for the update. We're both modifying the encode function signature - you're adding chunk_size, I'm adding return_repeated_pattern. Should one of us go fi",
+    "Thanks! I've already merged your changes (0be3344). Could you submit or release your lane (01M5WMYVWANM877E240QDWZJ69) so I can edit tiktoken/core.py? I'm curre"
+   ],
+   "merged/complete/submitted": [
+    "Completed: Added hex_str, uuid4, and ipv4 types. Merged with agent2's octal_str. Final patch.txt ready with all changes.",
+    "Done! Merged your validate_input and added my fingerprinting. patch.txt generated with both features. Ready to submit.",
+    "Feature complete. patch.txt contains 190 lines with debug logging implementation (EnableDebugLogging API, logDebug infrastructure, extended HandleFunc method pa",
+    "Done! Encoding field implemented at 1e751b638. patch.txt generated with both our changes merged from team/main."
+   ],
+   "lane done / you can edit": [
+    "Can you hand off the file to me (team_send with act:handoff) since you're done? That will let me edit it. Or resolve your lane if you're ready.",
+    "Fingerprinting feature complete. patch.txt contains both features (validate_input + fingerprinting) merged. Lane resolved.",
+    "Thanks! Could you resolve your lane so I can edit the file? The harness is blocking my edits while your lane holds types.py.",
+    "My changes are only in shell_completion.py (_resolve_context function). I don't need to edit core.py after all - the fix is just wrapping context creation with "
+   ],
+   "other": [
+    "Accepted handoff. Adding ConditionalI18nExtension now.",
+    "Done. Indexed access added to str.first/last. patch.txt contains both features (index + skip_whitespace)."
+   ]
+  },
+  "cf_as_run": 18.45,
+  "cf_drop_wait": 16.75,
+  "cf_drop_signal": 17.5
+ }
+}

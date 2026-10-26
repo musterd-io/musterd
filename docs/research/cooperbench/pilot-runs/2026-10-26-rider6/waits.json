@@ -1,0 +1,92 @@
+{
+ "totals": {
+  "wait_calls": 98,
+  "returned_push_act": 16,
+  "returned_other_act": 78,
+  "returned_nothing": 4,
+  "push_act_already_waiting": 25,
+  "wait_seconds_median": 45,
+  "wait_seconds_hist": {
+   "5": 1,
+   "10": 1,
+   "15": 1,
+   "30": 12,
+   "45": 66,
+   "60": 9,
+   "90": 3,
+   "120": 5
+  }
+ },
+ "pairs": {
+  "coop/dottxt_ai_outlines_task/1655/f1_f3": {
+   "wait_calls": 10,
+   "returned_push_act": 2,
+   "returned_other_act": 8,
+   "returned_nothing": 0,
+   "push_act_already_waiting": 4
+  },
+  "coop/dspy_task/8563/f1_f4": {
+   "wait_calls": 7,
+   "returned_push_act": 1,
+   "returned_other_act": 6,
+   "returned_nothing": 0,
+   "push_act_already_waiting": 2
+  },
+  "coop/go_chi_task/27/f3_f4": {
+   "wait_calls": 8,
+   "returned_push_act": 3,
+   "returned_other_act": 5,
+   "returned_nothing": 0,
+   "push_act_already_waiting": 3
+  },
+  "coop/llama_index_task/17244/f5_f6": {
+   "wait_calls": 7,
+   "returned_push_act": 1,
+   "returned_other_act": 6,
+   "returned_nothing": 0,
+   "push_act_already_waiting": 2
+  },
+  "coop/openai_tiktoken_task/0/f4_f8": {
+   "wait_calls": 7,
+   "returned_push_act": 1,
+   "returned_other_act": 5,
+   "returned_nothing": 1,
+   "push_act_already_waiting": 2
+  },
+  "coop/pallets_click_task/2800/f1_f4": {
+   "wait_calls": 14,
+   "returned_push_act": 1,
+   "returned_other_act": 12,
+   "returned_nothing": 1,
+   "push_act_already_waiting": 3
+  },
+  "coop/pallets_jinja_task/1559/f5_f8": {
+   "wait_calls": 12,
+   "returned_push_act": 2,
+   "returned_other_act": 9,
+   "returned_nothing": 1,
+   "push_act_already_waiting": 3
+  },
+  "coop/pallets_jinja_task/1621/f6_f10": {
+   "wait_calls": 13,
+   "returned_push_act": 2,
+   "returned_other_act": 10,
+   "returned_nothing": 1,
+   "push_act_already_waiting": 3
+  },
+  "coop/react_hook_form_task/153/f2_f6": {
+   "wait_calls": 9,
+   "returned_push_act": 1,
+   "returned_other_act": 8,
+   "returned_nothing": 0,
+   "push_act_already_waiting": 1
+  },
+  "coop/typst_task/6554/f2_f6": {
+   "wait_calls": 11,
+   "returned_push_act": 2,
+   "returned_other_act": 9,
+   "returned_nothing": 0,
+   "push_act_already_waiting": 2
+  }
+ }
+}

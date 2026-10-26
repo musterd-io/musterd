@@ -1,0 +1,6 @@
+[2026-10-26T17:31:48Z] api check: ok
+[2026-10-26T17:31:48Z] gate_smoke start
+[2026-10-26T17:32:21Z] gate_smoke cost_usd=0.0034239250000000004 a_edited=True b_edited=False gate_denies=1 PASS 
+[2026-10-26T17:32:21Z] hold_smoke_697 start
+[2026-10-26T17:35:07Z] hold_smoke_697 agent1_edited=True agent2_first_refused=True agent2_again_allowed=True held_deny_audited=True handover_refusal_audited=True no_deaf_warning=True cost_usd=0.0085 PASS 
+[2026-10-26T17:35:07Z] preflight done

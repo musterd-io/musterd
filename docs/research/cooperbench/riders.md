@@ -193,7 +193,11 @@ the hook command text does not change, so the arm's pinned settings do not eithe
 **Lanes:** `01M5WJGW3H` (this pre-registration), `01M5WJJAMF` (the ADR and product change),
 `01M5WJJGNJ` (the run → finding 028); goal `coordination-cost`. **Status:** pre-registered 2026-10-26,
 before the product change has landed or run on CooperBench. Run manifest:
-[rider6-manifest.md](./rider6-manifest.md). Decided by nick, 2026-10-26, in session ("Option 2 sounds
+[rider6-manifest.md](./rider6-manifest.md). **Read 2026-10-26 → [finding 028](../028-cooperbench-rider6-run.md):**
+R6a 19 of 22 recorded pushes (part of it, four points under the bound; 7 of the 19 fired only by the
+ended-lane rule; the 3 silent are 2 releases and 1 hand-off), R6b 90 wait-mode calls (did not act — up
+from 82; 94 of 98 waits returned an act, so they were turns, not polls), R6c 12 of 17 (did not act; the
+act carried subjects and files every time). Decided by nick, 2026-10-26, in session ("Option 2 sounds
 good", with the derived hand-off folded in).
 
 **What changes.** Finding 027 read ADR 731 on the 10 `core` pairs: 12 of 22 recorded pushes fired an
