@@ -10,6 +10,8 @@
 #   MUSTERD_AIR_ADDR    the Air's tailnet MagicDNS name or 100.x address
 #   MUSTERD_TEAM        team slug (default revive)
 #   BROADCAST_ARGS      extra args, e.g. "--duration 14400"
+#   MUSTERD_TWITCH_CHAT_{CLIENT_ID,CLIENT_SECRET,REFRESH_TOKEN,CHANNEL}
+#                       optional Fly secrets: chat's `!who` (ADR 740); unset, the reader stays off
 set -euo pipefail
 
 : "${TS_AUTHKEY:?TS_AUTHKEY missing — set it as a Fly secret}"

@@ -343,6 +343,9 @@ export interface OfficeHandle {
   /** Run the stream's roll call now (lane 01M5G7A9H1): the folded plates open in a wave and fold
    *  again. /broadcast runs it on its own clock; this is for /office-preview and captures. */
   rollCall: () => void;
+  /** Open one member's plate for a few seconds (ADR 740: Twitch chat's `!who`, via CDP). Returns
+   *  false, and does nothing, for a name not on the floor. */
+  spotlight: (name: string) => boolean;
   /** Show the working-hours calendar's settings door (`/live`, a signed-in human), and flag it when
    *  something there waits for the viewer. A no-op where the scene made no hotspot. */
   setSettingsSpot: (state: { enabled: boolean; flagged: boolean }) => void;
