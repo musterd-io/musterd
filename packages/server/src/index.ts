@@ -47,7 +47,7 @@ import { startTraceContentPrune } from './store/trace.js';
 import { startTraceCoverageSweep } from './store/traceCoverage.js';
 import { startSyncPull } from './sync/pull.js';
 import { startSyncPush } from './sync/push.js';
-import { makeUnresolvedSeatHook } from './sync/rosterRefresh.js';
+import { makeUnresolvedSeatHook, startRosterPull } from './sync/rosterRefresh.js';
 import { attachSyncStream } from './sync/streamHub.js';
 import { startSyncStream } from './sync/streamJoiner.js';
 import { startTracePush } from './sync/tracePush.js';
@@ -425,16 +425,28 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let boundPort = config.port;
 
   // (Re)start the roster watcher for the current `ctx.rosterRoots`. Reused by listen() and reload().
+  // The timed pull (ADR 736) rides with it: the watcher sees files change, the pull makes them change.
   const startWatching = async () => {
     stopWatcher?.();
     stopWatcher = null;
     if (ctx.rosterRoots.length > 0) {
+      const stopPull = startRosterPull(
+        () => ctx.rosterRoots,
+        async () => {
+          await broadcastReconciled(ctx, await reconcileAll(opDb, ctx.rosterRoots));
+        },
+      );
       stopWatcher = startRosterWatcher(ctx.rosterRoots, RECONCILE_DEBOUNCE_MS, async () => {
         // A seat file that just appeared (a git pull, `musterd agent`) is a Member arriving — say so.
         void (await reconcileAll(opDb, ctx.rosterRoots)
           .then((r) => broadcastReconciled(ctx, r))
           .catch((err) => log.warn({ msg: 'reconcile_watch_failed', err: String(err) })));
       });
+      const stopFiles = stopWatcher;
+      stopWatcher = () => {
+        stopFiles();
+        stopPull();
+      };
     }
   };
 

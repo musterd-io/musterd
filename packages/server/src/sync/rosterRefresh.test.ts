@@ -2,10 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Ctx } from '../context.js';
+import { log } from '../log.js';
 import {
   describeSeatFileReach,
+  makeRosterPullTick,
   makeUnresolvedSeatHook,
   refreshRosterRoot,
   resetRosterRefreshAttempts,
@@ -221,5 +223,108 @@ describe('makeUnresolvedSeatHook — the puller’s hook (ADR 592)', () => {
     });
     expect(await hook({ id: 't', slug: 'bravo' }, 'late')).toBe(false);
     expect(reconciled).toBe(0);
+  });
+});
+
+/**
+ * ADR 736: the timed pull. An edit to a seat that already exists never stops a fold, so the ADR 592
+ * hook never pulls it — on 2026-10-21 the hub served old roles for hours. Same real-git shape as
+ * above: a bare remote, the machine that edits (a) and the machine that must catch up (b).
+ */
+describe('makeRosterPullTick — pull roster roots on a timer (ADR 736)', () => {
+  let root: string;
+  let remote: string;
+  let a: string;
+  let b: string;
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'musterd-rosterpull-'));
+    remote = join(root, 'remote.git');
+    a = join(root, 'a');
+    b = join(root, 'b');
+    execFileSync('git', ['init', '--quiet', '--bare', '-b', 'main', remote]);
+    execFileSync('git', ['clone', '--quiet', remote, a]);
+    git(a, 'config', 'user.email', 't@t');
+    git(a, 'config', 'user.name', 't');
+    mkdirSync(join(a, '.musterd', 'seats'), { recursive: true });
+    writeFileSync(join(a, '.musterd', 'seats', 'ghost.toml'), 'kind = "agent"\n');
+    git(a, 'add', '.');
+    git(a, 'commit', '-q', '-m', 'seat');
+    git(a, 'push', '-q', '-u', 'origin', 'main');
+    execFileSync('git', ['clone', '--quiet', remote, b]);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('pulls a role edit to an existing seat and reconciles once; a quiet remote reconciles nothing', async () => {
+    writeFileSync(
+      join(a, '.musterd', 'seats', 'ghost.toml'),
+      'kind = "agent"\nroles = ["engineer"]\n',
+    );
+    git(a, 'commit', '-q', '-am', 'ghost: engineer');
+    git(a, 'push', '-q');
+    let reconciled = 0;
+    const tick = makeRosterPullTick(
+      () => [b],
+      async () => {
+        reconciled += 1;
+      },
+    );
+    await tick();
+    expect(git(b, 'log', '-1', '--format=%s')).toBe('ghost: engineer');
+    expect(reconciled).toBe(1);
+    await tick();
+    expect(reconciled).toBe(1);
+  });
+
+  it('warns once for a root that keeps failing the same way, and again when it recovers then fails', async () => {
+    const warn = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    let outcome: RosterRefreshOutcome = {
+      root: b,
+      outcome: 'failed',
+      detail: 'Not possible to fast-forward',
+    };
+    const tick = makeRosterPullTick(
+      () => [b],
+      async () => {},
+      { refresh: async () => [outcome] },
+    );
+    await tick();
+    await tick();
+    expect(warn).toHaveBeenCalledTimes(1);
+    outcome = { root: b, outcome: 'current' };
+    await tick();
+    outcome = { root: b, outcome: 'failed', detail: 'Not possible to fast-forward' };
+    await tick();
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not overlap a tick that is still pulling', async () => {
+    let release!: () => void;
+    let calls = 0;
+    const tick = makeRosterPullTick(
+      () => [b],
+      async () => {},
+      {
+        refresh: async () => {
+          calls += 1;
+          await new Promise<void>((r) => (release = r));
+          return [{ root: b, outcome: 'current' }];
+        },
+      },
+    );
+    const first = tick();
+    await tick();
+    release();
+    await first;
+    expect(calls).toBe(1);
   });
 });

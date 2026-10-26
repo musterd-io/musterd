@@ -264,6 +264,70 @@ export function makeUnresolvedSeatHook(
   };
 }
 
+/**
+ * ADR 736: how often every roster root is pulled while the daemon runs, stop or no stop. An edit to
+ * a seat or role that already exists never stops a fold, so the ADR 592 hook above never pulls it;
+ * on 2026-10-21 the hub served the old roles for hours after they were pushed.
+ */
+export const ROSTER_PULL_INTERVAL_MS = 5 * 60_000;
+
+/**
+ * One timed pull of every roster root (ADR 736). The same narrow `git pull --ff-only` as the stop
+ * hook. When a root moved, `onUpdated` reconciles, so the change reaches this daemon's db even
+ * where the file watcher is unavailable. A failure is logged when it first appears or changes,
+ * not on every tick, so a root that cannot fast-forward costs one warning, not one every five
+ * minutes. A tick that is still running is not overlapped. Never throws.
+ */
+export function makeRosterPullTick(
+  roots: () => readonly string[],
+  onUpdated: () => Promise<void>,
+  deps: { refresh?: (roots: readonly string[]) => Promise<RosterRefreshOutcome[]> } = {},
+): () => Promise<void> {
+  const refresh = deps.refresh ?? refreshRosterRoots;
+  const lastFailure = new Map<string, string>();
+  let running = false;
+  return async () => {
+    const current = roots();
+    if (running || current.length === 0) return;
+    running = true;
+    try {
+      const outcomes = await refresh(current);
+      for (const o of outcomes) {
+        if (o.outcome === 'failed') {
+          const detail = o.detail ?? 'git failed';
+          if (lastFailure.get(o.root) === detail) continue;
+          lastFailure.set(o.root, detail);
+          log.warn({
+            msg: 'roster_pull_failed',
+            root: o.root,
+            detail: `${detail} — roster edits pushed elsewhere will not reach this machine until \`git -C ${o.root} pull\` succeeds (ADR 736)`,
+          });
+          continue;
+        }
+        lastFailure.delete(o.root);
+        if (o.outcome === 'updated') log.info({ msg: 'roster_pulled', root: o.root });
+      }
+      if (outcomes.some((o) => o.outcome === 'updated')) await onUpdated();
+    } catch (err) {
+      log.warn({ msg: 'roster_pull_reconcile_failed', err: String(err) });
+    } finally {
+      running = false;
+    }
+  };
+}
+
+/** Run {@link makeRosterPullTick} every {@link ROSTER_PULL_INTERVAL_MS}. Returns the stop. */
+export function startRosterPull(
+  roots: () => readonly string[],
+  onUpdated: () => Promise<void>,
+  intervalMs = ROSTER_PULL_INTERVAL_MS,
+): () => void {
+  const tick = makeRosterPullTick(roots, onUpdated);
+  const timer = setInterval(() => void tick(), intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 /** Test seam: forget every attempt this daemon recorded. */
 export function resetRosterRefreshAttempts(config: Ctx['config']): void {
   lastAttemptByConfig.delete(config);
