@@ -88,9 +88,9 @@ export function readsFlags(src: string): Set<string> {
     /\.flags\s*,\s*'([a-z0-9-]+)'/g,
     // A helper that takes the whole parsed object and a name: `parseSeconds(parsed, 'settle')`.
     /\b\w+\(\s*parsed\s*,\s*'([a-z0-9-]+)'/g,
-    // A helper that takes ONLY the name, because it closes over the flags: `intFlag('uses')`,
-    // `onOff('deliver', current)`.
-    /\b\w+\(\s*'([a-z0-9-]+)'\s*[,)]/g,
+    // A bare helper that takes ONLY the name, because it closes over the flags; exclude member
+    // methods such as `picked.includes('opencode')`, which inspect data rather than read a flag.
+    /(?<![.\w$])\w+\(\s*'([a-z0-9-]+)'\s*[,)]/g,
     // A list of names, read in a loop: `['title', 'date', 'kind'] as const`.
     /(?<![\w$.])\[\s*'([a-z0-9-]+)'(?:\s*,\s*'([a-z0-9-]+)')*\s*\]/g,
     /\.flags\['([a-z0-9-]+)'\]/g,
