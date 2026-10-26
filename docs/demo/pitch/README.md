@@ -10,17 +10,17 @@ Demo Day deck of 2026-10-09 (nick, 2026-10-13: "make it our standing pitch deck"
 | `script.md` | The spoken text, the source for every number, and the questions to expect |
 | `counts.sh` | Prints slide 7's two counts from the team's database |
 | `chain.sh` | Prints the chain behind ADR 665's table from the team's database: who signed off, who accepted, who asked, refusals, asks to people. Run by a person; re-read monthly |
-| `build.sh` | Renders `musterd-pitch.pdf` without the browser, with the founder slide last. Needs Chrome and poppler (`brew install poppler`) for the reorder |
+| `build.sh` | Renders `musterd-pitch.pdf` without the browser, in the deck's own order. Needs Chrome |
 | `avatar.jpg` | nick's headshot for the founder slide. Not committed (`.gitignore`); copy one in |
 
 ## Before an event
 
 1. `./counts.sh`, then put the lane and ask counts on slide 7 and in `script.md` (page 7 and its
-   sources row), and the writing share in `script.md` (page 9 and its sources row).
-2. Re-check the answers in `script.md` that carry a date, and anything on slides 10 and 11 marked
+   sources row), and the writing share in `script.md` (page 8 and its sources row).
+2. Re-check the answers in `script.md` that carry a date, and anything on slides 9 and 10 marked
    coming soon or next: if it shipped, the slide says so.
-3. Slide 13's two asks fit an investor room. For another room, change them in `script.md`.
-4. Slide 8 is the live Twitch demo. With no screen or no network, skip it.
+3. Slide 12's two asks fit an investor room. For another room, change them in `script.md`.
+4. Slide 13 points the room at the Twitch stream. With a screen and network, open it there.
 5. Export: press `D` in the served deck, or run `./build.sh [dir]`. If the organizers want their
    own file name, rename the PDF; do not put event names in this folder.
 
