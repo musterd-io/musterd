@@ -721,17 +721,6 @@
       "scale": 3.0
     },
     {
-      "id": "rug/nook",
-      "file": "office-art-rug-nook.webp",
-      "w": 642,
-      "h": 314,
-      "anchor": {
-        "x": 2012.61,
-        "y": 32.0
-      },
-      "scale": 3.0
-    },
-    {
       "id": "rug/pod-0",
       "file": "office-art-rug-pod-0.webp",
       "w": 1024,

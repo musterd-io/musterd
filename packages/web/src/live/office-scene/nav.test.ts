@@ -11,8 +11,8 @@ import {
   FRIDGE_STAND,
   FWD,
   LEISURE_SPOTS,
+  insideCafe,
   NOOK,
-  NOOK_RUG_R,
   NOOK_SPOTS,
   RECEPTION,
   SEAT_BACK,
@@ -78,12 +78,14 @@ describe('walkability grid', () => {
     expect(walkable(NOOK.lx - 58, NOOK.ly + 78)).toBe(true);
   });
 
-  it('stands every away member on open rug — clear of the lounge furniture', () => {
+  it('stands every away member on the café tile — clear of the lounge furniture', () => {
+    // The nook's diamond rug is gone (office v3-2): the café's ceramic tile is the zone, and an
+    // away member standing off it reads as someone who wandered out of the café.
     for (const s of NOOK_SPOTS) {
       const lx = NOOK.lx + s.dx;
       const ly = NOOK.ly + s.dy;
       expect(walkable(lx, ly)).toBe(true); // not inside couch/chairs/table/kitchenette
-      expect(Math.abs(s.dx) + Math.abs(s.dy)).toBeLessThan(NOOK_RUG_R); // on the rug
+      expect(insideCafe(lx, ly), `nook spot (${s.dx},${s.dy}) is off the café tile`).toBe(true);
     }
   });
 
@@ -121,7 +123,10 @@ describe('walkability grid', () => {
     const path = findPath(from, to, [{ lx: 40, ly: 360 }]);
     expect(path.length).toBeGreaterThan(2);
     // and softened avoidance never blocks the endpoints themselves
-    const near = findPath(from, to, [{ lx: from.lx, ly: from.ly + 10 }, { lx: to.lx, ly: to.ly }]);
+    const near = findPath(from, to, [
+      { lx: from.lx, ly: from.ly + 10 },
+      { lx: to.lx, ly: to.ly },
+    ]);
     expect(near[0]).toEqual(from);
     expect(near[near.length - 1]).toEqual(to);
   });
@@ -195,7 +200,8 @@ describe('routes never pass through furniture', () => {
     for (const slot of DESK_SLOTS) {
       for (const [name, to] of errands) {
         const deep = deepestPenetration(findPath({ lx: slot.lx, ly: slot.ly }, to));
-        if (deep > MAX_GRAZE) bad.push(`desk ${slot.id} → ${name}: ${deep.toFixed(0)} units through solid`);
+        if (deep > MAX_GRAZE)
+          bad.push(`desk ${slot.id} → ${name}: ${deep.toFixed(0)} units through solid`);
       }
     }
     expect(bad).toEqual([]);
@@ -208,7 +214,8 @@ describe('routes never pass through furniture', () => {
       const there = deepestPenetration(findPath(FRIDGE_STAND, { lx: s.lx, ly: s.ly }));
       const back = deepestPenetration(findPath({ lx: s.lx, ly: s.ly }, SINK_STAND));
       const deep = Math.max(there, back);
-      if (deep > MAX_GRAZE) bad.push(`spot ${i} (${s.zone}): ${deep.toFixed(0)} units through solid`);
+      if (deep > MAX_GRAZE)
+        bad.push(`spot ${i} (${s.zone}): ${deep.toFixed(0)} units through solid`);
     }
     expect(bad).toEqual([]);
   });
@@ -233,7 +240,8 @@ describe('routes never pass through furniture', () => {
       }
       // A chair seats its occupant ~`CHAIR_OFF` back from where they stood to sit, so floor within 60
       // is what a real approach looks like.
-      if (nearest === Infinity) bad.push(`spot ${i} (${s.zone}): no walkable floor within 60 units`);
+      if (nearest === Infinity)
+        bad.push(`spot ${i} (${s.zone}): no walkable floor within 60 units`);
     }
     expect(bad).toEqual([]);
   });
@@ -241,7 +249,11 @@ describe('routes never pass through furniture', () => {
 
 describe('the front desk blocks', () => {
   it('routes an arrival around the counter, never through it', () => {
-    const path = findPath({ lx: ENTRANCE.lx, ly: ENTRANCE.ly }, { lx: DESK_SLOTS[0]!.lx, ly: DESK_SLOTS[0]!.ly - 60 }, []);
+    const path = findPath(
+      { lx: ENTRANCE.lx, ly: ENTRANCE.ly },
+      { lx: DESK_SLOTS[0]!.lx, ly: DESK_SLOTS[0]!.ly - 60 },
+      [],
+    );
     for (const step of path) {
       const inDesk =
         Math.abs(step.lx - FRONT_DESK.lx) < FRONT_DESK.long / 2 &&
@@ -276,12 +288,14 @@ describe('the front desk blocks', () => {
       ['cooler', COOLER_STAND],
       ['sink', SINK_STAND],
     ];
-    for (const [name, p] of dwells) expect(walkable(p.lx, p.ly), `${name} (${p.lx},${p.ly})`).toBe(true);
+    for (const [name, p] of dwells)
+      expect(walkable(p.lx, p.ly), `${name} (${p.lx},${p.ly})`).toBe(true);
     // Reading spots are the one leisure "spot" that is a standing place rather than a seat, so they are
     // held to the same rule. (The seated ones are *meant* to be on furniture.)
     for (let i = 0; i < LEISURE_SPOTS.length; i++) {
       const s = LEISURE_SPOTS[i]!;
-      if (s.sit === 0) expect(walkable(s.lx, s.ly), `leisure ${i} ${s.zone} (${s.lx},${s.ly})`).toBe(true);
+      if (s.sit === 0)
+        expect(walkable(s.lx, s.ly), `leisure ${i} ${s.zone} (${s.lx},${s.ly})`).toBe(true);
     }
   });
 });

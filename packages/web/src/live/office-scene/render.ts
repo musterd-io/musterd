@@ -2,7 +2,19 @@ import { canvasFont } from '../canvasFont';
 import type { WorkingHours } from '@musterd/protocol';
 import type { Appearance } from './appearance';
 import { animFor, drawCharacter } from './character';
-import { cameraOf, CORNER_CAMERA, depth, FLOOR, project, THICK, WALL_H, type Camera, type Fit, type FitBox, type Pt } from './iso';
+import {
+  cameraOf,
+  CORNER_CAMERA,
+  depth,
+  FLOOR,
+  project,
+  THICK,
+  WALL_H,
+  type Camera,
+  type Fit,
+  type FitBox,
+  type Pt,
+} from './iso';
 import type { SpriteCache } from './sprite-cache';
 import type { PetState } from './pet';
 import { RECEPTION_CUE_S, RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
@@ -610,7 +622,12 @@ function wallClock(
   const hand = (turns: number, len: number, w: number): void => {
     const a = turns * Math.PI * 2;
     const c = wallPt(edge, tc, uc, fit);
-    const tip = wallPt(edge, tc + (Math.sin(a) * len) / FLOOR, uc + (Math.cos(a) * len) / WALL_H, fit);
+    const tip = wallPt(
+      edge,
+      tc + (Math.sin(a) * len) / FLOOR,
+      uc + (Math.cos(a) * len) / WALL_H,
+      fit,
+    );
     ctx.strokeStyle = DRESS.hand;
     ctx.lineWidth = w * fit.scale;
     ctx.lineCap = 'round';
@@ -709,22 +726,49 @@ function wallLaneBoard(
       const age = col.stickies[s]!.age;
       const sw = stickySway(age);
       // Shadow first, offset down-right: paper held a hair off the cork rather than printed on it.
-      quad(ctx, [p(l + 0.8, top - 0.8), p(r + 0.8, top - 0.8), p(r + 0.8 + sw, top - noteH - 0.8), p(l + 0.8 + sw, top - noteH - 0.8)], PINBOARD.noteCast);
+      quad(
+        ctx,
+        [
+          p(l + 0.8, top - 0.8),
+          p(r + 0.8, top - 0.8),
+          p(r + 0.8 + sw, top - noteH - 0.8),
+          p(l + 0.8 + sw, top - noteH - 0.8),
+        ],
+        PINBOARD.noteCast,
+      );
       // A stopped plan's card (lane 01M4V9YKMG) is the same paper sun-bleached: the wash pulled toward
       // white, the tape half as present, and the bottom-right corner lifting off the cork — a wedge of
       // shadow under a lighter wedge of the paper's back. It is a paint, not a motion.
       const faded = col.stickies[s]!.faded === true;
-      quad(ctx, [p(l, top), p(r, top), p(r + sw, top - noteH), p(l + sw, top - noteH)], faded ? tone.faded : tone.note);
+      quad(
+        ctx,
+        [p(l, top), p(r, top), p(r + sw, top - noteH), p(l + sw, top - noteH)],
+        faded ? tone.faded : tone.note,
+      );
       if (faded) {
         const cx = r + sw;
         const cy = top - noteH;
-        quad(ctx, [p(cx - 4.5, cy), p(cx, cy), p(cx, cy + 3.5), p(cx - 4.5, cy)], PINBOARD.curlCast);
-        quad(ctx, [p(cx - 4, cy + 0.4), p(cx - 0.6, cy + 3.2), p(cx - 0.6, cy + 0.4), p(cx - 4, cy + 0.4)], PINBOARD.curlBack);
+        quad(
+          ctx,
+          [p(cx - 4.5, cy), p(cx, cy), p(cx, cy + 3.5), p(cx - 4.5, cy)],
+          PINBOARD.curlCast,
+        );
+        quad(
+          ctx,
+          [p(cx - 4, cy + 0.4), p(cx - 0.6, cy + 3.2), p(cx - 0.6, cy + 0.4), p(cx - 4, cy + 0.4)],
+          PINBOARD.curlBack,
+        );
       }
       // The washi tab, straddling the note's top edge onto the cork — the tape is doing the holding,
       // so it has to overlap both. Its own sheen line is what stops it reading as a painted stripe.
       const tw = 8;
-      rect(mid - tw / 2 + ja, top - 1.6, mid + tw / 2 + ja, top + 1.6, faded ? tone.fadedTape : tone.tape);
+      rect(
+        mid - tw / 2 + ja,
+        top - 1.6,
+        mid + tw / 2 + ja,
+        top + 1.6,
+        faded ? tone.fadedTape : tone.tape,
+      );
       rect(mid - tw / 2 + ja, top + 1, mid + tw / 2 + ja, top + 1.6, PINBOARD.tapeSheen);
     }
     // The cork keeps its tack holes: every slot a card has held (`held`, this viewer's high-water mark)
@@ -735,8 +779,18 @@ function wallLaneBoard(
     }
     // The overflow badge — the one piece of type, at the size that survives the downscale.
     if (col.count > STICKY_CAP) {
-      const b = H / 2 - M - 6 - STICKY_CAP * (13.5) - 4;
-      wallText(ctx, fit, edge, tc + mid / FLOOR, uc + b / WALL_H, `+${col.count - STICKY_CAP}`, 9, tone.cap, 'center');
+      const b = H / 2 - M - 6 - STICKY_CAP * 13.5 - 4;
+      wallText(
+        ctx,
+        fit,
+        edge,
+        tc + mid / FLOOR,
+        uc + b / WALL_H,
+        `+${col.count - STICKY_CAP}`,
+        9,
+        tone.cap,
+        'center',
+      );
     }
   }
 
@@ -746,8 +800,22 @@ function wallLaneBoard(
   // waiting one is the plainest paper on the board. The section beside the room says the rest.
   const RAIL = H / 2 - 71; // where the old board's cork ended: the columns above are untouched
   rect(-W / 2 + FR, RAIL - 1.6, W / 2 - FR, RAIL, PINBOARD.oak);
-  stroke([[-W / 2 + FR, RAIL], [W / 2 - FR, RAIL]], 0.7, PINBOARD.oakLit);
-  stroke([[-W / 2 + FR, RAIL - 1.6], [W / 2 - FR, RAIL - 1.6]], 0.7, PINBOARD.inner);
+  stroke(
+    [
+      [-W / 2 + FR, RAIL],
+      [W / 2 - FR, RAIL],
+    ],
+    0.7,
+    PINBOARD.oakLit,
+  );
+  stroke(
+    [
+      [-W / 2 + FR, RAIL - 1.6],
+      [W / 2 - FR, RAIL - 1.6],
+    ],
+    0.7,
+    PINBOARD.inner,
+  );
   const pins = readPins(data?.reads);
   const slotW = (W - M * 2) / READ_PIN_CAP;
   for (let i = 0; i < pins.length; i++) {
@@ -758,20 +826,70 @@ function wallLaneBoard(
     const tw = 10;
     const th = 8;
     const slip = pin === 'overdue' ? 2.6 : 0; // hung from one pin, the tag swings out of true
-    quad(ctx, [p(c - tw / 2 + 0.8, top - 0.8), p(c + tw / 2 + 0.8, top - 0.8), p(c + tw / 2 + 0.8 + slip, top - th - 0.8), p(c - tw / 2 + 0.8 + slip, top - th - 0.8)], PINBOARD.noteCast);
-    quad(ctx, [p(c - tw / 2, top), p(c + tw / 2, top), p(c + tw / 2 + slip, top - th), p(c - tw / 2 + slip, top - th)], look.tag);
+    quad(
+      ctx,
+      [
+        p(c - tw / 2 + 0.8, top - 0.8),
+        p(c + tw / 2 + 0.8, top - 0.8),
+        p(c + tw / 2 + 0.8 + slip, top - th - 0.8),
+        p(c - tw / 2 + 0.8 + slip, top - th - 0.8),
+      ],
+      PINBOARD.noteCast,
+    );
+    quad(
+      ctx,
+      [
+        p(c - tw / 2, top),
+        p(c + tw / 2, top),
+        p(c + tw / 2 + slip, top - th),
+        p(c - tw / 2 + slip, top - th),
+      ],
+      look.tag,
+    );
     const mid = c + slip / 2;
     if (pin === 'read')
-      stroke([[mid - 2.4, top - 4.2], [mid - 0.8, top - 5.8], [mid + 2.6, top - 2.4]], 1, look.mark!);
+      stroke(
+        [
+          [mid - 2.4, top - 4.2],
+          [mid - 0.8, top - 5.8],
+          [mid + 2.6, top - 2.4],
+        ],
+        1,
+        look.mark!,
+      );
     if (pin === 'more') {
-      stroke([[mid - 2.4, top - 4.2], [mid + 2.4, top - 4.2]], 1, look.mark!);
-      stroke([[mid, top - 1.8], [mid, top - 6.6]], 1, look.mark!);
+      stroke(
+        [
+          [mid - 2.4, top - 4.2],
+          [mid + 2.4, top - 4.2],
+        ],
+        1,
+        look.mark!,
+      );
+      stroke(
+        [
+          [mid, top - 1.8],
+          [mid, top - 6.6],
+        ],
+        1,
+        look.mark!,
+      );
     }
     rect(c - 1.2, top - 1.8, c + 1.2, top + 0.6, look.pin); // the tack's head
   }
 
   // Frame thickness — the outer edge of the oak, so the board reads as an object standing off the wall.
-  stroke([[-W / 2, -H / 2], [W / 2, -H / 2], [W / 2, H / 2], [-W / 2, H / 2], [-W / 2, -H / 2]], 0.9, PINBOARD.oakShade);
+  stroke(
+    [
+      [-W / 2, -H / 2],
+      [W / 2, -H / 2],
+      [W / 2, H / 2],
+      [-W / 2, H / 2],
+      [-W / 2, -H / 2],
+    ],
+    0.9,
+    PINBOARD.oakShade,
+  );
 }
 
 /**
@@ -789,19 +907,61 @@ function wallLaneBoard(
  * same paper, left in the window too long. (Pulling toward white was tried first, 2026-10-13: at the
  * wall's scale a whiter cream card read as pale, not old; yellowed grey reads as old beside fresh.)
  */
-const WALLBOARD_TONES: ReadonlyArray<{ cap: string; note: string; tape: string; faded: string; fadedTape: string }> = [
+const WALLBOARD_TONES: ReadonlyArray<{
+  cap: string;
+  note: string;
+  tape: string;
+  faded: string;
+  fadedTape: string;
+}> = [
   // open — warm unbleached paper
-  { cap: '#B4A88F', note: '#EFE8D8', tape: 'rgba(180, 168, 143, 0.75)', faded: '#E4DED1', fadedTape: 'rgba(180, 168, 143, 0.35)' },
+  {
+    cap: '#B4A88F',
+    note: '#EFE8D8',
+    tape: 'rgba(180, 168, 143, 0.75)',
+    faded: '#E4DED1',
+    fadedTape: 'rgba(180, 168, 143, 0.35)',
+  },
   // claimed — lane blue, lightened: picked up, not yet moving
-  { cap: '#8FB0E6', note: '#E2EBF8', tape: 'rgba(143, 176, 230, 0.75)', faded: '#DEDFDF', fadedTape: 'rgba(143, 176, 230, 0.35)' },
+  {
+    cap: '#8FB0E6',
+    note: '#E2EBF8',
+    tape: 'rgba(143, 176, 230, 0.75)',
+    faded: '#DEDFDF',
+    fadedTape: 'rgba(143, 176, 230, 0.35)',
+  },
   // active — the lane tone itself (--lc-lane)
-  { cap: '#3F74C4', note: '#D6E2F4', tape: 'rgba(63, 116, 196, 0.75)', faded: '#D8DBDE', fadedTape: 'rgba(63, 116, 196, 0.35)' },
+  {
+    cap: '#3F74C4',
+    note: '#D6E2F4',
+    tape: 'rgba(63, 116, 196, 0.75)',
+    faded: '#D8DBDE',
+    fadedTape: 'rgba(63, 116, 196, 0.35)',
+  },
   // blocked — --lc-danger
-  { cap: '#D1503F', note: '#F5DAD4', tape: 'rgba(209, 80, 63, 0.75)', faded: '#E6D7CF', fadedTape: 'rgba(209, 80, 63, 0.35)' },
+  {
+    cap: '#D1503F',
+    note: '#F5DAD4',
+    tape: 'rgba(209, 80, 63, 0.75)',
+    faded: '#E6D7CF',
+    fadedTape: 'rgba(209, 80, 63, 0.35)',
+  },
   // awaiting acceptance — blue leaning patient
-  { cap: '#6A93D4', note: '#DDE6F6', tape: 'rgba(106, 147, 212, 0.75)', faded: '#DBDDDE', fadedTape: 'rgba(106, 147, 212, 0.35)' },
+  {
+    cap: '#6A93D4',
+    note: '#DDE6F6',
+    tape: 'rgba(106, 147, 212, 0.75)',
+    faded: '#DBDDDE',
+    fadedTape: 'rgba(106, 147, 212, 0.35)',
+  },
   // done — --lc-success
-  { cap: '#2F9E6A', note: '#D5ECDF', tape: 'rgba(47, 158, 106, 0.75)', faded: '#D8DFD4', fadedTape: 'rgba(47, 158, 106, 0.35)' },
+  {
+    cap: '#2F9E6A',
+    note: '#D5ECDF',
+    tape: 'rgba(47, 158, 106, 0.75)',
+    faded: '#D8DFD4',
+    fadedTape: 'rgba(47, 158, 106, 0.35)',
+  },
 ];
 
 /**
@@ -891,7 +1051,12 @@ function wallText(
  * wall transform *off*: one text unit is one logical FLOOR unit either way, and `measureText` is the only
  * honest answer once copy is data (a schedule can say `MON · WED · FRI` as easily as `MON–FRI`).
  */
-function fitTextSize(ctx: CanvasRenderingContext2D, text: string, size: number, maxUnits: number): number {
+function fitTextSize(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  size: number,
+  maxUnits: number,
+): number {
   ctx.save();
   ctx.font = canvasFont(size, '--font-sans', 700);
   const width = ctx.measureText(text).width;
@@ -937,12 +1102,14 @@ export function drawWalls(
       if (a.wall !== wallIndex) return;
       // the frame and mat blit at the print's floor point, and the print paints on the mat
       const [fx, fy] = edge(a.tc);
-      if (blitIf(ctx, fit, art, `wall/art-${i}`, fx, fy)) wallArt(ctx, fit, edge, a.tc, a.uc, a.w, a.h, a.motif);
+      if (blitIf(ctx, fit, art, `wall/art-${i}`, fx, fy))
+        wallArt(ctx, fit, edge, a.tc, a.uc, a.w, a.h, a.motif);
     });
     if (wallIndex === 1) {
       const [cx, cy] = edge(0.52);
       run(() => {
-        if (blitIf(ctx, fit, art, 'wall/clock', cx, cy)) wallClock(ctx, fit, edge, 0.52, 0.62, env.hours); // dead centre, between the windows
+        if (blitIf(ctx, fit, art, 'wall/clock', cx, cy))
+          wallClock(ctx, fit, edge, 0.52, 0.62, env.hours); // dead centre, between the windows
       });
       // Painted with or without a schedule: on /live it is the door to the team's settings, so a team
       // that never set hours still needs something to reach for (nick, 2026-10-19).
@@ -971,7 +1138,11 @@ export function drawWalls(
  * people chose to inhabit. The bulbs stay on in daylight too, but read as tiny pearl pins rather
  * than glare. Its own function because it paints on the stage, over the blitted wall (see `drawWalls`).
  */
-function cableStrand(ctx: CanvasRenderingContext2D, fit: Fit, edge: (t: number) => [number, number]): void {
+function cableStrand(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  edge: (t: number) => [number, number],
+): void {
   const cable = cablePts(edge, fit);
   ctx.save();
   ctx.strokeStyle = 'rgba(91, 61, 38, 0.46)';
@@ -1033,9 +1204,19 @@ function workingHoursSign(
 
   // The header: mustard, with a hairline of shadow under it so the band sits *on* the sheet.
   wallRect(ctx, fit, edge, T(-halfW + 4), U(BAND), T(halfW - 4), U(halfH - 4), '#e1ad01');
-  wallRect(ctx, fit, edge, T(-halfW + 4), U(BAND - 1.5), T(halfW - 4), U(BAND), 'rgba(120,84,20,0.28)');
+  wallRect(
+    ctx,
+    fit,
+    edge,
+    T(-halfW + 4),
+    U(BAND - 1.5),
+    T(halfW - 4),
+    U(BAND),
+    'rgba(120,84,20,0.28)',
+  );
   // Two punched holes in the band, the way a wall calendar's top sheet is punched.
-  for (const dx of [-halfW + 12, halfW - 12]) wallDisc(ctx, fit, edge, T(dx), U(halfH - 9), 2.2, '#b8862a');
+  for (const dx of [-halfW + 12, halfW - 12])
+    wallDisc(ctx, fit, edge, T(dx), U(halfH - 9), 2.2, '#b8862a');
 
   // The days on the band, the hours across the sheet. Both shrink to the paper rather than overrun it:
   // days can be a list ("MON · WED · FRI"), not just a run.
@@ -1134,7 +1315,8 @@ export function hoursAnchor(fit: Fit): {
   const x = Math.min(...xs);
   const y = Math.min(...ys);
   // The frame's bottom edge: the screen-left and screen-right of its two lower corners.
-  const [l, r] = corners[0]!.x <= corners[1]!.x ? [corners[0]!, corners[1]!] : [corners[1]!, corners[0]!];
+  const [l, r] =
+    corners[0]!.x <= corners[1]!.x ? [corners[0]!, corners[1]!] : [corners[1]!, corners[0]!];
   const tiltDeg = (Math.atan2(r.y - l.y, r.x - l.x) * 180) / Math.PI;
   return {
     x,
@@ -1143,7 +1325,12 @@ export function hoursAnchor(fit: Fit): {
     h: Math.max(...ys) - y,
     // The tab spans the middle 60% of the edge; its left end sits ON the slanted edge, not level
     // with the frame's corner, or the skew leaves it hanging off (nick, 2026-10-20).
-    foot: { x: l.x + (r.x - l.x) * 0.2 - x, y: l.y + (r.y - l.y) * 0.2 - y, w: (r.x - l.x) * 0.6, unit: fit.scale },
+    foot: {
+      x: l.x + (r.x - l.x) * 0.2 - x,
+      y: l.y + (r.y - l.y) * 0.2 - y,
+      w: (r.x - l.x) * 0.6,
+      unit: fit.scale,
+    },
     tiltDeg,
   };
 }
@@ -1298,15 +1485,35 @@ export function receptionistPose(r: ReceptionistState): {
 } {
   const asleep = r.mode === 'asleep';
   if (r.mode === 'call')
-    return { gesture: GESTURE.call, gestureT: Math.min(0.98, r.modeT / Math.max(r.beatLen, 0.01)), carry: 'phone', typing: false };
+    return {
+      gesture: GESTURE.call,
+      gestureT: Math.min(0.98, r.modeT / Math.max(r.beatLen, 0.01)),
+      carry: 'phone',
+      typing: false,
+    };
   if (r.mode === 'ringing')
-    return { gesture: GESTURE.call, gestureT: Math.min(0.98, r.modeT / RECEPTION_CUE_S.ringing), carry: 'phone', typing: false };
+    return {
+      gesture: GESTURE.call,
+      gestureT: Math.min(0.98, r.modeT / RECEPTION_CUE_S.ringing),
+      carry: 'phone',
+      typing: false,
+    };
   if (r.mode === 'toss')
-    return { gesture: GESTURE.wave, gestureT: Math.min(0.98, r.modeT / RECEPTION_CUE_S.toss), carry: null, typing: false };
+    return {
+      gesture: GESTURE.wave,
+      gestureT: Math.min(0.98, r.modeT / RECEPTION_CUE_S.toss),
+      carry: null,
+      typing: false,
+    };
   if (asleep || r.mode === 'waking')
     // chin-on-hand reads as dozing at a desk; asleep holds the plateau — a still slump, no animation
     return { gesture: GESTURE.chin, gestureT: asleep ? 0.5 : null, carry: null, typing: false };
-  return { gesture: 0, gestureT: null, carry: null, typing: r.mode === 'typing' || r.mode === 'label' };
+  return {
+    gesture: 0,
+    gestureT: null,
+    carry: null,
+    typing: r.mode === 'typing' || r.mode === 'label',
+  };
 }
 
 function drawReceptionist(
@@ -1318,10 +1525,7 @@ function drawReceptionist(
   figure: { assets: FigureAssets; tint: string },
 ): void {
   const asleep = r.mode === 'asleep';
-  const wake =
-    asleep ? 0
-    : r.mode === 'waking' ? Math.min(1, r.modeT / RECEPTIONIST_WAKE_S)
-    : 1;
+  const wake = asleep ? 0 : r.mode === 'waking' ? Math.min(1, r.modeT / RECEPTIONIST_WAKE_S) : 1;
   // Asleep is a slump, not a separate drawing: the same seated figure folded forward over the desk.
   // `sit` stays 1 throughout — she never stands up, which is most of what "never leaves the desk"
   // means to the painter.
@@ -1345,7 +1549,13 @@ function drawReceptionist(
     moving: false,
   };
   const seed = RECEPTIONIST_SEED / 0xffffffff;
-  const { anim, startT, frame } = animFor(pose, typing && !asleep ? 1 : 0, t, seed, figure.assets.spec.anims);
+  const { anim, startT, frame } = animFor(
+    pose,
+    typing && !asleep ? 1 : 0,
+    t,
+    seed,
+    figure.assets.spec.anims,
+  );
   drawCharacter(ctx, fit, {
     lx: pose.lx,
     ly: pose.ly,
@@ -1393,7 +1603,11 @@ function receptionItems(
   /* The front desk is one asset (plan Task 6); its screen is still — the typing flicker the painter had
      is not rendered yet. */
   const deskDraw = blitDraw(fit, rendered, 'reception/desk', FRONT_DESK.lx, FRONT_DESK.ly);
-  const still = (d: number, key: string, draw: (c: CanvasRenderingContext2D) => void): DepthItem => ({
+  const still = (
+    d: number,
+    key: string,
+    draw: (c: CanvasRenderingContext2D) => void,
+  ): DepthItem => ({
     d,
     fn: () => draw(ctx),
     parts: [{ kind: 'sprite', key: `${key}·${statKey}`, draw }],
@@ -1401,12 +1615,29 @@ function receptionItems(
   return [
     // She sorts at her own feet, north of the counter, so the counter paints over her lower body.
     ...(figure
-      ? [{ d: depth(RECEPTIONIST.lx, RECEPTIONIST.ly), fn: () => drawReceptionist(ctx, fit, recep ?? SLEEPING_RECEPTIONIST, t, figure) }]
+      ? [
+          {
+            d: depth(RECEPTIONIST.lx, RECEPTIONIST.ly),
+            fn: () => drawReceptionist(ctx, fit, recep ?? SLEEPING_RECEPTIONIST, t, figure),
+          },
+        ]
       : []),
     { d: depth(FRONT_DESK.lx, FRONT_DESK.ly), fn: () => deskDraw(ctx) },
-    still(depth(R.endTable.lx, R.endTable.ly), 'recep·endtable', blitDraw(fit, rendered, 'reception/endtable', R.endTable.lx, R.endTable.ly)),
-    still(depth(R.chair.lx, R.chair.ly), 'recep·armchair', blitDraw(fit, rendered, 'reception/armchair', R.chair.lx, R.chair.ly)),
-    still(depth(R.plant.lx, R.plant.ly), 'recep·plant', blitDraw(fit, rendered, 'plant/fiddle', R.plant.lx, R.plant.ly)),
+    still(
+      depth(R.endTable.lx, R.endTable.ly),
+      'recep·endtable',
+      blitDraw(fit, rendered, 'reception/endtable', R.endTable.lx, R.endTable.ly),
+    ),
+    still(
+      depth(R.chair.lx, R.chair.ly),
+      'recep·armchair',
+      blitDraw(fit, rendered, 'reception/armchair', R.chair.lx, R.chair.ly),
+    ),
+    still(
+      depth(R.plant.lx, R.plant.ly),
+      'recep·plant',
+      blitDraw(fit, rendered, 'plant/fiddle', R.plant.lx, R.plant.ly),
+    ),
   ];
 }
 
@@ -1487,7 +1718,13 @@ function blitIf(
  * sprite cache rasterises the blit like any other item — the depth item, its key and its order are the
  * painters' (lane 01M5D8EJ40: the painters went; the items stayed).
  */
-function blitDraw(fit: Fit, rendered: RenderedAssets, id: string, lx: number, ly: number): (c: CanvasRenderingContext2D) => void {
+function blitDraw(
+  fit: Fit,
+  rendered: RenderedAssets,
+  id: string,
+  lx: number,
+  ly: number,
+): (c: CanvasRenderingContext2D) => void {
   return (c) => {
     blitIf(c, fit, rendered, id, lx, ly);
   };
@@ -1496,15 +1733,18 @@ function blitDraw(fit: Fit, rendered: RenderedAssets, id: string, lx: number, ly
 /** Convex hull (monotone chain) of a point set — the silhouette an extruded box clips to. */
 function hull(pts: Pt[]): Pt[] {
   const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
-  const cross = (o: Pt, a: Pt, b: Pt): number => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const cross = (o: Pt, a: Pt, b: Pt): number =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
   const lower: Pt[] = [];
   for (const q of p) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, q) <= 0) lower.pop();
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, q) <= 0)
+      lower.pop();
     lower.push(q);
   }
   const upper: Pt[] = [];
   for (const q of p.reverse()) {
-    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, q) <= 0) upper.pop();
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, q) <= 0)
+      upper.pop();
     upper.push(q);
   }
   return [...lower.slice(0, -1), ...upper.slice(0, -1)];
@@ -1522,23 +1762,29 @@ function nookItems(
   /** The static-sprite key suffix (`renderScene`'s `statKey`): fit, dpr, palette. */
   statKey: string,
   rendered: RenderedAssets,
-): { rug: (c: CanvasRenderingContext2D) => void; items: DepthItem[] } {
+): { items: DepthItem[] } {
   const { lx, ly } = NOOK;
   const L = LOUNGE;
   const r = (id: string, dx: number, dy: number) => blitDraw(fit, rendered, id, lx + dx, ly + dy);
-  const at = (dx: number, dy: number, key: string, draw: (c: CanvasRenderingContext2D) => void): DepthItem => ({
+  const at = (
+    dx: number,
+    dy: number,
+    key: string,
+    draw: (c: CanvasRenderingContext2D) => void,
+  ): DepthItem => ({
     d: depth(lx + dx, ly + dy),
     fn: () => draw(ctx),
     parts: [{ kind: 'sprite', key: `nook·${key}·${statKey}`, draw }],
   });
   return {
-    rug: r('rug/nook', 0, 0),
     items: [
       at(
         L.fridge.dx,
         L.fridge.dy,
         `fridge·${fridgeOpen ? 'open' : 'shut'}`,
-        fridgeOpen ? (c) => fridge(c, fit, lx + L.fridge.dx, ly + L.fridge.dy) : r('nook/fridge', L.fridge.dx, L.fridge.dy),
+        fridgeOpen
+          ? (c) => fridge(c, fit, lx + L.fridge.dx, ly + L.fridge.dy)
+          : r('nook/fridge', L.fridge.dx, L.fridge.dy),
       ),
       at(L.counter.dx, L.counter.dy, 'counter', r('nook/counter', L.counter.dx, L.counter.dy)),
       at(L.cooler.dx, L.cooler.dy, 'cooler', r('nook/cooler', L.cooler.dx, L.cooler.dy)),
@@ -1607,12 +1853,24 @@ function drawCountPill(ctx: CanvasRenderingContext2D, at: Pt, text: string, scal
  * for the leftward ones. Small on purpose — dog-sized next to the figures — so judge it at 4× on
  * /character-sheet, not here. No sheet (`dog.json` missing or unusable) draws no dog.
  */
-export function drawDog(ctx: CanvasRenderingContext2D, fit: Fit, pet: PetState, t: number, rendered: RenderedAssets): void {
+export function drawDog(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  pet: PetState,
+  t: number,
+  rendered: RenderedAssets,
+): void {
   if (rendered.dog) drawRenderedDog(ctx, fit, pet, t, rendered.dog);
 }
 
 /** A speech/thought bubble over an actor's head (raised-hand `?`, urgent `!`). Screen-space. */
-function bubble(ctx: CanvasRenderingContext2D, x: number, y: number, glyph: '?' | '!', s: number): void {
+function bubble(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  glyph: '?' | '!',
+  s: number,
+): void {
   const w = 22 * s;
   const h = 18 * s;
   roundRect(ctx, x - w / 2, y - h, w, h, 6 * s, '#20242b');
@@ -1654,7 +1912,10 @@ export function drawActor(
   // Typing is gated on posture (`sit > 0.9`, no beat playing) and its amplitude is the seat's PULSE —
   // distinct harness tool calls in the last minute (ADR 660) — so a `working` seat with no live pulse
   // sits still at its lit screen.
-  const typing = pose.sit > 0.9 && pose.gesture === 0 ? typingFromPulse(pulseIntensity(node.pulse, Date.now()), seed, t) : 0;
+  const typing =
+    pose.sit > 0.9 && pose.gesture === 0
+      ? typingFromPulse(pulseIntensity(node.pulse, Date.now()), seed, t)
+      : 0;
   const { anim, startT, frame } = animFor(pose, typing, t, seed, figure.assets.spec.anims);
   drawCharacter(
     ctx,
@@ -1687,7 +1948,13 @@ export function drawActor(
     const p = project(pose.lx, pose.ly, fit);
     // Over the crown, which the sheet's spec gives (96 was the painted member's).
     const crown = figure.assets.spec.height ?? 96;
-    bubble(ctx, p.x, p.y - (pose.small ? (crown + 2) * 0.76 : crown + 2) * fit.scale, pose.bubble, fit.scale);
+    bubble(
+      ctx,
+      p.x,
+      p.y - (pose.small ? (crown + 2) * 0.76 : crown + 2) * fit.scale,
+      pose.bubble,
+      fit.scale,
+    );
   }
 }
 
@@ -1720,9 +1987,18 @@ const CHAIR_ARM_SALT = 22;
 // each desk's chair/monitor is a curated spread: every kind appears, and every pod shows a mix (adjacent
 // desks differ), which is exactly what makes the variety read. Still fully deterministic + stable per frame.
 const CHAIR_KINDS_BY_ID: readonly ChairKind[] = [
-  'gamer', 'wheeled', 'exec', 'task', // pod 0 (top — two desks face the camera)
-  'exec', 'gamer', 'task', 'wheeled', // pod 1 (centre)
-  'wheeled', 'exec', 'gamer', 'task', // pod 2 (left)
+  'gamer',
+  'wheeled',
+  'exec',
+  'task', // pod 0 (top — two desks face the camera)
+  'exec',
+  'gamer',
+  'task',
+  'wheeled', // pod 1 (centre)
+  'wheeled',
+  'exec',
+  'gamer',
+  'task', // pod 2 (left)
 ];
 
 /** The ambient scheduler used to import this so it could skip the one kind with no casters. Every kind
@@ -1787,9 +2063,18 @@ type MonitorSetup = 'single' | 'dual' | 'ultrawide';
 // owner might be away or offline. Every desk now carries the same dock instead (see `deskDock`), empty
 // until its owner is working. Monitor variety is monitors.
 const MONITOR_SETUPS_BY_ID: readonly MonitorSetup[] = [
-  'single', 'dual', 'single', 'ultrawide', // pod 0 (top — 2,3 face the camera)
-  'single', 'dual', 'ultrawide', 'single', // pod 1 (centre — 6,7 face the camera)
-  'single', 'dual', 'ultrawide', 'dual', // pod 2 (left — 10,11 face the camera)
+  'single',
+  'dual',
+  'single',
+  'ultrawide', // pod 0 (top — 2,3 face the camera)
+  'single',
+  'dual',
+  'ultrawide',
+  'single', // pod 1 (centre — 6,7 face the camera)
+  'single',
+  'dual',
+  'ultrawide',
+  'dual', // pod 2 (left — 10,11 face the camera)
 ];
 function monitorSetupFor(id: number): MonitorSetup {
   return MONITOR_SETUPS_BY_ID[id % MONITOR_SETUPS_BY_ID.length]!;
@@ -1820,7 +2105,15 @@ const SCREEN_BG = '#2f9a8a';
  * bottom edge runs BL→BR in projected space and its vertical is a straight screen-space lift of `vh`. */
 type FaceMap = (u: number, v: number) => Pt;
 
-function faceQuad(ctx: CanvasRenderingContext2D, map: FaceMap, u0: number, v0: number, u1: number, v1: number, fill: string): void {
+function faceQuad(
+  ctx: CanvasRenderingContext2D,
+  map: FaceMap,
+  u0: number,
+  v0: number,
+  u1: number,
+  v1: number,
+  fill: string,
+): void {
   quad(ctx, [map(u0, v0), map(u1, v0), map(u1, v1), map(u0, v1)], fill);
 }
 
@@ -1848,7 +2141,15 @@ function drawScreenLife(
   // A slow aurora wash behind the windows — two soft drifting bands, so even the "wallpaper" is alive.
   for (let a = 0; a < 2; a++) {
     const cu = 0.5 + 0.42 * Math.sin(t * 0.21 + a * 2.4 + seed);
-    faceQuad(ctx, map, cu - 0.26, 0, cu + 0.26, 1, a === 0 ? 'rgba(213, 255, 244, 0.16)' : 'rgba(255, 224, 130, 0.13)');
+    faceQuad(
+      ctx,
+      map,
+      cu - 0.26,
+      0,
+      cu + 0.26,
+      1,
+      a === 0 ? 'rgba(213, 255, 244, 0.16)' : 'rgba(255, 224, 130, 0.13)',
+    );
   }
 
   const tiny = wPx < 26 * scale; // laptop lids and far-off panels: fewer, chunkier details
@@ -1884,10 +2185,26 @@ function drawScreenLife(
       const lv = wv + wh - barH - (row + 1) * lineH;
       const hue = CODE_HUES[(seed + gen + row * 2 + k) % CODE_HUES.length]!;
       const indent = scrRnd(seed, k * 97 + gen * 13 + row * 31 + 7) < 0.35 ? 0.08 : 0;
-      faceQuad(ctx, map, wu + 0.05 + indent, lv, wu + 0.05 + indent + full * frac, lv + lineH * 0.45, hue);
+      faceQuad(
+        ctx,
+        map,
+        wu + 0.05 + indent,
+        lv,
+        wu + 0.05 + indent + full * frac,
+        lv + lineH * 0.45,
+        hue,
+      );
       if (frac < 1 && Math.floor(t * 2.6) % 2 === 0) {
         // the blinking caret, riding the end of the active line
-        faceQuad(ctx, map, wu + 0.05 + indent + full * frac, lv - lineH * 0.1, wu + 0.07 + indent + full * frac, lv + lineH * 0.6, '#fff6da');
+        faceQuad(
+          ctx,
+          map,
+          wu + 0.05 + indent + full * frac,
+          lv - lineH * 0.1,
+          wu + 0.07 + indent + full * frac,
+          lv + lineH * 0.6,
+          '#fff6da',
+        );
       }
     }
   }
@@ -1900,12 +2217,33 @@ function drawScreenLife(
     const ph = (t / period + scrRnd(seed, 310 + s)) % 1;
     const a = Math.sin(ph * Math.PI);
     if (a < 0.05) continue;
-    const p = map(0.15 + scrRnd(seed, 320 + s) * 0.7 + 0.08 * Math.sin(t * 1.7 + s * 3), 0.55 + ph * 0.9);
+    const p = map(
+      0.15 + scrRnd(seed, 320 + s) * 0.7 + 0.08 * Math.sin(t * 1.7 + s * 3),
+      0.55 + ph * 0.9,
+    );
     const r = (1.6 + 1.1 * a) * scale;
     ctx.save();
     ctx.globalAlpha = a * 0.9;
-    quad(ctx, [{ x: p.x - r, y: p.y }, { x: p.x, y: p.y - r * 0.32 }, { x: p.x + r, y: p.y }, { x: p.x, y: p.y + r * 0.32 }], '#ffe9a8');
-    quad(ctx, [{ x: p.x, y: p.y - r }, { x: p.x + r * 0.32, y: p.y }, { x: p.x, y: p.y + r }, { x: p.x - r * 0.32, y: p.y }], '#fff6da');
+    quad(
+      ctx,
+      [
+        { x: p.x - r, y: p.y },
+        { x: p.x, y: p.y - r * 0.32 },
+        { x: p.x + r, y: p.y },
+        { x: p.x, y: p.y + r * 0.32 },
+      ],
+      '#ffe9a8',
+    );
+    quad(
+      ctx,
+      [
+        { x: p.x, y: p.y - r },
+        { x: p.x + r * 0.32, y: p.y },
+        { x: p.x, y: p.y + r },
+        { x: p.x - r * 0.32, y: p.y },
+      ],
+      '#fff6da',
+    );
     ctx.restore();
   }
 }
@@ -1954,11 +2292,22 @@ function screenPanel(
     const alive = life ? life.alive : working;
     const glow = life?.glow ?? 0;
     if (working) {
-      const map: FaceMap = (u, v) => ({ x: bl.x + u * (br.x - bl.x), y: bl.y + u * (br.y - bl.y) - lo - v * (hi - lo) });
+      const map: FaceMap = (u, v) => ({
+        x: bl.x + u * (br.x - bl.x),
+        y: bl.y + u * (br.y - bl.y) - lo - v * (hi - lo),
+      });
       const wPx = Math.abs(br.x - bl.x);
       // A lit screen is a fact of sitting at the desk; a MOVING one is a fact of working (ADR 660 §3):
       // with no live pulse the desktop is drawn once, still (`t` pinned), and nothing blooms.
-      drawScreenLife(ctx, map, wPx, fit.scale, Math.abs(Math.round(mx * 7 + my * 13)), alive ? t : 0, wAcross >= 30 ? 2 : 1);
+      drawScreenLife(
+        ctx,
+        map,
+        wPx,
+        fit.scale,
+        Math.abs(Math.round(mx * 7 + my * 13)),
+        alive ? t : 0,
+        wAcross >= 30 ? 2 : 1,
+      );
     }
     if (curved) {
       // Bow shading over whatever's on screen — translucent, so the animated desktop stays visible.
@@ -1979,16 +2328,36 @@ function screenPanel(
       const cyBottom = (bl.y + br.y) / 2 - lo; // screen's bottom edge (meets the desk)
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const bloom = ctx.createRadialGradient(cx, cyBottom - chh * 0.5, 0, cx, cyBottom - chh * 0.5, cw * 0.66);
+      const bloom = ctx.createRadialGradient(
+        cx,
+        cyBottom - chh * 0.5,
+        0,
+        cx,
+        cyBottom - chh * 0.5,
+        cw * 0.66,
+      );
       // A `run` pushes the bloom up to ~2.5× for three seconds, easing out (`runGlow`).
-      bloom.addColorStop(0, `rgba(154, 228, 240, ${Math.min(1, 0.38 * (1 + 1.5 * glow)).toFixed(3)})`);
+      bloom.addColorStop(
+        0,
+        `rgba(154, 228, 240, ${Math.min(1, 0.38 * (1 + 1.5 * glow)).toFixed(3)})`,
+      );
       bloom.addColorStop(1, 'rgba(154, 228, 240, 0)');
       ctx.fillStyle = bloom;
       ctx.beginPath();
       ctx.ellipse(cx, cyBottom - chh * 0.5, cw * 0.66, chh * 0.74, 0, 0, Math.PI * 2);
       ctx.fill();
-      const spill = ctx.createRadialGradient(cx, cyBottom + chh * 0.34, 0, cx, cyBottom + chh * 0.34, cw * 0.9);
-      spill.addColorStop(0, `rgba(122, 210, 226, ${Math.min(1, 0.2 * (1 + 1.5 * glow)).toFixed(3)})`);
+      const spill = ctx.createRadialGradient(
+        cx,
+        cyBottom + chh * 0.34,
+        0,
+        cx,
+        cyBottom + chh * 0.34,
+        cw * 0.9,
+      );
+      spill.addColorStop(
+        0,
+        `rgba(122, 210, 226, ${Math.min(1, 0.2 * (1 + 1.5 * glow)).toFixed(3)})`,
+      );
       spill.addColorStop(1, 'rgba(122, 210, 226, 0)');
       ctx.fillStyle = spill;
       ctx.beginPath();
@@ -2061,9 +2430,29 @@ function monitor(
   ctx.restore();
   if (!drawn) return;
   const panels: [number, number, number, boolean][] =
-    setup === 'dual' ? [[-18, 34, 22, false], [18, 34, 22, false]] : setup === 'ultrawide' ? [[0, 54, 20, true]] : [[0, 34, 22, false]];
+    setup === 'dual'
+      ? [
+          [-18, 34, 22, false],
+          [18, 34, 22, false],
+        ]
+      : setup === 'ultrawide'
+        ? [[0, 54, 20, true]]
+        : [[0, 34, 22, false]];
   for (const [off, w, h, curved] of panels) {
-    screenPanel(ctx, fit, mx + p[0] * off, my + p[1] * off, dir, working, surfaceUp, w, h, curved, t, life);
+    screenPanel(
+      ctx,
+      fit,
+      mx + p[0] * off,
+      my + p[1] * off,
+      dir,
+      working,
+      surfaceUp,
+      w,
+      h,
+      curved,
+      t,
+      life,
+    );
   }
 }
 
@@ -2082,7 +2471,15 @@ const LAPTOP_LOGO = '#a3a9b1';
  * monitor two props away. That is the whole model (design §0): the dock is a second reading of the
  * work cue, not a new fact plumbed through the scene, so an empty dock and a dark screen cannot
  * disagree — and the member sitting down is the single event that turns both on. */
-function deskDock(ctx: CanvasRenderingContext2D, fit: Fit, mx: number, my: number, dir: Dir, up: number, docked: boolean): void {
+function deskDock(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  mx: number,
+  my: number,
+  dir: Dir,
+  up: number,
+  docked: boolean,
+): void {
   const sn = dir === 'S' || dir === 'N';
   // Cradle and slot are sized to the slab they hold — a dock visibly narrower than its laptop reads
   // as the wrong furniture, so these three numbers move together or not at all.
@@ -2106,7 +2503,13 @@ function deskDock(ctx: CanvasRenderingContext2D, fit: Fit, mx: number, my: numbe
   const g = project(mx, my, fit);
   // The logo rides the centre of the standing face — derived from the slab's own height rather than a
   // hand-tuned constant, so it cannot drift off-centre the next time the lid changes size.
-  ellipse(ctx, { x: g.x, y: g.y - (up + 3 + hL / 2) * fit.scale }, 3 * fit.scale, 2.4 * fit.scale, LAPTOP_LOGO);
+  ellipse(
+    ctx,
+    { x: g.x, y: g.y - (up + 3 + hL / 2) * fit.scale },
+    3 * fit.scale,
+    2.4 * fit.scale,
+    LAPTOP_LOGO,
+  );
 }
 
 // ── desk-surface props: a keyboard + mouse on every desk, plus a deterministic personal mix ──────────
@@ -2122,23 +2525,57 @@ const MOUSE_COLORS = ['#454b54', '#5a6069', '#6a5568', '#4a5f57', '#6b5a48'];
 const KEYBOARD_WIDTHS = [26, 34, 40] as const;
 const KB_SALT = 32;
 /** Distinct "photos" for standing frames — each desk with a frame gets one of these by hash. */
-const PHOTOS = ['#6fa3c9', '#e0a05a', '#8db36a', '#c97f9c', '#9a8fce', '#d9b24a', '#e08585', '#5ab0a4'];
+const PHOTOS = [
+  '#6fa3c9',
+  '#e0a05a',
+  '#8db36a',
+  '#c97f9c',
+  '#9a8fce',
+  '#d9b24a',
+  '#e08585',
+  '#5ab0a4',
+];
 /** Mug colours, so coffee cups aren't all identical. */
 /** Notebook covers — the same spread of muted colours the rest of the desk gear draws from. */
 const NOTEBOOK_COVERS = ['#8a5a4a', '#46607d', '#5f7a55', '#7a5a78', '#9a7b3f'];
 const MUGS = ['#d6d0c6', '#c95c4a', '#3d6b8f', '#e0a72b', '#5f8a5a'];
 
 /** A closed notebook: a pad with a slightly proud cover and a colour band down its spine. */
-function deskNotebook(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, sn: boolean, up: number, cover: string): void {
+function deskNotebook(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  sn: boolean,
+  up: number,
+  cover: string,
+): void {
   const { w, d } = PROP_SPEC.notebook;
   box(ctx, fit, ix, iy, sn ? w : d, sn ? d : w, 2, '#e8e2d4', up); // the pages
   box(ctx, fit, ix, iy, sn ? w - 1 : d - 1, sn ? d - 1 : w - 1, 3, cover, up + 1); // the cover, a touch proud
   // The spine band: a thin stripe down the long edge, so the pad reads as a book and not as paper.
-  box(ctx, fit, ix - (sn ? w / 2 - 1.5 : 0), iy - (sn ? 0 : w / 2 - 1.5), sn ? 3 : d - 1, sn ? d - 1 : 3, 3.4, dim(cover, 0.72), up + 1);
+  box(
+    ctx,
+    fit,
+    ix - (sn ? w / 2 - 1.5 : 0),
+    iy - (sn ? 0 : w / 2 - 1.5),
+    sn ? 3 : d - 1,
+    sn ? d - 1 : 3,
+    3.4,
+    dim(cover, 0.72),
+    up + 1,
+  );
 }
 
 /** A pen cup: a short tumbler with two or three stems leaning out of it. */
-function deskPens(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, up: number, id: number): void {
+function deskPens(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  up: number,
+  id: number,
+): void {
   const { w } = PROP_SPEC.pens;
   box(ctx, fit, ix, iy, w, w, 9, '#6b7480', up); // the cup
   const g = project(ix, iy, fit);
@@ -2159,7 +2596,15 @@ function deskPens(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: numbe
 }
 
 /** Two or three books, stacked and slightly out of true — a low mass, readable by silhouette. */
-function deskBooks(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, sn: boolean, up: number, id: number): void {
+function deskBooks(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  sn: boolean,
+  up: number,
+  id: number,
+): void {
   const { w, d } = PROP_SPEC.books;
   const spines = ['#7b5ea7', '#c0705a', '#4e7f6e', '#c9a227', '#5a6d9a'];
   const n = 2 + Math.floor(deskRnd(id, 46) * 2);
@@ -2169,7 +2614,17 @@ function deskBooks(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: numb
     const shrink = i * 1.6;
     const skew = (deskRnd(id, 47 + i) - 0.5) * 3;
     const color = spines[Math.floor(deskRnd(id, 50 + i) * spines.length)]!;
-    box(ctx, fit, ix + (sn ? skew : 0), iy + (sn ? 0 : skew), sn ? w - shrink : d - shrink, sn ? d - shrink : w - shrink, 4, color, h);
+    box(
+      ctx,
+      fit,
+      ix + (sn ? skew : 0),
+      iy + (sn ? 0 : skew),
+      sn ? w - shrink : d - shrink,
+      sn ? d - shrink : w - shrink,
+      4,
+      color,
+      h,
+    );
     h += 4;
   }
 }
@@ -2187,7 +2642,16 @@ function deskRnd(id: number, salt: number): number {
  * coords: `along` +toward the monitor / −toward the seat, `across` +right / −left. `salt`+`prob` decide
  * per-desk presence from a stable hash. Shared by the canvas draw AND the animated-overlay anchors
  * (`animatedDeskAnchors`) so the spinning fan / coffee steam land exactly on the drawn prop. */
-const PROP_KINDS = ['coffee', 'water', 'plant', 'photo', 'fan', 'notebook', 'pens', 'books'] as const;
+const PROP_KINDS = [
+  'coffee',
+  'water',
+  'plant',
+  'photo',
+  'fan',
+  'notebook',
+  'pens',
+  'books',
+] as const;
 type PropKind = (typeof PROP_KINDS)[number];
 /**
  * Each personal prop: how likely it is on a given desk, where it stands, and the footprint it stands
@@ -2235,14 +2699,15 @@ export const PROP_SPEC: Record<
 };
 /** Whether a given desk carries a given prop — a stable per-desk hash, independent of who's seated.
  * Exported for the ambient scheduler: a sip beat needs a mug on that member's desk to sip from. */
-const rolledProp = (id: number, kind: PropKind): boolean => deskRnd(id, PROP_SPEC[kind].salt) < PROP_SPEC[kind].prob;
+const rolledProp = (id: number, kind: PropKind): boolean =>
+  deskRnd(id, PROP_SPEC[kind].salt) < PROP_SPEC[kind].prob;
 export function deskHasProp(id: number, kind: PropKind): boolean {
   if (rolledProp(id, kind)) return true;
   // Every desk carries something that moves once someone sits at it (lane 01M50X1WRW): a desk the hash
   // gave neither a fan nor a mug gets one of the two, picked by its own hash so the room still varies.
   // Decided here, so the baked prop, the sip mug and the Tier-A overlay all agree.
   if ((kind === 'fan' || kind === 'coffee') && !rolledProp(id, 'fan') && !rolledProp(id, 'coffee'))
-    return (deskRnd(id, 23) < 0.5) === (kind === 'fan');
+    return deskRnd(id, 23) < 0.5 === (kind === 'fan');
   return false;
 }
 /** The mug colour a desk's coffee cup uses — one hash shared by the desk prop and the in-hand sip mug. */
@@ -2250,27 +2715,61 @@ function deskMugColor(id: number): string {
   return MUGS[Math.floor(deskRnd(id, 11) * MUGS.length)]!;
 }
 /** Desk-relative (along,across) → absolute logical point, given the desk's facing. */
-function deskPoint(slot: { lx: number; ly: number; dir: Dir }, along: number, across: number): [number, number] {
+function deskPoint(
+  slot: { lx: number; ly: number; dir: Dir },
+  along: number,
+  across: number,
+): [number, number] {
   const f = FWD[slot.dir];
   return [slot.lx + f[0] * along - f[1] * across, slot.ly + f[1] * along + f[0] * across];
 }
 
 /** A flat keyboard: a base tray + a slightly raised key deck, oriented across the desk (facing-relative).
  * `shoulder` is its width along the shoulders (compact/standard/full) — per-desk, so keyboards vary. */
-function deskKeyboard(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, sn: boolean, up: number, shoulder = 34): void {
+function deskKeyboard(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  sn: boolean,
+  up: number,
+  shoulder = 34,
+): void {
   box(ctx, fit, ix, iy, sn ? shoulder : 13, sn ? 13 : shoulder, 3, KEYBOARD, up);
   box(ctx, fit, ix, iy, sn ? shoulder - 4 : 9, sn ? 9 : shoulder - 4, 4, '#3b414a', up); // key deck, a touch proud of the tray
 }
 
 /** A little mouse beside the keyboard — long axis pointing front-to-back, rounded top. Shell colour varies
  * per desk (`color`) so no two stations are quite identical. */
-function deskMouse(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, sn: boolean, up: number, color = MOUSE): void {
+function deskMouse(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  sn: boolean,
+  up: number,
+  color = MOUSE,
+): void {
   box(ctx, fit, ix, iy, sn ? 7 : 11, sn ? 11 : 7, 4, color, up);
   const g = project(ix, iy, fit);
-  ellipse(ctx, { x: g.x, y: g.y - (up + 4) * fit.scale }, 5 * fit.scale, 3 * fit.scale, mul(color, 1.2));
+  ellipse(
+    ctx,
+    { x: g.x, y: g.y - (up + 4) * fit.scale },
+    5 * fit.scale,
+    3 * fit.scale,
+    mul(color, 1.2),
+  );
 }
 
-function deskCoffee(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, up: number, mug: string, filled: boolean): void {
+function deskCoffee(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  up: number,
+  mug: string,
+  filled: boolean,
+): void {
   box(ctx, fit, ix, iy, 11, 11, 12, mug, up); // mug body
   const g = project(ix, iy, fit);
   const rim = { x: g.x, y: g.y - (up + 12) * fit.scale };
@@ -2279,25 +2778,57 @@ function deskCoffee(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: num
   ellipse(ctx, rim, 5.2 * fit.scale, 2.5 * fit.scale, filled ? '#3a2416' : dim(mug, 0.68));
 }
 
-function deskWater(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, up: number): void {
+function deskWater(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  up: number,
+): void {
   box(ctx, fit, ix, iy, 9, 9, 24, '#bfe3f2', up); // translucent-looking body
   box(ctx, fit, ix, iy, 6, 6, 4, '#5aa0c9', up + 24); // cap
 }
 
 /** A standing photo frame: a thin upright frame with an inset "photo" panel on its room-facing faces. */
-function deskPhoto(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, sn: boolean, up: number, photo: string): void {
+function deskPhoto(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  sn: boolean,
+  up: number,
+  photo: string,
+): void {
   box(ctx, fit, ix, iy, sn ? 20 : 6, sn ? 6 : 20, 18, '#cfc8b8', up); // frame
   box(ctx, fit, ix, iy, sn ? 15 : 3, sn ? 3 : 15, 13, photo, up + 3); // inset photo (shows on the visible faces)
 }
 
 /** A small potted desk plant — terracotta pot + a low leafy cluster. */
-function deskPlant(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, up: number): void {
+function deskPlant(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  up: number,
+): void {
   box(ctx, fit, ix, iy, 12, 12, 9, '#b9603a', up);
   const g = project(ix, iy, fit);
   const ty = g.y - (up + 9) * fit.scale;
   ellipse(ctx, { x: g.x, y: ty - 4 * fit.scale }, 9 * fit.scale, 7 * fit.scale, '#5f9350');
-  ellipse(ctx, { x: g.x - 4 * fit.scale, y: ty - 1 * fit.scale }, 5 * fit.scale, 4 * fit.scale, '#74a860');
-  ellipse(ctx, { x: g.x + 4 * fit.scale, y: ty - 6 * fit.scale }, 4.5 * fit.scale, 4 * fit.scale, '#6fa35a');
+  ellipse(
+    ctx,
+    { x: g.x - 4 * fit.scale, y: ty - 1 * fit.scale },
+    5 * fit.scale,
+    4 * fit.scale,
+    '#74a860',
+  );
+  ellipse(
+    ctx,
+    { x: g.x + 4 * fit.scale, y: ty - 6 * fit.scale },
+    4.5 * fit.scale,
+    4 * fit.scale,
+    '#6fa35a',
+  );
 }
 
 /** Where a desk lamp's shade sits on screen, for the emissive pass — the same anchor `deskLamp` draws
@@ -2392,11 +2923,17 @@ export function deskPropSort(dir: Dir, along: number, across: number): number {
  * The monitor already did this right (`BENCH.deep / 2 - 12`); these two put the dock on the same
  * footing, so both props are functions of the furniture rather than one of each.
  */
-export function benchMonitorAt(slot: { lx: number; ly: number; dir: Dir }): { lx: number; ly: number } {
+export function benchMonitorAt(slot: { lx: number; ly: number; dir: Dir }): {
+  lx: number;
+  ly: number;
+} {
   return benchAt(slot, BENCH.deep / 2 - 12, 0);
 }
 
-export function benchDockAt(slot: { lx: number; ly: number; dir: Dir; id: number }): { lx: number; ly: number } {
+export function benchDockAt(slot: { lx: number; ly: number; dir: Dir; id: number }): {
+  lx: number;
+  ly: number;
+} {
   // As far back as the cradle can stand with its whole footprint on the counter…
   const along = BENCH.deep / 2 - DOCK_CRADLE_ALONG / 2;
   // …and outboard to the edge of THIS seat's share, on the side whose sort term subtracts — the same
@@ -2454,7 +2991,11 @@ export function benchPropSort(
  */
 /** Clip `ctx` to the near half's silhouette — the extruded box from the floor to the worktop over the
  * +ly half of the desk. The caller saves and restores. */
-function clipToNearHalf(ctx: CanvasRenderingContext2D, fit: Fit, slot: { lx: number; ly: number; dir: Dir }): void {
+function clipToNearHalf(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  slot: { lx: number; ly: number; dir: Dir },
+): void {
   const { lx, ly, dir } = slot;
   const sn = dir === 'S' || dir === 'N';
   const wx = sn ? DESK_W : DESK_D;
@@ -2481,7 +3022,12 @@ function clipToNearHalf(ctx: CanvasRenderingContext2D, fit: Fit, slot: { lx: num
  * foot to its own desk — a fan sunk into the slab, a monitor's stand gone (nick, 2026-10-21). The
  * clip keeps it additive: inside it the worktop was just repainted opaque, so the props land on the
  * same pixels as the first pass; outside it nothing is touched, so a soft shadow is not doubled. */
-function nearHalfProps(ctx: CanvasRenderingContext2D, fit: Fit, slot: { lx: number; ly: number; dir: Dir }, draw: () => void): void {
+function nearHalfProps(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  slot: { lx: number; ly: number; dir: Dir },
+  draw: () => void,
+): void {
   ctx.save();
   clipToNearHalf(ctx, fit, slot);
   draw();
@@ -2589,13 +3135,25 @@ export function drawWorkstation(
 
   if (phase === 'monitor') {
     if (nearOnly && f[1] * MONITOR_ALONG < 0) return;
-    monitor(ctx, fit, lx + f[0] * MONITOR_ALONG, ly + f[1] * MONITOR_ALONG, dir, working, up, id, t, screenLifeFor(node));
+    monitor(
+      ctx,
+      fit,
+      lx + f[0] * MONITOR_ALONG,
+      ly + f[1] * MONITOR_ALONG,
+      dir,
+      working,
+      up,
+      id,
+      t,
+      screenLifeFor(node),
+    );
     return;
   }
 
   // The base — legs, slab and its bevelled lip — is one rendered image: `desk/base` for a S/N desk,
   // `desk/base-ew` for an E/W one (plan Task 3).
-  if (phase !== 'post' && !nearOnly) blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
+  if (phase !== 'post' && !nearOnly)
+    blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
 
   // Surface props, placed in desk-relative (along-facing, across) coords and self-sorted back-to-front so
   // overlaps paint correctly regardless of the desk's facing. `along` +toward the monitor, −toward the seat.
@@ -2606,11 +3164,20 @@ export function drawWorkstation(
     monitor?: true;
   }
   const props: Prop[] = [];
-  const at = (along: number, across: number, fn: (ix: number, iy: number) => void, monitor?: true): void => {
+  const at = (
+    along: number,
+    across: number,
+    fn: (ix: number, iy: number) => void,
+    monitor?: true,
+  ): void => {
     const ix = lx + f[0] * along + p[0] * across;
     const iy = ly + f[1] * along + p[1] * across;
     if (nearOnly && iy < ly) return;
-    props.push({ sum: deskPropSort(dir, along, across), fn: () => fn(ix, iy), ...(monitor ? { monitor } : {}) });
+    props.push({
+      sum: deskPropSort(dir, along, across),
+      fn: () => fn(ix, iy),
+      ...(monitor ? { monitor } : {}),
+    });
   };
 
   // The monitor at the back, then the keyboard + mouse pulled in to where a seated member's hands actually
@@ -2662,7 +3229,14 @@ export function drawWorkstation(
   // as lit at night.
   if (node)
     at(LAMP_ALONG, LAMP_ACROSS, (ix, iy) => {
-      blitIf(ctx, fit, rendered, lampsLit && !ownedEmpty ? 'desk/lamp-on' : 'desk/lamp-off', ix, iy);
+      blitIf(
+        ctx,
+        fit,
+        rendered,
+        lampsLit && !ownedEmpty ? 'desk/lamp-on' : 'desk/lamp-off',
+        ix,
+        iy,
+      );
     });
 
   // optional personal props — each present-or-not per desk by a stable hash, at its own station
@@ -2679,7 +3253,15 @@ export function drawWorkstation(
         case 'plant':
           return deskPlant(ctx, fit, ix, iy, up);
         case 'photo':
-          return deskPhoto(ctx, fit, ix, iy, sn, up, PHOTOS[Math.floor(deskRnd(id, 41) * PHOTOS.length)]!);
+          return deskPhoto(
+            ctx,
+            fit,
+            ix,
+            iy,
+            sn,
+            up,
+            PHOTOS[Math.floor(deskRnd(id, 41) * PHOTOS.length)]!,
+          );
         case 'fan': {
           // Rendered: four blade positions; the blades turn only while someone is at the desk
           // (spec §3.1 item 5 — a prop moves only with a sitter), 8 steps a second.
@@ -2688,7 +3270,15 @@ export function drawWorkstation(
           return;
         }
         case 'notebook':
-          return deskNotebook(ctx, fit, ix, iy, sn, up, NOTEBOOK_COVERS[Math.floor(deskRnd(id, 43) * NOTEBOOK_COVERS.length)]!);
+          return deskNotebook(
+            ctx,
+            fit,
+            ix,
+            iy,
+            sn,
+            up,
+            NOTEBOOK_COVERS[Math.floor(deskRnd(id, 43) * NOTEBOOK_COVERS.length)]!,
+          );
         case 'pens':
           return deskPens(ctx, fit, ix, iy, up, id);
         case 'books':
@@ -2706,7 +3296,12 @@ export function drawWorkstation(
       at(MONITOR_ALONG, 0, (ix, iy) => {
         const b = project(ix, iy, fit);
         ctx.fillStyle = `rgba(122, 148, 156, ${warmAlpha})`;
-        ctx.fillRect(b.x - 15 * fit.scale, b.y - (up + 23) * fit.scale, 30 * fit.scale, 18 * fit.scale);
+        ctx.fillRect(
+          b.x - 15 * fit.scale,
+          b.y - (up + 23) * fit.scale,
+          30 * fit.scale,
+          18 * fit.scale,
+        );
       });
   }
 
@@ -2727,7 +3322,11 @@ export function drawWorkstation(
  * not paint. One formula for the paint and for the sprite key: the fade over an hour is the one
  * `Date.now()`-derived input in the room, and it enters the key only as the string it paints with.
  */
-export function ownedDeskWarmAlpha(node: OfficeNode | null, owned: boolean, now = Date.now()): string {
+export function ownedDeskWarmAlpha(
+  node: OfficeNode | null,
+  owned: boolean,
+  now = Date.now(),
+): string {
   if (!node || !owned) return '';
   const steppedAway = node.presence !== 'offline';
   const age = node.last_seen_at != null ? now - node.last_seen_at : Infinity;
@@ -2788,7 +3387,8 @@ function benchStation(
   /** Owner working AND sitting here — see the note on `drawWorkstation`'s parameter of the same name. */
   atWork = false,
 ): void {
-  const kbShoulder = KEYBOARD_WIDTHS[Math.floor(deskRnd(slot.id, KB_SALT) * KEYBOARD_WIDTHS.length)]!;
+  const kbShoulder =
+    KEYBOARD_WIDTHS[Math.floor(deskRnd(slot.id, KB_SALT) * KEYBOARD_WIDTHS.length)]!;
   /*
    * Sorted back-to-front, exactly as `drawWorkstation` sorts its own props — it used to be three
    * sequential calls, so the dock painted over the monitor by CALL ORDER at every facing no matter
@@ -2797,15 +3397,24 @@ function benchStation(
    */
   const kbAt = benchAt(slot, KEYBOARD_ALONG, 0); // same frame drawWorkstation uses: `at(KEYBOARD_ALONG, 0)`
   const props: { sum: number; fn: () => void }[] = [
-    { sum: benchPropSort(slot, benchMonitorAt(slot)), fn: () => {
-      const m = benchMonitorAt(slot);
-      monitor(ctx, fit, m.lx, m.ly, slot.dir, atWork, DESK_UP, slot.id, t, screenLifeFor(node));
-    } },
-    { sum: benchPropSort(slot, benchDockAt(slot)), fn: () => {
-      const d = benchDockAt(slot);
-      deskDock(ctx, fit, d.lx, d.ly, slot.dir, DESK_UP, atWork);
-    } },
-    { sum: benchPropSort(slot, kbAt), fn: () => deskKeyboard(ctx, fit, kbAt.lx, kbAt.ly, true, DESK_UP, kbShoulder) },
+    {
+      sum: benchPropSort(slot, benchMonitorAt(slot)),
+      fn: () => {
+        const m = benchMonitorAt(slot);
+        monitor(ctx, fit, m.lx, m.ly, slot.dir, atWork, DESK_UP, slot.id, t, screenLifeFor(node));
+      },
+    },
+    {
+      sum: benchPropSort(slot, benchDockAt(slot)),
+      fn: () => {
+        const d = benchDockAt(slot);
+        deskDock(ctx, fit, d.lx, d.ly, slot.dir, DESK_UP, atWork);
+      },
+    },
+    {
+      sum: benchPropSort(slot, kbAt),
+      fn: () => deskKeyboard(ctx, fit, kbAt.lx, kbAt.ly, true, DESK_UP, kbShoulder),
+    },
   ];
   for (const prop of props.sort((a, b) => a.sum - b.sum)) prop.fn();
 }
@@ -2816,7 +3425,14 @@ export interface SceneAnchors {
 }
 
 /** A soft additive warm pool: an ellipse of warm light that *adds* back over the night veil. */
-function warmPool(ctx: CanvasRenderingContext2D, p: Pt, r: number, flatten: number, color: string, peak: number): void {
+function warmPool(
+  ctx: CanvasRenderingContext2D,
+  p: Pt,
+  r: number,
+  flatten: number,
+  color: string,
+  peak: number,
+): void {
   const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
   g.addColorStop(0, `rgba(${color}, ${peak})`);
   g.addColorStop(1, `rgba(${color}, 0)`);
@@ -2880,7 +3496,14 @@ function drawInteriorLight(
     // The string lights emit: a warm pool cast down from each bulb onto the wall + floor beneath it. Tuned
     // to actually read against the veil (a first pass was too faint to see) while staying a warm accent.
     for (const b of magicAnchors(fit).bulbs) {
-      warmPool(ctx, { x: b.x, y: b.y + 24 * fit.scale }, 52 * fit.scale, 0.95, '255, 200, 120', 0.2 * night);
+      warmPool(
+        ctx,
+        { x: b.x, y: b.y + 24 * fit.scale },
+        52 * fit.scale,
+        0.95,
+        '255, 200, 120',
+        0.2 * night,
+      );
     }
 
     // Desk lamps emit, in two parts, and the order of them is the whole point. `litLamps` is the set of
@@ -2893,7 +3516,14 @@ function drawInteriorLight(
       const low = dreamLamps.has(slot.id) ? DREAM_LAMP : 1;
       // (a) The floor pool: light landing on the desk corner and the floor beside it, cast from under the
       // shade rather than from the shade itself, so it reads as spill and not as a second bulb.
-      warmPool(ctx, { x: head.x, y: head.y + (DESK_UP + 20) * fit.scale }, 74 * fit.scale * low, 0.6, '255, 194, 112', 0.3 * night * low);
+      warmPool(
+        ctx,
+        { x: head.x, y: head.y + (DESK_UP + 20) * fit.scale },
+        74 * fit.scale * low,
+        0.6,
+        '255, 194, 112',
+        0.3 * night * low,
+      );
       // (b) The bulb: a small, bright, unmistakably warm core right at the shade, painted additively over
       // the veil so the fixture reads as ON. Two stops — a tight near-white filament inside a warm halo —
       // because a single soft blob at this size reads as a smudge, and what has to survive the veil is the
@@ -2925,9 +3555,23 @@ function drawInteriorLight(
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       // the halo: wide, flat, on the floor — it separates a body from the floor behind it.
-      warmPool(ctx, { x: b.x, y: b.y - 8 * fit.scale * scale }, 88 * fit.scale * scale, 0.6, '255, 206, 140', 0.1 * night);
+      warmPool(
+        ctx,
+        { x: b.x, y: b.y - 8 * fit.scale * scale },
+        88 * fit.scale * scale,
+        0.6,
+        '255, 206, 140',
+        0.1 * night,
+      );
       // the core: the member's own presence, at a tenth of the alpha it used to bleach them with.
-      warmPool(ctx, { x: b.x, y: b.y - 16 * fit.scale * scale }, 50 * fit.scale * scale, 0.8, '255, 214, 158', 0.09 * night);
+      warmPool(
+        ctx,
+        { x: b.x, y: b.y - 16 * fit.scale * scale },
+        50 * fit.scale * scale,
+        0.8,
+        '255, 214, 158',
+        0.09 * night,
+      );
       ctx.restore();
     });
   }
@@ -3051,7 +3695,10 @@ export function deskStationItems(
   if (slot.kind === 'bench') {
     // No per-seat slab — the shared counter is already an item. +0.1 sorts the gear after the
     // counter's long box (same centre-sorted-box problem the couch solves with depthAt).
-    out.push({ d: depth(BENCH.lx, BENCH.ly) + 0.1, fn: () => benchStation(ctx, fit, slot, node, t, seatedWorking) });
+    out.push({
+      d: depth(BENCH.lx, BENCH.ly) + 0.1,
+      fn: () => benchStation(ctx, fit, slot, node, t, seatedWorking),
+    });
   } else {
     if (node && !deskOwned && env.lampsOn) litLamps.add(slot.id);
     const wsKey = workstationKey({
@@ -3067,7 +3714,21 @@ export function deskStationItems(
       warmAlpha: ownedDeskWarmAlpha(node, deskOwned),
     });
     const ws = (c: CanvasRenderingContext2D, phase: WorkstationPhase, nearOnly = false): void =>
-      drawWorkstation(c, fit, slot, node, teamName, deskOwned, t, hide, env.lampsOn, seatedWorking, phase, opts.rendered, nearOnly);
+      drawWorkstation(
+        c,
+        fit,
+        slot,
+        node,
+        teamName,
+        deskOwned,
+        t,
+        hide,
+        env.lampsOn,
+        seatedWorking,
+        phase,
+        opts.rendered,
+        nearOnly,
+      );
     // The near half's own props, again over its repaint (`nearHalfProps`) — the same pre / live
     // monitor / post split as the desk, since an S desk's monitor stands on this half.
     const nearProps = (c: CanvasRenderingContext2D, phase: WorkstationPhase): void =>
@@ -3092,7 +3753,20 @@ export function deskStationItems(
        revert — the paragraph above is kept because it is the reasoning, not because anything is owed. */
       d: depth(slot.lx, slot.ly),
       fn: () =>
-        drawWorkstation(ctx, fit, slot, node, teamName, deskOwned, t, hide, env.lampsOn, seatedWorking, 'all', opts.rendered),
+        drawWorkstation(
+          ctx,
+          fit,
+          slot,
+          node,
+          teamName,
+          deskOwned,
+          t,
+          hide,
+          env.lampsOn,
+          seatedWorking,
+          'all',
+          opts.rendered,
+        ),
       // Cached form: two sprites around a live screen (see `WorkstationPhase`). The sprite draws
       // take the OFFSCREEN context; the screen paints on the stage.
       parts: (() => {
@@ -3143,7 +3817,8 @@ export function deskStationItems(
   // fully hidden, so the desk reads as chairless (nick, 2026-08-31: the kimi desk). Roll it back
   // far enough to emerge past the desk's far edge, the way a real chair sits pushed out when its
   // owner is away. Facing is measured on screen, not guessed from the dir name.
-  const fScreen = project(slot.lx + f[0] * 10, slot.ly + f[1] * 10, fit).y - project(slot.lx, slot.ly, fit).y;
+  const fScreen =
+    project(slot.lx + f[0] * 10, slot.ly + f[1] * 10, fit).y - project(slot.lx, slot.ly, fit).y;
   const vacantPeek = !seated && fScreen > 0 ? 16 : 0;
   const cx = slot.lx - f[0] * (CHAIR_OFF + shift + vacantPeek);
   const cy = slot.ly - f[1] * (CHAIR_OFF + shift + vacantPeek);
@@ -3162,7 +3837,8 @@ export function deskStationItems(
   const chairArt = `chair/${chairVariantFor(slot.id)}/${axis}`;
   const drawBase = (c: CanvasRenderingContext2D) => {
     // the shadow untinted under the tinted chair (a multiply would show the tint in its soft edge)
-    if (opts.rendered.images.has(`${chairArt}/base`)) blitIf(c, fit, opts.rendered, 'chair/shadow', cx, cy);
+    if (opts.rendered.images.has(`${chairArt}/base`))
+      blitIf(c, fit, opts.rendered, 'chair/shadow', cx, cy);
     blitTinted(c, fit, opts.rendered, `${chairArt}/base`, cx, cy, chairColor);
   };
   const drawBack = (c: CanvasRenderingContext2D) => {
@@ -3274,7 +3950,14 @@ function blitSprite(
  */
 export function backgroundKey(fit: Fit, env: LightEnv, dpr: number): string {
   const m = roomMixFor(env);
-  return ['bg', `${m.from}→${m.to}@${Math.round(m.mix * 32)}`, env.daylight.toFixed(3), fitKey(fit), dpr, paletteKey()].join('·');
+  return [
+    'bg',
+    `${m.from}→${m.to}@${Math.round(m.mix * 32)}`,
+    env.daylight.toFixed(3),
+    fitKey(fit),
+    dpr,
+    paletteKey(),
+  ].join('·');
 }
 
 /**
@@ -3361,7 +4044,9 @@ export function renderScene(
   const mix = roomMixFor(env);
   /* The figure (plan Task 13): every member is a sprite frame under the room's light tint. No sheets
      (figure.json missing or its skin sheet failed) draws nobody — the loader said so once. */
-  const figure = rendered.figure ? { assets: rendered.figure, tint: figureTintFor(env) } : undefined;
+  const figure = rendered.figure
+    ? { assets: rendered.figure, tint: figureTintFor(env) }
+    : undefined;
   const shell = (c: CanvasRenderingContext2D): void => {
     drawGroundShadow(c, fit);
     blitIf(c, fit, rendered, `room/light-${dayOf(mix.from)}`, 0, 0);
@@ -3384,7 +4069,7 @@ export function renderScene(
     for (const pod of PODS) ro(`rug/pod-${pod.id}`, pod.cx, pod.cy)(c);
     ro('rug/meeting', MEETING.lx, MEETING.ly)(c);
     ro('rug/reception', RECEPTION.rug.lx, RECEPTION.rug.ly)(c);
-    nook.rug(c);
+    // No nook rug (office v3-2): the café's tile, painted in the shell, is the zone.
   }
   if (cache) {
     const bg = backgroundKey(fit, env, dpr);
@@ -3399,30 +4084,50 @@ export function renderScene(
   }
   {
     const draw = ro('meeting/table', MEETING.lx, MEETING.ly);
-    items.push({ d: depth(MEETING.lx, MEETING.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `meeting·table·${statKey}`, draw }] });
+    items.push({
+      d: depth(MEETING.lx, MEETING.ly),
+      fn: () => draw(ctx),
+      parts: [{ kind: 'sprite', key: `meeting·table·${statKey}`, draw }],
+    });
   }
   MEETING.chairs.forEach((c, ci) => {
     const cx = MEETING.lx + c.dx;
     const cy = MEETING.ly + c.dy;
     const draw = ro(`meeting/chair-${ci}`, cx, cy);
-    items.push({ d: depth(cx, cy), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `meeting·chair·${ci}·${statKey}`, draw }] });
+    items.push({
+      d: depth(cx, cy),
+      fn: () => draw(ctx),
+      parts: [{ kind: 'sprite', key: `meeting·chair·${ci}·${statKey}`, draw }],
+    });
   });
   items.push(...receptionItems(ctx, fit, recep, t, statKey, rendered, figure));
   {
     const draw = ro('printer', PRINTER.lx, PRINTER.ly);
-    items.push({ d: depth(PRINTER.lx, PRINTER.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `printer·${statKey}`, draw }] });
+    items.push({
+      d: depth(PRINTER.lx, PRINTER.ly),
+      fn: () => draw(ctx),
+      parts: [{ kind: 'sprite', key: `printer·${statKey}`, draw }],
+    });
   }
   {
     const draw = ro('entrance', ENTRANCE.lx, ENTRANCE.ly);
-    items.push({ d: depth(ENTRANCE.lx, ENTRANCE.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `entrance·${statKey}`, draw }] });
+    items.push({
+      d: depth(ENTRANCE.lx, ENTRANCE.ly),
+      fn: () => draw(ctx),
+      parts: [{ kind: 'sprite', key: `entrance·${statKey}`, draw }],
+    });
   }
 
   // The office dog sorts with everything else at its own floor position (behaviour lives in pet.ts).
-  if (pet) items.push({ d: depth(pet.lx, pet.ly) + 0.08, fn: () => drawDog(ctx, fit, pet, t, rendered) });
+  if (pet)
+    items.push({ d: depth(pet.lx, pet.ly) + 0.08, fn: () => drawDog(ctx, fit, pet, t, rendered) });
   // The welcome wagon (lane 01M3F81DD9) trails the dog on the floor and sorts at its own position.
   if (pet?.cargo === 'wagon') {
     const w = wagonTrail(pet);
-    items.push({ d: depth(w.lx, w.ly) + 0.08, fn: () => blitIf(ctx, fit, rendered, 'welcome/wagon', w.lx, w.ly) });
+    items.push({
+      d: depth(w.lx, w.ly) + 0.08,
+      fn: () => blitIf(ctx, fit, rendered, 'welcome/wagon', w.lx, w.ly),
+    });
   }
   // The label maker's strips, curling up off the front desk's arrivals end.
   for (const label of opts.welcome?.labels ?? []) {
@@ -3438,7 +4143,11 @@ export function renderScene(
   // 300 long: the widest footprint on the floor, so the centre-vs-edge error is largest here.
   {
     const draw = ro('bench/base', BENCH.lx, BENCH.ly);
-    items.push({ d: depth(BENCH.lx, BENCH.ly), fn: () => draw(ctx), parts: [{ kind: 'sprite', key: `bench·${statKey}`, draw }] });
+    items.push({
+      d: depth(BENCH.lx, BENCH.ly),
+      fn: () => draw(ctx),
+      parts: [{ kind: 'sprite', key: `bench·${statKey}`, draw }],
+    });
   }
 
   // Desks whose lamp is switched on: a real sitter's desk, after dark. Filled from the same three facts
@@ -3486,7 +4195,10 @@ export function renderScene(
     if (pl.kind !== 'strip') continue;
     const pose = poses.get(name);
     if (!pose) continue;
-    items.push({ d: depth(pose.lx, pose.ly) - 0.2, fn: () => drawQueuePad(ctx, fit, pose.lx, pose.ly) });
+    items.push({
+      d: depth(pose.lx, pose.ly) - 0.2,
+      fn: () => drawQueuePad(ctx, fit, pose.lx, pose.ly),
+    });
   }
 
   for (const [name, pose] of poses) {
@@ -3502,9 +4214,11 @@ export function renderScene(
     // The desk mug travels with a sipping owner — passed down so the hand mug matches the desk mug.
     const mug = seated && pose.gesture === GESTURE.sip ? deskMugColor(slot.id) : undefined;
     // A lanyard still in the air is not on them yet — it lands at the end of its flight.
-    const inFlight = opts.welcome?.tosses.some((x) => x.name === name && t - x.t0 < TOSS_S) ?? false;
+    const inFlight =
+      opts.welcome?.tosses.some((x) => x.name === name && t - x.t0 < TOSS_S) ?? false;
     const lanyard = inFlight ? undefined : opts.welcome?.lanyards.get(name);
-    if (figure) items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug, lanyard, figure) });
+    if (figure)
+      items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug, lanyard, figure) });
 
     // Seated overlay: the desk paints over a member sitting behind it (correct — that is what a desk does
     // to your legs), but their forearms *rest on the surface*, above it, so they must paint on top of the
@@ -3526,7 +4240,12 @@ export function renderScene(
     // The label rides 20 above the crown the sheet's spec gives (96 was the painted member's) —
     // otherwise a smaller figure's name floats in the air above it.
     const crown = figure?.assets.spec.height ?? 96;
-    heads.set(name, { x: b.x, y: b.y - (pose.small ? (crown + 20) * 0.78 : crown + 20 - pose.sit * 22 * (crown / 96)) * fit.scale });
+    heads.set(name, {
+      x: b.x,
+      y:
+        b.y -
+        (pose.small ? (crown + 20) * 0.78 : crown + 20 - pose.sit * 22 * (crown / 96)) * fit.scale,
+    });
   }
 
   items.sort((a, b) => a.d - b.d);
@@ -3578,11 +4297,25 @@ export function renderScene(
   }
   if (stripTotal - stripDrawn > 0) {
     const a = project(ENTRANCE.lx + 34, ENTRANCE.ly - 10, fit);
-    run(() => drawCountPill(ctx, { x: a.x, y: a.y - 66 * fit.scale }, `+${stripTotal - stripDrawn} waiting`, fit.scale));
+    run(() =>
+      drawCountPill(
+        ctx,
+        { x: a.x, y: a.y - 66 * fit.scale },
+        `+${stripTotal - stripDrawn} waiting`,
+        fit.scale,
+      ),
+    );
   }
   if (nookTotal - nookDrawn > 0) {
     const a = project(NOOK.lx, NOOK.ly, fit);
-    run(() => drawCountPill(ctx, { x: a.x, y: a.y - 52 * fit.scale }, `+${nookTotal - nookDrawn} away`, fit.scale));
+    run(() =>
+      drawCountPill(
+        ctx,
+        { x: a.x, y: a.y - 52 * fit.scale },
+        `+${nookTotal - nookDrawn} away`,
+        fit.scale,
+      ),
+    );
   }
 
   // Frame the whole diorama last — a soft edge vignette so the scene fades into the panel at the corners.
@@ -3642,7 +4375,13 @@ const dogDirs = new WeakMap<PetState, Dir8>();
  * the direction of its last leg. Its shadow is in the render. Untinted, like the furniture: the night
  * veil paints over it as it does over everything rendered under the day rig.
  */
-function drawRenderedDog(ctx: CanvasRenderingContext2D, fit: Fit, pet: PetState, t: number, dog: NonNullable<RenderedAssets['dog']>): void {
+function drawRenderedDog(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  pet: PetState,
+  t: number,
+  dog: NonNullable<RenderedAssets['dog']>,
+): void {
   const dir = dogDir(pet.heading ?? 0, dogDirs.get(pet));
   dogDirs.set(pet, dir);
   const { anim, frame } = dogFrame(dog.spec, pet, t);
@@ -3668,7 +4407,17 @@ function drawLabelStrip(ctx: CanvasRenderingContext2D, fit: Fit, color: string, 
   const rise = Math.min(1, age / 0.6);
   const fade = age > LABEL_S - 0.5 ? (LABEL_S - age) / 0.5 : 1;
   ctx.globalAlpha = Math.max(0, fade);
-  box(ctx, fit, FRONT_DESK.lx + 30, FRONT_DESK.ly + 10, 14, 2, 3, color, FRONT_DESK.high + 2 + rise * 6);
+  box(
+    ctx,
+    fit,
+    FRONT_DESK.lx + 30,
+    FRONT_DESK.ly + 10,
+    14,
+    2,
+    3,
+    color,
+    FRONT_DESK.high + 2 + rise * 6,
+  );
   ctx.globalAlpha = 1;
 }
 
@@ -3691,7 +4440,9 @@ function drawTosses(
     if (k < 0 || k >= 1) continue;
     const head = heads.get(toss.name);
     // `heads` is the plate anchor above the crown; the chest is ~52 units below it.
-    const end = head ? { x: head.x, y: head.y + 52 * s } : { x: start.x + 60 * s, y: start.y + 20 * s };
+    const end = head
+      ? { x: head.x, y: head.y + 52 * s }
+      : { x: start.x + 60 * s, y: start.y + 20 * s };
     const e = 1 - (1 - k) * (1 - k); // eases out as it lands
     const x = start.x + (end.x - start.x) * e;
     const y = start.y + (end.y - start.y) * e - Math.sin(k * Math.PI) * 38 * s; // the arc
@@ -3848,7 +4599,10 @@ function drawDreamBubble(ctx: CanvasRenderingContext2D, fit: Fit, at: Pt, t: num
  * desk slot ids with a seated member) gates both; the physical fan and mug are still drawn at empty desks,
  * just idle (the fan off, the mug empty — see `deskFan` / `deskCoffee`).
  */
-export function animatedDeskAnchors(fit: Fit, occupied: Set<number>): { fans: Pt[]; coffees: Pt[] } {
+export function animatedDeskAnchors(
+  fit: Fit,
+  occupied: Set<number>,
+): { fans: Pt[]; coffees: Pt[] } {
   const fans: Pt[] = [];
   const coffees: Pt[] = [];
   for (const slot of DESK_SLOTS) {
@@ -3991,7 +4745,12 @@ export function drawCue(ctx: CanvasRenderingContext2D, cue: Cue, scale: number):
     const crack = Math.sin(Math.min(1, t) * Math.PI);
     ctx.globalAlpha = Math.min(1, crack * 1.4);
     ctx.fillStyle = '#fff6d6';
-    ctx.fillRect(at.x - crack * 1.6 * scale, at.y - h + 4 * scale, crack * 3.2 * scale, h - 8 * scale);
+    ctx.fillRect(
+      at.x - crack * 1.6 * scale,
+      at.y - h + 4 * scale,
+      crack * 3.2 * scale,
+      h - 8 * scale,
+    );
     ctx.globalAlpha = 1;
     return;
   }

@@ -36,7 +36,14 @@ import type { RenderedAssets } from './assets';
 import { parseManifest } from './manifest';
 
 const img = { fake: true } as unknown as CanvasImageSource;
-const asset = (id: string, file: string) => ({ id, file, w: 420, h: 300, anchor: { x: 210, y: 262 }, scale: 2.8284 });
+const asset = (id: string, file: string) => ({
+  id,
+  file,
+  w: 420,
+  h: 300,
+  anchor: { x: 210, y: 262 },
+  scale: 2.8284,
+});
 
 function rendered(ids: string[]): RenderedAssets {
   const manifest = parseManifest({
@@ -52,18 +59,36 @@ describe('renderScene with rendered desk bases (plan Task 3)', () => {
   const empty = new Map();
   const run = (r: RenderedAssets) => {
     const { ctx, ops } = recordingCtx();
-    renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: r });
+    renderScene(
+      ctx,
+      fit,
+      empty,
+      new Map(),
+      new Map(),
+      0,
+      'revive',
+      undefined,
+      null,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      { rendered: r },
+    );
     return ops;
   };
 
-  const blits = (ops: ReturnType<typeof run>) => ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length;
+  const blits = (ops: ReturnType<typeof run>) =>
+    ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length;
 
   it('blits the base once per desk, plus the clipped near half where that item exists', () => {
     const ops = run(rendered(['desk/base', 'desk/base-ew']));
     const n = blits(ops);
     expect(n).toBeGreaterThanOrEqual(DESK_SLOTS.length);
     // every near-half blit sits inside a clip
-    expect(ops.filter((o) => o.name === 'clip').length).toBeGreaterThanOrEqual(n - DESK_SLOTS.length);
+    expect(ops.filter((o) => o.name === 'clip').length).toBeGreaterThanOrEqual(
+      n - DESK_SLOTS.length,
+    );
   });
 
   it('an orientation whose asset is missing draws no base there, and nothing in its place', () => {
@@ -77,7 +102,11 @@ describe('renderScene with rendered desk bases (plan Task 3)', () => {
   });
 
   it('an empty manifest blits nothing and still draws a room (the props, the notes, the veil)', () => {
-    const ops = run({ manifest: parseManifest({ version: 1, camera: { kx: 1, ky: 1 }, assets: [] }), images: new Map(), missing: [] });
+    const ops = run({
+      manifest: parseManifest({ version: 1, camera: { kx: 1, ky: 1 }, assets: [] }),
+      images: new Map(),
+      missing: [],
+    });
     expect(blits(ops)).toBe(0);
     expect(ops.length).toBeGreaterThan(50);
   });
@@ -96,7 +125,6 @@ const STATIC_IDS: Record<string, number> = {
   'rug/pod-3': 1,
   'rug/meeting': 1,
   'rug/reception': 1,
-  'rug/nook': 1,
   'bench/base': 1,
   'plant/snake': 4, // three on the walls + the pinwheel's hub (office v3)
   'plant/fiddle': 6, // five on the floor + reception's
@@ -126,10 +154,26 @@ describe('renderScene with the rendered room (plan Task 6)', () => {
   const empty = new Map();
   const run = (r: RenderedAssets) => {
     const { ctx, ops } = recordingCtx();
-    renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: r });
+    renderScene(
+      ctx,
+      fit,
+      empty,
+      new Map(),
+      new Map(),
+      0,
+      'revive',
+      undefined,
+      null,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      { rendered: r },
+    );
     return ops;
   };
-  const blits = (ops: ReturnType<typeof run>) => ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length;
+  const blits = (ops: ReturnType<typeof run>) =>
+    ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length;
   const total = Object.values(STATIC_IDS).reduce((a, b) => a + b, 0);
 
   it('blits every static item exactly once per placement, and nothing else from the manifest', () => {
@@ -146,53 +190,128 @@ describe('renderScene with the rendered room (plan Task 6)', () => {
   it('mid-fade the shell draws both day states, the second at the mix (plan Task 8)', () => {
     const { ctx, ops } = recordingCtx();
     const env = computeLightEnv(16 + 52.5 / 60, true); // day → evening, mix 0.5
-    renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', env, null, undefined, null, undefined, undefined, {
-      rendered: rendered(Object.keys(STATIC_IDS)),
-    });
+    renderScene(
+      ctx,
+      fit,
+      empty,
+      new Map(),
+      new Map(),
+      0,
+      'revive',
+      env,
+      null,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      {
+        rendered: rendered(Object.keys(STATIC_IDS)),
+      },
+    );
     expect(ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length).toBe(total + 1); // the `to` layer over the `from`
     const alphas = ops.filter((o) => o.name === 'set:globalAlpha').map((o) => o.args[0] as number);
     expect(alphas.some((a) => Math.abs(a - 0.5) < 1e-6)).toBe(true);
     // the ceiling overlay is added, not painted over
-    expect(ops.some((o) => o.name === 'set:globalCompositeOperation' && o.args[0] === 'lighter')).toBe(true);
+    expect(
+      ops.some((o) => o.name === 'set:globalCompositeOperation' && o.args[0] === 'lighter'),
+    ).toBe(true);
   });
 
   it('an empty office at night draws the night shell and no ceiling overlay', () => {
     const { ctx, ops } = recordingCtx();
-    renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', computeLightEnv(23, false), null, undefined, null, undefined, undefined, {
-      rendered: rendered(Object.keys(STATIC_IDS)),
-    });
+    renderScene(
+      ctx,
+      fit,
+      empty,
+      new Map(),
+      new Map(),
+      0,
+      'revive',
+      computeLightEnv(23, false),
+      null,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      {
+        rendered: rendered(Object.keys(STATIC_IDS)),
+      },
+    );
     expect(ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length).toBe(total - 1); // no ceiling-on
   });
 
   it('the open fridge keeps its painter (a live state the render has no door for yet)', () => {
     const { ctx, ops } = recordingCtx();
-    renderScene(ctx, fit, empty, new Map(), new Map(), 0, 'revive', undefined, null, { fridgeOpen: true, bottleCarriers: new Set() }, null, undefined, undefined, {
-      rendered: rendered(Object.keys(STATIC_IDS)),
-    });
+    renderScene(
+      ctx,
+      fit,
+      empty,
+      new Map(),
+      new Map(),
+      0,
+      'revive',
+      undefined,
+      null,
+      { fridgeOpen: true, bottleCarriers: new Set() },
+      null,
+      undefined,
+      undefined,
+      {
+        rendered: rendered(Object.keys(STATIC_IDS)),
+      },
+    );
     expect(ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length).toBe(total - 1);
   });
 });
 
 describe('rendered per-desk overlays (plan Task 7)', () => {
   const fit = fitFloor(1200, 900);
-  const ids = ['desk/lamp-off', 'desk/lamp-on', 'desk/fan-0', 'desk/fan-1', 'desk/fan-2', 'desk/fan-3'];
+  const ids = [
+    'desk/lamp-off',
+    'desk/lamp-on',
+    'desk/fan-0',
+    'desk/fan-1',
+    'desk/fan-2',
+    'desk/fan-3',
+  ];
   const seat = (name: string, slot: number) => {
     const placements = new Map([[name, { kind: 'desk' as const, slot, owned: false }]]);
     const byName = new Map([[name, officeNode(name)]]);
     return { placements, byName };
   };
   const blitsOf = (ops: ReturnType<typeof recordingCtx>['ops'], id: string) =>
-    ops.filter((o) => o.name === 'drawImage' && o.args[0] === img && (o as unknown as { id?: string }).id === id).length;
+    ops.filter(
+      (o) =>
+        o.name === 'drawImage' && o.args[0] === img && (o as unknown as { id?: string }).id === id,
+    ).length;
   const run = (hours: number, occupied: boolean, t = 0) => {
     const { ctx, ops } = recordingCtx();
     const r = rendered(ids);
     // tag each image so a blit can be told apart by asset: the loader gives one image per id
     for (const id of ids) r.images.set(id, { fake: true, id } as unknown as CanvasImageSource);
-    const { placements, byName } = occupied ? seat('ada', 0) : { placements: new Map(), byName: new Map() };
-    renderScene(ctx, fit, placements, byName, new Map(), t, 'revive', computeLightEnv(hours, occupied), null, undefined, null, undefined, undefined, {
-      rendered: r,
-    });
-    const by = (id: string) => ops.filter((o) => o.name === 'drawImage' && (o.args[0] as { id?: string }).id === id).length;
+    const { placements, byName } = occupied
+      ? seat('ada', 0)
+      : { placements: new Map(), byName: new Map() };
+    renderScene(
+      ctx,
+      fit,
+      placements,
+      byName,
+      new Map(),
+      t,
+      'revive',
+      computeLightEnv(hours, occupied),
+      null,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      {
+        rendered: r,
+      },
+    );
+    const by = (id: string) =>
+      ops.filter((o) => o.name === 'drawImage' && (o.args[0] as { id?: string }).id === id).length;
     return { by, ops };
   };
   void blitsOf;
@@ -213,13 +332,30 @@ describe('rendered per-desk overlays (plan Task 7)', () => {
     // used to lose its foot to it — a fan sunk into the slab (nick, 2026-10-21).
     const { ctx, ops } = recordingCtx();
     const r = rendered([...ids, 'desk/base']);
-    for (const id of [...ids, 'desk/base']) r.images.set(id, { fake: true, id } as unknown as CanvasImageSource);
+    for (const id of [...ids, 'desk/base'])
+      r.images.set(id, { fake: true, id } as unknown as CanvasImageSource);
     const placements = new Map([['ada', { kind: 'desk' as const, slot: 0 }]]);
     const byName = new Map([['ada', officeNode('ada')]]);
-    renderScene(ctx, fit, placements, byName, new Map(), 0, 'revive', computeLightEnv(12, true), null, undefined, null, undefined, undefined, {
-      rendered: r,
-    });
-    const idOf = (o: (typeof ops)[number]) => (o.name === 'drawImage' ? (o.args[0] as { id?: string }).id : undefined);
+    renderScene(
+      ctx,
+      fit,
+      placements,
+      byName,
+      new Map(),
+      0,
+      'revive',
+      computeLightEnv(12, true),
+      null,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      {
+        rendered: r,
+      },
+    );
+    const idOf = (o: (typeof ops)[number]) =>
+      o.name === 'drawImage' ? (o.args[0] as { id?: string }).id : undefined;
     const bases = ops.flatMap((o, i) => (idOf(o) === 'desk/base' ? [i] : []));
     const lamps = ops.flatMap((o, i) => (idOf(o) === 'desk/lamp-off' ? [i] : []));
     expect(lamps.length).toBe(2);
@@ -263,7 +399,8 @@ describe('the rendered figure (plan Task 13)', () => {
       'stand-up': { row: 56, frames: 4, fps: 12, loop: false },
     },
   } as const;
-  const sheetImg = (id: string) => ({ width: 1024, height: 14848, id }) as unknown as CanvasImageSource;
+  const sheetImg = (id: string) =>
+    ({ width: 1024, height: 14848, id }) as unknown as CanvasImageSource;
   const withFigure = (): RenderedAssets => {
     const r = rendered(ids);
     const layers = ['skin', 'hair/short', 'top/tee', 'bottom', 'shoes', 'tell/eyes'] as const;
@@ -275,7 +412,26 @@ describe('the rendered figure (plan Task 13)', () => {
     return r;
   };
   const standing = (name: string) => {
-    const poses = new Map([[name, { lx: 300, ly: 400, dir: 'S', small: false, carry: null, bubble: null, alpha: 1, moving: true, run: false, gesture: 0, gestureT: 0, sit: 0, heading: Math.PI / 4 } as never]]);
+    const poses = new Map([
+      [
+        name,
+        {
+          lx: 300,
+          ly: 400,
+          dir: 'S',
+          small: false,
+          carry: null,
+          bubble: null,
+          alpha: 1,
+          moving: true,
+          run: false,
+          gesture: 0,
+          gestureT: 0,
+          sit: 0,
+          heading: Math.PI / 4,
+        } as never,
+      ],
+    ]);
     const byName = new Map([[name, officeNode(name)]]);
     return { poses, byName };
   };
@@ -287,9 +443,26 @@ describe('the rendered figure (plan Task 13)', () => {
     // the tint pass needs a canvas; under node, give it a recording one
     const origCreate = globalThis.document;
     const scratch = recordingCtx(); // the tint scratch and the composed frames, one recording for all of them
-    (globalThis as { document?: unknown }).document = { createElement: () => ({ width: 0, height: 0, getContext: () => scratch.ctx }) };
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ width: 0, height: 0, getContext: () => scratch.ctx }),
+    };
     try {
-      renderScene(ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: r });
+      renderScene(
+        ctx,
+        fit,
+        new Map(),
+        byName,
+        poses,
+        3,
+        'revive',
+        undefined,
+        null,
+        undefined,
+        null,
+        undefined,
+        undefined,
+        { rendered: r },
+      );
     } finally {
       (globalThis as { document?: unknown }).document = origCreate;
     }
@@ -298,7 +471,12 @@ describe('the rendered figure (plan Task 13)', () => {
     expect(sheetBlits.length).toBe(2);
     // …and the scratch read ada's five from the walk row for SE (row 8 + 1) of their sheets; the
     // receptionist (seated, facing S) reads from a sit row
-    const reads = scratch.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9 && (o.args[0] as { id?: string }).id !== undefined);
+    const reads = scratch.ops.filter(
+      (o) =>
+        o.name === 'drawImage' &&
+        o.args.length === 9 &&
+        (o.args[0] as { id?: string }).id !== undefined,
+    );
     expect(reads.filter((b) => b.args[2] === 9 * 232).length).toBe(10); // two reads per tint pass (draw, then destination-in)
     expect(reads.filter((b) => b.args[2] === (24 + 2) * 232).length).toBeGreaterThanOrEqual(6); // sit-idle row for S
   });
@@ -306,18 +484,55 @@ describe('the rendered figure (plan Task 13)', () => {
   it('without figure sheets nobody is drawn — the room still paints, with no member and no receptionist', () => {
     const { poses, byName } = standing('ada');
     const a = recordingCtx();
-    renderScene(a.ctx, fit, new Map(), byName, poses, 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
+    renderScene(
+      a.ctx,
+      fit,
+      new Map(),
+      byName,
+      poses,
+      3,
+      'revive',
+      undefined,
+      null,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      { rendered: rendered(ids) },
+    );
     const b = recordingCtx();
-    renderScene(b.ctx, fit, new Map(), new Map(), new Map(), 3, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
+    renderScene(
+      b.ctx,
+      fit,
+      new Map(),
+      new Map(),
+      new Map(),
+      3,
+      'revive',
+      undefined,
+      null,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      { rendered: rendered(ids) },
+    );
     expect(a.ops.filter((o) => o.name === 'drawImage' && o.args.length === 9)).toHaveLength(0);
-    expect(a.ops.filter((o) => o.name === 'quadraticCurveTo')).toHaveLength(b.ops.filter((o) => o.name === 'quadraticCurveTo').length); // no wisp
+    expect(a.ops.filter((o) => o.name === 'quadraticCurveTo')).toHaveLength(
+      b.ops.filter((o) => o.name === 'quadraticCurveTo').length,
+    ); // no wisp
   });
 });
 
 describe('rendered desk chairs (lane 01M5D8EJ40)', () => {
   const fit = fitFloor(1200, 900);
   const styles = ['task', 'wheeled', 'wheeled-arms', 'exec', 'gamer'];
-  const ids = ['chair/shadow', ...styles.flatMap((s) => ['sn', 'ew'].flatMap((a) => [`chair/${s}/${a}/base`, `chair/${s}/${a}/back`]))];
+  const ids = [
+    'chair/shadow',
+    ...styles.flatMap((s) =>
+      ['sn', 'ew'].flatMap((a) => [`chair/${s}/${a}/base`, `chair/${s}/${a}/back`]),
+    ),
+  ];
 
   it('each chair is its style’s sprite, tinted on a canvas the size of the sprite, never a default-sized one', () => {
     // A fresh canvas is 300 × 150 and the tint only grows one: a chair blitted from that squeezed to a
@@ -335,8 +550,25 @@ describe('rendered desk chairs (lane 01M5D8EJ40)', () => {
     const placements = new Map([['ada', { kind: 'desk', slot: 0 }]]);
     try {
       const { ctx, ops } = recordingCtx();
-      renderScene(ctx, fit, placements as never, byName, new Map(), 0, 'revive', undefined, null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
-      const tintedBlits = ops.filter((o) => o.name === 'drawImage' && made.includes(o.args[0] as never));
+      renderScene(
+        ctx,
+        fit,
+        placements as never,
+        byName,
+        new Map(),
+        0,
+        'revive',
+        undefined,
+        null,
+        undefined,
+        null,
+        undefined,
+        undefined,
+        { rendered: rendered(ids) },
+      );
+      const tintedBlits = ops.filter(
+        (o) => o.name === 'drawImage' && made.includes(o.args[0] as never),
+      );
       expect(tintedBlits.length).toBeGreaterThan(0);
       for (const c of made) expect([c.width, c.height]).toEqual([420, 300]);
     } finally {
@@ -348,10 +580,34 @@ describe('rendered desk chairs (lane 01M5D8EJ40)', () => {
 describe('rendered wall fixtures (lane 01M5D8EJ40)', () => {
   const fit = fitFloor(1200, 900);
   const room = ['room/light-day', 'room/ceiling-on'];
-  const fixtures = ['wall/art-0', 'wall/art-1', 'wall/art-2', 'wall/art-3', 'wall/art-4', 'wall/clock', 'wall/board', 'wall/hanger'];
+  const fixtures = [
+    'wall/art-0',
+    'wall/art-1',
+    'wall/art-2',
+    'wall/art-3',
+    'wall/art-4',
+    'wall/clock',
+    'wall/board',
+    'wall/hanger',
+  ];
   const run = (ids: string[]) => {
     const { ctx, ops } = recordingCtx();
-    renderScene(ctx, fit, new Map(), new Map(), new Map(), 0, 'revive', computeLightEnv(12, true), null, undefined, null, undefined, undefined, { rendered: rendered(ids) });
+    renderScene(
+      ctx,
+      fit,
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+      'revive',
+      computeLightEnv(12, true),
+      null,
+      undefined,
+      null,
+      undefined,
+      undefined,
+      { rendered: rendered(ids) },
+    );
     return ops.filter((o) => o.name === 'drawImage' && o.args[0] === img).length;
   };
 

@@ -54,8 +54,7 @@ POD_RUGS = {  # shape → (along, across) — mirrors layout.ts podRug()
 POD_RUG_FIELD_ALPHA = 0.25
 BENCH = dict(lx=320, ly=56, long=300, deep=30)
 NOOK = (725, 175)
-NOOK_RUG_R = 150
-NOOK_RUG = ("#ce9256", "#b2743c")
+CAFE = (620, 4, 896, 330)  # x0, y0, x1, y1 — mirrors layout.ts CAFE: the tiled café corner (office v3-2)
 LOUNGE = dict(
     fridge=dict(dx=-104, dy=-60, w=36, d=30, h=72),
     counter=dict(dx=-30, dy=-86, w=120, d=30, h=34),
@@ -127,7 +126,9 @@ def srgb(hex6: str) -> tuple[float, float, float]:
 
 OAK = srgb("#a97a46")        # the painters' PAL.wood lit; the render carries its own shading
 OAK_DARK = srgb("#6b4826")
-FLOOR_TILE = srgb("#ebae64")  # DARK_PALETTE.floor
+FLOOR_TILE = srgb("#ebae64")  # DARK_PALETTE.floor — the planks' middle tone (office v3-2)
+CAFE_TILE = srgb("#cfc6b6")   # small pale ceramic under the café (a shade down from the swatch: the window pool lifts it)
+CAFE_GROUT = srgb("#a89d8a")
 FLOOR_SIDE = srgb("#c8863c")  # DARK_PALETTE.floor2
 WALL = srgb("#d6cbbc")        # warm greige plaster: nick 2026-10-20, the lilac "looks purpleish"; a neutral that takes the warm key
 APPLIANCE = srgb("#d8d2c6")
@@ -229,6 +230,80 @@ def tiles(name: str, rgb: tuple[float, float, float], cell: float = 60.0) -> bpy
     links.new(brick.outputs["Color"], bsdf.inputs["Base Color"])
     bump = nodes.new("ShaderNodeBump")
     bump.inputs["Strength"].default_value = 0.25
+    links.new(brick.outputs["Fac"], bump.inputs["Height"])
+    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    return m
+
+
+def planks(name: str, rgb: tuple[float, float, float], board_len: float = 160.0, board_w: float = 18.0) -> bpy.types.Material:
+    """The floor (office v3-2): wide boards running E–W, joints staggered by a third of a board, three
+    tones around `rgb`, a fine dark seam. A brick texture whose cells are one board: `Brick Width`
+    is the board's aspect, the offset the stagger."""
+    m = bpy.data.materials.get(name)
+    if m:
+        return m
+    m = bpy.data.materials.new(name)
+    nt, nodes, links, bsdf = _nodes(m)
+    bsdf.inputs["Roughness"].default_value = 0.65
+    bsdf.inputs["Specular IOR Level"].default_value = 0.25
+    tex = nodes.new("ShaderNodeTexCoord")
+    brick = nodes.new("ShaderNodeTexBrick")
+    brick.inputs["Scale"].default_value = 1.0 / board_w
+    brick.inputs["Mortar Size"].default_value = 0.022
+    brick.inputs["Mortar Smooth"].default_value = 0.2
+    brick.inputs["Bias"].default_value = 0.0
+    brick.inputs["Brick Width"].default_value = board_len / board_w
+    brick.inputs["Row Height"].default_value = 1.0
+    brick.offset = 0.33
+    brick.offset_frequency = 1
+    brick.inputs["Color1"].default_value = (*[c * 1.08 for c in rgb], 1)
+    brick.inputs["Color2"].default_value = (*[c * 0.86 for c in rgb], 1)
+    brick.inputs["Mortar"].default_value = (*[c * 0.32 for c in rgb], 1)
+    # a third tone: a coarse noise over the board field, so no two boards along a row match
+    noise = nodes.new("ShaderNodeTexNoise")
+    noise.inputs["Scale"].default_value = 0.01
+    noise.inputs["Detail"].default_value = 1.0
+    mix = nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    mix.inputs["Factor"].default_value = 0.0
+    links.new(noise.outputs["Fac"], mix.inputs["Factor"])
+    links.new(brick.outputs["Color"], mix.inputs[6])  # A
+    mix.inputs[7].default_value = (*[c * 0.78 for c in rgb], 1)  # B
+    links.new(tex.outputs["Object"], brick.inputs["Vector"])
+    links.new(tex.outputs["Object"], noise.inputs["Vector"])
+    links.new(mix.outputs[2], bsdf.inputs["Base Color"])
+    bump = nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.35
+    links.new(brick.outputs["Fac"], bump.inputs["Height"])
+    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    return m
+
+
+def cafe_tile(name: str, rgb: tuple[float, float, float], grout: tuple[float, float, float], cell: float = 30.0) -> bpy.types.Material:
+    """Small square ceramic tiles with a light grout, under the café (office v3-2)."""
+    m = bpy.data.materials.get(name)
+    if m:
+        return m
+    m = bpy.data.materials.new(name)
+    nt, nodes, links, bsdf = _nodes(m)
+    bsdf.inputs["Roughness"].default_value = 0.75
+    bsdf.inputs["Specular IOR Level"].default_value = 0.15
+    tex = nodes.new("ShaderNodeTexCoord")
+    brick = nodes.new("ShaderNodeTexBrick")
+    brick.inputs["Scale"].default_value = 1.0 / cell
+    brick.inputs["Mortar Size"].default_value = 0.035
+    brick.inputs["Mortar Smooth"].default_value = 0.5
+    brick.inputs["Bias"].default_value = 0.0
+    brick.inputs["Brick Width"].default_value = 1.0
+    brick.inputs["Row Height"].default_value = 1.0
+    brick.offset = 0.0
+    brick.inputs["Color1"].default_value = (*rgb, 1)
+    brick.inputs["Color2"].default_value = (*[c * 0.97 for c in rgb], 1)
+    brick.inputs["Mortar"].default_value = (*grout, 1)
+    links.new(tex.outputs["Object"], brick.inputs["Vector"])
+    links.new(brick.outputs["Color"], bsdf.inputs["Base Color"])
+    bump = nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.15
     links.new(brick.outputs["Fac"], bump.inputs["Height"])
     links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
     return m
@@ -1258,12 +1333,20 @@ def desk_fan(asset_id: str, frame: int, zs: float, col) -> bpy.types.Object:
 
 # ── the shell ──────────────────────────────────────────────────────────────────────────────
 def floor_slab(asset_id: str, zs: float, col) -> bpy.types.Object:
-    """The floor: a tiled top and a darker slab edge (THICK) the diamond sits on. Origin at the back corner."""
-    tile = tiles("floor-tiles", FLOOR_TILE)
+    """The floor (office v3-2): planks across the room, the café corner tiled on a box inset 0.2 above
+    them with a darker threshold strip along its south and west edges, and a darker slab edge
+    (THICK) under it all. Origin at the back corner."""
+    board = planks("floor-planks", FLOOR_TILE)
+    tile = cafe_tile("cafe-tile", CAFE_TILE, CAFE_GROUT)
     side = paint("floor-side", FLOOR_SIDE, 0.7)
-    top = box(f"{asset_id}/top", FLOOR / 2, FLOOR / 2, -1.0, FLOOR, FLOOR, 1.0, tile, zs)
+    sill = wood("cafe-threshold", srgb("#8a6a4a"), grain=0.1)
+    x0, y0, x1, y1 = CAFE
+    top = box(f"{asset_id}/top", FLOOR / 2, FLOOR / 2, -1.0, FLOOR, FLOOR, 1.0, board, zs)
+    cafe = box(f"{asset_id}/cafe", (x0 + x1) / 2, (y0 + y1) / 2, 0.0, x1 - x0, y1 - y0, 0.2, tile, zs)
+    south = box(f"{asset_id}/threshold-s", (x0 + x1) / 2, y1 - 2, 0.0, x1 - x0, 4, 0.3, sill, zs)
+    west = box(f"{asset_id}/threshold-w", x0 + 2, (y0 + y1) / 2, 0.0, 4, y1 - y0, 0.3, sill, zs)
     slab = box(f"{asset_id}/slab", FLOOR / 2, FLOOR / 2, -THICK, FLOOR - 0.2, FLOOR - 0.2, THICK - 1.0, side, zs)
-    return finish(asset_id, [top, slab], 0, 0, col)
+    return finish(asset_id, [top, cafe, south, west, slab], 0, 0, col)
 
 
 def wall(asset_id: str, which: int, zs: float, col) -> bpy.types.Object:
@@ -1453,7 +1536,6 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     a["rug/meeting"] = rug("rug/meeting", MEETING["lx"], MEETING["ly"], mw, md, mf, mm, mv, zs, export)
     rlx, rly, rw, rd, rf, rm, rv = RECEPTION["rug"]
     a["rug/reception"] = rug("rug/reception", rlx, rly, rw, rd, rf, rm, rv, zs, export)
-    a["rug/nook"] = diamond_rug("rug/nook", NOOK[0], NOOK[1], NOOK_RUG_R, NOOK_RUG[0], NOOK_RUG[1], zs, export)
     a["desk/base"] = desk("desk/base", C, C, True, zs, export)
     a["desk/base-ew"] = desk("desk/base-ew", C, C, False, zs, export)
     a["bench/base"] = bench("bench/base", zs, export)
