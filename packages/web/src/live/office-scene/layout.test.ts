@@ -13,8 +13,10 @@ import {
   STRIP_CAP,
   FWD,
   LEISURE_SPOTS,
+  MAX_S_FACING,
   MEETING,
   MIN_SPOT_GAP,
+  POD_SHAPE_SEATS,
   PODS,
   RECEPTION,
   SEAT_BACK,
@@ -26,27 +28,38 @@ import {
 } from './layout';
 
 describe('desk pods', () => {
-  it('seats exactly seventeen, sized per pod, with stable unique ids', () => {
-    // 20 on 2026-08-02; 18 when the centre duo came out because the floor read as crowded; 17 when
-    // pod 3 dropped to a solo to unbox the lounge. Each cut bought air no amount of shuffling could.
-    expect(DESK_SLOTS).toHaveLength(17);
-    const podSeats = PODS.reduce((n, p) => n + p.size, 0);
+  it('seats 26: bench 4, pinwheel 4, spine 10, zigzag 3, solo 1, corner duo 2, window 2', () => {
+    // 20 on 2026-08-02; 18 → 17 as the floor read crowded; 26 on 2026-10-26 (office v3, spec
+    // 2026-10-26-office-v3-design.md §2.1): the v2 figure is smaller and the room has air again.
+    expect(DESK_SLOTS).toHaveLength(26);
+    const podSeats = PODS.reduce((n, p) => n + POD_SHAPE_SEATS[p.shape], 0);
     expect(DESK_SLOTS).toHaveLength(podSeats + BENCH.seats + WINDOW_DESKS.length);
     expect(new Set(DESK_SLOTS.map((s) => s.id)).size).toBe(DESK_SLOTS.length);
     for (const pod of PODS) {
-      expect(DESK_SLOTS.filter((s) => s.pod === pod.id)).toHaveLength(pod.size);
+      expect(DESK_SLOTS.filter((s) => s.pod === pod.id)).toHaveLength(POD_SHAPE_SEATS[pod.shape]);
     }
     expect(DESK_SLOTS.filter((s) => s.kind === 'bench')).toHaveLength(BENCH.seats);
     expect(DESK_SLOTS.filter((s) => s.kind === 'window')).toHaveLength(WINDOW_DESKS.length);
-    // Pod ids stay 0..11 — the bench and window seats append, they do not renumber anybody.
-    for (const s of DESK_SLOTS) if (s.kind === 'pod') expect(s.id).toBeLessThan(PODS.length * 4);
   });
 
-  it('keeps exactly two desks facing the viewer', () => {
+  it('keeps at most MAX_S_FACING desks facing the viewer', () => {
     // A face is what makes a member read as a person rather than a coloured block, so the floor needs
-    // some — but turning more of it toward the camera would make the room a stage set. Two is the deal:
-    // one 'ns' pod's north row. Adding a second 'ns' pod would silently double it.
-    expect(DESK_SLOTS.filter((s) => s.dir === 'S')).toHaveLength(2);
+    // some — but turning more of it toward the camera would make the room a stage set. Four is the
+    // ceiling with 28 desks: the pinwheel gives one, the zigzag at most two.
+    expect(DESK_SLOTS.filter((s) => s.dir === 'S').length).toBeLessThanOrEqual(MAX_S_FACING);
+  });
+
+  it('turns a pinwheel to face all four ways', () => {
+    const pw = PODS.find((p) => p.shape === 'pinwheel')!;
+    const dirs = DESK_SLOTS.filter((d) => d.pod === pw.id).map((d) => d.dir);
+    expect(new Set(dirs)).toEqual(new Set(['N', 'E', 'S', 'W']));
+  });
+
+  it('steps a zigzag so no two desks share a row or a column', () => {
+    const z = PODS.find((p) => p.shape === 'zigzag')!;
+    const desks = DESK_SLOTS.filter((d) => d.pod === z.id);
+    expect(new Set(desks.map((d) => d.lx)).size).toBe(3);
+    expect(new Set(desks.map((d) => d.ly)).size).toBe(3);
   });
 
   it('seats every member outside their pod, on the floor', () => {
