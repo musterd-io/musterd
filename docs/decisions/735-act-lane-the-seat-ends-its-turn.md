@@ -49,7 +49,10 @@ time is real, on the team.
    derivation waives the cooldown (`cooled` is true by policy, not by the ledger) and adds a candidate
    source: every directed act to the seat from another member that the seat has not read — newer than
    its inbox cursor, any act kind, a plain `message` included (`listDirectedSince`, receipt order, 200
-   at most). The candidates ride the batched lane (`lane: 'batched'`, `derivation: 'batched'`): the
+   at most). _(Amended 2026-10-26: and newer than the seat's act-lane enrollment — the enrollment
+   row's `updated_at`, stamped by the `residency on` that set the lane. An act received before the
+   switch is backlog, not the next act; the first live act-lane wake, 15 minutes after the switch, was
+   a `message` that had waited 838 hours.)_ The candidates ride the batched lane (`lane: 'batched'`, `derivation: 'batched'`): the
    lease, the report, the ledger and the roster need no new value. Everything that bounds a wake still
    bounds these: the hourly cap and the attempt cap (§2), ADR 434 §2's spent-act skip, ADR 211 §4's
    deferral suppression, ADR 494 §4's dream rule, ADR 463's host scope, the live-presence and lease
@@ -87,6 +90,12 @@ time is real, on the team.
 
 ## Consequences
 
+- _2026-10-26, 19:40Z, the first live wake:_ grokbot, enrolled at ~19:40Z, was woken at once for a
+  `message` from stanley that had waited **838 hours** — its inbox cursor was a month old, and every
+  unread directed act behind it was due. The hourly cap bounded it to two wakes an hour, which is still
+  about $26 a day a seat on backlog alone. Fixed the same hour: the act lane's candidates are newer than
+  the enrollment row's `updated_at` as well as the cursor (§1 amended), with a test. A later
+  `residency on` on the same seat moves that horizon again, which is what re-enrolling means (ADR 434 §3).
 - An admin may enroll a seat with `musterd residency on --seat <agent> --workspace <its folder> --lane
   act [--hourly-cap <n>]` from their own Workspace (ADR 442). Nothing changes for any seat not so
   enrolled.
