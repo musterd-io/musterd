@@ -377,7 +377,7 @@ _(Replaced 2026-10-26, nick: the painters were deleted in #3295, so there is no 
 - ~~**Step 1:** Run `scripts/perf/broadcast-baseline.mjs` (method at the top of `docs/perf/web-live-baseline.md`) against `origin/main` and this branch, same fixture team, 1080p30, five minutes each.~~ — replaced, see below
 - ~~**Step 2:** Record draws/s, ms per draw and main-thread busy in `web-live-baseline.md`. The gate: ms per draw on this branch ≤ main's. A regression blocks the merge; fix it here (first suspects: unneeded per-frame `tintedSheet` misses, overlays drawn when nothing changed under dirty-rect).~~ — replaced, see below
 - ~~**Step 3:** Commit the numbers.~~ — replaced, see below
-- [x] **Replacement (nick, 2026-10-26).** Measure `/broadcast` on the hosted stream seat for five minutes and record it in `web-live-baseline.md`. **Revised gate:** the stream holds its capture rate — the encoder at 30 fps and 1× speed — while the office draws at a median within 10% of it, on a run with less than 10% CPU from other processes. **Met** (#3345): encoder `fps=30 … speed=1x`, median 29 draws/s (p5 23), other CPU 2.5%.
+- [x] **Replacement (nick, 2026-10-26).** Measure `/broadcast` on the hosted stream seat for five minutes and record it in `web-live-baseline.md`. **Revised gate:** the stream holds its capture rate — the encoder at 30 fps and 1× speed — while the office draws a median of at least 28 per second with its slowest 5% of seconds at 22 or above (nick, 2026-10-26), on a run with less than 10% CPU from other processes. **Met** (#3345): encoder `fps=30 … speed=1x`, median 29 draws/s (p5 23), other CPU 2.5%.
 
 ### Task 21: Ship
 
