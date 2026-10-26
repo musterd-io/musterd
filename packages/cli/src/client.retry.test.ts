@@ -91,3 +91,29 @@ describe('connectionNeverEstablished is narrower than isConnRefused', () => {
     expect(connectionNeverEstablished(undefined)).toBe(false);
   });
 });
+
+describe('HttpClient names a non-JSON reply instead of throwing a bare SyntaxError', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const htmlPage = (status: number) =>
+    new Response('<!DOCTYPE html><html><body>502 Bad Gateway</body></html>', {
+      status,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+
+  it('reports the method, route, status and content-type of an HTML error page', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(htmlPage(502)));
+    const err = await write().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    const msg = (err as Error).message;
+    expect(msg).toMatch(/^POST \/teams\/revive\/.+ answered HTTP 502 with text\/html, not JSON/);
+    expect(msg).toContain('in front of the team server at http://x');
+    expect(msg).toContain('"<!DOCTYPE html>');
+    expect(msg).not.toMatch(/Unexpected token/);
+  });
+
+  it('says so even when the page arrives with a 200', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(htmlPage(200)));
+    await expect(write()).rejects.toThrow(/answered HTTP 200 with text\/html, not JSON/);
+  });
+});
