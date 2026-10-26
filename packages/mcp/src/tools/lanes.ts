@@ -282,9 +282,7 @@ export function registerLanes(
         risk: z
           .array(z.string())
           .optional()
-          .describe(
-            'only user-facing: peer review. Any other tag (policy, security…): human. [] = none.',
-          ),
+          .describe('only user-facing: peer review. Other tag, e.g. policy: human. [] = none.'),
       },
     },
     async (args) => {
