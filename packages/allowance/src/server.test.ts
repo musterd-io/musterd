@@ -1,8 +1,9 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { accountKey } from './accountKey.js';
 import { start } from './server.js';
 
 const SECRET = 'xi-test-secret-key-do-not-leak';
@@ -44,6 +45,7 @@ describe('start', () => {
       claudeToken: null,
       cursorAuthPath: null,
       cursorToken: null,
+      museAuthPath: null,
     });
     const address = server.address();
     expect(address).toMatchObject({ address: '127.0.0.1' });
@@ -133,5 +135,75 @@ describe('start', () => {
       body: `account=exa&pad=${'x'.repeat(5000)}`,
     });
     expect(huge.status).toBe(413);
+  });
+
+  it('posts a Muse window and not the auth email or the access token', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'allowance-muse-'));
+    const email = 'ada@example.com';
+    const token = 'secret-token-value';
+    await writeFile(
+      join(dir, 'auth.json'),
+      JSON.stringify({ user_email: email, providers: { muse: { access_token: token } } }),
+    );
+    await writeFile(join(dir, 'config.json'), JSON.stringify({ accounts: ['muse'] }));
+    const posts: string[] = [];
+    const fetchSub = vi.fn<typeof fetch>(async (_url, init) => {
+      posts.push(String(init?.body ?? ''));
+      return new Response('{}', { status: 200 });
+    });
+    server = await start({
+      port: 0,
+      env: {
+        MUSTERD_TEAM: 'revive',
+        MUSTERD_SERVER: 'http://127.0.0.1:4849',
+        MUSTERD_CONFIG: join(dir, 'missing.json'),
+      },
+      now: () => 1_700_000_000_000,
+      timeZone: 'UTC',
+      fetchSub,
+      configPath: join(dir, 'config.json'),
+      codexAuthPath: null,
+      claudeCredentialPath: null,
+      claudeToken: null,
+      cursorAuthPath: null,
+      cursorToken: null,
+      museAuthPath: join(dir, 'auth.json'),
+      readMuse: async () => ({
+        state: 'live',
+        detail: null,
+        windows: [
+          {
+            id: 'session',
+            unit: 'percent',
+            used: 35,
+            limit: 100,
+            resetsAt: 1_700_000_100_000,
+            label: '5-hour window',
+          },
+        ],
+      }),
+    });
+    const address = server.address();
+    if (address === null || typeof address !== 'object') throw new Error('no port');
+    const api = await fetch(`http://127.0.0.1:${address.port}/api/board`);
+    const json = await api.text();
+    expect(api.status).toBe(200);
+    expect(json).toContain('"id":"muse"');
+    expect(json).not.toContain(email);
+    expect(json).not.toContain(token);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).not.toContain(email);
+    expect(posts[0]).not.toContain(token);
+    expect(JSON.parse(posts[0] ?? '{}')).toEqual({
+      accounts: [
+        {
+          provider: 'muse',
+          account: accountKey('muse', `id:${email}`),
+          label: 'Muse',
+          readAt: 1_700_000_000_000,
+          windows: [{ name: '5h', left: 0.65, resetsAt: 1_700_000_100_000, kind: 'percent' }],
+        },
+      ],
+    });
   });
 });

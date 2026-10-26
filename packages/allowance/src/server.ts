@@ -3,8 +3,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cursorAccountKey, elevenAccountKey, openaiAccountKey } from './accountKey.js';
-import { readBoard } from './board.js';
+import {
+  cursorAccountKey,
+  elevenAccountKey,
+  museAccountKey,
+  openaiAccountKey,
+} from './accountKey.js';
+import { readBoard, type ReadDeps } from './board.js';
 import { claudeSignInFromKeychain, resolveClaudeSignIn } from './claude.js';
 import { codexSession } from './codex.js';
 import { loadSelection, saveSelection, selectionFromForm } from './config.js';
@@ -47,6 +52,13 @@ export interface StartOpts {
    * Null skips both, so a test never reads a sign-in.
    */
   cursorToken?: string | null;
+  /**
+   * Muse auth.json. Defaults to `MUSE_AUTH_PATH` or `~/.config/muse/auth.json`.
+   * Null skips the file, so a test never reads a home directory.
+   */
+  museAuthPath?: string | null;
+  /** Override the Muse CLI read. Tests pass this so they do not spawn `muse`. */
+  readMuse?: ReadDeps['readMuse'];
 }
 
 const SAVE_REFUSED = 'That save did not come from this page.';
@@ -151,6 +163,10 @@ export function start(opts: StartOpts): Promise<Server> {
       : opts.claudeCredentialPath;
   const cursorAuthPath =
     opts.cursorAuthPath === undefined ? join(home, '.cursor', 'auth.json') : opts.cursorAuthPath;
+  const museAuthPath =
+    opts.museAuthPath === undefined
+      ? env['MUSE_AUTH_PATH']?.trim() || join(home, '.config', 'muse', 'auth.json')
+      : opts.museAuthPath;
   let css: Promise<string> | undefined;
   const stylesheet = (): Promise<string> => {
     css ??= readFile(join(assets, 'allowance.css'), 'utf8').then((file) => file + percentCss());
@@ -225,10 +241,11 @@ export function start(opts: StartOpts): Promise<Server> {
     try {
       const chosen = await loadSelection(configPath);
       const on = new Set(chosen);
-      const [codexAuth, claudeCredential, cursorFile] = await Promise.all([
+      const [codexAuth, claudeCredential, cursorFile, museFile] = await Promise.all([
         on.has('openai') ? readJson(codexAuthPath) : undefined,
         on.has('claude') ? readJson(claudeCredentialPath) : undefined,
         on.has('cursor') ? readJson(cursorAuthPath) : undefined,
+        on.has('muse') ? readJson(museAuthPath) : undefined,
       ]);
       const cursor = on.has('cursor')
         ? await resolveCursorToken(opts.cursorToken, cursorFile, cursorTokenFromKeychain)
@@ -253,6 +270,7 @@ export function start(opts: StartOpts): Promise<Server> {
         claudeToken: claude?.token ?? null,
         claudePlan: claude?.plan ?? null,
         cursorToken: cursor,
+        ...(opts.readMuse ? { readMuse: opts.readMuse } : {}),
       });
       await publishReading(board, {
         env,
@@ -261,6 +279,7 @@ export function start(opts: StartOpts): Promise<Server> {
         claudeKey: claude?.accountKey ?? null,
         cursorToken: cursor,
         cursorFile,
+        museFile,
       });
       return board;
     } catch {
@@ -277,6 +296,7 @@ export function start(opts: StartOpts): Promise<Server> {
       claudeKey: string | null;
       cursorToken: string | null;
       cursorFile: unknown;
+      museFile: unknown;
     },
   ): Promise<void> {
     try {
@@ -290,6 +310,9 @@ export function start(opts: StartOpts): Promise<Server> {
       const eleven = read.env['ELEVENLABS_API_KEY']?.trim() ?? '';
       if (eleven !== '')
         keys.push({ provider: 'elevenlabs', accountKey: elevenAccountKey(eleven) });
+      if (board.chosen.includes('muse')) {
+        keys.push({ provider: 'muse', accountKey: museAccountKey(read.museFile) });
+      }
       const snapshot = allowanceSnapshot(board, keys);
       if (snapshot === null) return;
       const musterdConfig =

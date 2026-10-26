@@ -70,3 +70,25 @@ export function openaiAccountKey(accountId: string): string {
 export function elevenAccountKey(apiKey: string): string {
   return accountKey('elevenlabs', `key:${apiKey}`);
 }
+
+function museEmail(body: unknown): string | null {
+  if (body === null || typeof body !== 'object') return null;
+  const row = body as Record<string, unknown>;
+  const top = publicAccountId(row['user_email']);
+  if (top) return top;
+  const providers = row['providers'];
+  if (providers === null || typeof providers !== 'object') return null;
+  for (const value of Object.values(providers as Record<string, unknown>)) {
+    if (value === null || typeof value !== 'object') continue;
+    const id = publicAccountId((value as Record<string, unknown>)['user_email']);
+    if (id) return id;
+  }
+  return null;
+}
+
+/** Muse: a public email on the auth file, else this machine. The access token is not hashed. */
+export function museAccountKey(body: unknown): string {
+  const email = museEmail(body);
+  if (email) return accountKey('muse', `id:${email}`);
+  return machineAccountKey('muse');
+}

@@ -5,6 +5,7 @@ import {
   cursorAccountKey,
   elevenAccountKey,
   machineAccountKey,
+  museAccountKey,
   openaiAccountKey,
   publicAccountId,
 } from './accountKey.js';
@@ -57,6 +58,26 @@ describe('account keys', () => {
     expect(key).toBe(accountKey('cursor', 'id:ada@example.com'));
     expect(key).not.toContain('cursor-secret');
     expect(cursorAccountKey({ accessToken: 'cursor-secret' })).toBe(machineAccountKey('cursor'));
+  });
+
+  it('hashes a Muse email and not the access token', () => {
+    const email = 'ada@example.com';
+    const token = 'secret-token-value';
+    const first = museAccountKey({
+      user_email: email,
+      providers: { muse: { access_token: token, user_email: 'other@example.com' } },
+    });
+    const second = museAccountKey({
+      providers: { muse: { user_email: email, access_token: 'other-token-value' } },
+    });
+    expect(first).toBe(accountKey('muse', `id:${email}`));
+    expect(second).toBe(first);
+    expect(first).not.toContain(email);
+    expect(first).not.toContain(token);
+    expect(museAccountKey({ access_token: token })).toBe(machineAccountKey('muse'));
+    expect(museAccountKey({ user_email: 'short', access_token: token })).toBe(
+      machineAccountKey('muse'),
+    );
   });
 
   it('refuses a token-shaped or short public id', () => {

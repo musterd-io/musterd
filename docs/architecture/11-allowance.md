@@ -6,7 +6,7 @@
 
 ## What it is
 
-`@musterd/allowance` is one local page, `what's left` (0.1.2). It reads provider windows that a
+`@musterd/allowance` is one local page, `what's left` (0.1.3). It reads provider windows that a
 provider actually reports, and it says so when it cannot. It does not join a team and it does not
 import another musterd package. After a good read it posts the percents to the daemon named by
 `MUSTERD_SERVER`, or the local daemon, for the team in `MUSTERD_TEAM`, the workspace file, or the
@@ -52,8 +52,19 @@ A number is drawn only from a body the provider's own client reads:
   `individualUsed` or, when that field is absent, the limit minus `individualRemaining`. Auto and
   API percents are shares of the included pool, so they are not separate bars. `displayMessage` is
   never copied out.
+- Muse, from `muse usage --json` on this machine (5 second limit). A number is drawn only from
+  `allowance.window`, or from a flat `usedPercent` on `allowance` when `window` is absent. The
+  current window needs `usedPercent` (or `used_percent`), `windowDurationMins` (or
+  `window_duration_mins`), and a reset (`resetsAtMs`, `resets_at_ms`, `resetsAt`, or `resets_at`).
+  300 minutes is the 5-hour window. When both the flat fields and `window` are present, `window`
+  wins. `allowance.weekly` is the weekly window from a used percent and a reset. Used percent may
+  be over 100. `schemaVersion` must be 1. `allowance: null` is a reason and no number: nothing
+  spent in this window yet, no subscription, an API key, or not signed in. The hint and `tier` are
+  not copied out. The account key is `id:` plus `user_email` when that email is a public id, from
+  the top of `MUSE_AUTH_PATH` or `~/.config/muse/auth.json`, or from a `providers` entry, else the
+  machine key. The access token is not hashed.
 
-OpenCode, Grok, Muse, Hume and Exa have no remaining-window read. When one of them is checked, the
+OpenCode, Grok, Hume and Exa have no remaining-window read. When one of them is checked, the
 line is the reason and no number. A checked account with no sign-in on this machine says so, and
 shows no number.
 
@@ -80,6 +91,7 @@ cursor.ts         // Cursor's usage read: included percent and on-demand cents, 
 elevenlabs.ts     // parseElevenLabs + readElevenLabs (redirect:'error', 5s budget lives with the caller)
 format.ts         // counts, "left of", a share of a named window, on-demand dollars, reset phrases
 launch.ts         // startup lines, and opening the browser when stdout is a terminal
+muse.ts           // Muse's usage read: muse usage --json; a null allowance is a reason and no number; the auth email is hashed, the token is not
 page.ts           // renderPage: live accounts two across, a quiet account on one line, the account form, every provider string escaped
 post.ts           // after a good read, post the percents to the daemon named by the env, the workspace file, or the only team on this machine
 server.ts         // 127.0.0.1 only; /, /api/board, POST /accounts, the stylesheet, the three font files

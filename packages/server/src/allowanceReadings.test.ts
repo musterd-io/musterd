@@ -190,6 +190,79 @@ describe('allowance readings', () => {
     expect(allowanceForRoster(TEAM, [service]).has('nick')).toBe(false);
   });
 
+  it('paints Muse on a muse-wonder presence, and not on musterd', () => {
+    ingestAllowance(
+      TEAM,
+      {
+        accounts: [
+          {
+            provider: 'muse',
+            account: 'eeeeeeeeeeeeeeee',
+            label: 'Muse',
+            readAt: 100,
+            windows: [{ name: '5h', left: 0.65, resetsAt: null, kind: 'percent' }],
+          },
+          {
+            provider: 'cursor',
+            account: 'cccccccccccccccc',
+            label: 'Cursor',
+            readAt: 100,
+            windows: [{ name: 'month', left: 0.5, resetsAt: null, kind: 'percent' }],
+          },
+          {
+            provider: 'elevenlabs',
+            account: 'dddddddddddddddd',
+            label: 'ElevenLabs',
+            readAt: 100,
+            windows: [
+              {
+                name: 'characters',
+                left: 0.4,
+                resetsAt: null,
+                kind: 'amount',
+                used: 1,
+                limit: 10,
+                unit: 'characters',
+              },
+            ],
+          },
+        ],
+      },
+      { holder: 'nick', local: true },
+    );
+    const wonder = seat({
+      name: 'tj',
+      kind: 'agent',
+      present: true,
+      presences: [{ status: 'online', node: null, model: 'muse-wonder-1.0', driver: null }],
+    });
+    const spark = seat({
+      name: 'tj',
+      kind: 'agent',
+      present: true,
+      presences: [{ status: 'online', node: null, model: 'muse-spark-x', driver: 'nick' }],
+    });
+    const word = seat({
+      name: 'tj',
+      kind: 'agent',
+      present: true,
+      presences: [{ status: 'online', node: null, model: 'musterd', driver: 'nick' }],
+    });
+    expect(
+      allowanceForRoster(TEAM, [wonder])
+        .get('tj')
+        ?.accounts.map((account) => account.provider),
+    ).toEqual(['muse']);
+    expect(allowanceForRoster(TEAM, [spark]).get('tj')?.accounts[0]?.label).toBe('Muse');
+    expect(allowanceForRoster(TEAM, [word]).has('tj')).toBe(false);
+    const nick = seat({ name: 'nick' });
+    expect(
+      allowanceForRoster(TEAM, [nick])
+        .get('nick')
+        ?.accounts.map((account) => account.provider),
+    ).toEqual(['cursor', 'elevenlabs', 'muse']);
+  });
+
   it('omits the field for a broadcast reader and keeps it for a public reader', () => {
     const view = {
       readAt: 1,

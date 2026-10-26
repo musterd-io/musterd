@@ -23,13 +23,13 @@ export const ACCOUNTS: readonly Account[] = [
     name: 'Grok',
     reason: 'xAI shows spend in the console. It does not report a remaining window.',
   },
-  { id: 'muse', name: 'Muse', reason: 'No window we can read yet.' },
+  { id: 'muse', name: 'Muse', reason: '' },
   { id: 'cursor', name: 'Cursor', reason: '' },
   { id: 'hume', name: 'Hume', reason: 'Hume does not report remaining included usage.' },
   { id: 'exa', name: 'Exa', reason: 'Exa reports spend, not a remaining balance.' },
 ];
 
-const READERS = new Set(['elevenlabs', 'openai', 'claude', 'cursor']);
+const READERS = new Set(['elevenlabs', 'openai', 'claude', 'cursor', 'muse']);
 
 /** Accounts with no read. A quiet row carries a reason and never a number. */
 export const QUIET: readonly Account[] = ACCOUNTS.filter((account) => !READERS.has(account.id));
