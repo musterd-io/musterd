@@ -91,6 +91,34 @@ describe('awaitDaemon', () => {
     const health = (): Promise<DaemonHealth> => Promise.reject(new Error('refused'));
     expect(await awaitDaemon(health, { sleep, delayMs: 0, tries: 3 })).toBeNull();
   });
+
+  it('stops at the wall-clock budget before it runs out of tries', async () => {
+    let t = 0;
+    let calls = 0;
+    const health = (): Promise<DaemonHealth> => {
+      calls++;
+      t += 2_000; // each poll times out
+      return Promise.reject(new Error('timeout'));
+    };
+    const tick = (ms: number): Promise<void> => {
+      t += ms;
+      return Promise.resolve();
+    };
+    const opts = { sleep: tick, now: () => t, delayMs: 500, tries: 1_000, budgetMs: 10_000 };
+    expect(await awaitDaemon(health, opts)).toBeNull();
+    expect(calls).toBe(4); // 4 x (2s poll + 0.5s wait) = 10s
+  });
+
+  it('hands the per-poll timeout to the probe, so a slow /health under load still counts', async () => {
+    const seen: (number | undefined)[] = [];
+    const health = (timeoutMs?: number): Promise<DaemonHealth> => {
+      seen.push(timeoutMs);
+      return Promise.resolve({ build: 'abc123' });
+    };
+    await awaitDaemon(health, { sleep, pollTimeoutMs: 10_000 });
+    await awaitDaemon(health, { sleep });
+    expect(seen).toEqual([10_000, undefined]);
+  });
 });
 
 describe('service install daemon environment (end to end through the command)', () => {
