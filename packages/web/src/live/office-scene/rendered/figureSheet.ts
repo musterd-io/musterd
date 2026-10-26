@@ -45,9 +45,27 @@ export type GestureAnim = (typeof GESTURE_ANIMS)[number];
  * idle with both hands holding something at the chest (`hold2`: a box, a plate), the right hand out in
  * front (`hold1`: the card, a mug, a bottle), or the phone at the ear on a pacing call.
  */
-export const CARRY_ANIMS = ['walk-hold2', 'walk-hold1', 'walk-call', 'idle-hold2', 'idle-hold1'] as const;
+export const CARRY_ANIMS = [
+  'walk-hold2',
+  'walk-hold1',
+  'walk-call',
+  'idle-hold2',
+  'idle-hold1',
+] as const;
 export type CarryAnim = (typeof CARRY_ANIMS)[number];
-export type Anim = 'idle' | 'walk' | 'sit-type' | 'sit-idle' | 'speak' | 'turn' | 'sit-down' | 'stand-up' | GestureAnim | CarryAnim | 'sit-hand';
+export type Anim =
+  | 'idle'
+  | 'walk'
+  | 'sit-type'
+  | 'sit-idle'
+  | 'speak'
+  | 'turn'
+  | 'sit-down'
+  | 'stand-up'
+  | GestureAnim
+  | CarryAnim
+  | 'sit-hand'
+  | 'sit-lap';
 export const ANIMS: readonly Anim[] = [
   'idle',
   'walk',
@@ -88,7 +106,11 @@ export interface SheetSpec {
   /** The crown of the head in floor units — nameplates and bubbles hang above it (96 when absent). */
   height?: number;
   /** Partial: a figure.json from before a clip existed simply lacks it (the runtime falls back). */
-  anims: Partial<Record<Anim, AnimSpec>> & Record<'idle' | 'walk' | 'sit-type' | 'sit-idle' | 'speak' | 'turn' | 'sit-down' | 'stand-up', AnimSpec>;
+  anims: Partial<Record<Anim, AnimSpec>> &
+    Record<
+      'idle' | 'walk' | 'sit-type' | 'sit-idle' | 'speak' | 'turn' | 'sit-down' | 'stand-up',
+      AnimSpec
+    >;
   /**
    * Per layer, the packed atlas cells: six numbers per cell — `x, y, w, h` in the atlas and
    * `ox, oy`, where the cell sits inside the nominal frame — in ANIMS order, then DIR8, then
@@ -112,7 +134,7 @@ const HYSTERESIS = (4 * Math.PI) / 180;
 
 /** Wrap a heading to (−π, π]. */
 function wrap(h: number): number {
-  const w = ((h + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+  const w = (((h + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
   return w - Math.PI;
 }
 
@@ -149,16 +171,31 @@ export interface FrameRect {
 }
 
 /** Which frame of `anim` plays at `t`, and whether a one-shot has finished. */
-export function frameIndex(spec: SheetSpec, anim: Anim, t: number, startT: number, frame?: number): { i: number; done: boolean } {
+export function frameIndex(
+  spec: SheetSpec,
+  anim: Anim,
+  t: number,
+  startT: number,
+  frame?: number,
+): { i: number; done: boolean } {
   const a = spec.anims[anim]!;
   // A gesture names its frame outright (the beat's own clock picks it, not the scene's).
   if (frame !== undefined) return { i: Math.max(0, Math.min(a.frames - 1, frame)), done: false };
   const elapsed = Math.max(0, t - startT);
   const n = Math.floor(elapsed * a.fps + 1e-6);
-  return { i: a.loop ? n % a.frames : Math.min(n, a.frames - 1), done: !a.loop && n >= a.frames - 1 };
+  return {
+    i: a.loop ? n % a.frames : Math.min(n, a.frames - 1),
+    done: !a.loop && n >= a.frames - 1,
+  };
 }
 
-export function frameRect(spec: SheetSpec, anim: Anim, dir: Dir8, t: number, startT: number): FrameRect {
+export function frameRect(
+  spec: SheetSpec,
+  anim: Anim,
+  dir: Dir8,
+  t: number,
+  startT: number,
+): FrameRect {
   const { i, done } = frameIndex(spec, anim, t, startT);
   const a = spec.anims[anim]!;
   return {

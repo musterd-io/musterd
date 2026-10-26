@@ -1788,7 +1788,15 @@ function nookItems(
       ),
       at(L.counter.dx, L.counter.dy, 'counter', r('nook/counter', L.counter.dx, L.counter.dy)),
       at(L.cooler.dx, L.cooler.dy, 'cooler', r('nook/cooler', L.cooler.dx, L.cooler.dy)),
+      at(L.island.dx, L.island.dy, 'island', r('nook/island', L.island.dx, L.island.dy)),
+      ...L.stools.map((st, i) => at(st.dx, st.dy, `stool-${i}`, r('nook/stool', st.dx, st.dy))),
       at(L.couch.dx, L.couch.dy, 'couch', r('nook/couch', L.couch.dx, L.couch.dy)),
+      at(
+        L.armchair.dx,
+        L.armchair.dy,
+        'armchair',
+        r('nook/armchair', L.armchair.dx, L.armchair.dy),
+      ),
       at(L.table.dx, L.table.dy, 'table', r('nook/table', L.table.dx, L.table.dy)),
     ],
   };

@@ -1,7 +1,14 @@
 import { type Appearance, lookFor } from './appearance';
 import type { FigureAssets } from './rendered/assets';
 import { drawFigureFrame } from './rendered/figure';
-import { type Anim, type CarryAnim, dir8FromDir, dir8FromHeading, type GestureAnim, type SheetSpec } from './rendered/figureSheet';
+import {
+  type Anim,
+  type CarryAnim,
+  dir8FromDir,
+  dir8FromHeading,
+  type GestureAnim,
+  type SheetSpec,
+} from './rendered/figureSheet';
 import { project, type Fit, type Pt } from './iso';
 import { arcEnv, GESTURE, holdEnv, smooth } from './skeleton';
 import type { CarryKind, Dir, OfficeNode, Pose } from './types';
@@ -80,7 +87,10 @@ export interface CharacterOpts {
  * envelope clip (rest → peak), `seq` samples a clip that carries its own motion. `take` is `reach`
  * played back down, so the card's two legs are one clip.
  */
-const GESTURE_CLIP: Record<number, { anim: GestureAnim; seated: boolean; map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq' }> = {
+const GESTURE_CLIP: Record<
+  number,
+  { anim: GestureAnim; seated: boolean; map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq' }
+> = {
   [GESTURE.stretch]: { anim: 'g-stretch', seated: true, map: 'arc' },
   [GESTURE.glance]: { anim: 'g-glance', seated: true, map: 'arc' },
   [GESTURE.scratch]: { anim: 'g-scratch', seated: true, map: 'seq' },
@@ -104,13 +114,28 @@ const GESTURE_CLIP: Record<number, { anim: GestureAnim; seated: boolean; map: 'a
   [GESTURE.take]: { anim: 'g-reach', seated: false, map: 'fall' },
 };
 
-const GESTURE_SEATED: ReadonlySet<Anim> = new Set(Object.values(GESTURE_CLIP).filter((c) => c.seated).map((c) => c.anim));
+const GESTURE_SEATED: ReadonlySet<Anim> = new Set(
+  Object.values(GESTURE_CLIP)
+    .filter((c) => c.seated)
+    .map((c) => c.anim),
+);
 
 /** The frame of a gesture clip at `gestureT`, for a clip of `frames` frames. */
-export function gestureFrame(map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq', gestureT: number, frames: number): number {
+export function gestureFrame(
+  map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq',
+  gestureT: number,
+  frames: number,
+): number {
   const g = Math.max(0, Math.min(1, gestureT));
   if (map === 'seq') return Math.min(frames - 1, Math.floor(g * frames));
-  const e = map === 'arc' ? arcEnv(g) : map === 'hold' ? holdEnv(g) : map === 'rise' ? smooth(g) : 1 - smooth(g);
+  const e =
+    map === 'arc'
+      ? arcEnv(g)
+      : map === 'hold'
+        ? holdEnv(g)
+        : map === 'rise'
+          ? smooth(g)
+          : 1 - smooth(g);
   return Math.round(Math.max(0, Math.min(1, e)) * (frames - 1));
 }
 
@@ -126,7 +151,11 @@ function grip(carry: CarryKind | null): 'hold2' | 'hold1' | null {
 }
 
 /** The carrying variant of the walk or the idle, when the sheet has it (an older one falls back). */
-function carrying(base: 'walk' | 'idle', pose: Pose, anims: SheetSpec['anims']): 'walk' | 'idle' | CarryAnim {
+function carrying(
+  base: 'walk' | 'idle',
+  pose: Pose,
+  anims: SheetSpec['anims'],
+): 'walk' | 'idle' | CarryAnim {
   const g = grip(pose.carry);
   const call = base === 'walk' && pose.gesture === GESTURE.call;
   const anim = call ? 'walk-call' : g ? (`${base}-${g}` as CarryAnim) : base;
@@ -155,7 +184,13 @@ export function animFor(
     return { anim, startT: t - pose.phase * (a.frames / a.fps) };
   }
   // Seated with something to say: the hand goes up (the painter's help overlay), over the typing.
-  if (pose.sit > 0.9 && pose.bubble && anims['sit-hand']) return { anim: 'sit-hand', startT: seed * 10 };
+  if (pose.sit > 0.9 && pose.bubble && anims['sit-hand'])
+    return { anim: 'sit-hand', startT: seed * 10 };
+  // A casual seat — couch, stool, meeting chair — has no keyboard: hands in the lap, laptop under the
+  // arm (`sit-lap`, office v3-6) and never the typing clip; a sheet without it idles (v3-3 shipped the
+  // seats first).
+  if (pose.sit > 0.9 && pose.casual)
+    return { anim: anims['sit-lap'] ? 'sit-lap' : 'sit-idle', startT: seed * 10 };
   if (pose.sit > 0.9) return { anim: typing > 0 ? 'sit-type' : 'sit-idle', startT: seed * 10 };
   if (pose.sit > 0) {
     const a = anims['sit-down'];
@@ -184,7 +219,11 @@ export function drawCharacter(
   let frame = o.animFrame;
   const spec = o.rendered.spec.anims[anim];
   if (!spec || (spec.dirs && !spec.dirs.includes(dir8))) {
-    anim = anim.startsWith('g-') ? (o.anim && GESTURE_SEATED.has(o.anim) ? 'sit-idle' : 'idle') : 'idle';
+    anim = anim.startsWith('g-')
+      ? o.anim && GESTURE_SEATED.has(o.anim)
+        ? 'sit-idle'
+        : 'idle'
+      : 'idle';
     frame = undefined;
   }
   drawFigureFrame({
@@ -199,7 +238,12 @@ export function drawCharacter(
     held: {
       carry: o.carry,
       // the desk mug is in the hand only through the middle of the beat, as the painter has it
-      ...(o.mug !== undefined && anim === 'g-sip' && (o.gestureT ?? 0) > 0.12 && (o.gestureT ?? 0) < 0.95 ? { mug: o.mug } : {}),
+      ...(o.mug !== undefined &&
+      anim === 'g-sip' &&
+      (o.gestureT ?? 0) > 0.12 &&
+      (o.gestureT ?? 0) < 0.95
+        ? { mug: o.mug }
+        : {}),
       ...(o.lanyard !== undefined ? { lanyard: o.lanyard } : {}),
     },
     part: armsOnly ? 'arms' : 'all',
@@ -221,7 +265,15 @@ export function drawCharacter(
     const base = { x: p.x, y: p.y - (crown - 1 - (o.sit ?? 0) * 22 * (crown / 96)) * u };
     const prev = ctx.globalAlpha;
     if (o.alpha < 1) ctx.globalAlpha = Math.max(0, o.alpha);
-    drawWisp(ctx, base, { x: base.x, y: base.y - 12 * u }, u, o.topColor ?? node.color, o.t, o.seed);
+    drawWisp(
+      ctx,
+      base,
+      { x: base.x, y: base.y - 12 * u },
+      u,
+      o.topColor ?? node.color,
+      o.t,
+      o.seed,
+    );
     ctx.globalAlpha = prev;
   }
 }
@@ -233,7 +285,15 @@ export function drawCharacter(
  * drifting and breathing. It also stays the only from-behind tell, so it must read at office scale. `base`
  * is just off the crown and `top` where the stalk would end standing still; both painters call it.
  */
-export function drawWisp(ctx: CanvasRenderingContext2D, base: Pt, top: Pt, u: number, acc: string, t: number, seed: number): void {
+export function drawWisp(
+  ctx: CanvasRenderingContext2D,
+  base: Pt,
+  top: Pt,
+  u: number,
+  acc: string,
+  t: number,
+  seed: number,
+): void {
   const swayDir = seed % 2 === 0 ? 1 : -1;
   const drift = Math.sin(t * 1.05 + seed * 5) * 1.7 * u; // a firefly's idle wander
   const tx = top.x + drift;

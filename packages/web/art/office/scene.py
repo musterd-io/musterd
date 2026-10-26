@@ -61,9 +61,13 @@ LOUNGE = dict(
     machine=dict(dx=-71, dy=-86),
     sink=dict(dx=-49, dy=-86),
     cooler=dict(dx=42, dy=-92, w=26, d=26, h=52),
-    couch=dict(dx=6, dy=-4, len=108, dep=44),
-    table=dict(dx=6, dy=86, w=56, d=40),
+    island=dict(dx=45, dy=8, w=130, d=40, h=34),
+    stools=[(-21, 54), (45, 54), (111, 54)],
+    couch=dict(dx=135, dy=-90, len=80, dep=44),
+    armchair=dict(dx=135, dy=-4),
+    table=dict(dx=135, dy=-50, w=40, d=30),
 )
+STOOL = 26
 MEETING = dict(lx=500, ly=805, w=150, d=80, h=30, rug=(250, 175, "#9aa886", "#7e8c6b", "stripes"),
                chairs=[(-40, -72, "S"), (40, -72, "S"), (-124, 0, "E"), (124, 0, "W")], chair=36)
 RECEPTION = dict(rug=(140, 810, 200, 120, "#c07a55", "#9c5c3c", "border"), chair=(205, 856, "N"),
@@ -74,8 +78,8 @@ END_TABLE = 26
 ENTRANCE = (47, 815)
 PRINTER = dict(lx=505, ly=60, w=46, d=34, h=32)
 PLANTS = [  # lx, ly, species
-    (70, 110, "snake"), (855, 130, "fiddle"), (55, 645, "fiddle"), (866, 610, "snake"),
-    (380, 870, "fiddle"), (66, 470, "fiddle"), (830, 330, "snake"), (872, 878, "fiddle"),
+    (70, 110, "snake"), (225, 330, "snake"), (55, 645, "fiddle"), (866, 490, "snake"),
+    (380, 870, "fiddle"), (66, 470, "fiddle"), (872, 878, "fiddle"),
 ]
 SHELF_LONG, SHELF_DEEP, SHELF_H, DEEP_WIDE = 58, 20, 66, 22
 BOOKSHELVES = [  # lx, ly, dir, long, deep, high, rows, tone
@@ -737,6 +741,37 @@ def couch(asset_id: str, lx: float, ly: float, L: float, Dp: float, zs: float, c
         parts.append(ball(f"{asset_id}/cushion", cx, cy, 19, (L / 4 - 3) if sn else Dp / 2 - 5, Dp / 2 - 5 if sn else (L / 4 - 3), 3.5, fab, zs))
     parts.append(ball(f"{asset_id}/pillow", lx - p[0] * (L / 2 - 16) - f[0] * 8, ly - p[1] * (L / 2 - 16) - f[1] * 8, 20, 9, 7, 7, fabric("pillow", srgb("#d9774f")), zs))
     parts.append(shadow(f"{asset_id}/shadow", lx, ly, (L if sn else Dp) * 0.58, (Dp if sn else L) * 0.6, zs))
+    return finish(asset_id, parts, lx, ly, col)
+
+
+def island(asset_id: str, lx: float, ly: float, w: float, d: float, h: float, zs: float, col) -> bpy.types.Object:
+    """The café's breakfast island (office v3-3): a pale base, a wood slab overhanging it by 4 all
+    round, a mug and a fruit bowl left on top."""
+    oak = wood("oak", OAK)
+    base = paint("island-base", srgb("#d9d3c7"), 0.8)
+    parts = [box(f"{asset_id}/base", lx, ly, 0, w - 8, d - 8, h - 3, base, zs)]
+    top = box(f"{asset_id}/top", lx, ly, h - 3, w, d, 3, oak, zs)
+    bevel(top, 0.8)
+    parts.append(top)
+    parts.append(cyl(f"{asset_id}/bowl", lx - w / 4, ly - 2, h, 7, 9, 3.5, paint("bowl", srgb("#e8c17d"), 0.5), zs, 16))
+    parts.append(cyl(f"{asset_id}/mug", lx + w / 4, ly + 4, h, 3.2, 3.2, 5, paint("mug", srgb("#5e7a8c"), 0.5), zs, 12))
+    parts.append(shadow(f"{asset_id}/shadow", lx, ly, w * 0.58, d * 0.6, zs))
+    return finish(asset_id, parts, lx, ly, col)
+
+
+def stool(asset_id: str, lx: float, ly: float, zs: float, col) -> bpy.types.Object:
+    """A café stool (office v3-3): a round padded seat on a post with a foot ring. Rendered once at
+    the floor centre and blitted at each stool's spot."""
+    post = paint("stool-post", srgb("#4a4642"), 0.5)
+    seat = fabric("stool-seat", srgb("#c9744a"))
+    r = STOOL / 2 - 1
+    parts = [cyl(f"{asset_id}/foot", lx, ly, 0, 9, 9, 1.2, post, zs, 20)]
+    parts.append(cyl(f"{asset_id}/post", lx, ly, 0, 1.8, 1.8, 22, post, zs, 12))
+    parts.append(cyl(f"{asset_id}/ring", lx, ly, 8, 7, 7, 1.0, post, zs, 20))
+    top = cyl(f"{asset_id}/seat", lx, ly, 22, r, r, 3.5, seat, zs, 24)
+    bevel(top, 1.2)
+    parts.append(top)
+    parts.append(shadow(f"{asset_id}/shadow", lx, ly, STOOL * 0.5, STOOL * 0.5, zs))
     return finish(asset_id, parts, lx, ly, col)
 
 
@@ -1550,7 +1585,12 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     cz = LOUNGE["couch"]
     a["nook/couch"] = couch("nook/couch", NOOK[0] + cz["dx"], NOOK[1] + cz["dy"], cz["len"], cz["dep"], zs, export)
     tb = LOUNGE["table"]
-    a["nook/table"] = low_table("nook/table", NOOK[0] + tb["dx"], NOOK[1] + tb["dy"], tb["w"], tb["d"], 16, zs, export)
+    a["nook/table"] = low_table("nook/table", NOOK[0] + tb["dx"], NOOK[1] + tb["dy"], tb["w"], tb["d"], 16, zs, export, dress=False)
+    isl = LOUNGE["island"]
+    a["nook/island"] = island("nook/island", NOOK[0] + isl["dx"], NOOK[1] + isl["dy"], isl["w"], isl["d"], isl["h"], zs, export)
+    a["nook/stool"] = stool("nook/stool", C, C, zs, export)
+    ac = LOUNGE["armchair"]
+    a["nook/armchair"] = armchair("nook/armchair", NOOK[0] + ac["dx"], NOOK[1] + ac["dy"], WAIT_CHAIR, "W", zs, export)
     a["reception/desk"] = front_desk("reception/desk", zs, export)
     a["reception/endtable"] = end_table("reception/endtable", zs, export)
     ch = RECEPTION["chair"]

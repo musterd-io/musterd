@@ -126,8 +126,8 @@ const STATIC_IDS: Record<string, number> = {
   'rug/meeting': 1,
   'rug/reception': 1,
   'bench/base': 1,
-  'plant/snake': 4, // three on the walls + the pinwheel's hub (office v3)
-  'plant/fiddle': 6, // five on the floor + reception's
+  'plant/snake': 3, // two on the walls + the pinwheel's hub (v3-3: the one under the café shelf boxed its reader in)
+  'plant/fiddle': 5, // four on the floor + reception's (v3-3: the café corner's went for the couch)
   'shelf/0': 1,
   'shelf/1': 1,
   'shelf/2': 1,
@@ -138,6 +138,9 @@ const STATIC_IDS: Record<string, number> = {
   'nook/cooler': 1,
   'nook/couch': 1,
   'nook/table': 1,
+  'nook/island': 1,
+  'nook/stool': 3,
+  'nook/armchair': 1,
   'reception/desk': 1,
   'reception/endtable': 1,
   'reception/armchair': 1,

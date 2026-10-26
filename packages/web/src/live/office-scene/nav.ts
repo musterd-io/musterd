@@ -18,6 +18,7 @@ import {
   PRINTER,
   RECEPTION,
   WAIT_CHAIR,
+  STOOL,
 } from './layout';
 
 /**
@@ -69,33 +70,106 @@ function solidRects(): Rect[] {
       // One counter segment per seat — sized to the drawn counter (BENCH.deep), not to DESK_D: the
       // grid must match the picture, and a 68-deep blocker under a 30-deep counter would make
       // walkers skirt furniture that is not there.
-      out.push(rect(slot.lx, slot.ly, BENCH.long / BENCH.seats, BENCH.deep, BODY_R, `bench-seat-${slot.id}`));
+      out.push(
+        rect(
+          slot.lx,
+          slot.ly,
+          BENCH.long / BENCH.seats,
+          BENCH.deep,
+          BODY_R,
+          `bench-seat-${slot.id}`,
+        ),
+      );
     } else {
       const sn = slot.dir === 'S' || slot.dir === 'N';
-      out.push(rect(slot.lx, slot.ly, sn ? DESK_W : DESK_D, sn ? DESK_D : DESK_W, BODY_R, `desk-${slot.id}`));
+      out.push(
+        rect(
+          slot.lx,
+          slot.ly,
+          sn ? DESK_W : DESK_D,
+          sn ? DESK_D : DESK_W,
+          BODY_R,
+          `desk-${slot.id}`,
+        ),
+      );
     }
     const f = FWD[slot.dir];
     // the task chair sits behind the desk; pad it lightly so its own seat spot stays reachable
-    out.push(rect(slot.lx - f[0] * CHAIR_OFF, slot.ly - f[1] * CHAIR_OFF, CHAIR_SIZE, CHAIR_SIZE, 4, `chair-${slot.id}`));
+    out.push(
+      rect(
+        slot.lx - f[0] * CHAIR_OFF,
+        slot.ly - f[1] * CHAIR_OFF,
+        CHAIR_SIZE,
+        CHAIR_SIZE,
+        4,
+        `chair-${slot.id}`,
+      ),
+    );
   }
   const L = LOUNGE;
-  out.push(rect(NOOK.lx + L.fridge.dx, NOOK.ly + L.fridge.dy, L.fridge.w, L.fridge.d, BODY_R, 'fridge'));
-  out.push(rect(NOOK.lx + L.counter.dx, NOOK.ly + L.counter.dy, L.counter.w, L.counter.d, BODY_R, 'nook-counter'));
-  out.push(rect(NOOK.lx + L.cooler.dx, NOOK.ly + L.cooler.dy, L.cooler.w, L.cooler.d, BODY_R, 'cooler'));
-  out.push(rect(NOOK.lx + L.couch.dx, NOOK.ly + L.couch.dy, L.couch.len, L.couch.dep, BODY_R, 'couch'));
-  out.push(rect(NOOK.lx + L.table.dx, NOOK.ly + L.table.dy, L.table.w, L.table.d, BODY_R, 'nook-table'));
+  out.push(
+    rect(NOOK.lx + L.fridge.dx, NOOK.ly + L.fridge.dy, L.fridge.w, L.fridge.d, BODY_R, 'fridge'),
+  );
+  out.push(
+    rect(
+      NOOK.lx + L.counter.dx,
+      NOOK.ly + L.counter.dy,
+      L.counter.w,
+      L.counter.d,
+      BODY_R,
+      'nook-counter',
+    ),
+  );
+  out.push(
+    rect(NOOK.lx + L.cooler.dx, NOOK.ly + L.cooler.dy, L.cooler.w, L.cooler.d, BODY_R, 'cooler'),
+  );
+  out.push(
+    rect(NOOK.lx + L.couch.dx, NOOK.ly + L.couch.dy, L.couch.len, L.couch.dep, BODY_R, 'couch'),
+  );
+  out.push(
+    rect(NOOK.lx + L.table.dx, NOOK.ly + L.table.dy, L.table.w, L.table.d, BODY_R, 'nook-table'),
+  );
+  out.push(
+    rect(NOOK.lx + L.island.dx, NOOK.ly + L.island.dy, L.island.w, L.island.d, BODY_R, 'island'),
+  );
+  // Stools and the armchair are seats: padded lightly like every chair so their own spot stays reachable.
+  for (const st of L.stools)
+    out.push(rect(NOOK.lx + st.dx, NOOK.ly + st.dy, STOOL, STOOL, 4, 'stool'));
+  out.push(
+    rect(
+      NOOK.lx + L.armchair.dx,
+      NOOK.ly + L.armchair.dy,
+      WAIT_CHAIR,
+      WAIT_CHAIR,
+      4,
+      'cafe-armchair',
+    ),
+  );
   out.push(rect(MEETING.lx, MEETING.ly, MEETING.w, MEETING.d, BODY_R, 'meeting-table'));
   for (const c of MEETING.chairs) {
-    out.push(rect(MEETING.lx + c.dx, MEETING.ly + c.dy, MEETING.chairSize, MEETING.chairSize, 4, 'meeting-chair'));
+    out.push(
+      rect(
+        MEETING.lx + c.dx,
+        MEETING.ly + c.dy,
+        MEETING.chairSize,
+        MEETING.chairSize,
+        4,
+        'meeting-chair',
+      ),
+    );
   }
   // Reception's waiting chair. Padded like the other chairs so its own seat spot stays reachable —
   // a chair that blocks its own approach is a seat nobody can walk to.
   out.push(rect(RECEPTION.chair.lx, RECEPTION.chair.ly, WAIT_CHAIR, WAIT_CHAIR, 4, 'wait-chair'));
-  out.push(rect(RECEPTION.endTable.lx, RECEPTION.endTable.ly, END_TABLE, END_TABLE, BODY_R, 'end-table'));
+  out.push(
+    rect(RECEPTION.endTable.lx, RECEPTION.endTable.ly, END_TABLE, END_TABLE, BODY_R, 'end-table'),
+  );
   out.push(rect(RECEPTION.plant.lx, RECEPTION.plant.ly, 26, 26, BODY_R, 'reception-plant'));
   out.push(rect(PRINTER.lx, PRINTER.ly, PRINTER.w, PRINTER.d, BODY_R, 'printer'));
   // The front desk blocks like the bookshelves do — a counter you can walk through is a rug.
-  out.push(rect(FRONT_DESK.lx, FRONT_DESK.ly, FRONT_DESK.long, FRONT_DESK.deep, BODY_R, 'front-desk'));
+  out.push(
+    rect(FRONT_DESK.lx, FRONT_DESK.ly, FRONT_DESK.long, FRONT_DESK.deep, BODY_R, 'front-desk'),
+  );
   for (const p of PLANTS) out.push(rect(p.lx, p.ly, 26, 26, BODY_R, 'plant'));
   for (const s of BOOKSHELVES) {
     const sn = s.dir === 'S' || s.dir === 'N';
@@ -374,7 +448,8 @@ export function findPath(from: P, to: P, avoid: P[] = []): P[] {
 
   if (clear(from, to, blocked)) return [from, to];
 
-  const start = g[cellOf(from)] === 1 || soft.has(cellOf(from)) ? nearestFree(from, blocked) : cellOf(from);
+  const start =
+    g[cellOf(from)] === 1 || soft.has(cellOf(from)) ? nearestFree(from, blocked) : cellOf(from);
   const goal = g[cellOf(to)] === 1 || soft.has(cellOf(to)) ? nearestFree(to, blocked) : cellOf(to);
   // Both endpoints nudge to the same free cell (two seats sharing one patch of floor). The straight
   // line is blocked or we'd have returned already, so step through that cell rather than across.

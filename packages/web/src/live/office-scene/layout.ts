@@ -418,10 +418,24 @@ export const LOUNGE = {
   // Conversation set in the front. The gaps are the point: a coffee table sits a stride from a couch,
   // not against it, and the old 64-unit centre spacing put the table's edge within a few units of the
   // couch front (couch dep 44, table d 40 — 42 units of furniture across a 64-unit gap).
-  couch: { dx: 6, dy: -4, len: 108, dep: 44 }, // faces S (toward the room)
-  // Office v3-1: dx 6 → 30, so the spine's north-east seat has its stand-behind floor clear of the
-  // table's padded footprint. The café is re-cut in v3-3.
-  table: { dx: 30, dy: 86, w: 56, d: 40 },
+  // ── The café (office v3-3, spec §2.3): a breakfast island in front of the counter, three stools
+  // along its south edge, and a two-seat couch + armchair + low table in the north-east corner. ──
+  // The island sits ~90 in front of the counter so the kitchenette lane and its four dwell stands
+  // stay walkable, and it is 130 wide rather than the spec's 180 so the lane keeps a two-cell
+  // opening at its west end (a 180 island sealed the lane against the fridge and the couch set, and
+  // every coffee errand cut through it). Stools are 66 apart: 46.7 on screen, just over MIN_SPOT_GAP.
+  island: { dx: 45, dy: 8, w: 130, d: 40, h: 34 },
+  stools: [
+    { dx: -21, dy: 54 },
+    { dx: 45, dy: 54 },
+    { dx: 111, dy: 54 },
+  ],
+  // The corner set is placed by SCREEN x, not floor x: a seat "behind" a stool along the lx+ly
+  // diagonal collapses onto it (the iso squashes that axis), so the couch and armchair sit far
+  // enough east that their occupants land right of the stools on screen.
+  couch: { dx: 135, dy: -90, len: 80, dep: 44 }, // NE corner, faces S; its pad stays off BOARD_STAND's row
+  armchair: { dx: 135, dy: -4 }, // below the table, faces W (its seat clears the couch's on screen by 1.5)
+  table: { dx: 135, dy: -50, w: 40, d: 30 },
   // The chairs stay where they were. Pushing them out with the table walked chairW into a reading
   // spot (MIN_SPOT_GAP) and put an away member's stand point on furniture — the gap this set needed
   // was between the couch and the table, and widening everything just moved the crowding outward.
@@ -438,17 +452,13 @@ export const LOUNGE = {
 /** Where the six visible `away` members stand — an arc on the rug around the lounge set's open (front)
  * side. Hand-placed (offsets from NOOK) so nobody stands inside the couch/armchairs/table/kitchenette. */
 export const NOOK_SPOTS: ReadonlyArray<{ dx: number; dy: number }> = [
-  // Re-placed for the 148 rug (2026-08-02). The old arc sat as far out as |dx|+|dy| = 184, which was
-  // inside the 192 rug and is well outside this one — an away member standing off the rug reads as
-  // someone who wandered out of the nook rather than someone in it. Pulled into a tighter horseshoe
-  // that still clears the couch (x -48..60, y -26..18) and the coffee table (x -22..34, y 54..94).
-  // v3-1: the west flank pulled in 20 east, off the spine's north-east seat; the café is re-cut in v3-3.
-  { dx: -80, dy: 8 }, // west flank, south of the fridge
-  { dx: -64, dy: 58 }, // southwest corner of the set
-  { dx: -50, dy: 90 }, // front arc, clear of the coffee table's west corner
-  { dx: 10, dy: 134 },
-  { dx: 86, dy: 60 }, // southeast corner (v3-1: 12 east, off the moved table's pad)
-  { dx: 96, dy: 14 }, // east flank, below the cooler
+  // Office v3-3: four standing spots along the café's south threshold, between the stools —
+  // idle members take the café's seats, away members stand small (spec §2.9). Each is inside CAFE,
+  // walkable; a small away avatar may brush a seated stool's label, and away is rare (spec §2.9).
+  { dx: -54, dy: 135 },
+  { dx: 12, dy: 135 },
+  { dx: 78, dy: 135 },
+  { dx: 118, dy: 100 }, // east end, between the third stool and the corner shelf's reader
 ];
 
 /**
@@ -489,7 +499,7 @@ export const SINK_STAND = { lx: NOOK.lx + SINK.dx + 6, ly: NOOK.ly + LOUNGE.coun
 /** How many overflow-queue / nook avatars render individually before the rest collapse into a "+N" pill,
  * so a very large roster stays bounded instead of marching avatars off the floor. */
 export const STRIP_CAP = 6;
-export const NOOK_CAP = 6;
+export const NOOK_CAP = 4;
 
 /** The glass entrance, set flush into the back-left floor edge (lx≈0) — the enter/exit path endpoint +
  * overflow strip anchor. `lx` is the mat centre just inside the doorway; the door plane sits ~42 back. */
@@ -562,6 +572,8 @@ export const MEETING = {
  * say "wait here a moment" instead of "settle in", in a fraction of the footprint.
  */
 export const WAIT_CHAIR = 34;
+/** A café stool's footprint (office v3-3): a round seat on a post. */
+export const STOOL = 26;
 export const END_TABLE = 26;
 export const RECEPTION = {
   // Smaller again (260x165 -> 210x125) and pulled into the corner. The rug's east edge is what sets
@@ -657,12 +669,10 @@ export const PLANTS: Plant[] = [
   { lx: 225, ly: 330, species: 'snake' },
   // (a fiddle stood at 480,55 — removed with the bench: it landed against the counter's end, and a
   // plant wedged between a bench and a printer is clutter, not softening.)
-  { lx: 855, ly: 130, species: 'fiddle' },
   { lx: 55, ly: 645, species: 'fiddle' }, // left wall, in the gap between pod 2 and reception
   { lx: 866, ly: 490, species: 'snake' }, // right flank, between the two window desks (400 and 580), clear of both stand-behinds
   { lx: 380, ly: 870, species: 'fiddle' },
   { lx: 66, ly: 470, species: 'fiddle' }, // left flank, in the rug gap between pods 0 and 2
-  { lx: 830, ly: 330, species: 'snake' }, // right flank, under the nook shelf
   // Front corner, past the meeting table. Kept clear of the aisle the east head chair is pulled out
   // into (that chair's occupant stands around lx 842 to sit down), so the corner stays decoration
   // rather than a wall. A plant that fences off a seat is how the meeting corner got into trouble
@@ -859,8 +869,6 @@ export const BOOKSHELVES: Bookshelf[] = [
     rows: 2,
     tone: 0.94,
     reversed: true,
-    // The big corner plant (830,330) stands exactly where this shelf's reader would: step north.
-    readAlong: 34,
     decor: 'photo',
   },
   // left wall beside pod 0 — the standard unit, i.e. the constants above
@@ -985,8 +993,26 @@ export const LEISURE_SPOTS: LeisureSpot[] = (() => {
   // The couch cushion is the nook's only seat now — the two armchairs went with the 2026-08-02
   // downsizing. `couchSeats` still offers exactly one cushion, for the reason it always did: three
   // sitters on one couch render as a single smear of overlapping heads.
+  // The café's five seats (office v3-3): three stools facing the island, one couch cushion, the
+  // armchair. Stools first, so the probe fills the island before the corner.
   const lounge: LeisureSpot[] = [
+    ...L.stools.map((st) => ({
+      zone: 'lounge' as const,
+      lx: NOOK.lx + st.dx,
+      ly: NOOK.ly + st.dy,
+      dir: 'N' as Dir,
+      sit: 1,
+      casual: true,
+    })),
     ...couchSeats('lounge', NOOK.lx + L.couch.dx, NOOK.ly + L.couch.dy, 'S'),
+    {
+      zone: 'lounge' as const,
+      lx: NOOK.lx + L.armchair.dx - CHAIR_SEAT_FWD,
+      ly: NOOK.ly + L.armchair.dy,
+      dir: 'W' as Dir,
+      sit: 1,
+      casual: true,
+    },
   ];
   // Reception's two waiting chairs, which inherit the huddle's job of being the second leisure zone.
   // Someone idling in the waiting chairs is a true thing for an office to show, and it keeps four

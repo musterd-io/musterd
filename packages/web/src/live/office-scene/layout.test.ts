@@ -16,6 +16,8 @@ import {
   MAX_S_FACING,
   MEETING,
   MIN_SPOT_GAP,
+  NOOK_CAP,
+  NOOK_SPOTS,
   POD_SHAPE_SEATS,
   PODS,
   RECEPTION,
@@ -116,6 +118,14 @@ describe('zone rugs', () => {
 });
 
 describe('LEISURE_SPOTS', () => {
+  it('offers five café seats to idle members and four standing spots to away ones (office v3-3)', () => {
+    // Three stools at the island, one couch cushion, one armchair. Away members stand small at the
+    // island's east end and the café's south threshold — idle sits, away stands (spec §2.9).
+    expect(LEISURE_SPOTS.filter((s) => s.zone === 'lounge' && s.sit === 1)).toHaveLength(5);
+    expect(NOOK_SPOTS).toHaveLength(4);
+    expect(NOOK_CAP).toBe(4);
+  });
+
   it('keeps every pair of spots far enough apart to read as two people', () => {
     // The guard is in **screen** space, not floor space: the 2:1 iso halves the ly axis, so two spots can
     // be a comfortable 64 apart on the plan and 37 apart in pixels — one smeared avatar under two stacked
@@ -218,7 +228,9 @@ describe('the walls are not a matched set', () => {
       const half = a.w / 2 / FLOOR;
       for (const w of WINDOWS) {
         const overlaps = a.tc + half > w.t0 && a.tc - half < w.t1;
-        expect(overlaps, `art (${a.motif} on wall ${a.wall} at t=${a.tc}) overlaps a window`).toBe(false);
+        expect(overlaps, `art (${a.motif} on wall ${a.wall} at t=${a.tc}) overlaps a window`).toBe(
+          false,
+        );
       }
     }
   });
@@ -257,7 +269,10 @@ describe('the walls are not a matched set', () => {
     expect(t0).toBeGreaterThan(0);
     expect(t1).toBeLessThanOrEqual(1);
     for (const w of WINDOWS) {
-      expect(t1 <= w.t0 || t0 >= w.t1, `board (t ${t0.toFixed(3)}–${t1.toFixed(3)}) overlaps a window`).toBe(true);
+      expect(
+        t1 <= w.t0 || t0 >= w.t1,
+        `board (t ${t0.toFixed(3)}–${t1.toFixed(3)}) overlaps a window`,
+      ).toBe(true);
     }
     const CLOCK = { tc: 0.52, r: 27.5 / FLOOR };
     expect(t0 > CLOCK.tc + CLOCK.r || t1 < CLOCK.tc - CLOCK.r).toBe(true);
@@ -285,13 +300,18 @@ describe('the walls are not a matched set', () => {
     const CLOCK = { tc: 0.52, r: 27.5 / FLOOR, u0: 0.62 * WALL_H - 27.5, u1: 0.62 * WALL_H + 27.5 };
     // The binder loops rise above the paper rectangle, so their physical extent—not only the card face—must clear the dial.
     const fixtureTop = u1 + WORKING_HOURS_CALENDAR.loopOverhang;
-    expect(t0 > CLOCK.tc + CLOCK.r || t1 < CLOCK.tc - CLOCK.r || fixtureTop < CLOCK.u0 || u0 > CLOCK.u1).toBe(true);
+    expect(
+      t0 > CLOCK.tc + CLOCK.r || t1 < CLOCK.tc - CLOCK.r || fixtureTop < CLOCK.u0 || u0 > CLOCK.u1,
+    ).toBe(true);
     for (const art of ART.filter((piece) => piece.wall === WORKING_HOURS_CALENDAR.wall)) {
       const artT0 = art.tc - art.w / 2 / FLOOR;
       const artT1 = art.tc + art.w / 2 / FLOOR;
       const artU0 = art.uc * WALL_H - art.h / 2;
       const artU1 = art.uc * WALL_H + art.h / 2;
-      expect(t1 < artT0 || t0 > artT1 || u1 < artU0 || u0 > artU1, `calendar overlaps ${art.motif}`).toBe(true);
+      expect(
+        t1 < artT0 || t0 > artT1 || u1 < artU0 || u0 > artU1,
+        `calendar overlaps ${art.motif}`,
+      ).toBe(true);
     }
   });
 
@@ -301,7 +321,8 @@ describe('the walls are not a matched set', () => {
     for (const win of WINDOWS) {
       const clearsSideways =
         WORKING_HOURS_CALENDAR.tc + half < win.t0 || WORKING_HOURS_CALENDAR.tc - half > win.t1;
-      const clearsBelow = WORKING_HOURS_CALENDAR.uc + WORKING_HOURS_CALENDAR.h / 2 / WALL_H < win.u0;
+      const clearsBelow =
+        WORKING_HOURS_CALENDAR.uc + WORKING_HOURS_CALENDAR.h / 2 / WALL_H < win.u0;
       expect(clearsSideways || clearsBelow, `calendar overlaps a window at t${win.t0}`).toBe(true);
     }
   });

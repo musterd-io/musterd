@@ -20,20 +20,50 @@ const anims: SheetSpec['anims'] = {
 };
 
 const pose = (p: Partial<Pose>): Pose =>
-  ({ lx: 0, ly: 0, dir: 'S', small: false, carry: null, bubble: null, alpha: 1, moving: false, run: false, gesture: 0, gestureT: 0, sit: 0, phase: 0, stride: 0, ...p }) as Pose;
+  ({
+    lx: 0,
+    ly: 0,
+    dir: 'S',
+    small: false,
+    carry: null,
+    bubble: null,
+    alpha: 1,
+    moving: false,
+    run: false,
+    gesture: 0,
+    gestureT: 0,
+    sit: 0,
+    phase: 0,
+    stride: 0,
+    ...p,
+  }) as Pose;
 
 describe('animFor (office realism Task 13: the pose picks the clip)', () => {
   it('walking wins over everything, and the walk is scrubbed by the gait phase (distance, not clock)', () => {
-    expect(animFor(pose({ moving: true, sit: 1, bubble: '?' as never }), 1, 5, 0.3, anims).anim).toBe('walk');
+    expect(
+      animFor(pose({ moving: true, sit: 1, bubble: '?' as never }), 1, 5, 0.3, anims).anim,
+    ).toBe('walk');
     const a = animFor(pose({ moving: true, phase: 0.5 }), 0, 10, 0.3, anims);
     expect(10 - a.startT).toBeCloseTo(0.5 * (6 / 12), 9); // frame 3 of 6
     // the same clock, a different phase: a different frame — the clock alone moves nothing
-    expect(animFor(pose({ moving: true, phase: 0.5 }), 0, 11, 0.3, anims).startT).toBeCloseTo(a.startT + 1, 9);
+    expect(animFor(pose({ moving: true, phase: 0.5 }), 0, 11, 0.3, anims).startT).toBeCloseTo(
+      a.startT + 1,
+      9,
+    );
   });
 
   it('seated with a typing pulse types; seated without it idles', () => {
     expect(animFor(pose({ sit: 1 }), 0.8, 5, 0.3, anims).anim).toBe('sit-type');
     expect(animFor(pose({ sit: 1 }), 0, 5, 0.3, anims).anim).toBe('sit-idle');
+  });
+
+  it('a casual seat (couch, stool, meeting chair) never types, and idles when the sheet has no sit-lap', () => {
+    // Office v3-3 ships the café seats before v3-6 ships the hands-in-lap clip: until then a casual
+    // sitter plays sit-idle — never sit-type, there is no keyboard — and sit-lap once the sheet has it.
+    expect(animFor(pose({ sit: 1, casual: true }), 0.8, 5, 0.3, anims).anim).toBe('sit-idle');
+    const withLap = { ...anims, 'sit-lap': { row: 64, frames: 8, fps: 12, loop: true } };
+    expect(animFor(pose({ sit: 1, casual: true }), 0.8, 5, 0.3, withLap).anim).toBe('sit-lap');
+    expect(animFor(pose({ sit: 1, casual: false }), 0, 5, 0.3, withLap).anim).toBe('sit-idle');
   });
 
   it('a half-sat pose scrubs the sit-down clip by `sit`', () => {
@@ -63,18 +93,36 @@ describe('carrying clips (plan Task 16: the hands hold what is carried)', () => 
   };
 
   it('a walker with a box or plate holds it in both hands; a card, mug or bottle in one; the laptop needs neither', () => {
-    expect(animFor(pose({ moving: true, carry: 'box' }), 0, 5, 0.3, withCarry).anim).toBe('walk-hold2');
-    expect(animFor(pose({ moving: true, carry: 'plate' }), 0, 5, 0.3, withCarry).anim).toBe('walk-hold2');
-    expect(animFor(pose({ moving: true, carry: 'card' }), 0, 5, 0.3, withCarry).anim).toBe('walk-hold1');
-    expect(animFor(pose({ moving: true, carry: 'laptop' }), 0, 5, 0.3, withCarry).anim).toBe('walk');
+    expect(animFor(pose({ moving: true, carry: 'box' }), 0, 5, 0.3, withCarry).anim).toBe(
+      'walk-hold2',
+    );
+    expect(animFor(pose({ moving: true, carry: 'plate' }), 0, 5, 0.3, withCarry).anim).toBe(
+      'walk-hold2',
+    );
+    expect(animFor(pose({ moving: true, carry: 'card' }), 0, 5, 0.3, withCarry).anim).toBe(
+      'walk-hold1',
+    );
+    expect(animFor(pose({ moving: true, carry: 'laptop' }), 0, 5, 0.3, withCarry).anim).toBe(
+      'walk',
+    );
     // still scrubbed by the gait phase
     const a = animFor(pose({ moving: true, carry: 'box', phase: 0.5 }), 0, 10, 0.3, withCarry);
     expect(10 - a.startT).toBeCloseTo(0.5 * (6 / 12), 9);
   });
 
   it('a pacing call walks with the phone at the ear; standing still, a held thing outranks the talking hand', () => {
-    expect(animFor(pose({ moving: true, carry: 'phone', gesture: GESTURE.call, gestureT: 0.5 }), 0, 5, 0.3, withCarry).anim).toBe('walk-call');
-    expect(animFor(pose({ carry: 'mug', bubble: '!' as never }), 0, 5, 0.3, withCarry).anim).toBe('idle-hold1');
+    expect(
+      animFor(
+        pose({ moving: true, carry: 'phone', gesture: GESTURE.call, gestureT: 0.5 }),
+        0,
+        5,
+        0.3,
+        withCarry,
+      ).anim,
+    ).toBe('walk-call');
+    expect(animFor(pose({ carry: 'mug', bubble: '!' as never }), 0, 5, 0.3, withCarry).anim).toBe(
+      'idle-hold1',
+    );
     expect(animFor(pose({ carry: 'box' }), 0, 5, 0.3, withCarry).anim).toBe('idle-hold2');
   });
 
@@ -88,7 +136,12 @@ describe('gesture clips (increment 3b: every beat the painter plays has a sprite
   // A sheet with every gesture clip, six frames each, at rows past the base clips.
   const withGestures: SheetSpec['anims'] = {
     ...anims,
-    ...Object.fromEntries(GESTURE_ANIMS.map((a, i) => [a, { row: 64 + i * 8, frames: 6, fps: 12, loop: false, dirs: ['E', 'S', 'W', 'N'] }])),
+    ...Object.fromEntries(
+      GESTURE_ANIMS.map((a, i) => [
+        a,
+        { row: 64 + i * 8, frames: 6, fps: 12, loop: false, dirs: ['E', 'S', 'W', 'N'] },
+      ]),
+    ),
   };
 
   it('every idle gesture maps to a clip the sheet has, in the posture it is played in', () => {
@@ -101,8 +154,18 @@ describe('gesture clips (increment 3b: every beat the painter plays has a sprite
   });
 
   it('the errand beats map too, standing; take is reach played back down', () => {
-    for (const g of [GESTURE.browse, GESTURE.fill, GESTURE.pour, GESTURE.call, GESTURE.wave, GESTURE.reach, GESTURE.take]) {
-      expect(animFor(pose({ gesture: g, gestureT: 0.5 }), 0, 5, 0.3, withGestures).anim.startsWith('g-')).toBe(true);
+    for (const g of [
+      GESTURE.browse,
+      GESTURE.fill,
+      GESTURE.pour,
+      GESTURE.call,
+      GESTURE.wave,
+      GESTURE.reach,
+      GESTURE.take,
+    ]) {
+      expect(
+        animFor(pose({ gesture: g, gestureT: 0.5 }), 0, 5, 0.3, withGestures).anim.startsWith('g-'),
+      ).toBe(true);
     }
     const up = animFor(pose({ gesture: GESTURE.reach, gestureT: 0.9 }), 0, 5, 0.3, withGestures);
     const down = animFor(pose({ gesture: GESTURE.take, gestureT: 0.1 }), 0, 5, 0.3, withGestures);
@@ -111,9 +174,16 @@ describe('gesture clips (increment 3b: every beat the painter plays has a sprite
   });
 
   it('a seated beat on a standing member, a walker, or a sheet without the clip falls back to the base clip', () => {
-    expect(animFor(pose({ sit: 0, gesture: GESTURE.lean, gestureT: 0.5 }), 0, 5, 0.3, withGestures).anim).toBe('idle');
-    expect(animFor(pose({ moving: true, gesture: GESTURE.call, gestureT: 0.5 }), 0, 5, 0.3, withGestures).anim).toBe('walk');
-    expect(animFor(pose({ sit: 1, gesture: GESTURE.sip, gestureT: 0.5 }), 0, 5, 0.3, anims).anim).toBe('sit-idle');
+    expect(
+      animFor(pose({ sit: 0, gesture: GESTURE.lean, gestureT: 0.5 }), 0, 5, 0.3, withGestures).anim,
+    ).toBe('idle');
+    expect(
+      animFor(pose({ moving: true, gesture: GESTURE.call, gestureT: 0.5 }), 0, 5, 0.3, withGestures)
+        .anim,
+    ).toBe('walk');
+    expect(
+      animFor(pose({ sit: 1, gesture: GESTURE.sip, gestureT: 0.5 }), 0, 5, 0.3, anims).anim,
+    ).toBe('sit-idle');
   });
 
   it('an envelope clip goes rest → peak → rest with the beat; a seq clip walks its window', () => {
@@ -128,7 +198,13 @@ describe('gesture clips (increment 3b: every beat the painter plays has a sprite
 });
 
 describe('rendered parity (plan Task 17: what the painter drew per member, the sprite path draws too)', () => {
-  const spec: SheetSpec = { scale: 2, frame: { w: 64, h: 96 }, anchor: { x: 32, y: 88 }, height: 85, anims: { ...anims, 'sit-idle': anims['sit-idle'] } };
+  const spec: SheetSpec = {
+    scale: 2,
+    frame: { w: 64, h: 96 },
+    anchor: { x: 32, y: 88 },
+    height: 85,
+    anims: { ...anims, 'sit-idle': anims['sit-idle'] },
+  };
   const fakeCanvas = () => {
     const rec = recordingCtx();
     return { width: 64, height: 96, getContext: () => rec.ctx } as unknown as HTMLCanvasElement;
@@ -136,7 +212,11 @@ describe('rendered parity (plan Task 17: what the painter drew per member, the s
   const sheet = { width: 64, height: 96 } as unknown as CanvasImageSource;
   const draw = (node: OfficeNode, armsOnly = false) => {
     const { ctx, ops } = recordingCtx();
-    const assets: FigureAssets = { spec, sheets: new Map([['acc/headphones', sheet]]), scratch: { canvas: fakeCanvas() } };
+    const assets: FigureAssets = {
+      spec,
+      sheets: new Map([['acc/headphones', sheet]]),
+      scratch: { canvas: fakeCanvas() },
+    };
     // the composed frame is a canvas too; under node, a recording one
     const doc = globalThis.document;
     (globalThis as { document?: unknown }).document = { createElement: () => fakeCanvas() };
@@ -144,7 +224,20 @@ describe('rendered parity (plan Task 17: what the painter drew per member, the s
       drawCharacter(
         ctx,
         fitFloor(1200, 900),
-        { lx: 300, ly: 300, dir: 'S', node, size: 1, alpha: 1, carry: null, t: 2, seed: 0.4, rendered: assets, anim: 'idle', sit: 0 },
+        {
+          lx: 300,
+          ly: 300,
+          dir: 'S',
+          node,
+          size: 1,
+          alpha: 1,
+          carry: null,
+          t: 2,
+          seed: 0.4,
+          rendered: assets,
+          anim: 'idle',
+          sit: 0,
+        },
         armsOnly,
       );
     } finally {
@@ -153,12 +246,16 @@ describe('rendered parity (plan Task 17: what the painter drew per member, the s
     return ops;
   };
   // A name whose hashed accessory is not the headphones, so only dnd can put them on.
-  const name = ['ada', 'bo', 'cy', 'dev', 'eli', 'fen', 'gus'].find((n) => appearanceOf({ name: n, kind: 'human' }).accessory !== 'headphones')!;
+  const name = ['ada', 'bo', 'cy', 'dev', 'eli', 'fen', 'gus'].find(
+    (n) => appearanceOf({ name: n, kind: 'human' }).accessory !== 'headphones',
+  )!;
   const member = { name, kind: 'human', color: '#3366cc' } as OfficeNode;
 
   it('a dnd member wears the headphones, as the painter has them', () => {
     expect(draw(member).filter((o) => o.name === 'drawImage')).toHaveLength(0);
-    expect(draw({ ...member, dnd: true } as OfficeNode).filter((o) => o.name === 'drawImage')).toHaveLength(1);
+    expect(
+      draw({ ...member, dnd: true } as OfficeNode).filter((o) => o.name === 'drawImage'),
+    ).toHaveLength(1);
   });
 
   it('every rendered member carries the wisp over the crown — but not in the seated overlay pass', () => {
@@ -167,8 +264,22 @@ describe('rendered parity (plan Task 17: what the painter drew per member, the s
   });
 
   it('seated with a bubble, the hand goes up (sit-hand) when the sheet has it', () => {
-    const withHand = { ...anims, 'sit-hand': { row: 64, frames: 8, fps: 12, loop: true, base: 'sit-idle' as const, layers: ['skin', 'top/'] } };
-    expect(animFor(pose({ sit: 1, bubble: '?' as never }), 0.8, 5, 0.3, withHand).anim).toBe('sit-hand');
-    expect(animFor(pose({ sit: 1, bubble: '?' as never }), 0.8, 5, 0.3, anims).anim).toBe('sit-type');
+    const withHand = {
+      ...anims,
+      'sit-hand': {
+        row: 64,
+        frames: 8,
+        fps: 12,
+        loop: true,
+        base: 'sit-idle' as const,
+        layers: ['skin', 'top/'],
+      },
+    };
+    expect(animFor(pose({ sit: 1, bubble: '?' as never }), 0.8, 5, 0.3, withHand).anim).toBe(
+      'sit-hand',
+    );
+    expect(animFor(pose({ sit: 1, bubble: '?' as never }), 0.8, 5, 0.3, anims).anim).toBe(
+      'sit-type',
+    );
   });
 });
