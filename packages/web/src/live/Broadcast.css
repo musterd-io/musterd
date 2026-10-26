@@ -177,7 +177,9 @@
   top: 36px;
   margin: 0;
   z-index: var(--lc-z-overlay);
-  color: rgba(255, 190, 190, 0.9);
+  /* On the grey stage (lane 01M5WV60JS), not the black letterbox: the danger ink, 4.61:1 on the
+     darkest paper it lands on; the old pink read 1.39:1 there. */
+  color: var(--lc-danger-ink);
   font-family: var(--font-mono);
   font-size: 15px;
 }
