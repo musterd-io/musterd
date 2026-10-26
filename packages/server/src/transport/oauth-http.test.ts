@@ -347,6 +347,53 @@ withDrivers('oauth-http', (_o, kind) => {
       expect(calls).toBe(2);
     });
 
+    it('matches a loopback-IP redirect on any port, and nothing else (ADR 743, RFC 8252 §7.3)', async () => {
+      // Codex CLI 0.162's shape: portless loopback redirects, authorize from an ephemeral port.
+      const codex = 'https://chatgpt.com/oauth/codex/abc/client.json';
+      __setCimdResolverForTest(async (id) =>
+        metadata(
+          id,
+          ['http://127.0.0.1/callback/abc', 'http://localhost/callback/abc', 'http://[::1]/cb'],
+          'Codex',
+        ),
+      );
+      const ported = 'http://127.0.0.1:57156/callback/abc';
+      expect((await get(authorizeUrl(codex, ported))).status).toBe(200);
+      expect((await get(authorizeUrl(codex, 'http://[::1]:4100/cb'))).status).toBe(200);
+      for (const refused of [
+        'http://127.0.0.1:57156/callback/other', // path differs
+        'http://127.0.0.1:57156/callback/abc?x=1', // query differs
+        'http://localhost:57156/callback/abc', // localhost is not a loopback IP literal (§8.3)
+        'https://127.0.0.1:57156/callback/abc', // scheme differs
+      ]) {
+        expect((await get(authorizeUrl(codex, refused))).status, refused).toBe(400);
+      }
+
+      const authz = await postForm('/oauth/dawn/authorize', {
+        client_id: codex,
+        redirect_uri: ported,
+        state: 'state',
+        code_challenge: CHALLENGE,
+        code_challenge_method: 'S256',
+        member: 'nick',
+        credential: nickCred,
+      });
+      expect(authz.status, authz.text).toBe(302);
+      const location = new URL(authz.headers.get('location')!);
+      expect(`${location.origin}${location.pathname}`).toBe(ported);
+      const code = location.searchParams.get('code')!;
+
+      // The code is bound to the exact port it was issued for.
+      const otherPort = await postForm('/oauth/dawn/token', {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: 'http://127.0.0.1:1/callback/abc',
+        client_id: codex,
+        code_verifier: VERIFIER,
+      });
+      expect(otherPort.status).toBe(400);
+    });
+
     it('rate-limits CIMD resolution before metadata lookup on GET and POST', async () => {
       let calls = 0;
       __setCimdResolverForTest(async (id) => {
