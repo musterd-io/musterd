@@ -16,6 +16,7 @@ import {
   describeHoldLine,
   type Hold,
   isHoldActive,
+  type Envelope,
   makeEnvelope,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
@@ -106,6 +107,7 @@ import {
 import {
   computeSiteGap,
   DEPLOY_AUTHORIZED_SEAT,
+  replyOnAsk,
   nextAction,
   siteGapAskBody,
   siteGapLine,
@@ -622,6 +624,8 @@ export function resolveLiveCtx(ctx: ServiceCtx): LiveCtx {
   const agents = join(homedir(), 'Library', 'LaunchAgents');
   const whichGit = run('which', ['git']).stdout.trim();
   const gitDir = whichGit ? dirname(whichGit) : '/opt/homebrew/bin';
+  // ADR 734: the deploy authorizer named at install, kept beside the script.
+  const deployAuthorizer = ctx.readFile?.(join(liveDir, 'deploy-authorizer'))?.trim() || undefined;
   return {
     uid: typeof process.getuid === 'function' ? process.getuid() : '',
     buildLabel: LIVE_LABEL,
@@ -638,6 +642,7 @@ export function resolveLiveCtx(ctx: ServiceCtx): LiveCtx {
     nodeDir: dirname(process.execPath),
     gitDir,
     intervalSeconds: 60,
+    ...(deployAuthorizer ? { deployAuthorizer } : {}),
     run,
   };
 }
@@ -1100,10 +1105,56 @@ function readSiteGapStamp(path: string): SiteGapStamp | null {
       tip: typeof j.tip === 'string' ? j.tip : '',
       ask: typeof j.ask === 'string' ? j.ask : null,
       raised_at: typeof j.raised_at === 'number' ? j.raised_at : null,
+      asked_tip: typeof j.asked_tip === 'string' ? j.asked_tip : null,
+      decided:
+        j.decided && typeof j.decided === 'object' && typeof j.decided.tip === 'string'
+          ? j.decided
+          : null,
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * The authorizer's answer on the open ask, read from the live seat's inbox since the ask was raised
+ * (ADR 734 §2). A bounded page walk: `since` is the reply's ts floor, and the daemon caps a page.
+ */
+async function readReplyOnAsk(
+  auth: { http: HttpClient; team: string },
+  ask: string,
+  raisedAt: number | null,
+  authorizer: string,
+): Promise<ReturnType<typeof replyOnAsk>> {
+  const seen: Envelope[] = [];
+  let since = raisedAt ?? 0;
+  for (let page = 0; page < 5; page++) {
+    const res = await auth.http.inbox(auth.team, { since, peek: true });
+    seen.push(...res.messages);
+    if (!res.truncated || res.messages.length === 0) break;
+    since = res.messages[res.messages.length - 1]!.ts;
+  }
+  return replyOnAsk(seen, ask, authorizer);
+}
+
+const SITE_DEPLOY_TIMEOUT_MS = 10 * 60_000;
+
+/**
+ * Stage and deploy the publisher's own build (ADR 734 §2): `deploy:staged` in the web package, from
+ * the checkout the tick runs in, as this user — whose wrangler login it is. Never `deploy:site`:
+ * that rebuilds, and the build the human accepted is the one already on disk.
+ */
+function runSiteDeploy(cwd: string): { ok: boolean; tail: string } {
+  const r = spawnSync('pnpm', ['--filter', '@musterd/web', 'deploy:staged'], {
+    cwd,
+    encoding: 'utf8',
+    timeout: SITE_DEPLOY_TIMEOUT_MS,
+    env: { ...process.env, CI: '1' },
+  });
+  const text = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim();
+  const tail =
+    text.split('\n').slice(-6).join('\n') || (r.error ? r.error.message : `exit ${r.status}`);
+  return { ok: r.status === 0, tail };
 }
 
 async function runSiteGap(parsed: Parsed): Promise<number> {
@@ -1143,56 +1194,126 @@ async function runSiteGap(parsed: Parsed): Promise<number> {
 
   const stampPath = siteGapStampPath();
   const prev = readSiteGapStamp(stampPath);
-  const action = nextAction(prev, gap);
+  const authorizer = flagStr(parsed.flags, 'authorizer');
+  const published = flagStr(parsed.flags, 'published') ?? '';
   const auth = serviceSeatAuth();
   const next: SiteGapStamp = {
     deployed: gap.deployed,
     tip: gap.tip,
     ask: prev?.ask ?? null,
     raised_at: prev?.raised_at ?? null,
+    asked_tip: prev?.asked_tip ?? null,
+    decided: prev?.decided ?? null,
   };
-  if (action !== 'none') {
-    if (!auth) {
-      // Unprovisioned live seat: the line above is still in the log; nothing is sent (ADR 232 posture).
-      out(
-        `would ${action} but the live service seat is unprovisioned — run \`musterd service install --live\``,
-      );
-    } else if (action === 'resolve') {
-      await auth.http.send(
-        auth.team,
-        makeEnvelope({
-          id: ulid(),
-          team: auth.team,
-          from: LIVE_SEAT,
-          to: { kind: 'member', name: DEPLOY_AUTHORIZED_SEAT },
-          act: 'resolve',
-          thread: prev!.ask!,
-          body:
-            gap.status === 'current'
-              ? `${origin} caught up: now at ${gap.deployed!.slice(0, 8)}.`
-              : `${origin} moved to ${gap.deployed!.slice(0, 8)} and is still behind — a fresh ask follows.`,
-        }),
-      );
+  // ADR 734: no authorizer named, nothing is asked — the gap is still a line in the log.
+  if (!authorizer) {
+    out(
+      'no deploy authorizer named — reporting only (`musterd service install --live --deploy-authorizer <human>`, ADR 734)',
+    );
+  } else if (!auth) {
+    // Unprovisioned live seat: the line above is still in the log; nothing is sent (ADR 232 posture).
+    out(
+      'the live service seat is unprovisioned — reporting only; run `musterd service install --live`',
+    );
+  } else {
+    const reply = prev?.ask
+      ? await readReplyOnAsk(auth, prev.ask, prev.raised_at, authorizer)
+      : null;
+    const built = gitAt(cwd, ['rev-parse', 'HEAD']) === gap.tip && published === gap.tip;
+    const action = nextAction(prev, gap, reply, built);
+    const send = (env: Parameters<typeof makeEnvelope>[0]) =>
+      auth.http.send(auth.team, makeEnvelope(env));
+    const resolveOpen = async (body: string) => {
+      await send({
+        id: ulid(),
+        team: auth.team,
+        from: LIVE_SEAT,
+        to: { kind: 'member', name: authorizer },
+        act: 'resolve',
+        thread: prev!.ask!,
+        body,
+      });
       out(`resolved ${prev!.ask}`);
       next.ask = null;
       next.raised_at = null;
-    } else {
+      next.asked_tip = null;
+    };
+    const raise = async () => {
       const id = ulid();
-      await auth.http.send(
-        auth.team,
-        makeEnvelope({
-          id,
-          team: auth.team,
-          from: LIVE_SEAT,
-          to: { kind: 'member', name: DEPLOY_AUTHORIZED_SEAT },
-          act: 'ask',
-          body: siteGapAskBody(gap, origin),
-          meta: { species: 'consult', tier: 'advisory' },
-        }),
-      );
-      out(`asked ${DEPLOY_AUTHORIZED_SEAT} (${id})`);
+      await send({
+        id,
+        team: auth.team,
+        from: LIVE_SEAT,
+        to: { kind: 'member', name: authorizer },
+        act: 'ask',
+        body: siteGapAskBody(gap, origin),
+        meta: { species: 'approve', tier: 'blocking' },
+      });
+      out(`asked ${authorizer} to deploy ${gap.tip.slice(0, 8)} (${id})`);
       next.ask = id;
       next.raised_at = Date.now();
+      next.asked_tip = gap.tip;
+    };
+    switch (action) {
+      case 'raise':
+        await raise();
+        break;
+      case 'resolve':
+        await resolveOpen(
+          gap.status === 'current'
+            ? `${origin} caught up: now at ${gap.deployed!.slice(0, 8)}.`
+            : `${origin} moved to ${gap.deployed!.slice(0, 8)} and is still behind — a fresh ask follows.`,
+        );
+        if (gap.status === 'current') next.decided = null;
+        break;
+      case 'moved':
+        await resolveOpen(
+          `main moved to ${gap.tip.slice(0, 8)} since this ask named ${prev!.asked_tip!.slice(0, 8)} — withdrawn; a fresh ask follows.`,
+        );
+        await raise();
+        break;
+      case 'decline':
+        await resolveOpen(
+          `declined: ${gap.tip.slice(0, 8)} stays undeployed, and I will not ask again until main moves.`,
+        );
+        next.decided = { tip: gap.tip, outcome: 'declined' };
+        break;
+      case 'wait':
+        out(`accepted ${gap.tip.slice(0, 8)}; waiting for the publisher to build it`);
+        break;
+      case 'deploy': {
+        out(`accepted ${gap.tip.slice(0, 8)}; deploying`);
+        const r = runSiteDeploy(cwd);
+        if (r.ok) {
+          const n = gap.behind.length;
+          await send({
+            id: ulid(),
+            team: auth.team,
+            from: LIVE_SEAT,
+            to: { kind: 'team' },
+            act: 'status_update',
+            body: `deployed ${origin} at ${gap.tip.slice(0, 8)} on ${authorizer}'s accept: ${n} site commit(s).`,
+          });
+          await resolveOpen(`deployed ${gap.tip.slice(0, 8)}.`);
+          next.decided = { tip: gap.tip, outcome: 'deployed' };
+          out(`deployed ${gap.tip.slice(0, 8)}`);
+        } else {
+          await resolveOpen(`deploy of ${gap.tip.slice(0, 8)} FAILED — ${r.tail}`);
+          await send({
+            id: ulid(),
+            team: auth.team,
+            from: LIVE_SEAT,
+            to: { kind: 'member', name: DEPLOY_AUTHORIZED_SEAT },
+            act: 'message',
+            body: `The publisher's deploy of ${gap.tip.slice(0, 8)} failed on ${authorizer}'s accept (ADR 734); the hand path is yours: \`pnpm --filter @musterd/web deploy:site\`. Last lines:\n${r.tail}`,
+          });
+          next.decided = { tip: gap.tip, outcome: 'failed' };
+          out(`deploy FAILED: ${r.tail}`);
+        }
+        break;
+      }
+      case 'none':
+        break;
     }
   }
   mkdirSync(dirname(stampPath), { recursive: true });
@@ -1237,9 +1358,11 @@ export const SERVICE_FLAGS = [
   '-f',
   'acted',
   'allowed-hosts',
+  'authorizer',
   'auto',
   'better-sqlite3',
   'control-probe',
+  'deploy-authorizer',
   'error',
   'exit',
   'fetch',
@@ -1259,6 +1382,7 @@ export const SERVICE_FLAGS = [
   'pin',
   'pnpm',
   'port',
+  'published',
   'quiet-floor',
   'raise',
   'reason',
@@ -3476,6 +3600,13 @@ async function liveServiceCommand(
   const meta = (s: string) => process.stdout.write(theme.meta(s) + '\n');
   switch (sub) {
     case 'install': {
+      // ADR 734: the human whose accept deploys musterd.io, kept beside the script so a reinstall
+      // without the flag keeps it. The generated script carries it to every tick.
+      const named = flagStr(parsed.flags, 'deploy-authorizer');
+      if (named) {
+        writeFileSync(join(dirname(ctx.buildScriptPath), 'deploy-authorizer'), `${named}\n`);
+        ctx.deployAuthorizer = named;
+      }
       const res = installLive(ctx);
       if (res.worktree.result && !res.worktree.created && res.worktree.result.status !== 0)
         fail('git worktree add', res.worktree.result);

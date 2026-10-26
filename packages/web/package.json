@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "node --disable-warning=ExperimentalWarning scripts/gen-site-content.ts && tsc --noEmit",
     "stage:site": "node scripts/stage-site.mjs",
-    "deploy:site": "pnpm build && pnpm stage:site && pnpm dlx wrangler@4.83.0 deploy"
+    "deploy:site": "pnpm build && pnpm deploy:staged",
+    "deploy:staged": "pnpm stage:site && pnpm dlx wrangler@4.83.0 deploy"
   },
   "dependencies": {
     "@musterd/protocol": "workspace:*",

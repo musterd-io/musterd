@@ -27,25 +27,26 @@ check whether a re-baseline is due instead**: budgets are periodically reset to 
 re-baseline may only tighten — a loosening one is just a raise (ADR 183). Two ceilings were hit in
 one week in 2026-07 because raises were being used to fix a calibration problem.
 
-## Deploying the public site — miley's, not yours
+## Deploying the public site — the publisher's, on nick's accept
 
-**`pnpm --filter @musterd/web deploy:site` is miley's to run**
-([ADR 308](../../docs/decisions/308-public-site-deploy-authorization.md)). If your change
-ends with prose or pixels on musterd.io, land the PR and tell miley. This is standing, not
-per-request.
+**musterd.io deploys when nick accepts the publisher's ask**
+([ADR 734](../../docs/decisions/734-site-deploy-on-the-human-accept.md)). If your change ends
+with prose or pixels on musterd.io, land the PR; nothing else. The live build-publisher compares
+the site's `/build.json` with `origin/main` every poll, and when the site is behind it asks nick on
+`/live`, listing the commits and the exact tip an accept deploys. On his accept it stages and
+deploys its own build of that tip with his wrangler login, posts a `status_update` to the team, and
+resolves the ask. If `main` moves first the ask is withdrawn and a fresh one lists the new set; a
+declined tip is not asked again until `main` moves.
 
-**And miley does not wait for per-publish approval.** It is a standing authorization, not a routing
-rule: miley publishes web changes when they are ready, without asking nick each time. Those are two
-different rules and only one of them was in the original sentence — "who may deploy" without "and
-when" is the half that gets guessed at. Deploy authority is also not review authority: it does not
-license merging work miley has not read.
+**`pnpm --filter @musterd/web deploy:site` is the fallback, and still miley's**
+([ADR 308](../../docs/decisions/308-public-site-deploy-authorization.md)): for when the publisher
+cannot (no login on the machine, a failed stage), and only on nick's ask-and-accept, never unasked.
+Deploy authority is not review authority: it does not license merging work miley has not read.
 
-Landed is not live, and something now says so: the origin serves its build stamp at
-`/build.json`, `musterd service site-gap` prints the site-affecting commits between it and
-`origin/main` (exit 1 when behind, so it works as a gate), and the live build-publisher runs the
-same check every poll and asks miley when the site is behind (lane `01M2XD2RPG`). You do not need
-to tell miley a change is waiting; you do need `pnpm build` to have stamped the build you deploy —
-`stage:site` refuses one that has not.
+Landed is not live, and the record now says so: `musterd service site-gap` prints the
+site-affecting commits between the site and `origin/main` (exit 1 when behind, so it works as a
+gate); the publisher's ask, nick's answer and the publisher's `status_update` are the deploy's
+trail. `stage:site` refuses a build `pnpm build` has not stamped.
 
 It covers the publish to musterd.io and nothing else. The `/live` bundle is **not** a deploy — merge
 to `main` and the build-publisher republishes within ~60s with no daemon bounce (root `AGENTS.md`,

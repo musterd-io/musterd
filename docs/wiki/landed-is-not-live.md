@@ -32,6 +32,7 @@ The publisher's tail is `|| true` and guarded by `command -v musterd`: the instr
 ## What it does not do
 
 - It does not deploy. ADR 308 stands: the act is miley's, and the point of the ask is that the wait becomes a fact in the stream rather than a thing a seat notices.
+  - Invalidated 2026-10-26 ([ADR 734](../decisions/734-site-deploy-on-the-human-accept.md)): it now deploys, on nick's accept of its ask, and posts a `status_update` when it has. The ask goes to nick, not miley; miley's hand deploy is the fallback (falsify: a site-affecting merge with no `ask` from `live` to nick in the hour after, or a `status_update` naming a deploy that no ask preceded).
 - It does not reach the acceptor. The lane's third option — the acceptance ask carrying "this surface is public and is/is not live" — was not built; the acceptor still judges the landed outcome.
 - A publisher host with no `musterd` on PATH, or with the live seat unprovisioned, prints the gap line to `build.log` and sends nothing (2026-09-24; falsify: run `MUSTERD_SERVICE_TOKEN_FILE=/nonexistent musterd service site-gap --raise` against a behind origin and see "would raise but the live service seat is unprovisioned") — the ADR 232 posture: degrade to silence, never fail the tick. <!-- claim: other -->
 
