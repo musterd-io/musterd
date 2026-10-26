@@ -161,7 +161,8 @@ Ollama on Air 2, with every bound set before the first wake and recorded in the 
 
 Candidates that fit 8 GB beside seats: the 3–4B class. `qwen3:4b` is the baseline because it is
 the one model with a prior reading. One or two others of the same class, chosen by nick on the
-day. A 7–8B at 4-bit gets **one** trial, last, and only if the 4B candidates held the memory bound
+day. _(amended 2026-10-26, dolly: nick fixed the slate and the seat, swan; `qwen3.5:4b` replaces
+`qwen3:4b` as the baseline. Both are in [local model gauntlet](../../wiki/local-model-gauntlet.md).)_ A 7–8B at 4-bit gets **one** trial, last, and only if the 4B candidates held the memory bound
 with room; if it evicts a seat or trips the kill rule it is out and the trial is the reading.
 
 Every candidate runs the same fixed sequence, in this order, each timed:

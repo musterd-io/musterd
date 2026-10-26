@@ -74,6 +74,8 @@ measurements.
 the context. By my estimate from the config (32 value heads × 128 × 128 at f16 per layer) it is
 about 24 MiB, unmeasured.
 
+_(2026-10-26, dolly: the slate swan runs is fixed in [local model gauntlet](local-model-gauntlet.md): `qwen3.5:4b`, Spark-X2.6-4B, MiniCPM5-2B, then `granite4.2:3b`. The list below is the 2026-10-19 reading.)_
+
 The recommended slate for Air 2:
 
 1. **`qwen3:4b`**, the baseline: the one model with a prior reading (finding 003's four guardrail
