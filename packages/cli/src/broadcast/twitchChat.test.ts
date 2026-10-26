@@ -175,3 +175,42 @@ describe('startChatReader', () => {
     expect(h.logs.at(-1)).toMatch(/off — subscription revoked/);
   });
 });
+
+it('keeps a rotated refresh token for the run and says so once, without the token', async () => {
+  const sent: string[] = [];
+  let n = 0;
+  const fetchFn = async (url: string | URL | Request, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes('oauth2/token')) {
+      sent.push(new URLSearchParams(String(init?.body)).get('refresh_token') ?? '');
+      n += 1;
+      return Response.json({ access_token: `tok${n}`, refresh_token: 'r2' });
+    }
+    if (u.includes('/users?login=')) {
+      // the first lookup is refused, forcing a second refresh
+      return n === 1 ? new Response(null, { status: 401 }) : Response.json({ data: [{ id: 'B' }] });
+    }
+    if (u.endsWith('/users')) return Response.json({ data: [{ id: 'BOT' }] });
+    return new Response(null, { status: 202 });
+  };
+  const logs: string[] = [];
+  let sock: ChatSocket | undefined;
+  const stop = startChatReader({
+    creds: { clientId: 'c', clientSecret: 's', refreshToken: 'r1', channel: 'musterd' },
+    onWho: () => undefined,
+    log: (l) => logs.push(l),
+    fetch: fetchFn as unknown as typeof fetch,
+    connect: () => (sock = { onmessage: null, onclose: null, close: () => undefined }),
+  });
+  sock!.onmessage?.({
+    data: JSON.stringify({
+      metadata: { message_type: 'session_welcome' },
+      payload: { session: { id: 'S' } },
+    }),
+  });
+  for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+  expect(sent).toEqual(['r1', 'r2']);
+  expect(logs.filter((l) => l.includes('rotated'))).toHaveLength(1);
+  expect(logs.join('\n')).not.toMatch(/\br2\b|tok\d/);
+  stop();
+});

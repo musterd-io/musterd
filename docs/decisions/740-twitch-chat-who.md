@@ -28,6 +28,7 @@ Viewers can ask from chat, and the stream cannot hear them. Hearing them adds an
 
 - A second chat command is a change to this allowlist, with its own line here. A command that reaches the team is out of scope for this ADR and needs one of its own.
 - Revoking access is deleting the bot account or the app's authorization; the stream keeps running without the reader.
+- _(2026-10-26, izzo's acceptance decline)_ Twitch may return a new refresh token on any refresh, and the old one can stop working. The reader now uses the newest token for the rest of its run and logs once that the stored secret may be behind. It cannot write the secret back: the machine is `--rm` and the token is never logged. So after a rotation, the operator re-authorizes the bot and sets `MUSTERD_TWITCH_CHAT_REFRESH_TOKEN` again before the next start; a start on a dead token logs `chat: off` and the stream runs without the reader.
 - Going live needs a human: the app registration, the bot account and its authorization are nick's to do. Until then the reader logs once that it is off.
 
 ## Observability & Evaluation
