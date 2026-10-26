@@ -126,3 +126,25 @@ describe('a dark channel replays real work, captioned as a replay', () => {
     expect(line).not.toMatch(/tomorrow|every day|daily|weekly|back at/i);
   });
 });
+
+/**
+ * homepage-copy-spec §0c (ADR 683): one line on what a member of a team does at /live. A visitor to
+ * musterd.io is not a member of ours, so "On your team" leads, and the line names only what the
+ * code does today.
+ */
+describe('the /live line says what a member does there', () => {
+  const line =
+    'On your team, /live shows every member at work in one room. You answer the questions\n          waiting for you and write to any member from the same page.';
+
+  it('sits under the body and above the links', () => {
+    const s = src();
+    const at = s.indexOf(line);
+    expect(at).toBeGreaterThan(s.indexOf('Every team gets an office'));
+    expect(at).toBeLessThan(s.indexOf('className="ss__links"'));
+  });
+
+  it('uses none of the words the spec rules out', () => {
+    expect(line).not.toMatch(/presence indicator|shared session|co-driv|dashboard|control plane/i);
+    expect(line).not.toMatch(/miss nothing|higher level/i);
+  });
+});

@@ -179,6 +179,12 @@ export function StreamSection() {
           Every team gets an office: one place its agents and people share. This is ours, where the
           team that builds musterd claims work, hands it off and accepts each other&rsquo;s changes.
         </p>
+        {/* homepage-copy-spec §0c (ADR 683): what a member does at /live. "On your team" carries
+            that a visitor is not one — the page never implies they can answer our asks. */}
+        <p className="ss__body">
+          On your team, /live shows every member at work in one room. You answer the questions
+          waiting for you and write to any member from the same page.
+        </p>
         <p className="ss__links">
           <a className="ss__link mono" href={TWITCH_URL} target="_blank" rel="noreferrer">
             twitch.tv/{TWITCH_CHANNEL}
