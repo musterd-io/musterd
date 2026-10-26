@@ -31,6 +31,9 @@ const TALK_ONLY_ROUTES: ReadonlySet<string> = new Set([
   'POST /gate', // a harness's PreToolUse check must still answer for a guest's own session
   'GET /enforcement',
   'POST /doorbell/rings',
+  // The adapter's flush of the seat's own tool calls (ADR 144): presence-neutral measurement,
+  // stamped from the member row. A remote MCP guest sends it after every tool call.
+  'POST /telemetry/tool-calls',
 ]);
 
 /** Prefix routes a talk-only seat may call (`METHOD prefix`), for parameterised paths. */
