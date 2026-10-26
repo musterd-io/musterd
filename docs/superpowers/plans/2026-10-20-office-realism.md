@@ -372,6 +372,8 @@
 
 ### Task 20: Broadcast frame-time A/B
 
+_(Replaced 2026-10-26, nick: the painters were deleted in #3295, so there is no B to compare against. The real-stream measurement in `docs/perf/web-live-baseline.md` — "2026-10-26 — /broadcast frame time on the hosted stream seat" (#3345: median 29 draws/s at 1080p30, p5 23, Chrome 157%) — stands in for the A/B and its gate. Lane 01M5QE7HXP.)_
+
 - [ ] **Step 1:** Run `scripts/perf/broadcast-baseline.mjs` (method at the top of `docs/perf/web-live-baseline.md`) against `origin/main` and this branch, same fixture team, 1080p30, five minutes each.
 - [ ] **Step 2:** Record draws/s, ms per draw and main-thread busy in `web-live-baseline.md`. The gate: ms per draw on this branch ≤ main's. A regression blocks the merge; fix it here (first suspects: unneeded per-frame `tintedSheet` misses, overlays drawn when nothing changed under dirty-rect).
 - [ ] **Step 3:** Commit the numbers.
