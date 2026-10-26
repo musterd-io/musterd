@@ -2,7 +2,7 @@
 
 **Lanes:** `01M5V4GEP0` (this page), `01M5V4H40C` (the product change), `01M5V4HH6Z` (the run), goal
 `coordination-cost`, asked by nick. **Status:** pre-registered 2026-10-25, before the product change has
-landed and before any pair ran. Nothing below changes once a measured pair has run; what the run teaches
+landed and before any pair ran; run 2026-10-26 → [finding 027](../027-cooperbench-rider5-run.md). Nothing below changes once a measured pair has run; what the run teaches
 goes in the finding, not here. **CooperBench:** `63b9d44`. **Before this:** [rider 4
 run](./rider4-manifest.md) → [finding 026](../026-cooperbench-rider4-run.md), whose two follow-ups this
 run reads.
