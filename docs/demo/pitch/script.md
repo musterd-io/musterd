@@ -51,32 +51,27 @@ request sends her to check someone else's work. Then she saves where she left of
 We build musterd with musterd. This is our office. So far the team has closed 2,090 lanes and sent
 2,329 asks to a member.
 
-## 8 · Watch it live (0:15)
-
-Right now you can watch the team build musterd on Twitch, at twitch.tv/musterd_io. The code takes
-you there.
-
-## 9 · Who musterd is for (0:20)
+## 8 · Who musterd is for (0:20)
 
 Solo builders feed in: one person, many agents, several tools. The first buyer is the product and
 dev team, a few people and their agents on one or more repos. Then any team doing knowledge work,
 up to whole organizations. Nothing in musterd is specific to code: one in six of our own lanes is
 writing, not code.
 
-## 10 · How a team starts (0:25)
+## 9 · How a team starts (0:25)
 
 You install the CLI, run musterd init, and it wires your agents through MCP. Then you work from the
 CLI or in the browser. Today it runs on your machine, and other machines join through a hub you run.
 Next is musterd Cloud: hosted teams, with nothing to run. And a harness of our own, so a member can run on musterd itself.
 
-## 11 · Free to run yourself, paid when we host it (0:25)
+## 10 · Free to run yourself, paid when we host it (0:25)
 
 Running it yourself is free: MIT, your machines, no caps. Hosted musterd Cloud, coming soon, is a subscription,
 with caps on teams, people and history, and credits for model compute that musterd runs. Your own
 keys use none. musterd orgs, also coming soon, add single sign-on, signed audit export and admin across teams. I have
 no prices yet; the first design partners will tell me.
 
-## 12 · Where musterd sits (0:25)
+## 11 · Where musterd sits (0:25)
 
 Work trackers are adding agents. Your work already lives there, but the agents are assignees, not
 teammates. Agent teams give you tight coordination, inside one tool. Relays let agents reach each other
@@ -85,11 +80,16 @@ workflows in code, and their agents are not standing members. musterd is the sta
 harness. Nothing my agents do counts as done until another member accepts it, and the record shows
 who did it, who accepted it, and which model.
 
-## 13 · Nick Sanders, founder (0:20)
+## 12 · Nick Sanders, founder (0:20)
 
 Two asks (change them to suit the room; these are the standing two). Introductions to product and dev teams that run several agents across tools. And
 conversations with investors who back developer infrastructure. I'm Nick; find me here, or at
 musterd.io.
+
+## 13 · Watch the agents build musterd (0:15)
+
+The agents and I build musterd in the open, on Twitch at twitch.tv/musterd_io. The code takes you
+there.
 
 ---
 
@@ -97,24 +97,24 @@ musterd.io.
 
 | Page | Claim | Source, and when it was read |
 | --- | --- | --- |
-| 1, 13 | Tagline and subhead | `docs/design/brand.md` §1; ADR 563 (the claim is the team; it replaced ADR 550's "musterd makes your agents accountable" on 2026-10-12, which this script carried until 2026-10-13) |
-| 1, 13 | QR code | Encodes `https://musterd.io`; decoded in Chrome with `BarcodeDetector` on 2026-10-09 |
+| 1, 12 | Tagline and subhead | `docs/design/brand.md` §1; ADR 563 (the claim is the team; it replaced ADR 550's "musterd makes your agents accountable" on 2026-10-12, which this script carried until 2026-10-13) |
+| 1, 12 | QR code | Encodes `https://musterd.io`; decoded in Chrome with `BarcodeDetector` on 2026-10-09 |
 | 2 | 37% never reached main before, 0.9% after | The slide's own footnote: our team's git history, July, then a September read. Not re-derived for this script; the earlier "more than a third" is the same July figure. The 37% is finding 001's P3 post-mortem, which ROADMAP calls "a forensic proxy, not a reproducible calibration gate", so the slide says "never reached main", which is what was measured (wording corrected 2026-10-13 from "thrown away"). Do not swap in the cookoff's 72% → 1.9%: it is held out of outbound copy until its re-run lands (`docs/wiki/how-musterd-got-here.md`) |
 | 3 | Models, harnesses, protocols change monthly | Slide text; no number is claimed |
 | 4 | wanderer to ghost `challenge`, schmidt to nick `ask` | Quoted on the slide as examples of the two kinds of message |
 | 5 | The six features; the roster is an example team | Slide labels it "example team"; do not call it our roll call. Doorbell: waking an offline member is shipped through residency (a woken member is reply-only: it can coordinate, not edit); reaching a busy member is the interrupt line, whose coverage varies by harness; an open session idle at the prompt is goal `idle-wake`, still in flight. Do not say "any harness" |
 | 6 | Miley's session | Slide notes; the hooks named are Claude Code's, other harnesses get the same moves through MCP. The merge currently comes before review; the slide shows the flow we are moving to, so I say "submits" and leave the order of merge out |
 | 7 | 2,090 lanes closed, 2,329 asks to a member | `./counts.sh`, read 2026-10-20. Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
-| 8, 13 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
+| 12, 13 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
 | 5 | "Every team gets an office" | [ADR 578](../../decisions/578-the-office-and-knowledge-work.md): the office is everything a team shares, as one place. Say board, inbox, memory, record and /live; never the daemon or MCP. The /live sentence is [ADR 683](../../decisions/683-live-and-multiplayer-in-the-message.md) §1: three things the code does today (the office scene, answering an ask in the composer, writing to a member; read 2026-10-20). Never say presence indicators, shared session, dashboard or control plane |
-| 9 | Buyer tiers; knowledge work as the expansion | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 578 names knowledge work on the slide (ADR 550 §4 kept it in view) |
-| 9 | One in six of our lanes is writing | `./counts.sh`, read 2026-10-20: 321 of 1,937 closed lanes that declared a scope touched only docs/, content/ or .md files (17%). A floor, not a census. It shows the primitives carry non-code work; it is not a waste measurement for knowledge work, which does not exist yet (ADR 550 §4) |
-| 10 | Install and connect | The generated install block in README.md (ADR 669: one block every surface renders from), re-read 2026-10-20: step 1 is `npm install -g @musterd/cli`, or Homebrew's one line, `brew install SandRiseStudio/musterd/musterd`. The slide shows both. It showed `brew tap SandRiseStudio/musterd` then `brew install musterd` until 2026-10-20, a route ADR 568 retired (`RETIRED_INSTALL_COMMANDS` in `content/install.data.ts`); the 2026-10-20 deck refresh kept it by mistake |
-| 10 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
-| 10 | Native harness is "next" | ROADMAP "musterd as its own harness"; ADR 251 accepted (2026-08-12). One measurement exists (about 4 s, n=1, `docs/superpowers/specs/2026-09-23-reach-and-boundaries-design.md`). Today every member runs on someone else's harness, so the slide calls it next and promises no date |
-| 11 | Free local, subscription, credits; Cloud and orgs coming soon | Business plan spec above; no prices exist yet. Goal `cloud` in flight, no date quoted |
-| 12 | Each category: what it gives you, what it leaves out; musterd: any harness, then the message | The slide's short phrases, in place of the earlier check-mark columns. They describe what each category is built for. Competitor names are claims about other products; I have not tested anyone else's version. musterd's row carries [ADR 665](../../decisions/665-accountability-message-a-person-at-both-ends.md) §1's sentence (2026-10-19; it replaced "members who can say no" and "another member accepts", the mechanism chips of 2026-10-13) and the harness line; its limit (it is not a sandbox and does not run your agents) is in the questions below. "A person at both ends" is a section title in the ADR and is never said as a sentence. The chain of one piece of work is printed by `musterd lane show <id>` (ADR 629, #2771): asked, claimed, model, accepted, authorized, each marked verified, stated or missing; checked 2026-10-19 on lane 01M5AMG9C3 |
-| 12 | Competitor logos | Each is the icon the company serves on its own site, fetched 2026-10-09: Plane, Conductor, Band, CrewAI, Multica, Omnigent, Party and Agent Relay from their own domains. Two are indirect: **qm** shows YC's own "Y" because qm is a YC project and its page serves only that mark; **Hermes Bot Mode** shows the Nous Research icon, since Hermes Agent is a Nous product. Used only to identify each product. CrewAI's is a 32 px favicon, so it is soft at large sizes |
+| 8 | Buyer tiers; knowledge work as the expansion | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 578 names knowledge work on the slide (ADR 550 §4 kept it in view) |
+| 8 | One in six of our lanes is writing | `./counts.sh`, read 2026-10-20: 321 of 1,937 closed lanes that declared a scope touched only docs/, content/ or .md files (17%). A floor, not a census. It shows the primitives carry non-code work; it is not a waste measurement for knowledge work, which does not exist yet (ADR 550 §4) |
+| 9 | Install and connect | The generated install block in README.md (ADR 669: one block every surface renders from), re-read 2026-10-20: step 1 is `npm install -g @musterd/cli`, or Homebrew's one line, `brew install SandRiseStudio/musterd/musterd`. The slide shows both. It showed `brew tap SandRiseStudio/musterd` then `brew install musterd` until 2026-10-20, a route ADR 568 retired (`RETIRED_INSTALL_COMMANDS` in `content/install.data.ts`); the 2026-10-20 deck refresh kept it by mistake |
+| 9 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
+| 9 | Native harness is "next" | ROADMAP "musterd as its own harness"; ADR 251 accepted (2026-08-12). One measurement exists (about 4 s, n=1, `docs/superpowers/specs/2026-09-23-reach-and-boundaries-design.md`). Today every member runs on someone else's harness, so the slide calls it next and promises no date |
+| 10 | Free local, subscription, credits; Cloud and orgs coming soon | Business plan spec above; no prices exist yet. Goal `cloud` in flight, no date quoted |
+| 11 | Each category: what it gives you, what it leaves out; musterd: any harness, then the message | The slide's short phrases, in place of the earlier check-mark columns. They describe what each category is built for. Competitor names are claims about other products; I have not tested anyone else's version. musterd's row carries [ADR 665](../../decisions/665-accountability-message-a-person-at-both-ends.md) §1's sentence (2026-10-19; it replaced "members who can say no" and "another member accepts", the mechanism chips of 2026-10-13) and the harness line; its limit (it is not a sandbox and does not run your agents) is in the questions below. "A person at both ends" is a section title in the ADR and is never said as a sentence. The chain of one piece of work is printed by `musterd lane show <id>` (ADR 629, #2771): asked, claimed, model, accepted, authorized, each marked verified, stated or missing; checked 2026-10-19 on lane 01M5AMG9C3 |
+| 11 | Competitor logos | Each is the icon the company serves on its own site, fetched 2026-10-09: Plane, Conductor, Band, CrewAI, Multica, Omnigent, Party and Agent Relay from their own domains. Two are indirect: **qm** shows YC's own "Y" because qm is a YC project and its page serves only that mark; **Hermes Bot Mode** shows the Nous Research icon, since Hermes Agent is a Nous product. Used only to identify each product. CrewAI's is a 32 px favicon, so it is soft at large sizes |
 
 ## Questions to expect, and plain answers
 
@@ -138,7 +138,7 @@ number has a row in the Q&A ledger below; re-read it before each event.
   ships a Codex plugin for Claude Code. The review lands under the caller's name: Codex has no seat,
   nothing records which model looked, and the agent that asked decides whether to take the advice. On musterd nothing counts as done until another member accepts it. The reviewer is
   a separate member, its model is on the record, and the one who did the work never grades it.
-- **How is musterd different from competitors?** The four categories on slide 12, and most of what
+- **How is musterd different from competitors?** The four categories on slide 11, and most of what
   is in them is one person running several sessions inside one vendor's tool. I build for teams that
   mix tools. That layer is one neither Anthropic nor OpenAI will build, because each only sees its own
   agents. On musterd nothing counts as done until another member accepts it, and the record shows who
