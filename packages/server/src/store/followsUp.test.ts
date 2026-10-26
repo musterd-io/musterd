@@ -74,6 +74,28 @@ describe('leftoverSignal — S2, a lane that declares itself one part of several
       expect(leftoverSignal({ title, detail: null }), title).toBeNull();
   });
 
+  it('reads a score as a score, not a part (2026-10-26: two closes refused)', () => {
+    for (const title of [
+      // lane 01M5GCF88Z — pilot 3's pass rate, not "part 4 of 10"
+      "CooperBench 5: the solo reference, so pilot 3's musterd 4/10 can be read against the gap",
+      // lane 01M5G6AGDY — a count of agents
+      'pilot-musterd 20/20 agents',
+      "compared with musterd's 0/10 merge conflicts there",
+    ])
+      expect(leftoverSignal({ title, detail: null }), title).toBeNull();
+  });
+
+  it('still reads N/M as a part when punctuation, the end or a part noun follows', () => {
+    for (const title of [
+      'OpenRouter with OpenCode 2/4 — interactive setup guidance',
+      'sync latency (2/3)',
+      '2/4: the gate',
+      'role-skills 3/5 lanes',
+      'nothing-vanishes 3/5',
+    ])
+      expect(leftoverSignal({ title, detail: null }), title).not.toBeNull();
+  });
+
   it('still reads a part however it is punctuated or named', () => {
     for (const title of [
       'find-work 1 of 4',

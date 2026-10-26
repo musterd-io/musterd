@@ -145,6 +145,14 @@ The five lanes under goal `nothing-vanishes` carry the build; the spec's §7 map
   (part, increment, phase, step, lane): 16 matches remain and no plan part was lost. The other signals
   are unchanged, and a false positive still costs one `follows_up: "none"`.
 
+- _(2026-10-26, lane 01M5GEMZ07.)_ **The `N/M` signal read scores as parts.** On 2026-10-21 two
+  closes were refused: lane `01M5GCF88Z` ("… pilot 3's musterd 4/10 can be read …", a pass rate) and
+  lane `01M5G6AGDY` ("pilot-musterd 20/20 agents", a count). `N/M` now takes the `N of M` rule:
+  it signals only when nothing follows it but punctuation, the end, or a part noun (part, increment,
+  phase, step, lane). "OpenCode 2/4 — setup", "(2/3)", "2/4: the gate" and "3/5 lanes" still
+  signal. The store was not re-counted for this change; the cases come from the two refusals and
+  the board's own plan titles. The other signals are unchanged.
+
 ## Observability & Evaluation
 
 **Traces.** No new trace. The reads are the lane store (`follows_up`, `abandon_reason`,
