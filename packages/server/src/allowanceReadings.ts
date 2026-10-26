@@ -23,7 +23,13 @@ interface Reading {
 
 const byTeam = new Map<string, Map<string, Reading>>();
 
-const PROVIDER_ORDER: readonly AllowanceProvider[] = ['claude', 'openai', 'cursor', 'elevenlabs'];
+const PROVIDER_ORDER: readonly AllowanceProvider[] = [
+  'claude',
+  'openai',
+  'cursor',
+  'elevenlabs',
+  'muse',
+];
 
 export interface AllowanceRosterSeat {
   name: string;
@@ -129,12 +135,14 @@ export function ingestAllowance(
   }
 }
 
-function providerOfModel(model: string | null | undefined): 'claude' | 'openai' | null {
+function providerOfModel(model: string | null | undefined): 'claude' | 'openai' | 'muse' | null {
   if (!model) return null;
   const lower = model.trim().toLowerCase();
   if (!lower) return null;
   if (/\b(opus|sonnet|haiku|fable)\b/.test(lower) || lower.includes('claude')) return 'claude';
   if (/\bgpt\b/.test(lower) || /\bo[1-9]\b/.test(lower)) return 'openai';
+  // A word, so muse-wonder matches and musterd does not.
+  if (/\bmuse\b/.test(lower)) return 'muse';
   return null;
 }
 
@@ -187,7 +195,7 @@ function onOnlyHumanNode(
 
 function readingForPresence(
   readings: readonly Reading[],
-  provider: 'claude' | 'openai',
+  provider: 'claude' | 'openai' | 'muse',
   presence: AllowanceRosterSeat['presences'][number],
 ): Reading | null | 'ambiguous' {
   if (providerOfModel(presence.model) !== provider) return null;
@@ -212,7 +220,7 @@ function agentAccounts(
 ): AllowanceView['accounts'] {
   const accounts: AllowanceView['accounts'] = [];
   const live = seat.presences.filter((presence) => presence.status !== 'offline');
-  for (const provider of ['claude', 'openai'] as const) {
+  for (const provider of ['claude', 'openai', 'muse'] as const) {
     let chosen: Reading | null = null;
     let drop = false;
     for (const presence of live) {

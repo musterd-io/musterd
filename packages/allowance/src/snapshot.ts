@@ -2,7 +2,7 @@ import type { Board, LiveProvider, Window } from './types.js';
 
 /** A key already hashed. The snapshot never sees the material it was hashed from. */
 export interface AccountMaterial {
-  provider: 'claude' | 'openai' | 'cursor' | 'elevenlabs';
+  provider: 'claude' | 'openai' | 'cursor' | 'elevenlabs' | 'muse';
   accountKey: string;
 }
 
@@ -33,6 +33,7 @@ const PROVIDERS = new Set<AccountMaterial['provider']>([
   'openai',
   'cursor',
   'elevenlabs',
+  'muse',
 ]);
 
 function isProvider(id: string): id is AccountMaterial['provider'] {

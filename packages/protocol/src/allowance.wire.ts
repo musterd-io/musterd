@@ -4,8 +4,12 @@
  * same tuples, so the browser bundle never pulls a validator in to read a what's-left line.
  */
 
-/** Providers the roster can name. Quiet providers are omitted rather than listed. */
-export const ALLOWANCE_PROVIDERS = ['claude', 'openai', 'cursor', 'elevenlabs'] as const;
+/**
+ * Providers the roster can name. Quiet providers are omitted rather than listed.
+ * Append one. An older daemon rejects a post that names a provider it does not list,
+ * and that rejection drops the other accounts in the same body (ADR 739).
+ */
+export const ALLOWANCE_PROVIDERS = ['claude', 'openai', 'cursor', 'elevenlabs', 'muse'] as const;
 export type AllowanceProvider = (typeof ALLOWANCE_PROVIDERS)[number];
 
 /**

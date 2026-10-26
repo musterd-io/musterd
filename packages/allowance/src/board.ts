@@ -1,8 +1,9 @@
 import { ACCOUNTS } from './catalog.js';
 import { asClaude, readClaude } from './claude.js';
-import { asCodex, codexSession, readCodex } from './codex.js';
+import { asCodex, codexSession, readCodex, type ShareMiss, type ShareRead } from './codex.js';
 import { asCursor, readCursor } from './cursor.js';
 import { asLive, readElevenLabs } from './elevenlabs.js';
+import { asMuse, readMuse } from './muse.js';
 import type { Board, ProviderCard } from './types.js';
 
 export interface ReadDeps {
@@ -16,6 +17,8 @@ export interface ReadDeps {
   claudeToken: string | null;
   claudePlan: string | null;
   cursorToken: string | null;
+  /** Tests pass this so a chosen Muse account does not spawn the CLI. */
+  readMuse?: () => Promise<ShareRead | ShareMiss>;
 }
 
 function held(
@@ -54,6 +57,11 @@ export async function readBoard(deps: ReadDeps): Promise<Board> {
     if (account.id === 'cursor') {
       const read = await readCursor(deps.cursorToken, deps.fetchSub, deps.signal);
       providers.push(read.state === 'live' ? asCursor(read) : held('cursor', 'Cursor', read));
+      continue;
+    }
+    if (account.id === 'muse') {
+      const read = await (deps.readMuse ?? (() => readMuse(deps.signal)))();
+      providers.push(read.state === 'live' ? asMuse(read) : held('muse', 'Muse', read));
       continue;
     }
     providers.push({ id: account.id, name: account.name, state: 'quiet', reason: account.reason });
