@@ -62,6 +62,14 @@ deliberate unset from a stale base, and it does not record how far each joiner h
   The fold copies the hub's stored doc as is (`projectPolicyEvent`), so a joiner that has synced
   holds an equal doc, including `review_by`.
 
+- _2026-10-26 (lane `01M5WR5TVZ`):_ ADR 729 (#3290) took policy writes off the joiner. A joiner
+  now refuses `POST /policy` with `hub_local_required`, and the hub's `/sync/policy` refuses the
+  same way, because policy values may hold secret-bearing URLs and tokens. Nothing forwards a
+  change any more, so nothing carries a `base`. The stale-base check in `applyPolicyChange` had no
+  caller and was removed. The 2026-09-06 failure cannot recur by this route: the joiner never
+  sends the replace. Lane `01M5DA3V5B` (a joiner's base never matched a hub that stores secrets,
+  ADR 677) was closed as superseded for the same reason.
+
 ## Observability & Evaluation
 
 - **Traces:** the refusal is an HTTP 409 `conflict` on `POST /teams/:team/sync/policy` in the hub's
