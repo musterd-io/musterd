@@ -1,12 +1,13 @@
-# 027 — CooperBench rider 5 run: the push now reaches a seat in 12 of 22 cases, the pusher was told every time, and 8 of the 12 said it again anyway
+# 027 — CooperBench rider 5 run: the push now reaches a seat in 12 of 22 recorded pushes, the pusher was told every time, and 8 of the 12 said it again anyway
 
 > **Status:** 2026-10-26, lane 01M5V4HH6Z (lazara), asked for by nick. Pre-registered 2026-10-25
 > ([rider 5](./cooperbench/riders.md#rider-5-finding-026s-two-follow-ups--the-push-reaches-the-lanes-that-cover-its-files-and-the-pusher-is-told),
 > [manifest](./cooperbench/rider5-manifest.md), #3318) before [ADR 731](../decisions/731-push-reaches-covering-lanes.md)
 > landed (#3319); run 04:23Z–04:53Z the next day. **Rider 5, read once:** R5a "pushed / fetch" sends
 > **12** calls, $0.25 (finding 026: 18; rule ≤ 5 / ≥ 12) — **the change did not act**, at the bound. R5b
-> recorded pushes that fired an act **12 of 22** (55%; finding 026: 4 of 20; rule ≥ 80% / ≤ 40%) — **part
-> of it**. R5c announced pushers who said it by hand anyway **8 of 12** (67%; finding 026: 3 of 4; rule
+> recorded pushes that fired an act **12 of 22** (55%; over the 23 `git push` commands rider 4 counts,
+> 52% — one command recorded nothing, see R5b; finding 026: 4 of 20; rule ≥ 80% / ≤ 40%) — **part of
+> it** on either denominator. R5c announced pushers who said it by hand anyway **8 of 12** (67%; finding 026: 3 of 4; rule
 > ≤ 25% / ≥ 60%) — **the change did not act**. Beside them: the hook's line reached the pusher after
 > **22 of 22** recorded pushes; the ADR 691 refusal carried the pushed head in **16 of 28** refusals.
 > Pass 5 of 10, $18.54.
@@ -40,8 +41,16 @@ directory's world-writable bit, reset by the redeploy, was first put on the wron
 
 ### R5b — recorded pushes that fired an act: 4 of 20 → 12 of 22, part of it
 
-The hook reported 22 pushes (`rider4.py` counts 23 `git push` commands; one left the remote-tracking ref
-elsewhere and reported nothing, as ADR 730 §1 says). The daemon recorded all 22 and fired an act for
+**Denominator, stated once.** The rule counts *recorded* pushes; `rider5.json` carries both counts.
+`rider4.py` finds **23** `git push` commands in the agents' streams; the daemon recorded **22**
+(`lane_push_recorded` lines in the pairs' daemon logs, `recorded_pushes` in `rider5.json`). The one
+command that is not a recorded push is agent2's second in react-hook-form 153: `git push team agent2
+--force || true` inside a multi-command script, run after agent2 had already resolved its lane. That
+pair's daemon log shows two `POST /lanes/push`, not three — the hook never reported it
+([`pushwhy.txt`](./cooperbench/pilot-runs/2026-10-25-rider5/pushwhy.txt)), so there was nothing for the
+daemon to record or fire. R5b is **12 of 22** recorded pushes (55%, `R5b_fraction_recorded`); over the 23
+commands it is 12 of 23 (52%, the as-run `R5b_fraction`). Both sit between the bounds. The daemon fired
+an act for
 **12** (finding 026: 4), to the covering partner in all 12 — `covering: 1` on every fired record, and
 `watchers: 1` as well on 6 of them. The receiver's next move after the act: `bash` (a fetch or merge,
 in stream order) 10 times, a wait twice.
@@ -55,20 +64,21 @@ by construction, as ADR 730's was for the refused seat's push. The finished part
 the branch, though: in 7 of the 10 pairs the first mover went on to merge the second mover's branch
 and write the combined patch ("I've merged your changes. patch.txt now contains both our features").
 
-| Pair | Pushes | Fired | Why not |
-| --- | --- | --- | --- |
-| outlines 1655 | 2 | 1 | agent1 resolved before agent2 pushed |
-| dspy 8563 | 2 | 1 | agent2 resolved before agent1 pushed |
-| go-chi 27 | 2 | 2 | — |
-| llama-index 17244 | 2 | 1 | agent1 resolved before agent2 pushed |
-| tiktoken 0 | 2 | 1 | agent1 resolved before agent2 pushed |
-| click 2800 | 3 | 2 | agent2 resolved before agent1's second push |
-| jinja 1559 | 2 | 1 | agent2 resolved before agent1 pushed |
-| jinja 1621 | 3 | 1 | agent1 released its lane; agent2 pushed twice after |
-| react-hook-form 153 | 2 | 1 | agent2 resolved before agent1 pushed |
-| typst 6554 | 2 | 1 | agent2 handed its lane to agent1; agent1 then owned every lane |
+| Pair | Push commands | Recorded | Fired | Why not |
+| --- | --- | --- | --- | --- |
+| outlines 1655 | 2 | 2 | 1 | agent1 resolved before agent2 pushed |
+| dspy 8563 | 2 | 2 | 1 | agent2 resolved before agent1 pushed |
+| go-chi 27 | 2 | 2 | 2 | — |
+| llama-index 17244 | 2 | 2 | 1 | agent1 resolved before agent2 pushed |
+| tiktoken 0 | 2 | 2 | 1 | agent1 resolved before agent2 pushed |
+| click 2800 | 3 | 3 | 2 | agent2 resolved before agent1's second push |
+| jinja 1559 | 2 | 2 | 1 | agent2 resolved before agent1 pushed |
+| jinja 1621 | 3 | 3 | 1 | agent1 released its lane; agent2 pushed twice after |
+| react-hook-form 153 | 3 | 2 | 1 | agent2 resolved before agent1 pushed; agent2's own second push command, after its resolve, was never reported |
+| typst 6554 | 2 | 2 | 1 | agent2 handed its lane to agent1; agent1 then owned every lane |
 
-12 of 22 is 55%, between the bounds (≥ 80% acted, ≤ 40% did not): **part of it**. Of finding 026's three
+12 of 22 recorded pushes is 55%, and 12 of 23 commands is 52%: both between the bounds (≥ 80% acted,
+≤ 40% did not), **part of it**. Of finding 026's three
 reasons, two are gone — the refused seat's own push now has an audience while the partner's lane is
 open (go-chi, click), and a holder's push before the partner's refusal reaches the covering partner
 (outlines, go-chi, click, jinja 1621, react-hook-form) — and the third, the push after the partner's
@@ -164,6 +174,10 @@ Per pair: [`readout.json`](./cooperbench/pilot-runs/2026-10-25-rider5/readout.js
 ([`residue/`](./cooperbench/pilot-runs/2026-10-25-rider5/residue/)); rider 2
 ([`rider2.json`](./cooperbench/pilot-runs/2026-10-25-rider5/rider2.json)); rider 4
 ([`rider4.json`](./cooperbench/pilot-runs/2026-10-25-rider5/rider4.json)); rider 5
-([`rider5.json`](./cooperbench/pilot-runs/2026-10-25-rider5/rider5.json)); daemon push lines and
+([`rider5.json`](./cooperbench/pilot-runs/2026-10-25-rider5/rider5.json) — `rider5.py` amended
+2026-10-26 after big-body's acceptance review to carry `recorded_pushes` and `R5b_fraction_recorded`
+beside the as-run `git_pushes` and `R5b_fraction`, then re-run on the machine over the same logs; the
+amendment is dated in the script's header and in the [run log](./cooperbench/pilot-runs/2026-10-25-rider5/run.log));
+daemon push lines and
 stream order per pair ([`pushwhy.txt`](./cooperbench/pilot-runs/2026-10-25-rider5/pushwhy.txt));
 [run log](./cooperbench/pilot-runs/2026-10-25-rider5/run.log), [pre-flight](./cooperbench/pilot-runs/2026-10-25-rider5/preflight.log).

@@ -1,7 +1,11 @@
 """Rider 5 (riders.md; ADR 731), derived from rider4.json's per-pair fields and the agents' streams:
 
 - R5b: recorded pushes that fired at least one push act — distinct (holder, head) in `push_acts`, over
-  `git_push_count`.
+  `git_push_count`. _(Amended 2026-10-26, after the readout, on big-body's acceptance review of finding
+  027: `git_push_count` is rider 4's count of `git push` commands, and a command that records nothing —
+  a push after the pusher's lane ended — is not a recorded push. The script now also counts the daemon's
+  `lane_push_recorded` lines per pair as `recorded_pushes` and reports `R5b_fraction_recorded` beside
+  the as-run `R5b_fraction`; nothing else changed, and the finding names which denominator it reads.)_
 - R5c: announced pushers who then sent a hand pushed / fetch message anyway — holders in `push_acts`
   with a `hand_pushed_sends` entry whose `push_acts_so_far >= 1`, over the distinct announced holders.
 - `refusals`: held refusals in the streams ("is held by"), and how many carried the pushed head
@@ -25,6 +29,7 @@ ARM = sys.argv[2]
 R4 = json.load(open(sys.argv[3]))[ARM]
 
 HELD = "is held by"
+RECORDED = '"msg":"lane_push_recorded"'
 HEAD_NOTE = "Their branch "
 PUSHER_LINE = "musterd: your push of"
 
@@ -56,6 +61,13 @@ def stream_texts(pair: Path):
     return out
 
 
+def recorded_pushes(pair: Path) -> int:
+    """The daemon's lane_push_recorded lines for this pair (ADR 730 §1: one per push that reported)."""
+    return sum(
+        1 for dl in pair.rglob("*daemon.log") for line in dl.read_text(errors="replace").splitlines() if RECORDED in line
+    )
+
+
 def pair_record(p: dict):
     pair = LOGS / p["pair"]
     acts = p.get("push_acts", [])
@@ -71,6 +83,7 @@ def pair_record(p: dict):
     return {
         "pair": p["pair"],
         "git_pushes": p.get("git_push_count", 0),
+        "recorded_pushes": recorded_pushes(pair),
         "announced_pushes": len(announced),
         "announced_holders": sorted(holders),
         "holders_repeating_by_hand": repeaters,
@@ -84,6 +97,7 @@ def pair_record(p: dict):
 def main():
     pairs = [pair_record(p) for p in R4["pairs"]]
     pushes = sum(p["git_pushes"] for p in pairs)
+    recorded = sum(p["recorded_pushes"] for p in pairs)
     announced = sum(p["announced_pushes"] for p in pairs)
     holders = sum(len(p["announced_holders"]) for p in pairs)
     repeaters = sum(len(p["holders_repeating_by_hand"]) for p in pairs)
@@ -92,8 +106,10 @@ def main():
             "pairs": pairs,
             "totals": {
                 "git_pushes": pushes,
+                "recorded_pushes": recorded,
                 "announced_pushes": announced,
                 "R5b_fraction": round(announced / pushes, 3) if pushes else None,
+                "R5b_fraction_recorded": round(announced / recorded, 3) if recorded else None,
                 "announced_holders": holders,
                 "holders_repeating_by_hand": repeaters,
                 "R5c_fraction": round(repeaters / holders, 3) if holders else None,

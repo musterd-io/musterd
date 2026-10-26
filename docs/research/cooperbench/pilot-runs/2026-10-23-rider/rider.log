@@ -1,0 +1,8 @@
+[2026-10-23T17:38:44Z] pull 9 images, df 56G free
+[2026-10-23T17:40:32Z] pulled, df 48G free
+[2026-10-23T17:40:32Z] start rider-musterd
+[2026-10-23T18:05:32Z] rider-musterd run exit=0
+[2026-10-23T18:07:31Z] rider-musterd eval exit=0
+[2026-10-23T18:07:31Z] all done, spent $17.67
+[2026-10-23T18:07:31Z] run_arms exit=0
+[2026-10-23T18:07:31Z] readout exit=0

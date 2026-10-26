@@ -140,6 +140,9 @@ In each container (`adapter.py`):
   not `/data/runs/trajectories` — rider 5 pre-flight, 2026-10-26). And the arm's `agent*_stream.jsonl` carries no
   PostToolUse hook output: ADR 731's line to the pusher is read from `agent*_session.jsonl`, Claude Code's own
   transcript in the same pair directory (finding 027).
+  And the run folder's `*.log` files are research data: the repo's root `.gitignore` ignores `*.log`, so until
+  2026-10-26 no run's `run.log` had reached `main` though every finding linked it; `.gitignore` now un-ignores
+  `docs/research/cooperbench/pilot-runs/**/*.log` — check `git status` shows your logs staged before you push.
 - `tests/`: 39 tests on the hook drift, the prompts' shape, both adapters' flows, and the OpenHands shims, against
   a fake container and host.
 - **One task end to end in both arms** (done-when 4), on the run machine, `pallets_click` task 2068,

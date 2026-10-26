@@ -1,0 +1,12 @@
+[2026-10-26T04:19:09Z] api check: ok
+[2026-10-26T04:19:09Z] gate_smoke start
+[2026-10-26T04:19:21Z] gate_smoke exit=0     os.mkdir(self, mode) PermissionError: [Errno 13] Permission denied: '/opt/cooperbench/src/cooperbench/agents/swe_agent/trajectories' 
+[2026-10-26T04:19:21Z] hold_smoke_697 start
+[2026-10-26T04:19:30Z] hold_smoke_697     os.mkdir(self, mode) PermissionError: [Errno 13] Permission denied: '/opt/cooperbench/src/cooperbench/agents/swe_agent/trajectories' 
+[2026-10-26T04:19:30Z] preflight done
+[2026-10-26T04:19:48Z] smokes rerun: /opt/cooperbench/src/cooperbench/agents/swe_agent/trajectories chmod 1777 (redeploy reset it; first try had chmod on the wrong dir)
+[2026-10-26T04:19:48Z] gate_smoke start
+[2026-10-26T04:20:23Z] gate_smoke cost_usd=0.003455115 a_edited=True b_edited=False gate_denies=1 PASS 
+[2026-10-26T04:20:23Z] hold_smoke_697 start
+[2026-10-26T04:23:05Z] hold_smoke_697 agent1_edited=True agent2_first_refused=True agent2_again_allowed=True held_deny_audited=True handover_refusal_audited=True no_deaf_warning=True cost_usd=0.0083 PASS 
+[2026-10-26T04:23:05Z] preflight done

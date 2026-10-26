@@ -1,0 +1,41 @@
+# CooperBench rider 4 run — run log (lane 01M5SZXMJX, rider4-manifest.md)
+
+## Pre-flight, 2026-10-25 (machine musterd-cooperbench, performance-8x)
+
+- **Spend:** nick asked for the run in session ("lets do rider 4", 2026-10-25); the manifest carries the
+  coordination-cost run's figures (about $18, hard stop $25). The manifest landed on main (#3316,
+  `be261e24`) before any pair ran.
+- **Deploy** from main `70d0170a` (#3315, the ADR 730 refspec fix): `MUSTERD_REF=70d0170a…`, Claude
+  Code `2.1.307` on the host (`claude --version`) and, through CooperBench's `setup.sh`, in every agent
+  container. Redeploy reset the root fs: `useradd smoke` again, trajectories dir `1777` again.
+- **API check:** one `claude -p` (haiku) → `ok`.
+- **First smoke attempt failed for a pre-flight reason, not a build one:** my wrapper put the agent-side
+  packed CLI (`/opt/musterd-seat/bin`, installed `--ignore-scripts`, so no `better-sqlite3` binding)
+  first on `PATH`, and the pair daemon exited before `/health`. Both smokes raised "never became
+  healthy" with no model call ($0). Rerun with the host `musterd` (`/usr/local/bin`) on `PATH`.
+- **`gate_smoke.py`** (committed, with `Read`, #3314) as the `smoke` user: **PASS, $0.0035** —
+  `src/a.py` edited inside the lane, `src/b.py` refused by the gate, one `lane.gate` deny audited, no
+  deaf warning.
+- **`hold_smoke.py`** (committed) as the `smoke` user: **FAIL, $0.0042** — but the failing step is the
+  gate working as ADR 697 says: agent2's retry after the 110 s lapse was refused once with "blocked
+  once: 'src/a.py' was held by agent1 … bring it in first … This is the one hand-over for that hold
+  (ADR 697)" (`denied_handover` audited), and the smoke, written before ADR 697, expects that retry to
+  be allowed. The README already names `hold_smoke_697.py` as the check until `hold_smoke.py` is updated
+  (big-body's lane `01M5G2PCFW`); the manifest's step 3 should have named it. Follow-up: the committed
+  `hold_smoke.py` needs ADR 697's hand-over step.
+- **`hold_smoke_697.py`** as the `smoke` user: **PASS, $0.0096** — held → hand-over refused once →
+  allowed; `denied_handover` audited; no deaf warning.
+- **Smokes total ≈ $0.017.** Arm cap stays **$24.80**.
+- No smoke pair, as pre-registered. All 10 `core` images were already on the volume (39 GB free).
+
+## Run
+
+- 17:15:05Z `r4.sh` started (`r4-musterd`, `-s core`, `-c 3`, `run_arms.py --cap 24.80`).
+- 17:15:05Z all 10 `core` images already on the volume; `r4-musterd` started. 17:45:08Z `run_arms` exit 0
+  (30 min 3 s), eval done, **$18.91** model spend, `readout.py` exit 0. No errored pair, no API-limit line,
+  nothing re-run. `MUSTERD_REF` 70d0170a and `claude_code_version` 2.1.307 in every pair.
+- Residue: `boardreads.py`, `sends.py`, `mtools.py`, `cats.py` (the claim run's copies, unchanged) →
+  `residue/`; `rider2.py` (coordination-cost run's, unchanged) → `rider2.json`; `rider4.py` (this folder,
+  written before the readout) → `rider4.json`. The machine was restarted once after the stop to run
+  `pushwhy.py` (daemon `lane_push_*` lines and stream order per pair) → `pushwhy.txt`, then stopped again.
+- Result: finding 026.
