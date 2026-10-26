@@ -182,6 +182,8 @@ const JOB_SWIPE_MS = 1200;
 const ROLLCALL_EVERY_MS = 5 * 60_000;
 const ROLLCALL_STEP_MS = 200; // one motion.ts step (dur-2)
 const ROLLCALL_HOLD_MS = 1600;
+/** How long a chat `!who` keeps one plate open (ADR 740). */
+const SPOTLIGHT_MS = 5000;
 /** Ambient micro-choreography (ADR 086 Phase 2, seeded by E1): when the room is quiet, inject one idle
  * beat (a seated micro-gesture — scratch, sip, swivel… — or a stroll), drawn per 10s wall-clock slot so
  * every viewer of the same team sees the same beats. How OFTEN is `ambientSeed.ambientFireP`, which
@@ -3449,6 +3451,33 @@ export function mountOffice(
   };
   const rollTimer = interactiveLabels || STILL ? null : setInterval(rollCall, ROLLCALL_EVERY_MS);
 
+  // Twitch chat's `!who <member>` (ADR 740): one plate open for SPOTLIGHT_MS, with the roll call's
+  // spot and layout hold. A name not on the floor is ignored; a newer spotlight closes the last one.
+  let spotlit: { n: string; t: ReturnType<typeof setTimeout> } | null = null;
+  const spotlight = (asked: string): boolean => {
+    const want = asked.toLowerCase();
+    const name = [...labels.keys()].find((n) => n.toLowerCase() === want);
+    const el = name === undefined ? undefined : labels.get(name);
+    if (name === undefined || !el) return false;
+    if (spotlit) {
+      clearTimeout(spotlit.t);
+      labels.get(spotlit.n)?.classList.remove('is-spot');
+      rollSize.delete(spotlit.n);
+    }
+    const size = plateSize.get(name);
+    if (size) rollSize.set(name, size);
+    el.classList.add('is-spot');
+    spotlit = {
+      n: name,
+      t: setTimeout(() => {
+        el.classList.remove('is-spot');
+        rollSize.delete(name);
+        spotlit = null;
+      }, SPOTLIGHT_MS),
+    };
+    return true;
+  };
+
   // Track the real PST sun: re-read the clock every minute and rebake only when the veil/lamp state moves.
   const lightTimer = setInterval(() => {
     if (refreshLightEnv()) {
@@ -3755,6 +3784,7 @@ export function mountOffice(
       );
     },
     rollCall,
+    spotlight,
     setLinked: (names: string | readonly string[] | null) => {
       // A class toggle only — the ring is CSS, so linking costs no frame (ADR 464). Several at once
       // when a Now goal row lights everyone on that goal.
@@ -3836,6 +3866,7 @@ export function mountOffice(
       clearInterval(lightTimer); // stop the PST lighting clock
       if (rollTimer) clearInterval(rollTimer); // stop the stream's roll call
       for (const t of rollTimers) clearTimeout(t);
+      if (spotlit) clearTimeout(spotlit.t);
       if (railTimer) clearInterval(railTimer); // stop the caption rail
       options.onCaption?.(null);
       clearInterval(welcomeTimer); // stop the receptionist welcome

@@ -16,6 +16,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { z } from 'zod';
 import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
+import { chatCredsFromEnv, spotlightExpression, startChatReader } from '../broadcast/twitchChat.js';
 import { configPath } from '../config.js';
 import { CliError } from '../errors.js';
 import { keychainLookup } from '../keychain.js';
@@ -2318,8 +2319,10 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     }
   };
 
+  let stopChat: (() => void) | undefined;
   const cleanup = () => {
     cleaningUp = true;
+    stopChat?.();
     disarmFrameWatch();
     if (pumpTimer) clearInterval(pumpTimer);
     stopEncoder(ffmpeg?.stdin, opts.capture);
@@ -2334,6 +2337,19 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
       display = x.display;
     }
     await Promise.race([launchCapture(true), diedDuringStartup]);
+    // Twitch chat's `!who` (ADR 740): off unless the stream machine carries its four secrets. Its only
+    // reach is one expression in whichever page is live — never the team.
+    const chatCreds = chatCredsFromEnv();
+    if (chatCreds)
+      stopChat = startChatReader({
+        creds: chatCreds,
+        log: (line) => process.stdout.write(theme.meta(`  ${line}\n`)),
+        onWho: (name) =>
+          void current?.cdp
+            ?.send('Runtime.evaluate', { expression: spotlightExpression(name) })
+            .catch(() => undefined),
+      });
+    else process.stdout.write(theme.meta('  chat: off — no MUSTERD_TWITCH_CHAT_* secrets\n'));
     // x11: the page is on screen now, so the first frame ffmpeg grabs is the office, not Xvfb's root.
     if (opts.capture === 'x11') startEncoder(display);
 

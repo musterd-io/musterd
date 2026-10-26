@@ -210,6 +210,15 @@ describe('folded plates and the roll call (lane 01M5G7A9H1)', () => {
   it('an open plate in the wave is laid out at its folded size, so no neighbour moves', () => {
     expect(index).toContain('const size = rollSize.get(name) ?? plateSize.get(name);');
   });
+
+  it("chat's spotlight (ADR 740) opens one plate with the same hold, ignores a stranger, and clears on dispose", () => {
+    const fn = index.slice(index.indexOf('const spotlight = '), index.indexOf('// Track the real PST sun'));
+    expect(fn).toContain('if (name === undefined || !el) return false;');
+    expect(fn).toContain('if (size) rollSize.set(name, size);');
+    expect(fn).toContain("labels.get(spotlit.n)?.classList.remove('is-spot');");
+    expect(fn).toContain('}, SPOTLIGHT_MS),');
+    expect(index).toContain('if (spotlit) clearTimeout(spotlit.t);');
+  });
 });
 
 describe('the in-room ask moment (ADR 464, lane 3)', () => {
