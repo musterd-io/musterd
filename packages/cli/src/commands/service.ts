@@ -107,6 +107,7 @@ import {
 import {
   computeSiteGap,
   DEPLOY_AUTHORIZED_SEAT,
+  openGapAsk,
   replyOnAsk,
   nextAction,
   siteGapAskBody,
@@ -1137,6 +1138,25 @@ async function readReplyOnAsk(
   return replyOnAsk(seen, ask, authorizer);
 }
 
+/** How far back a tick looks for another publisher's open gap ask: a gap older than this has been re-asked. */
+const GAP_ASK_LOOKBACK_MS = 2 * 24 * 3600_000;
+
+/** Another publisher instance's open gap ask for `deployed`, from the team record (lane 01M5WQMRXC). */
+async function findOpenGapAsk(
+  auth: { http: HttpClient; team: string },
+  deployed: string,
+): Promise<string | null> {
+  try {
+    const { messages } = await auth.http.messages(auth.team, {
+      since: Date.now() - GAP_ASK_LOOKBACK_MS,
+      limit: 2000,
+    });
+    return openGapAsk(messages, deployed);
+  } catch {
+    return null; // unreadable record: raise as before rather than fall silent
+  }
+}
+
 const SITE_DEPLOY_TIMEOUT_MS = 10 * 60_000;
 
 /**
@@ -1219,6 +1239,17 @@ async function runSiteGap(parsed: Parsed): Promise<number> {
     const reply = prev?.ask
       ? await readReplyOnAsk(auth, prev.ask, prev.raised_at, authorizer)
       : null;
+    // Two publishers, one ask (lane 01M5WQMRXC): with no open ask of its own, a tick that finds
+    // another instance's unresolved ask for this deployed ref stands by rather than raising a twin.
+    if (!prev?.ask && gap.status === 'behind') {
+      const other = await findOpenGapAsk(auth, gap.deployed!);
+      if (other) {
+        out(`ask ${other} already open from another publisher — standing by`);
+        mkdirSync(dirname(stampPath), { recursive: true });
+        writeFileSync(stampPath, JSON.stringify(next) + '\n');
+        return 0;
+      }
+    }
     const built = gitAt(cwd, ['rev-parse', 'HEAD']) === gap.tip && published === gap.tip;
     const action = nextAction(prev, gap, reply, built);
     const send = (env: Parameters<typeof makeEnvelope>[0]) =>
@@ -1247,7 +1278,11 @@ async function runSiteGap(parsed: Parsed): Promise<number> {
         to: { kind: 'member', name: authorizer },
         act: 'ask',
         body: siteGapAskBody(gap, origin),
-        meta: { species: 'approve', tier: 'blocking' },
+        meta: {
+          species: 'approve',
+          tier: 'blocking',
+          site_gap: { deployed: gap.deployed, tip: gap.tip },
+        },
       });
       out(`asked ${authorizer} to deploy ${gap.tip.slice(0, 8)} (${id})`);
       next.ask = id;

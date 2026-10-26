@@ -80,6 +80,12 @@ it.
 - Reverting is deleting the deploy branch of the tick and pointing the ask back at miley; the stamp
   format is forward-compatible (unknown fields are ignored on read).
 
+- _(2026-10-26, lane 01M5WQMRXC)_ Two publisher instances tick with the one `live` seat and
+  separate stamps, and the same gap drew two asks seventeen seconds apart. The raise now carries
+  `meta.site_gap {deployed, tip}`, and a tick with no open ask of its own stands by when the record
+  holds another instance's unresolved ask for that deployed ref. Only the raiser reads the reply and
+  deploys, so the authorizer is named on the machine that holds the wrangler login.
+
 ## Observability & Evaluation
 
 **Traces.** Three acts the record did not have: the `ask` to the authorizer (species approve), the
