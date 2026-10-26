@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from 'node:util';
 import {
   type AgentKeyMint,
   type AskTier,
@@ -665,33 +664,19 @@ export async function setPolicy(
  * that folds it stores exactly what the admin chose and keeps its own defaults alive for the rest
  * (ADR 185).
  *
- * Only the HUB calls this. Policy is hub-authoritative (ADR 325 residence 1): a joiner forwards to
- * the hub and learns the answer back through the fold, so no second origin ever mints the verb.
- *
- * `opts.base` (ADR 587) is the stored doc a forwarded change was built on. When it is not the doc
- * stored here, the change is refused and nothing is written: replace semantics on a stale base
- * unset every knob the base lacked, which is how one `--dispatch on` from a fresh joiner turned off
- * the hub's review and sweep loops and dropped its seeds relay on 2026-09-06.
+ * Only the HUB calls this. Policy is hub-authoritative (ADR 325 residence 1) and, since ADR 729,
+ * hub-local: a joiner refuses a policy write (`hub_local_required`) instead of forwarding it, so no
+ * second origin ever mints the verb. That also retired ADR 587's stale-base check, which guarded
+ * the forward.
  */
 export async function applyPolicyChange(
   db: Driver,
   teamId: string,
   actor: string,
   policy: z.input<typeof PolicyOverrideSchema>,
-  opts: { enforce?: boolean; base?: PolicyOverride } = {},
+  opts: { enforce?: boolean } = {},
 ): Promise<{ policy: Policy; stored: PolicyOverride }> {
   return db.tx(async (t) => {
-    if (
-      opts.base !== undefined &&
-      !isDeepStrictEqual(opts.base, await getStoredPolicy(t, teamId))
-    ) {
-      throw new MusterdError(
-        'conflict',
-        "the team's policy changed on the hub since this machine last synced it, so this change " +
-          'was built on an old copy and would have unset settings it did not show; nothing was ' +
-          'changed — run the command again',
-      );
-    }
     const stored = stampReviewBy(PolicyOverrideSchema.parse(policy), Date.now());
     if (opts.enforce !== false) {
       const refusal = await policyPairRefusal(t, teamId, PolicySchema.parse(stored));
