@@ -60,6 +60,20 @@ export async function authorityProofForRequest(
   return authorityProofForDescriptor(cfg, approval.act, approval.target, approval.payload);
 }
 
+/** A watch-link observer is a roster change (`admin.roster`, ADR 662). The payload is the one the
+ * daemon rebuilds from the mint body, field for field, or the signature reads as a mismatch. */
+export async function authorityProofForObserver(
+  cfg: LiveConfig,
+  name: string,
+): Promise<ApprovalProof | null> {
+  return authorityProofForDescriptor(cfg, 'admin.roster', name, {
+    name,
+    kind: 'human',
+    role: null,
+    observer: true,
+  });
+}
+
 async function authorityProofForDescriptor(
   cfg: LiveConfig,
   act: string,
@@ -103,17 +117,17 @@ async function authorityProofForDescriptor(
       e.name === 'SecurityError' &&
       isLoopbackIp(window.location.hostname)
     )
-      throw new Error('open musterd’s localhost URL to use passkeys; verdict not sent');
+      throw new Error('open musterd’s localhost URL to use passkeys; nothing was sent');
     if (e instanceof DOMException && ['NotAllowedError', 'AbortError'].includes(e.name))
-      throw new Error('passkey cancelled; verdict not sent');
+      throw new Error('passkey cancelled; nothing was sent');
     throw e;
   }
-  if (!assertion) throw new Error('passkey cancelled; verdict not sent');
+  if (!assertion) throw new Error('passkey cancelled; nothing was sent');
   const resp = assertion.response as AuthenticatorAssertionResponse;
   const key = view.passkeys.find(
     (p) => bytesToB64url(assertion.rawId) === p.credential_id.replace(/=+$/, ''),
   );
-  if (!key) throw new Error('passkey mismatch; verdict not sent');
+  if (!key) throw new Error('passkey mismatch; nothing was sent');
   return {
     key_id: key.key_id,
     nonce,

@@ -620,22 +620,47 @@ export async function acquireWatchLinkObserver(
   team: string,
   bearer: string | null,
   grade: WatchGrade = 'public',
+  sign?: (name: string) => Promise<ApprovalProof | null>,
 ): Promise<ObserverCreds> {
+  let cached: ObserverCreds | null = null;
   try {
     const raw = window.localStorage.getItem(watchLinkKey(team, grade));
     if (raw) {
       const creds = JSON.parse(raw) as ObserverCreds;
-      if (creds && creds.token) return creds;
+      if (creds && creds.token) cached = creds;
     }
   } catch {
     // fall through and mint
   }
+  // The cache outlives the seat: an idle observer is reaped at the 24h TTL (ADR 064), and a link to
+  // it is refused not_found. Ask the daemon whether the seat still answers before handing it out.
+  if (cached) {
+    if (await observerAlive(team, cached.token)) return cached;
+    window.localStorage.removeItem(watchLinkKey(team, grade));
+  }
   if (!bearer) throw new ObserverSignInRequired();
   const name = (grade === 'public' ? 'watch-' : 'demo-') + Math.random().toString(36).slice(2, 8);
-  const token = await provisionObserver(team, name, grade, bearer);
+  // ADR 662: minting an observer is `admin.roster`, so an enrolled human's passkey signs it first.
+  const approval = sign ? await sign(name) : null;
+  const token = await provisionObserver(team, name, grade, bearer, approval);
   const creds = { name, token };
   window.localStorage.setItem(watchLinkKey(team, grade), JSON.stringify(creds));
   return creds;
+}
+
+/** Does a cached watch-link seat still authenticate? Only a 401 says the seat is gone; a network
+ * error or a 5xx keeps the cache, since minting a fresh seat would orphan a link that still works. */
+async function observerAlive(team: string, token: string): Promise<boolean> {
+  try {
+    // `/lanes` is member-authed; `/members` is not (an anonymous read gets the public roster), so a
+    // reaped seat would pass there.
+    const res = await fetch(`/teams/${encodeURIComponent(team)}/lanes?brief=1&open=1`, {
+      headers: { authorization: `Bearer ${token}`, 'x-musterd-surface': 'web' },
+    });
+    return res.status !== 401;
+  } catch {
+    return true;
+  }
 }
 
 /** Drop the cached watch-link seat for `grade` — its link stops working on the next mint (the old
@@ -901,11 +926,18 @@ export async function provisionObserver(
   name: string,
   scope: 'full' | WatchGrade,
   bearer: string,
+  approval: ApprovalProof | null = null,
 ): Promise<string> {
   const res = await fetch(`/teams/${encodeURIComponent(team)}/members`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${bearer}` },
-    body: JSON.stringify({ name, kind: 'human', observer: true, observer_scope: scope }),
+    body: JSON.stringify({
+      name,
+      kind: 'human',
+      observer: true,
+      observer_scope: scope,
+      ...(approval ? { approval } : {}),
+    }),
   });
   const text = await res.text();
   const json = text ? JSON.parse(text) : {};
