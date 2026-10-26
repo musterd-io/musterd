@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Renders musterd-pitch.pdf from deck.html without the browser editor, in the deck's own order
-# (nick, 2026-10-26: the Twitch slide closes it). Needs Chrome, as docs/brand/one-slide/README.md
-# does. In the browser, press D on the served deck instead.
+# (nick, 2026-10-26: the founder slide closes it and carries the Twitch invitation). Needs Chrome,
+# as docs/brand/one-slide/README.md does. In the browser, press D on the served deck instead.
 # Usage: ./build.sh [output-dir]   (default: this folder)
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

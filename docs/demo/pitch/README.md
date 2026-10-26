@@ -1,6 +1,6 @@
 # Pitch deck
 
-The standing musterd pitch: 13 slides, about six minutes, for any event at any time. It began as the
+The standing musterd pitch: 12 slides, about six minutes, for any event at any time. It began as the
 Demo Day deck of 2026-10-09 (nick, 2026-10-13: "make it our standing pitch deck").
 `../demo-day-2026-10-09/` keeps that day's deck as it was shown. Change this one, not that one.
 
@@ -19,9 +19,9 @@ Demo Day deck of 2026-10-09 (nick, 2026-10-13: "make it our standing pitch deck"
    sources row), and the writing share in `script.md` (page 8 and its sources row).
 2. Re-check the answers in `script.md` that carry a date, and anything on slides 9 and 10 marked
    coming soon or next: if it shipped, the slide says so.
-3. Slide 12's two asks fit an investor room. For another room, change them in `script.md`.
-4. Slide 13 points the room at the Twitch stream. With a screen and network, open it there.
-5. Export: press `D` in the served deck, or run `./build.sh [dir]`. If the organizers want their
+3. Slide 12's two asks fit an investor room. For another room, change them in `script.md`. Its QR
+   points the room at the Twitch stream; with a screen and network, open it there.
+4. Export: press `D` in the served deck, or run `./build.sh [dir]`. If the organizers want their
    own file name, rename the PDF; do not put event names in this folder.
 
 ## Edit the deck in the browser
