@@ -91,6 +91,10 @@ export function startChatReader(deps: ChatReaderDeps): () => void {
   let stopped = false;
   let sock: ChatSocket | null = null;
   let token = '';
+  // Twitch may hand back a new refresh token on any refresh; the old one can stop working. Keep the
+  // newest for this run, and say once that the stored secret is behind (the machine is --rm).
+  let refreshToken = deps.creds.refreshToken;
+  let rotationSaid = false;
   let ids: { broadcaster: string; bot: string } | null = null;
   let retry: ReturnType<typeof setTimeout> | null = null;
 
@@ -100,15 +104,26 @@ export function startChatReader(deps: ChatReaderDeps): () => void {
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'refresh_token',
-        refresh_token: deps.creds.refreshToken,
+        refresh_token: refreshToken,
         client_id: deps.creds.clientId,
         client_secret: deps.creds.clientSecret,
       }).toString(),
     });
     if (!r.ok) throw new Error(`token refresh refused (${r.status})`);
-    const body = (await r.json()) as { access_token?: string };
+    const body = (await r.json()) as { access_token?: string; refresh_token?: string };
     if (!body.access_token) throw new Error('token refresh returned no access token');
     token = body.access_token;
+    if (body.refresh_token && body.refresh_token !== refreshToken) {
+      refreshToken = body.refresh_token;
+      if (!rotationSaid) {
+        rotationSaid = true;
+        deps.log(
+          'chat: Twitch rotated the refresh token — this run uses the new one, but the stored ' +
+            'MUSTERD_TWITCH_CHAT_REFRESH_TOKEN may stop working; re-authorize the bot and set it ' +
+            'again before the next start (ADR 740)',
+        );
+      }
+    }
   };
 
   const helix = async (path: string, init: RequestInit = {}, again = true): Promise<Response> => {
