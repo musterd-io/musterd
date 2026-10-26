@@ -892,15 +892,17 @@ const RAW: RawItem[] = [
   },
   {
     id: 'more-surfaces',
-    unfrozen: 'a surface stub — Slack-first when a surface wave opens, nothing frozen',
+    unfrozen:
+      'a cluster of away-channels ADRs — 618/623/659/662/676 accepted — but the governing design spec (2026-10-15-away-channels-design.md) is itself still marked draft, so no single ADR freezes the arc',
     wave: 'later',
     title: 'Slack surface (general iOS app deferred)',
-    plan: 'reserved',
+    plan: 'near-term',
     category: 'surfaces',
     blurb:
-      'A Slack surface, so a Member is reachable where its human already lives; a general native iOS app is explicitly deferred behind it. One carve-out: the musterd app as a sealed ask client and the phone authenticator (ADR 676).',
+      'A Slack surface, so a Member is reachable where its human already lives; a general native iOS app is explicitly deferred behind it. "Away channels" (pairing, settings, quotas, a distributed Slack app) has landed in increments; the musterd app as a sealed ask client with the phone authenticator (ADR 676) is a separate carve-out.',
     detail:
-      'Re-scoped at the 2026-07-10 reprioritization: no evidence pull for iOS anywhere in the record, while Slack is where the reachability loop (notify → availability → urgent) most plausibly meets a human day-to-day. Slack-first when a surface wave opens; iOS only on real demand. Carve-out 2026-10-19 (ADR 676): the calendar-only app of 2026-10-05 went unused, and the app became an ask client with device-signed answers and the ADR 662 phone authenticator, on TestFlight for nick only. A team view, /live on the phone and the calendar stay deferred.',
+      'Re-scoped at the 2026-07-10 reprioritization: no evidence pull for iOS anywhere in the record, while Slack is where the reachability loop (notify → availability → urgent) most plausibly meets a human day-to-day. The "away channels" build has since landed several increments (numbered 6–10 in commit subjects, reconciled here 2026-10-26 — earlier increments 1–5 were not individually re-verified): pairing with a binding store, nonce, CLI + /live confirmation, and a kill switch (#2906); per-channel deliver/answer switches, presence gating, and a tier floor (#2930, ADR 618/623); per-team quotas and tenant isolation on the relay (#3022, ADR 659); the distributed Slack app’s OAuth install records (#3039); and a Cloud-direct transport for answers (#3044). Separately, carve-out 2026-10-19 (ADR 676): the calendar-only app of 2026-10-05 went unused, and the app became an ask client with device-signed answers and the ADR 662 phone authenticator, on TestFlight for nick only. A team view, /live on the phone and the calendar stay deferred.',
+    refs: [adr(618, 'ADR 618'), adr(623, 'ADR 623'), adr(659, 'ADR 659'), adr(676, 'ADR 676')],
     dependsOn: ['web-dashboard'],
   },
   {
@@ -1392,15 +1394,16 @@ const RAW: RawItem[] = [
   {
     id: 'insight-dashboard',
     frozenBy: 104,
-    shipped: { prs: [151, 435, 439] },
+    shipped: { prs: [151, 435, 439, 2956] },
     title: 'Work items, board & insight layer (web)',
     category: 'insights',
     blurb:
       'The kanban-style board and team analytics rendered in the web dashboard — a thin surface over the insight engine, never a second store.',
     detail:
-      "The web surface for the already-shipped insight engine (server projections + GET /report + the report CLI/MCP all landed; this is the browser board they never got). ADR 104 frames it as three increments over the two existing endpoints — no board CRUD, no stored columns, the dashboard renders what the engine derives. Increment 1 shipped (PR #151): a read-only /board kanban over GET /lanes — one column per lane state (backlog/claimed/in-progress/blocked/done), cards carrying owner, Goal, branch, age, and the advisory lane-warning flag, auto-provisioning the same hidden observer seat /live uses. Increments 2 and 3 then landed under the writable-board arc rather than this item's banner, which is why this stayed marked unbuilt: the insight rail over GET /report plus the columns-versus-Goals swimlane toggle (#439), and the live read — one fetch, then a re-fetch only when a lane act arrives over the firehose, no polling (#435).",
+      "The web surface for the already-shipped insight engine (server projections + GET /report + the report CLI/MCP all landed; this is the browser board they never got). ADR 104 frames it as three increments over the two existing endpoints — no board CRUD, no stored columns, the dashboard renders what the engine derives. Increment 1 shipped (PR #151): a read-only /board kanban over GET /lanes — one column per lane state (backlog/claimed/in-progress/blocked/done), cards carrying owner, Goal, branch, age, and the advisory lane-warning flag, auto-provisioning the same hidden observer seat /live uses. Increments 2 and 3 then landed under the writable-board arc rather than this item's banner, which is why this stayed marked unbuilt: the insight rail over GET /report plus the columns-versus-Goals swimlane toggle (#439), and the live read — one fetch, then a re-fetch only when a lane act arrives over the firehose, no polling (#435). ADR 582 (#2956) then collapsed board-finding onto one query string with short ids and derived areas.",
     refs: [
       adr(104, 'ADR 104'),
+      adr(582, 'ADR 582'),
       doc('docs/design/human-agent-dynamics.md', 'human-agent-dynamics.md'),
     ],
     dependsOn: ['insight-engine', 'web-dashboard'],
@@ -1664,17 +1667,177 @@ const RAW: RawItem[] = [
 
   {
     id: 'sponsor-host-isolation',
-    unfrozen: 'ADR 463 names these as its next increments; no ADR designs them yet',
+    unfrozen: 'ADR 463 names the container-isolation increment as next; no ADR designs it yet',
     wave: 'later',
-    title: 'Sponsored agents beyond the sponsor’s own account — containers, shared hosts, Cloud',
+    title: 'Sponsored agents beyond the sponsor’s own account — containers, shared hosts',
     plan: 'reserved',
     category: 'platform',
     blurb:
-      'A sponsored agent runs on its sponsor’s host today, in the sponsor’s own OS account (ADR 463). Next on the same provisions table: opt-in container isolation on that machine, team-shared hosts, and a Cloud runtime.',
+      'A sponsored agent runs on its sponsor’s host today, in the sponsor’s own OS account (ADR 463). Still reserved on the same provisions table: opt-in container isolation on that machine. The team-shared-host and Cloud-runtime increments this item used to name are now their own item, `cloud-agents` — a separate ADR (647), not this one.',
     detail:
-      'ADR 463 (landed 2026-09-29, #1784–#1818) lets any member with `can_create_agents` have their new agent provisioned and woken by their own `musterd host`, under authority scoped to agents they sponsor. Its trust domain is deliberately the one `musterd agent` already uses: the agent shares its sponsor’s account. Three increments reuse `host_provisions` unchanged: containers on the sponsor’s machine (opt-in via `agent_host.policy.isolation`); hosts a team shares rather than one sponsor owns; and the Cloud runtime, where no sponsor machine is needed.',
+      'ADR 463 (landed 2026-09-29, #1784–#1818) lets any member with `can_create_agents` have their new agent provisioned and woken by their own `musterd host`, under authority scoped to agents they sponsor. Its trust domain is deliberately the one `musterd agent` already uses: the agent shares its sponsor’s account. One increment still reuses `host_provisions` unchanged and is reserved: containers on the sponsor’s machine (opt-in via `agent_host.policy.isolation`). The other two increments this item originally named — hosts a team shares, and a Cloud runtime needing no sponsor machine — turned out to need their own freezing ADR rather than extending 463, and shipped as `cloud-agents` (see that item). `musterd team policy --hosted-budget` (#2922) is the one piece of ADR 463’s own §2 hosted-budget policy to land here directly.',
     refs: [adr(463, 'ADR 463')],
     dependsOn: ['harness-residency'],
+  },
+
+  // ── reconciled by steward 2026-10-26 (undeclared merged work, grouped by theme) ─────
+  {
+    id: 'cloud-agents',
+    frozenBy: 647,
+    // Follows-up: steward-reconciled 2026-10-26
+    building:
+      'Phase 1 (a hosted seat on a Fly machine, one machine per seat) shipped: Fly packaging (#2826), the create.sh provisioning script (#2847), and a sponsored mint naming the host that stands the seat up (#3071). Phase 2b (a laptop acts as hub, a Cloud machine joins it as a joiner) has merged code — sponsor-scoped credential replication in three parts (#3085/#3091/#3098), the cloud provisioner against a joiner with hub_unreachable retry (#3101), and hub mode itself (#3109) — but its own governing ADRs, 648 and 689, are still `proposed`, not accepted, so this item cannot be marked shipped on their account alone.',
+    wave: 9,
+    title: 'Cloud agents — a hosted seat runs on musterd compute',
+    plan: 'near-term',
+    category: 'platform',
+    blurb:
+      'A hosted agent seat that runs on musterd-operated compute (Fly), on the sponsor’s own key — no sponsor machine required. The next step past `sponsor-host-isolation`: a laptop as hub, a Cloud machine as joiner.',
+    detail:
+      'ADR 647 (accepted 2026-10-17) is the Cloud counterpart to the sponsor-runs-it-locally model in `sponsor-host-isolation`: a hosted seat runs on musterd compute instead, still on the sponsor’s own key. Phase 1 packages one Fly machine per hosted seat. Phase 2b lets a laptop act as hub and a Cloud machine join it as a joiner, replicating sponsor-scoped credentials and host-pinned provisions so the joiner can stand up seats without re-minting from scratch — ADR 648 (sponsor host key provisions its own sponsored seats) and ADR 689 (replication mechanics) are the proposed designs behind that half; both are still open for review despite the code landing.',
+    refs: [adr(647, 'ADR 647'), adr(648, 'ADR 648'), adr(689, 'ADR 689')],
+    dependsOn: ['sponsor-host-isolation'],
+  },
+  {
+    id: 'cloud-ops-reliability',
+    frozenBy: 679,
+    shipped: { prs: [3029, 3036, 3045, 3048, 3018] },
+    title: 'Cloud ops — nightly encrypted backups, a restore drill, and OTel export',
+    category: 'platform',
+    blurb:
+      'The operational floor under hosted teams: a nightly encrypted Postgres dump to R2 per team, a monthly restore drill that proves the backup actually restores, and an OpenTelemetry exporter disclosed in PRIVACY.md.',
+    detail:
+      'ADR 679 (cloud 3): the nightly-backup script, tests, and ops runbook (#3029), then the LaunchAgent + GitHub Actions schedule that actually runs it (#3036); the restore-drill script with managed-Postgres restore fixes and a recorded drill (#3045), then its own monthly schedule (#3048). ADR 678 (cloud 6): wiring `MUSTERD_OTLP_ENDPOINT`, HTTP request/error spans, and the PRIVACY.md disclosure that names what leaves the machine (#3018).',
+    refs: [adr(679, 'ADR 679'), adr(678, 'ADR 678')],
+    dependsOn: ['cloud-agents'],
+  },
+  {
+    id: 'human-authority',
+    frozenBy: 662,
+    shipped: { prs: [2963, 2966, 2968] },
+    title: 'Human authority — device-signed approval for the acts that matter most',
+    category: 'platform',
+    blurb:
+      'A closed list of high-authority acts (admin, grants, credential minting, agent creation, device-key lifecycle) now require a signed, server-built approval descriptor from an enrolled human — never an agent-worded prompt the human just clicks through.',
+    detail:
+      'ADR 662 pairs one hosted seat per machine with a human-authority model: a device signature (A2) over a server-rendered descriptor naming the actor, act, target, and payload digest, so the human always sees what they are actually approving. Human authority 1 (#2963) added the `HIGH_AUTHORITY_ACTS` list and the server-side gate that refuses an agent-kind credential outright and requires an A2 signature from an enrolled human. Human authority 2 (#2966) added the device-key lifecycle: an audited one-time code for first enrollment and lost-everything recovery (later hardened to require a countersigning admin once any key exists), with further keys and revocations signed by a standing key. Human authority 3 (#2968) wired three real authenticators to one verifier — a daemon-served WebAuthn passkey, a Secure-Enclave-backed terminal helper, and (ADR 694) a paired phone key. Several dated amendments through 2026-10-21 record security re-reviews that closed real bypasses (relay-origin spoofing, a raw-vs-DER signature mismatch, self-issued enrollment codes).',
+    refs: [adr(662, 'ADR 662')],
+    dependsOn: ['v03-p2-enforcement'],
+  },
+  {
+    id: 'allowance-page',
+    unfrozen: 'a local utility page (`@musterd/allowance`), not a protocol change — no ADR',
+    wave: 'later',
+    title: 'Allowance — a local page of what API budget is left',
+    plan: 'reserved',
+    category: 'observability',
+    blurb:
+      'A loopback page (`npx @musterd/allowance`) naming which accounts and plans are burning budget, and how much of each model window is left — the local answer to "am I about to run out mid-lane."',
+    detail:
+      'Three increments: the page itself, reading usage for the accounts it is pointed at (#2911); a choice of which accounts the page reads (#2948); and naming the actual Claude plan plus its model windows rather than a generic budget number (#2953), then fitting the page inside a laptop-sized window (#3017). No governing ADR exists for the page; ADR 723 (accepted 2026-10-23) is the one downstream integration so far, surfacing an allowance reading on the `/live` member card.',
+    refs: [adr(723, 'ADR 723')],
+  },
+  {
+    id: 'cli-flag-safety',
+    unfrozen: 'a mechanism-level CLI hardening fix, not a design — no ADR',
+    wave: 'later',
+    title: 'Every CLI command declares its flags, and refuses what it doesn’t',
+    plan: 'reserved',
+    category: 'platform',
+    blurb:
+      'An unknown `--flag` used to silently swallow the next argument as its value. Every command now declares the flags it reads, and a general parser layer refuses an unrecognized flag by name instead of mis-parsing around it.',
+    detail:
+      'The general parser layer landed first (#3072), then the fleet-wide rollout across all 62 CLI command files plus the refusal itself (#3077), then value-bearing flags (`--flag=value`) and a refusal that names what it did not use (#3064). Pickers were updated separately to name each missing harness with its install command (#3159) — related CLI-polish, not the same parsing mechanism.',
+  },
+  {
+    id: 'office-realism',
+    unfrozen: 'design spec 2026-10-20-office-realism-design.md; not frozen by an ADR',
+    wave: 9,
+    title: 'Pre-rendered office art — a rendered room and rendered figures',
+    plan: 'near-term',
+    category: 'surfaces',
+    blurb:
+      'A second, flag-gated (`?office=rendered`) visual track for the office: a Blender-rendered room and figures instead of the code-drawn isometric scene — distinct from the office-delight credibility/beauty program, which still governs the default scene.',
+    detail:
+      'Increment 1 (#3046): the render pipeline itself — a Blender render script, a manifest, the `?office=rendered` desk bases, and an `officeArtBytes` budget so the art cannot blow the page weight. Increment 2 (#3055): the rendered room — corner camera, walls, floor, furniture, and light states. Increment 3 (#3069): rendered figures — sprite sheets, tintable identity layers, `drawCharacter` picking frames. Explicitly not finished: increment 3’s own sign-off/capture task was still pending at merge, and the room is described as "still painted on top" until a later increment. Not marked shipped for that reason.',
+    dependsOn: ['live-office'],
+  },
+  {
+    id: 'lane-reads-experiments',
+    frozenBy: 644,
+    shipped: { prs: [2816, 2845, 2856] },
+    title: 'Lane reads — a dated read, its verdict, and an Experiments panel',
+    category: 'insights',
+    blurb:
+      'A lane can declare the date it reads on; closing it records the read’s verdict instead of a silent guess. The office corkboard and a web Experiments panel both read that record.',
+    detail:
+      'ADR 644: `reads_on` + `read_verdict` on a lane, a derived `read_status`, and `done` refused without a verdict (#2816). The office corkboard then reads pins off the same record (#2845), and the web UI gained an Experiments panel — calendar leaves laid out on a fortnight strip (#2856).',
+    refs: [adr(644, 'ADR 644')],
+    dependsOn: ['insight-dashboard'],
+  },
+  {
+    id: 'mcp-remote-bearer',
+    frozenBy: 630,
+    shipped: { prs: [2785, 2791] },
+    title: 'Remote MCP — the adapter composed in, reached over a bearer token',
+    category: 'harness',
+    blurb:
+      'The MCP adapter can now run remote: a bearer-token mode for reaching it from off-machine, and the remote MCP composed directly into `musterd serve` rather than shipped as a separate process.',
+    detail:
+      'ADR 630 increment 1 (#2785): remote-bearer mode, the credential half. Increments 2–3 (#2791): the remote MCP is the adapter itself, composed in by `musterd serve` and calling the daemon over loopback — not a second server to deploy and keep in sync.',
+    refs: [adr(630, 'ADR 630')],
+    dependsOn: ['own-harness'],
+  },
+  {
+    id: 'multi-harness-idle-wake',
+    frozenBy: 558,
+    shipped: { prs: [2762, 2778, 2779, 2967] },
+    title: 'Idle-at-prompt wake, beyond Claude Code — cursor, grok, Codex queue',
+    category: 'harness',
+    blurb:
+      'The idle-at-prompt wake mechanism extended past its original harness: a cursor-agent wake backend, a grok leader session injected from the socket, and an idle Codex turn injected via a queue — plus the roster/picker/send-ack surfacing of a seat that is live but not listening.',
+    detail:
+      'ADR 558 (idle-at-prompt wake) backs three new backends — cursor-agent (#2762), a grok leader session injected from the socket (#2778), and an idle Codex turn via `codex queue` (#2779) — and #2967 surfaces the resulting live-but-deaf state on the roster, pickers, and send acknowledgements so a sender can tell a seat is connected but not about to act on a message.',
+    refs: [adr(558, 'ADR 558')],
+    dependsOn: ['wake-on-message'],
+  },
+  {
+    id: 'cloud-console-signin',
+    frozenBy: 685,
+    shipped: { prs: [2797, 3054] },
+    title: 'Cloud console sign-in — app.musterd.io',
+    category: 'surfaces',
+    blurb:
+      'A hosted sign-in surface at app.musterd.io, distinct from the local `/live` console — console tokens are signed by asking Cloud KMS over REST rather than holding a signing key in the console process.',
+    detail:
+      'The sign-in screens themselves (#2797), then ADR 685: the console asks Cloud KMS to sign its tokens over REST instead of embedding a key (#3054).',
+    refs: [adr(685, 'ADR 685')],
+  },
+  {
+    id: 'pull-pre-registered-work',
+    frozenBy: 645,
+    shipped: { prs: [2827, 2850] },
+    title: 'Pre-registered work — a lane class a host may take unprompted',
+    category: 'platform',
+    blurb:
+      'A declared class of pre-registered lanes a host can claim without being asked first — the hub grants, the host pulls — plus an acceptance backstop scoped to pulled lanes on the review window.',
+    detail:
+      'ADR 645: the band-2 pull, where hosts claim pre-registered work and the hub grants it (#2827). #2850 then adds the acceptance backstop on the review window, scoped to pulled lanes only, so an unattended pull cannot sit unaccepted forever.',
+    refs: [adr(645, 'ADR 645')],
+    dependsOn: ['coordination-lanes'],
+  },
+  {
+    id: 'ios-engineer-role',
+    frozenBy: 708,
+    shipped: { prs: [3164, 3175] },
+    title: 'iOS engineer role — a role skill plus harness auto-provisioning',
+    category: 'harness',
+    blurb:
+      'An iOS-engineer role skill (Expo-first, with a Swift native bridge) for agents that build iOS apps for the team’s users — unrelated to musterd’s own deferred iOS surface (`more-surfaces`). ADR 708 generalizes this to role toolkits + harness auto-provisioning for any role.',
+    detail:
+      'The ios-engineer role skill (#3164) is the first consumer of ADR 708’s general mechanism (#3175): a role can carry an associated toolkit, and a harness auto-provisions it rather than a human installing it by hand.',
+    refs: [adr(708, 'ADR 708')],
+    dependsOn: ['role-routing-profiles'],
   },
 
   // ── out of scope ──────────────────────────────────────────────────────────
