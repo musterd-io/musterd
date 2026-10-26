@@ -3,7 +3,12 @@ import { createServer, type Server, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { grokLeader } from './grokLeader.js';
+import {
+  grokLeader,
+  grokLeaderSocketPath,
+  grokSeatLeaderSocket,
+  grokSeatSocketFile,
+} from './grokLeader.js';
 import { injectAdapterFor } from './inject.js';
 
 let server: Server | undefined;
@@ -79,6 +84,24 @@ describe('grok leader inject (ADR 558 §6)', () => {
       ready: false,
       reason: 'no-leader-socket',
     });
+  });
+
+  it('locks the filename of /seats/dreamy and prefers an existing per-seat socket', () => {
+    expect(grokSeatSocketFile('/seats/dreamy')).toBe('65972905c9dfa3cdb961dfa2727d5422.sock');
+    const root = mkdtempSync(join(tmpdir(), 'grok-seat-'));
+    const home = join(root, 'grok-home');
+    mkdirSync(home);
+    const seat = mkdtempSync(join(root, 'seat-'));
+    const env = { MUSTERD_CONFIG: join(root, 'config.json'), GROK_HOME: home };
+    expect(grokLeaderSocketPath(env, seat)).toBe(join(home, 'leader.sock'));
+    const seatSocket = grokSeatLeaderSocket(seat, env);
+    expect(seatSocket).toBeTruthy();
+    mkdirSync(join(root, 'grok-sockets'), { recursive: true });
+    writeFileSync(seatSocket!, '');
+    expect(grokLeaderSocketPath(env, seat)).toBe(seatSocket);
+    expect(grokLeader(env, seat).probe()).toEqual({ ready: true });
+    const override = join(root, 'override.sock');
+    expect(grokLeaderSocketPath({ ...env, GROK_LEADER_SOCKET: override }, seat)).toBe(override);
   });
 
   it('injectAdapterFor wires grok only when the socket exists', async () => {

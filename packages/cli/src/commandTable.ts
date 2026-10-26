@@ -29,6 +29,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   fmt: async () => (await import('./commands/fmt.js')).fmtCommand,
   gate: async () => (await import('./commands/gate.js')).gateCommand,
   goal: async () => (await import('./commands/goal.js')).goalCommand,
+  grok: async () => (await import('./commands/grok.js')).grokCommand,
   halt: async () => (await import('./commands/halt.js')).haltCommand,
   harness: async () => (await import('./commands/harness.js')).harnessCommand,
   hold: async () => (await import('./commands/hold.js')).holdCommand,

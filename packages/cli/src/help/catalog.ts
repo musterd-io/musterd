@@ -215,6 +215,20 @@ export const CATALOG: readonly CommandEntry[] = [
     ],
   },
   {
+    name: 'grok',
+    signature: '',
+    summary: 'open this folder’s Grok chat on its own leader socket',
+    group: 'setup',
+    primary: false,
+    detail:
+      'Starts `grok --leader` in this folder with a socket under `~/.musterd/grok-sockets/` ' +
+      '(ADR 742). That is the restart an already-open chat needs before an idle push can land. ' +
+      'A plain `grok` stays deaf. This command does not set `use_leader` and does not create ' +
+      '`~/.grok/leader.sock`. The socket name is not `leader-*`, so `grok leader kill` does not ' +
+      'take this seat down with every other one.',
+    examples: ['musterd grok'],
+  },
+  {
     name: 'surface',
     signature: 'list | decline <name> | accept <name>',
     summary:

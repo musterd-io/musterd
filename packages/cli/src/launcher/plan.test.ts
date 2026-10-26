@@ -1,5 +1,9 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CliError } from '../errors.js';
+import { grokSeatLeaderSocket } from '../grokSeatSocket.js';
 import type { HarnessAdapter } from '../onboard/reconcile/fragments.js';
 import { chooseHarness, planLaunch } from './plan.js';
 import type { Seat } from './store.js';
@@ -90,6 +94,47 @@ describe('planLaunch (ADR 491)', () => {
     const bare = planLaunch({ ...base, seat: seat(), harness: 'grok' });
     await expect(bare).rejects.toThrow(/musterd harness configure/);
     await expect(bare).rejects.not.toThrow(/install:/);
+  });
+
+  it('a grok launch listens on the seat socket', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'grok-plan-'));
+    try {
+      const env = { MUSTERD_CONFIG: join(root, 'config.json') };
+      const registry = [adapter('grok', '/bin/grok')];
+      const seatPath = '/w/stanley';
+      const socket = grokSeatLeaderSocket(seatPath, env);
+      expect(
+        await planLaunch({
+          ...base,
+          seat: seat({ path: seatPath }),
+          harness: 'grok',
+          registry,
+          env,
+        }),
+      ).toEqual({
+        bin: '/bin/grok',
+        args: ['--leader', '--leader-socket', socket, '--fresh'],
+        cwd: seatPath,
+        harness: 'grok',
+        env: { GROK_LEADER_SOCKET: socket },
+      });
+      expect(
+        (
+          await planLaunch({
+            ...base,
+            seat: seat({ path: seatPath }),
+            harness: 'grok',
+            registry,
+            env,
+            mode: 'resume',
+            session: { harness: 'grok', id: 'S9' },
+          })
+        ).args,
+      ).toEqual(['--leader', '--leader-socket', socket, '--resume', 'S9']);
+      expect(socket.includes('leader-')).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('a human seat gets a login shell', async () => {
