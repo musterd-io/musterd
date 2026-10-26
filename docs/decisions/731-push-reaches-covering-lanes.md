@@ -97,9 +97,9 @@ text.
 - One more read per recorded push (the board, filtered to contending lanes) and one `laneHoldingFile`
   per announced path.
 - `hold_smoke.py` and `gate_smoke.py` are unaffected: neither pushes.
-- The `lanePush.ts` line in `docs/architecture/03-server.md` still describes ADR 730's audience: that
-  file is named and held by lane `01M5N55GVE` (big-body) as this lands, so the one-line update follows in
-  that lane or after it. Follows-up: 01M5N55GVEHPPGVWFERB26K0KN
+- _2026-10-25 (acceptance, this lane):_ the `lanePush.ts` line in `docs/architecture/03-server.md`
+  landed one PR behind this one — big-body's lane `01M5N55GVE` held the file, cleared the line, then
+  declined the first landing for it; the line now describes this ADR's audience and response.
 
 ## Observability & Evaluation
 
