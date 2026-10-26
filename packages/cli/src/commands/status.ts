@@ -1,5 +1,6 @@
 import {
   deriveHuddles,
+  describeHubLink,
   describeSyncPullStop,
   describeSyncWedge,
   type Hold,
@@ -125,6 +126,12 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
     process.stdout.write(
       '\n' + theme.warn(describeSyncPullStop(res.sync.hub_stopped, Date.now(), 'hub')) + '\n',
     );
+  // ADR 738: this joiner's link to its hub — last good sync, or since when it fails and why. Absent
+  // on the hub, on a machine without one, and from an older daemon.
+  if (res.sync?.hub_link) {
+    const link = describeHubLink(res.sync.hub_link, Date.now());
+    process.stdout.write('\n' + (link.warn ? theme.warn(link.line) : theme.meta(link.line)) + '\n');
+  }
   // ADR 516: the Team's active holds — what is paused, by whom, until when. Seat-authed and
   // best-effort like `pending` above: an ambient identity or an older daemon prints nothing.
   const holds =

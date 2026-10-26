@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TOKEN_PREFIXES } from './credentials.js';
 import {
+  describeHubLink,
   describeSyncPullStop,
   describeSyncWedge,
   NodeEnrollRequestSchema,
@@ -212,5 +213,73 @@ describe('describeSyncWedge — the hub names the seat, label and node, so the s
   it('bounds a label and leaves a plain one alone', () => {
     expect(sanitizeWedgeLabel('x'.repeat(200))).toHaveLength(80);
     expect(sanitizeWedgeLabel("Nick's MacBook Air (work)")).toBe("Nick's MacBook Air (work)");
+  });
+});
+
+describe('describeHubLink — the hub link line on `musterd status` (ADR 738)', () => {
+  const now = 1_800_000_000_000;
+  it('a link that is up says when it last synced', () => {
+    const r = describeHubLink(
+      {
+        hub: '100.100.246.14:4849',
+        last_ok_at: now - 2 * 60_000,
+        failing_since: null,
+        failure: null,
+      },
+      now,
+    );
+    expect(r).toEqual({ line: 'hub 100.100.246.14:4849 — last sync 2m ago', warn: false });
+  });
+
+  it('a link that has not pulled yet says so rather than guess', () => {
+    const r = describeHubLink(
+      { hub: 'h:1', last_ok_at: null, failing_since: null, failure: null },
+      now,
+    );
+    expect(r).toEqual({ line: 'hub h:1 — no sync yet since this daemon started', warn: false });
+  });
+
+  it('a failing link names since when, the cause, and the last good sync', () => {
+    const r = describeHubLink(
+      {
+        hub: '100.100.246.14:4849',
+        last_ok_at: now - 3 * 3_600_000,
+        failing_since: now - 3 * 3_600_000 + 60_000,
+        failure: { kind: 'timeout', code: 'TimeoutError', tailscale: 'stopped' },
+      },
+      now,
+    );
+    expect(r.warn).toBe(true);
+    expect(r.line).toBe(
+      '⚠ hub 100.100.246.14:4849 unreachable since 3h ago — Tailscale is stopped on this machine — start it (`tailscale up`); last sync 3h ago',
+    );
+  });
+
+  it('names the errno class when Tailscale is not the cause', () => {
+    const line = (kind: 'refused' | 'unroutable' | 'dns' | 'other', code: string | null) =>
+      describeHubLink(
+        {
+          hub: 'h:1',
+          last_ok_at: null,
+          failing_since: now,
+          failure: { kind, code, tailscale: 'running' },
+        },
+        now,
+      ).line;
+    expect(line('refused', 'ECONNREFUSED')).toContain(
+      'the hub refused the connection (ECONNREFUSED)',
+    );
+    expect(line('unroutable', 'EHOSTUNREACH')).toContain('no route to the hub (EHOSTUNREACH)');
+    expect(line('dns', 'ENOTFOUND')).toContain("the hub's name did not resolve");
+    expect(line('other', null)).toContain('the hub could not be reached');
+    expect(line('refused', 'ECONNREFUSED')).not.toContain('last sync');
+  });
+
+  it('never prints control characters from the hub field', () => {
+    const r = describeHubLink(
+      { hub: 'evil\u001b[31m', last_ok_at: now, failing_since: null, failure: null },
+      now,
+    );
+    expect(r.line).not.toContain('\u001b');
   });
 });

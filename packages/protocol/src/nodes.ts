@@ -220,6 +220,62 @@ export function describeSyncPullStop(
   );
 }
 
+/**
+ * ADR 738: this joiner's link to its hub, from its own pull ticks. No new probe: the pull already
+ * asks the hub every minute, and this is what the last asks said. `hub` is the hub's host, never a
+ * credential. `last_ok_at` is the last pull the hub answered; `failing_since` is the first failure
+ * of the current run of failures, null while the link is up. `failure` is the latest failure's
+ * classified cause (the ADR 598 diagnosis), null while the link is up.
+ */
+export interface HubLink {
+  hub: string;
+  last_ok_at: number | null;
+  failing_since: number | null;
+  failure: {
+    kind: 'timeout' | 'refused' | 'unroutable' | 'dns' | 'other';
+    code: string | null;
+    tailscale: 'running' | 'stopped' | 'absent' | 'unknown' | null;
+  } | null;
+}
+
+function agoShort(ms: number): string {
+  const mins = Math.max(0, Math.round(ms / 60_000));
+  return mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
+}
+
+/**
+ * One line for `musterd status` (ADR 738). `warn` is true while the link is failing. A link that has
+ * never answered and never failed (a fresh daemon before its first pull) says so rather than guess.
+ */
+export function describeHubLink(
+  link: HubLink,
+  now: number = Date.now(),
+): { line: string; warn: boolean } {
+  const hub = link.hub.replace(/[^\p{L}\p{N}._:[\]-]/gu, '?').slice(0, 80);
+  if (link.failing_since === null) {
+    return link.last_ok_at === null
+      ? { line: `hub ${hub} — no sync yet since this daemon started`, warn: false }
+      : { line: `hub ${hub} — last sync ${agoShort(now - link.last_ok_at)}`, warn: false };
+  }
+  const f = link.failure;
+  let cause: string;
+  if (f?.tailscale === 'stopped')
+    cause = 'Tailscale is stopped on this machine — start it (`tailscale up`)';
+  else if (f?.tailscale === 'absent')
+    cause = "Tailscale is not installed here, and the hub's address is a Tailscale one";
+  else if (f?.kind === 'timeout') cause = 'the hub did not answer in time';
+  else if (f?.kind === 'refused') cause = `the hub refused the connection (${f.code ?? 'refused'})`;
+  else if (f?.kind === 'unroutable') cause = `no route to the hub (${f.code ?? 'unroutable'})`;
+  else if (f?.kind === 'dns') cause = "the hub's name did not resolve";
+  else
+    cause = f?.code ? `the hub could not be reached (${f.code})` : 'the hub could not be reached';
+  const last = link.last_ok_at === null ? '' : `; last sync ${agoShort(now - link.last_ok_at)}`;
+  return {
+    line: `⚠ hub ${hub} unreachable since ${agoShort(now - link.failing_since)} — ${cause}${last}`,
+    warn: true,
+  };
+}
+
 /** The roster's `sync` object as a client reads it. `pull_stopped` is absent from an older daemon. */
 export interface RosterSyncState {
   wedged: SyncWedge | null;
@@ -228,6 +284,9 @@ export interface RosterSyncState {
    *  the stop that holds every lane claim from every machine. Absent from an older daemon; null on
    *  the hub itself and on a joiner whose hub is folding. */
   hub_stopped?: SyncPullStop | null;
+  /** ADR 738: this joiner's link to its hub. Absent from an older daemon; null on the hub itself
+   *  and on a machine that has no hub. */
+  hub_link?: HubLink | null;
 }
 
 export const NodeListSchema = z.object({
