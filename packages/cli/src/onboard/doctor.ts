@@ -24,6 +24,7 @@ import {
   saveBinding,
 } from '../config.js';
 import { CliError } from '../errors.js';
+import { localServingNotes } from '../host/backends/opencodeLocal.js';
 import { inspectWakeMusterd } from '../host/pinnedBin.js';
 import { sameCommit } from '../render/rows.js';
 import { theme } from '../render/theme.js';
@@ -1143,6 +1144,7 @@ export async function inspectProvisioning(
       ...deadHookLease,
       ...seatIdentity.notes,
       ...inspectGitAttribution(binding, cwd),
+      ...localServingNotes(cwd, binding),
       ...borrowedGitRootNotes(cwd),
       ...registryNotes,
       ...labelNotes,

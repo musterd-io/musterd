@@ -1,6 +1,11 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { isLoopbackUrl, readLocalServing, type LocalServingIo } from './opencodeLocal.js';
+import {
+  isLoopbackUrl,
+  localServingNotes,
+  readLocalServing,
+  type LocalServingIo,
+} from './opencodeLocal.js';
 
 const WS = '/ws';
 const DOT = join(WS, '.opencode', 'opencode.json');
@@ -88,6 +93,49 @@ describe('readLocalServing (ADR 663): three signals, all at spawn', () => {
     expect(
       readLocalServing(WS, { local: true }, io({ [DOT]: ollama(undefined, 'qwen3:4b') })),
     ).toBeNull();
+  });
+});
+
+describe('localServingNotes: a local-declared seat whose wakes will not read local', () => {
+  // OpenCode 2.1's replacement for `provider`; where its base URL goes is undocumented (2026-10-26).
+  const newShape = {
+    model: 'ollama/qwen3.5:4b',
+    providers: { ollama: { settings: { baseURL: 'http://127.0.0.1:11434/v1' } } },
+  };
+
+  it('silent when the seat is not declared local, or when the read answers local', () => {
+    expect(localServingNotes(WS, {}, io({ [DOT]: newShape }))).toEqual([]);
+    expect(localServingNotes(WS, null, io({}))).toEqual([]);
+    expect(localServingNotes(WS, { local: true }, io({ [DOT]: ollama() }))).toEqual([]);
+    // Both keys, and the `provider` block alone carries the loopback URL: the read answers local.
+    expect(
+      localServingNotes(
+        WS,
+        { local: true },
+        io({ [DOT]: { ...newShape, provider: ollama().provider } }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('names the `providers` shape when that is the only provider block', () => {
+    const notes = localServingNotes(WS, { local: true }, io({ [ROOT]: newShape }));
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain('`providers`');
+    expect(notes[0]).toContain('harness_price_unverified');
+  });
+
+  it('any other miss gets the general reason, never the `providers` one', () => {
+    for (const files of [
+      {},
+      { [DOT]: ollama('http://gpu-box.lan:11434/v1') },
+      { [DOT]: { ...newShape, provider: ollama('http://gpu-box.lan:11434/v1').provider } },
+      { [DOT]: '{ not json' },
+    ]) {
+      const notes = localServingNotes(WS, { local: true }, io(files));
+      expect(notes).toHaveLength(1);
+      expect(notes[0]).not.toContain('`providers`');
+      expect(notes[0]).toContain('loopback');
+    }
   });
 });
 

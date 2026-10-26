@@ -96,10 +96,14 @@ Air 2. Swap `model` per candidate (`ollama/` plus the Ollama model name from the
 }
 ```
 
-Use the `provider` key, not `providers`. OpenCode 2.1 marks `provider` deprecated, and its
-replacement `providers` moves the base URL under `settings`. musterd's ADR 663 check
+Use the `provider` key, not `providers`. OpenCode 2.1.4's schema marks `provider` deprecated in
+favour of `providers`, but `providers` has no documented base-URL field: its `settings` block lists
+timeouts, compaction, transport and encoding only, and OpenCode's providers page still shows the
+Ollama and llama.cpp examples under `provider` (both read 2026-10-26). musterd's ADR 663 check
 (`packages/cli/src/host/backends/opencodeLocal.ts`) reads only `provider.<id>.options.baseURL`, so a
-config written in the new shape is not marked `local`.
+config written in the new shape is not marked `local`. `musterd doctor` says so for a seat whose
+binding declares `local: true` (lane `01M5X3XED3`).
+Follows-up: `01M5X40AJDEYAN8KJFX0ZMM0C1` (read `providers` once OpenCode documents its base URL)
 - ADR 663 does not read the `providers` shape (2026-10-26; falsify: a wake on a workspace whose `opencode.json` uses only `providers` records `unpriced_reason: local`) <!-- claim: other -->
 
 The prompt trims from [the context floor](local-model-context-floor.md) (the skill list, unused
