@@ -61,6 +61,6 @@ Grok 1.0.70 (`f50904eaee6c`), n=1 for the page shape and n=1 for a completed pus
 
 ## What this does not settle
 
-- A default musterd Grok seat stays deaf. Nothing in this repo starts `grok` with `--leader`, and `use_leader` is off unless someone sets it. `grokLeader` probes `no-leader-socket` when the socket is absent and prompts a `--leader` session whose cwd is the binding directory.
+- A plain `grok`, with neither `--leader` nor `[cli] use_leader`, stays deaf. `musterd grok` in that seat's folder is the restart that listens: `--leader` and a socket under `~/.musterd/grok-sockets/` (sha256 of the folder's real path). It does not set `use_leader` and does not create `~/.grok/leader.sock`. `grokLeader` uses `GROK_LEADER_SOCKET` when set, then that per-seat file when it exists, then `~/.grok/leader.sock`. A missing socket is `no-leader-socket`. (2026-10-26, ADR 742; falsify: `musterd grok` from a seat folder execs `grok` without `--leader`, or the socket path is under `~/.grok/`.) <!-- claim: other -->
 - A half-typed draft and an open approval dialog were not tried. The [idle-wake spec](../superpowers/specs/2026-10-07-idle-wake-design.md) §3 leaves both unmeasured on every harness.
 - n=1. One idle TUI, one injected turn, Grok 1.0.52 on this laptop.

@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import { Socket } from 'node:net';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { InjectAdapter, InjectResult } from './inject.js';
 
@@ -16,6 +17,11 @@ import type { InjectAdapter, InjectResult } from './inject.js';
  * (2026-10-26) the list is paged: the result carries `nextCursor`, and the next page is
  * `{cursor: <that value>}`. The client follows that cursor, and prompts only a row whose
  * resolved cwd is this binding directory — the newest `updatedAt` across the pages.
+ *
+ * The socket is `GROK_LEADER_SOCKET` when set, else the per-seat file under
+ * `~/.musterd/grok-sockets/` when it exists (ADR 742), else `$GROK_HOME/leader.sock`
+ * or `~/.grok/leader.sock`. The filename function is duplicated in
+ * `packages/cli/src/grokSeatSocket.ts`. Both lock sha256("/seats/dreamy").
  *
  * The prompt's JSON-RPC result arrives when the turn stops (1.0.52: `stopReason` about 2 s later).
  * `inject` returns once the prompt is accepted — a later frame, or a short quiet with the socket
@@ -74,15 +80,50 @@ interface RpcView {
   result?: unknown;
 }
 
-export function grokLeaderSocketPath(env: NodeJS.ProcessEnv): string {
+/** Keep identical to `grokSeatSocketFile` in `packages/cli/src/grokSeatSocket.ts` (ADR 742). */
+export function grokSeatSocketFile(resolvedDir: string): string {
+  return createHash('sha256').update(resolvedDir).digest('hex').slice(0, 32) + '.sock';
+}
+
+function resolveSeatDir(dir: string): string {
+  try {
+    return realpathSync(dir);
+  } catch {
+    return resolve(dir);
+  }
+}
+
+/**
+ * The machine root the CLI uses. Under vitest with no `MUSTERD_CONFIG`, return null and
+ * leave the shared leader path in place so a test that never opted a seat stays deaf
+ * the way ADR 558 measured it (ADR 190: do not invent `~/.musterd` inside the suite).
+ */
+function musterdRoot(env: NodeJS.ProcessEnv): string | null {
+  const config = env['MUSTERD_CONFIG'];
+  if (config) return dirname(config);
+  if (env['VITEST']) return null;
+  return join(homedir(), '.musterd');
+}
+
+export function grokSeatLeaderSocket(dir: string, env: NodeJS.ProcessEnv): string | null {
+  const root = musterdRoot(env);
+  if (!root) return null;
+  return join(root, 'grok-sockets', grokSeatSocketFile(resolveSeatDir(dir)));
+}
+
+export function grokLeaderSocketPath(env: NodeJS.ProcessEnv, dir?: string): string {
   const override = env['GROK_LEADER_SOCKET'];
   if (override) return override;
+  if (dir) {
+    const seat = grokSeatLeaderSocket(dir, env);
+    if (seat && existsSync(seat)) return seat;
+  }
   const root = env['GROK_HOME'] ?? join(homedir(), '.grok');
   return join(root, 'leader.sock');
 }
 
 export function grokLeader(env: NodeJS.ProcessEnv, dir: string): InjectAdapter {
-  const socketPath = grokLeaderSocketPath(env);
+  const socketPath = grokLeaderSocketPath(env, dir);
   return {
     harness: 'grok',
     probe: () =>

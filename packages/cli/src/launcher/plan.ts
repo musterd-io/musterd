@@ -1,4 +1,5 @@
 import { CliError } from '../errors.js';
+import { ensureGrokSeatLeaderDir } from '../grokSeatSocket.js';
 import { resolveAdapter, type HarnessAdapter } from '../onboard/reconcile/fragments.js';
 import { chooseHarness, harnessLabel } from './labels.js';
 import type { Recent, Seat } from './store.js';
@@ -61,7 +62,13 @@ export async function planLaunch(input: PlanInput): Promise<LaunchPlan> {
       1,
     );
   const sessionId = input.session?.harness === id ? input.session.id : undefined;
-  const args =
+  let args =
     input.mode === 'resume' ? adapter.interactive.resume(sessionId) : adapter.interactive.fresh();
-  return { bin, args, cwd: seat.path, harness: id };
+  let env: NodeJS.ProcessEnv | undefined;
+  if (id === 'grok') {
+    const socket = ensureGrokSeatLeaderDir(seat.path, input.env);
+    args = ['--leader', '--leader-socket', socket, ...args];
+    env = { GROK_LEADER_SOCKET: socket };
+  }
+  return { bin, args, cwd: seat.path, harness: id, ...(env ? { env } : {}) };
 }
