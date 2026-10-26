@@ -1,6 +1,7 @@
 import type { Binding } from '@musterd/protocol';
-import type { HttpClient } from '../client.js';
+import type { AuthorityProof, HttpClient } from '../client.js';
 import { saveBinding, saveWorkspaceSpec } from '../config.js';
+import { CliError } from '../errors.js';
 import { loadProvisioning, saveProvisioning } from './manifest.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { reconcileHarnesses, type ReconcileReport } from './reconcile/engine.js';
@@ -29,6 +30,12 @@ export interface ProvisionSeatInput {
   server: string;
   http: Pick<HttpClient, 'mintBootstrapCredential' | 'issueGrant'> &
     Partial<Pick<HttpClient, 'revokeBootstrapCredential'>>;
+  /** Collect an A2 proof for a hub-local authority operation after its unsigned attempt is refused. */
+  authorityApproval?: (
+    act: 'credential_mint' | 'grant_issue',
+    target: string,
+    payload: unknown,
+  ) => Promise<AuthorityProof>;
   /** Create (or reuse) the seat's Workspace. Called once, after the credential is minted. */
   workspace: () => Workspace;
   /**
@@ -77,24 +84,46 @@ export interface ProvisionSeatResult {
 /** `pending` (selected but not installed) is NOT wired: launching it would fail at spawn. */
 const WIRED = new Set(['applied', 'unchanged', 'satisfied-unmanaged']);
 
+function needsAuthorityProof(err: unknown): boolean {
+  return err instanceof CliError && /authority refused \(no_signature\)/.test(err.message);
+}
+
 /** Throws only when the credential cannot be minted or the Workspace cannot be made. */
 export async function provisionSeat(input: ProvisionSeatInput): Promise<ProvisionSeatResult> {
   const { team, name, server, http } = input;
 
   // ADR 344: a credential constrained to this one seat. Mint after declaration — the server
   // validates the target against the live roster. Never fall back to a Team-wide key.
-  const mint = await http.mintBootstrapCredential(team, {
+  const bootstrapMint = {
     use: 'claim_seat',
     target: name,
     label: `${input.wiring.desired[0] ?? 'musterd'}:${name}`,
-  });
+  } as const;
+  let mint: Awaited<ReturnType<HttpClient['mintBootstrapCredential']>>;
+  try {
+    mint = await http.mintBootstrapCredential(team, bootstrapMint);
+  } catch (err) {
+    if (!needsAuthorityProof(err) || !input.authorityApproval) throw err;
+    const approval = await input.authorityApproval('credential_mint', name, {
+      action: 'bootstrap_mint',
+      use: bootstrapMint.use,
+      target: bootstrapMint.target,
+    });
+    mint = await http.mintBootstrapCredential(team, { ...bootstrapMint, approval });
+  }
   const agentKey = mint.agent_key;
 
   // A standing grant so autojoin occupies on launch instead of opening an approval (ADR 077).
   let grant: string | undefined;
   try {
-    grant = (await http.issueGrant(team, { scope: 'seat', target: name, lifetime: 'standing' }))
-      .token;
+    const grantBody = { scope: 'seat', target: name, lifetime: 'standing' } as const;
+    try {
+      grant = (await http.issueGrant(team, grantBody)).token;
+    } catch (err) {
+      if (!needsAuthorityProof(err) || !input.authorityApproval) throw err;
+      const approval = await input.authorityApproval('grant_issue', name, grantBody);
+      grant = (await http.issueGrant(team, { ...grantBody, approval })).token;
+    }
   } catch {
     grant = undefined;
   }

@@ -1,4 +1,5 @@
 import {
+  ApprovalProofSchema,
   PolicyOverrideSchema,
   type ApprovalDescriptor,
   type PolicyOverride,
@@ -9,7 +10,7 @@ import { success } from '../render/ui.js';
 import { resolve } from './helpers.js';
 
 const USAGE =
-  'usage: musterd authority enroll [--confirmed-by <admin>]\n' +
+  'usage: musterd authority enroll [--confirmed-by <admin> --countersign-proof <json>]\n' +
   '       musterd authority keys\n' +
   '       musterd authority revoke <key-id>\n' +
   '       musterd authority approve --act <act> --target <target> --payload <json>';
@@ -21,6 +22,8 @@ const USAGE =
  * readable by every process running as the human, so it qualified as nothing).
  * `enroll` runs the browser ceremony on the daemon's own origin; when a key already
  * stands, a further passkey first needs that key's approval, collected the same way.
+ * Past genesis, a joiner's countersign proof is created on the hub with `approve` and
+ * handed to this command; the joiner never creates a descriptor for a nonresident signer.
  * `approve` fetches the descriptor from the server itself (decision 5) — the words
  * a human approves are the server's, never the caller's.
  */
@@ -40,6 +43,10 @@ export function laneReviewApproval(lane: string, verdict: 'accept' | 'decline') 
 function printJson(value: unknown): number {
   process.stdout.write(JSON.stringify(value, null, 2) + '\n');
   return 0;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 /**
@@ -215,6 +222,7 @@ export const AUTHORITY_FLAGS = [
   'codex',
   'commit',
   'confirmed-by',
+  'countersign-proof',
   'connect',
   'connection',
   'content-type',
@@ -442,27 +450,56 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     const active = before.keys.filter((k) => k.revoked_at === null);
     let approval: Proof | undefined;
     let countersign: { confirmer: string; approval: Proof } | undefined;
+    if (parsed.flags['confirmed-by'] === true)
+      throw new CliError('--confirmed-by needs an admin name', 2);
+    if (parsed.flags['countersign-proof'] === true)
+      throw new CliError('--countersign-proof needs a JSON value', 2);
     const confirmedBy = flagStr(parsed.flags, 'confirmed-by');
+    const countersignProofRaw = flagStr(parsed.flags, 'countersign-proof');
+    if (countersignProofRaw && !confirmedBy)
+      throw new CliError('--countersign-proof requires --confirmed-by <admin>', 2);
+    if (confirmedBy && !countersignProofRaw) {
+      throw new CliError(
+        `Countersigning must happen on the hub. On the hub, run:\n` +
+          `  musterd authority approve --act device_key_admin --target ${shellQuote(member)} ` +
+          `--payload ${shellQuote(JSON.stringify({ action: 'enroll', kind: 'passkey', member }))}\n` +
+          `Then pass the printed proof to this joiner with --confirmed-by ${confirmedBy} ` +
+          `--countersign-proof '<proof JSON>'.`,
+        2,
+      );
+    }
+    let suppliedCountersignProof: Proof | undefined;
+    if (countersignProofRaw) {
+      try {
+        const parsedProof = ApprovalProofSchema.parse(JSON.parse(countersignProofRaw));
+        suppliedCountersignProof = {
+          nonce: parsedProof.nonce,
+          key_id: parsedProof.key_id,
+          signature: parsedProof.signature,
+          ...(parsedProof.authenticator_data
+            ? { authenticator_data: parsedProof.authenticator_data }
+            : {}),
+          ...(parsedProof.client_data_json
+            ? { client_data_json: parsedProof.client_data_json }
+            : {}),
+        };
+      } catch {
+        throw new CliError('--countersign-proof must be valid approval proof JSON', 2);
+      }
+    }
+    if (active.length > 0 && confirmedBy)
+      throw new CliError('--confirmed-by only applies when this member has no active key', 2);
     if (active.length > 0) {
       process.stdout.write('A device key already stands — the new passkey needs its approval.\n');
       approval = await collectApproval(http, team, 'device_key_admin', member, {
         action: 'enroll',
         kind: 'passkey',
       });
-    } else if (confirmedBy) {
+    } else if (confirmedBy && suppliedCountersignProof) {
       process.stdout.write(
-        `No standing key of yours — ${confirmedBy} (a human admin) must countersign.\n` +
-          `They open the approval link and approve with their passkey.\n`,
+        `Using ${confirmedBy}'s hub-issued countersign proof for this enrollment.\n`,
       );
-      const proof = await collectApproval(
-        http,
-        team,
-        'device_key_admin',
-        member,
-        { action: 'enroll', kind: 'passkey', member },
-        confirmedBy,
-      );
-      countersign = { confirmer: confirmedBy, approval: proof };
+      countersign = { confirmer: confirmedBy, approval: suppliedCountersignProof };
     }
     const { challenge } = await http.issueEnrollmentChallenge(team);
     const fragment = approval
@@ -493,7 +530,8 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
           confirmedBy || active.length > 0
             ? 'no passkey was enrolled in 4 minutes'
             : 'no passkey was enrolled in 4 minutes — if this team already has device keys, ' +
-                'a human admin must countersign: re-run with --confirmed-by <admin>',
+                'a human admin must countersign on the hub, then pass its proof with ' +
+                '--confirmed-by <admin> --countersign-proof <json>',
           1,
         );
       }
