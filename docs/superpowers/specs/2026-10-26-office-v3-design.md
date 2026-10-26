@@ -31,7 +31,13 @@ reads as one lived-in place rather than a grid, and nobody on it looks like they
 
 ## 2 What is decided
 
-### 2.1 Layout E — "pinwheel and zigzag", 28 desks
+### 2.1 Layout E — "pinwheel and zigzag", 23 desks
+
+_(Corrected 2026-10-26 while building v3-1, lane `01M5X4Q7NFKJ69KVHR38T47YMG`: the mockup's "28"
+was a miscount — the clusters it drew sum to 24 — and two of those did not survive the nav
+invariants. The solo island is gone and the spine is four pairs: with the meeting table and the
+corner row, a five-pair spine sealed the front strip and the only way east was round the top wall
+past the work board. 23 is the as-built count; the table below is the as-built plan.)_
 
 Plan view, north wall at the top, door bottom-left, logical floor 900 × 900 (`iso.ts` FLOOR).
 Positions are the mockup's and are the builder's to tune by up to ±40 units to satisfy the
@@ -39,19 +45,19 @@ invariants in §5; the *shape* of each cluster is decided.
 
 | Cluster | Desks | Where | Shape |
 | --- | --- | --- | --- |
-| Back bench | 4 | under the north windows, x≈90–390 | one counter, sitters face the wall (as today) |
-| Pinwheel | 4 | NW quarter, centre ≈ (250, 280) | four desks around a floor plant, each facing a different cardinal direction (N, E, S, W), like a turnstile |
-| Spine | 8 | centre, x≈400–610, y≈240–640 | four facing pairs in a line running N–S |
-| Zigzag trio | 3 | front-left, ≈ (120–350, 500–690) | three desks stepped diagonally, no two sharing a row or column, alternating facing |
-| Solo island | 1 | front-right ≈ (660, 720), south of the spine's foot | one desk on its own small rug, facing the room |
-| Corner duo | 2 | SE corner ≈ (790, 790–870), turned to face N | two desks side by side |
-| Window desks | 2 | east wall ≈ (834, 400) and (834, 580) | facing W, as today |
-| Meeting table | 0 | where it is today ≈ (500, 805) | four chairs, shrunk from today's table |
+| Back bench | 4 | under the north windows, x≈170–470, ly 56 | one counter, sitters face the wall (as today, 6 units further north so the chairs clear the nav grid's row) |
+| Pinwheel | 4 | NW quarter, centre (225, 330) | four desks 85 out from a centre plant, each facing inward so the four face S, W, N, E and the seats ring the outside |
+| Spine | 8 | centre (540, 440), pairs at y 290–590 | four facing pairs in a line running N–S; the two columns face each other |
+| Zigzag trio | 3 | front-left, centre (235, 595) | three desks stepped diagonally at (−110,−90) E, (0,0) W, (−60,102) E; no two share a row or column |
+| Corner row | 2 | SE corner (790, 830), facing S | two desks side by side against the south wall, seats to the north, on a wide shallow rug |
+| Window desks | 2 | east wall (776, 400) and (776, 580) | facing W, as today |
+| Meeting table | 0 | where it is today (500, 805) | four chairs, unchanged (its size is pinned by its seats) |
 
 _(miley's calls after the builder check, 2026-10-26.)_ The mockup put the meeting table on top of
-reception; it stays at today's spot instead and the solo island moves to the front-right. The spine
-starts at y≈240 so its north-east desk clears the café (the fridge's west face is at x≈603), and
-the corner duo turns to face N so its seats sit against the south wall and off the solo's floor.
+reception; it stays at today's spot instead. The spine starts at y≈290 so its north-east seat clears
+the lounge's coffee table (moved 24 east for the interim; v3-3 re-cuts the café). Slot ids are
+sequential over `DESK_SLOTS` (the old `id * 4 + i` stride cannot hold an 8-desk pod), and the
+spine lists its W-facing column first so the seating probe's runs land row-mates together.
 
 Pods are no longer only quads/duos/solos: the `Pod` type grows a `shape` of `'quad' | 'duo' |
 `'solo' | 'pinwheel' | 'zigzag' | 'spine'` (builder's naming) with its own desk generator in
@@ -178,7 +184,7 @@ Render cost, from the store's rules (ADR none; wiki `office-render-cost`):
 
 ## 4 Goals, non-goals, anti-goals
 
-**Goals.** 28 desks. A room that reads asymmetric on purpose. Feet that land on a floor that shows
+**Goals.** 23 desks (28 was the mockup's miscount; see §2.1). A room that reads asymmetric on purpose. Feet that land on a floor that shows
 where they land. Idle members who look parked, not typing in the air. A café corner that looks
 like somewhere a person would take a coffee.
 
@@ -227,8 +233,9 @@ rug; `STRIDE` value after measurement; frame count of `sit-lap` if 8 proves too 
 
 ## 8 Risks
 
-- 28 desks may not all clear the 60-unit rule at the mockup's positions; the ±40 tune is the
-  budget, and the next give is the corner duo (→ solo) before any other cluster.
+- ~~28 desks may not all clear the 60-unit rule at the mockup's positions~~ — they did not: the
+  solo and the spine's fifth pair went (§2.1). Any further desk needs a nav map first
+  (`nav.test.ts` can dump one: mark seats and `walkable` cells on a 60×60 grid).
 - The planks' E–W grain under an iso camera may strobe during the walk; if so, rotate the grain
   N–S (one re-render of the shell).
 - `sit-lap` across all layers could push bytes over budget; the fallback is rendering it at the

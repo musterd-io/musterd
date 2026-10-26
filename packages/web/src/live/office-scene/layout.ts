@@ -637,6 +637,8 @@ export interface Plant {
  * floor between zones without standing in a walking line. */
 export const PLANTS: Plant[] = [
   { lx: 70, ly: 110, species: 'snake' },
+  // The pinwheel's hub (office v3): the four desks turn around this plant.
+  { lx: 225, ly: 330, species: 'snake' },
   // (a fiddle stood at 480,55 — removed with the bench: it landed against the counter's end, and a
   // plant wedged between a bench and a printer is clutter, not softening.)
   { lx: 855, ly: 130, species: 'fiddle' },
