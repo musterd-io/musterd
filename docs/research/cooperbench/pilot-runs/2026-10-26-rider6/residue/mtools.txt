@@ -1,0 +1,13 @@
+== r6-musterd
+   musterd:team_inbox_check (wait)            90 $ 1.75
+   musterd:team_inbox_check (plain)           47 $ 1.43
+   other:ToolSearch                           58 $ 1.11
+   gate:edit-refused                          29 $ 0.86
+   musterd:lane_board                         37 $ 0.64
+   musterd:lane_resolve                       15 $ 0.33
+   musterd:lane_open                          16 $ 0.26
+   musterd:lane_submit                         6 $ 0.13
+   musterd:lane_update                         5 $ 0.12
+   musterd:team_status                         4 $ 0.07
+   musterd:lane_release                        2 $ 0.04
+   musterd:lane_handoff                        1 $ 0.02

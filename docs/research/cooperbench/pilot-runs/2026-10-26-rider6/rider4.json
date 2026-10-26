@@ -1,0 +1,567 @@
+{
+ "r6-musterd": {
+  "pairs": [
+   {
+    "pair": "r6-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1793036320652,
+      "to": "agent1",
+      "holder": "agent2",
+      "branch": "agent2",
+      "head": "9118e23f4272",
+      "body": "[lane] agent2 pushed \"Add octal_str type for octal validation\": agent2 at 9118e23f4272 on team \u2014 Add octal_str type for octal number validation (files: outlines/types/__init__.py) \u2014 fetch it before yo",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793036480641,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "afb0a5f065d3",
+      "body": "[lane] agent1 pushed \"Add IPv4, UUID4, and hex string regex types\": agent1 at afb0a5f065d3 on team \u2014 Add hex_str, uuid4, and ipv4 regex types; Add octal_str type for octal number validation (files: ou",
+      "receiver_next": "message:message"
+     }
+    ],
+    "push_act_count": 2,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "I see you've pushed your octal_str changes. Can you submit your lane so I can add my types? Our changes are in different sections so the merge should be clean.",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      }
+     ],
+     "agent2": [
+      {
+       "body": "My changes are already pushed to team/agent2 (commit 9118e23f). You can proceed with your work on agent1 branch - we'll merge both branches at the end. Our edits are in different sections so the merge",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ]
+    },
+    "hand_pushed_count": 2,
+    "hand_pushed_after_own_push": 1
+   },
+   {
+    "pair": "r6-musterd/coop/dspy_task/8563/f1_f4",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1793036327900,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "ca26568add1d",
+      "body": "[lane] agent1 pushed \"Add flexible parsing for dspy.ToolCalls\": agent1 at ca26568add1d on team \u2014 Add flexible parsing for dspy.ToolCalls via validate_input method (files: dspy/adapters/types/tool.py) ",
+      "receiver_next": "bash"
+     }
+    ],
+    "push_act_count": 1,
+    "lane_freed_act_count": 0,
+    "hand_pushed_sends": {
+     "agent1": [],
+     "agent2": []
+    },
+    "hand_pushed_count": 0,
+    "hand_pushed_after_own_push": 0
+   },
+   {
+    "pair": "r6-musterd/coop/go_chi_task/27/f3_f4",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force",
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 3,
+    "push_acts": [
+     {
+      "ts": 1793036325450,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "4544f7fb4d7e",
+      "body": "[lane] agent1 pushed \"Add debug logging for route pattern handling\": agent1 at 4544f7fb4d7e on team \u2014 feat: add debug logging for route pattern handling (files: log.go, mux.go) \u2014 fetch it before you e",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793036418322,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "70973b7ff71c",
+      "body": "[lane] agent1 pushed \"Add debug logging for route pattern handling\": agent1 at 70973b7ff71c on team \u2014 fix: remove unused fmt import from log.go (files: log.go) \u2014 fetch it before you edit; 'mux.go' is ",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793036448623,
+      "to": "agent1",
+      "holder": "agent2",
+      "branch": "agent2",
+      "head": "360b96f6f300",
+      "body": "[lane] agent2 pushed \"Add path prefix support in HTTP method patterns\": agent2 at 360b96f6f300 on team \u2014 test: add comprehensive tests for HTTP method prefix patterns; fix: remove unused fmt import fr",
+      "receiver_next": "bash"
+     }
+    ],
+    "push_act_count": 3,
+    "lane_freed_act_count": 0,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "I've already modified Handle (109-125) and HandleFunc (129-147) in mux.go - added pattern parsing with method detection to both, plus debug logging calls. Also created log.go with EnableDebugLogging()",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Committed and pushed my changes to team/agent1. You can fetch and review. HandleFunc now supports \"METHOD /path\" pattern parsing just like Handle does.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      },
+      {
+       "body": "Fixed - removed unused fmt import from log.go and pushed. Should build now.",
+       "pushes_before": 2,
+       "push_acts_so_far": 2
+      }
+     ],
+     "agent2": []
+    },
+    "hand_pushed_count": 3,
+    "hand_pushed_after_own_push": 2
+   },
+   {
+    "pair": "r6-musterd/coop/llama_index_task/17244/f5_f6",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1793036677308,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "749c40cb96d8",
+      "body": "[lane] agent1 pushed \"Add get_image_mimetype() method to ImageBlock\": agent1 at 749c40cb96d8 on team \u2014 Add get_image_mimetype() lazy accessor to ImageBlock (files: llama-index-core/llama_index/core/ba",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793036787118,
+      "to": "agent1",
+      "holder": "agent2",
+      "branch": "agent2",
+      "head": "1e751b638fbb",
+      "body": "[lane] agent2 pushed \"Add encoding field to ImageBlock\": agent2 at 1e751b638fbb on team \u2014 Add encoding field to ImageBlock for flexible base64 control; Add get_image_mimetype() lazy accessor to ImageB",
+      "receiver_next": "act not seen in stream"
+     }
+    ],
+    "push_act_count": 2,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "My changes are committed and pushed (749c40cb9). Added get_image_mimetype() method at line 86. You can work on top - the encoding field should be compatible. Let me know when you're done so I can merg",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ],
+     "agent2": []
+    },
+    "hand_pushed_count": 1,
+    "hand_pushed_after_own_push": 1
+   },
+   {
+    "pair": "r6-musterd/coop/openai_tiktoken_task/0/f4_f8",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1",
+      "cd /workspace/repo\ngit push team agent1 --force || true"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 3,
+    "push_acts": [
+     {
+      "ts": 1793036683729,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "0be3344432ee",
+      "body": "[lane] agent1 pushed \"Add token chunking support\": agent1 at 0be3344432ee on team \u2014 Add token chunking support to encode function (files: tiktoken/core.py) \u2014 fetch it before you edit; 'tiktoken/core.p",
+      "receiver_next": "bash"
+     }
+    ],
+    "push_act_count": 1,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "I've finished my chunk_size parameter implementation and pushed to team/agent1 (commit 0be3344). The encode function signature now includes chunk_size: int | None = None. You can merge my changes and ",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      },
+      {
+       "body": "Released my lane. You can now edit tiktoken/core.py. My changes are on team/agent1 branch when you're ready to merge.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Completed token pattern tracking feature in tiktoken/core.py. Added return_repeated_pattern parameter that tracks and returns top 3 most frequent token pairs. Pushed to team/agent2 (commit 87ecc1c). W",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ]
+    },
+    "hand_pushed_count": 3,
+    "hand_pushed_after_own_push": 3
+   },
+   {
+    "pair": "r6-musterd/coop/pallets_click_task/2800/f1_f4",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2 --force",
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 3,
+    "push_acts": [
+     {
+      "ts": 1793036915976,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "6d7e9511553a",
+      "body": "[lane] agent1 pushed \"Fix resource leak in shell completion - close file contexts\": agent1 at 6d7e9511553a on team \u2014 Fix resource leak in shell completion by properly closing file contexts (files: src",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793037155524,
+      "to": "agent1",
+      "holder": "agent2",
+      "branch": "agent2",
+      "head": "85df76a71d6e",
+      "body": "[lane] agent2 pushed \"Add cleanup_timeout parameter to Context\": agent2 at 85df76a71d6e on team \u2014 Add cleanup_timeout parameter to Context to prevent hanging close operations; Fix resource leak in she",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793037232665,
+      "to": "agent1",
+      "holder": "agent2",
+      "branch": "agent2",
+      "head": "8e0b167c59da",
+      "body": "[lane] agent2 pushed \"Add cleanup_timeout parameter to Context\": agent2 at 8e0b167c59da on team \u2014 Fix cleanup_timeout to properly terminate on timeout (files: src/click/core.py, test_cleanup_timeout.p",
+      "receiver_next": "bash"
+     }
+    ],
+    "push_act_count": 3,
+    "lane_freed_act_count": 2,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Updated my lane scope to only src/click/shell_completion.py. core.py is all yours. My changes are committed and pushed.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      },
+      {
+       "body": "Yes, I'm done with shell_completion.py. My changes are in _resolve_context function (lines 532-586). All committed and pushed. You can add your doc update - which part of the file do you need to modif",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      },
+      {
+       "body": "My changes are already committed on team/agent1. You can fetch my branch and work on top of it: `git fetch team && git merge team/agent1`. The docstring update shouldn't conflict with my with-statemen",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      },
+      {
+       "body": "Merged your branch successfully. Final patch.txt generated with both our changes. Ready for submission.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Done with cleanup_timeout implementation. Added parameter to Context.__init__, implemented timeout in close() method, and updated shell_completion.py docs. All changes committed and tested. patch.txt ",
+       "pushes_before": 2,
+       "push_acts_so_far": 2
+      }
+     ]
+    },
+    "hand_pushed_count": 5,
+    "hand_pushed_after_own_push": 5
+   },
+   {
+    "pair": "r6-musterd/coop/pallets_jinja_task/1559/f5_f8",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1793037040879,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "21524a95e6a2",
+      "body": "[lane] agent1 pushed \"Translation variable validation\": agent1 at 21524a95e6a2 on team \u2014 feat(i18n): Add translation variable validation (files: src/jinja2/ext.py) \u2014 fetch it before you edit; 'src/jin",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793037277802,
+      "to": "agent1",
+      "holder": "agent2",
+      "branch": "agent2",
+      "head": "60d064ffc10b",
+      "body": "[lane] agent2 pushed \"Conditional translation rendering (ctrans tag)\": agent2 at 60d064ffc10b on team \u2014 feat(i18n): Add conditional translation rendering with fallback support; feat(i18n): Add transla",
+      "receiver_next": "bash"
+     }
+    ],
+    "push_act_count": 2,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Translation variable validation complete and committed to agent1 branch (21524a95). All existing tests pass. Ready to merge once agent2 completes.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      },
+      {
+       "body": "Lane resolved. ext.py is released - you can edit now. My changes are committed on agent1 branch.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Blocked from editing ext.py - you hold the lane. Can you handoff the file to me after your changes, or release the lane? I'll merge your branch when I pull.",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "ConditionalI18nExtension implementation complete. Added ctrans tag with condition, pluralize, and mandatory fallback blocks. Committed to agent2 branch at 60d064ff.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ]
+    },
+    "hand_pushed_count": 4,
+    "hand_pushed_after_own_push": 3
+   },
+   {
+    "pair": "r6-musterd/coop/pallets_jinja_task/1621/f6_f10",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1793037181038,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "7ecfcabf5121",
+      "body": "[lane] agent1 pushed \"Add path_transform to template loaders\": agent1 at 7ecfcabf5121 on team \u2014 Add path_transform parameter to template loaders (files: src/jinja2/loaders.py) \u2014 fetch it before you ed",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793037480033,
+      "to": "agent1",
+      "holder": "agent2",
+      "branch": "agent2",
+      "head": "72238a6930dd",
+      "body": "[lane] agent2 pushed \"Add template path aliasing to BaseLoader\": agent2 at 72238a6930dd on team \u2014 Add template path aliasing support to Jinja2 loaders; Add path_transform parameter to template loaders",
+      "receiver_next": "wait_until_lane"
+     }
+    ],
+    "push_act_count": 2,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Done with path_transform. Committed and pushed to team/agent1. All existing tests pass. Your aliasing feature should work well with this - aliases would live on BaseLoader while path_transform stays o",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ],
+     "agent2": []
+    },
+    "hand_pushed_count": 1,
+    "hand_pushed_after_own_push": 1
+   },
+   {
+    "pair": "r6-musterd/coop/react_hook_form_task/153/f2_f6",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1793037531799,
+      "to": "agent1",
+      "holder": "agent2",
+      "branch": "agent2",
+      "head": "475d98e4e0ee",
+      "body": "[lane] agent2 pushed \"feat: handleSubmit submission context\": agent2 at 475d98e4e0ee on team \u2014 feat(handleSubmit): Add optional submission context parameter (files: src/logic/createFormControl.ts, src",
+      "receiver_next": "message:message"
+     }
+    ],
+    "push_act_count": 1,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Lane collision: both lanes need src/types/form.ts and createFormControl.ts. Your lane holds them. Options: (1) I wait for your lane to finish, then implement on top, or (2) you push changes and hand o",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Your lane currently holds the files - I'm blocked from editing. Since you opened your lane first, go ahead and finish your implementation. Push your changes to team/agent2, then I'll fetch and build o",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Saw your push. Can you hand off the files to me now so I can add onFinally on top of your changes? Or submit your lane if you're done.",
+       "pushes_before": 0,
+       "push_acts_so_far": 0
+      },
+      {
+       "body": "Done with onFinally implementation. Merged your context param changes and added onFinally callback on top. Pushed to team/agent1 (commit f198c305). All tests pass.",
+       "pushes_before": 1,
+       "push_acts_so_far": 0
+      }
+     ],
+     "agent2": [
+      {
+       "body": "Done with my implementation. Pushed to team/agent2 (commit 475d98e4). Tests all pass. You can now fetch and build your onFinally callback on top. Files are ready for you.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      },
+      {
+       "body": "Released my lane. Files are yours now. My changes are on team/agent2 at 475d98e4, fetch and build on top.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ]
+    },
+    "hand_pushed_count": 6,
+    "hand_pushed_after_own_push": 3
+   },
+   {
+    "pair": "r6-musterd/coop/typst_task/6554/f2_f6",
+    "db": "musterd-musterd.db",
+    "git_pushes": {
+     "agent1": [
+      "git push team agent1 --force"
+     ],
+     "agent2": [
+      "git push team agent2 --force"
+     ]
+    },
+    "git_push_count": 2,
+    "push_acts": [
+     {
+      "ts": 1793037487947,
+      "to": "agent1",
+      "holder": "agent2",
+      "branch": "agent2",
+      "head": "5977f09e68f5",
+      "body": "[lane] agent2 pushed \"Add skip_whitespace to str.first/last\": agent2 at 5977f09e68f5 on team \u2014 Add skip_whitespace parameter to str.first and str.last (files: crates/typst/src/foundations/str.rs) \u2014 fe",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793037619205,
+      "to": "agent2",
+      "holder": "agent1",
+      "branch": "agent1",
+      "head": "258a01df44f0",
+      "body": "[lane] agent1 pushed \"Add indexed access to str.first and str.last\": agent1 at 258a01df44f0 on team \u2014 Add indexed access to str.first and str.last; Add skip_whitespace parameter to str.first and str.l",
+      "receiver_next": "bash"
+     }
+    ],
+    "push_act_count": 2,
+    "lane_freed_act_count": 1,
+    "hand_pushed_sends": {
+     "agent1": [
+      {
+       "body": "Index parameter added to first/last methods. Changes committed and pushed to team/agent1.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ],
+     "agent2": [
+      {
+       "body": "My changes are pushed (5977f09). Ready for you to merge and add your index parameter.",
+       "pushes_before": 1,
+       "push_acts_so_far": 1
+      }
+     ]
+    },
+    "hand_pushed_count": 2,
+    "hand_pushed_after_own_push": 2
+   }
+  ],
+  "totals": {
+   "git_pushes": 23,
+   "push_acts": 19,
+   "lane_freed_acts": 9,
+   "hand_pushed_sends": 27,
+   "hand_pushed_after_own_push": 21
+  }
+ }
+}

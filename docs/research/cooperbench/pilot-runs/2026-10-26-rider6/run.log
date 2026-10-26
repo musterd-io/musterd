@@ -1,0 +1,43 @@
+# CooperBench rider 6 run — run log (lane 01M5WJJGNJ, rider6-manifest.md)
+
+## Pre-flight, 2026-10-26 17:20–17:35Z (machine musterd-cooperbench, performance-8x)
+
+- **Spend:** nick asked for the run in session ("Option 2 sounds good", 2026-10-26); the manifest
+  carries about $19, hard stop $25. The pre-registration landed on main (#3330, `75c8772b`) before the
+  product change (#3331, `119acf4d`) and before any pair ran.
+- **Deploy** from main `119acf4d` (#3331, ADR 732): `MUSTERD_REF=119acf4d…`, Claude Code `2.1.307` on the
+  host and, through CooperBench's `setup.sh`, in every agent container. After the redeploy: `useradd
+  smoke`, `chmod 1777` on `/opt/cooperbench/src/cooperbench/agents/swe_agent/trajectories`, the
+  `dataset` symlink (README). `musterd --version` 0.6.0 on the host.
+- **API check:** one `claude -p` (haiku) → `ok`.
+- **`gate_smoke.py`** as the `smoke` user, host `musterd` on `PATH`: **PASS, $0.0034** — `src/a.py` edited
+  inside the lane, `src/b.py` refused, one `lane.gate` deny audited, no deaf warning.
+- **`hold_smoke_697.py`** as the `smoke` user: **PASS, $0.0085** — held → hand-over refused once → allowed;
+  `denied_handover` audited; no deaf warning.
+- **Smokes ≈ $0.012.** Arm cap stays **$24.80**. No smoke pair, as pre-registered. All 10 `core` images
+  were already on the volume (39 GB free).
+
+## Run
+
+- 17:35:29Z `r6.sh` started (`r6-musterd`, `-s core`, `-c 3`, `run_arms.py --cap 24.80`).
+- 18:02:30Z run exit 0 (27 min); 18:06:47Z eval exit 0; **$18.45** model spend; `readout.py` exit 0. No
+  errored pair, no API-limit line, nothing re-run. `MUSTERD_REF` 119acf4d and `claude_code_version`
+  2.1.307 in every pair.
+- Residue: `boardreads.py`, `sends.py`, `mtools.py`, `cats.py` (the claim run's copies, unchanged) →
+  `residue/`; `rider2.py` (coordination-cost run's, unchanged) → `rider2.json`; `rider4.py` (rider 4's,
+  unchanged) → `rider4.json`; `rider5.py` (rider 5's, its 2026-10-26 amended form from
+  `pilot-runs/2026-10-25-rider5/`, unchanged, copied here) → `rider5.json`; `pushwhy.py` (rider 4's,
+  unchanged) → `pushwhy.txt`.
+- **Hook lines to the pusher**, counted in `agent*_session.jsonl` as in rider 5 (each line appears 5×):
+  19 pushes "<seat> was told" (agent1 9, agent2 10), 3 "no other lane covers the files it names" — 22 of
+  the 22 pushes the daemon recorded. Daemon logs: 22 `lane_push_recorded` (7 with `ended: 1`), 19
+  `lane_push_fired`, 1 `lane_push_ignored` (tiktoken: a `git push … || true` after the pusher had
+  released its lane — the 23rd command).
+- **One read beside the pre-registered scripts:** `waits.py` (this folder, written after the readout, no
+  rule) pairs every wait-mode `team_inbox_check` tool call in the streams with its result and the pair's
+  daemon log → `waits.json`. It counts 98 wait tool calls; `mtools.py`'s pre-registered line counts 90
+  (the priced-call grouping, which folds a wait sharing a turn with another priced call). R6b is read
+  from `mtools.py`, as registered.
+- Machine stopped 18:1xZ after the run folder was copied; started twice more for a transcript grep
+  (files clause in the acts; the wait-call reconciliation), stopped each time.
+- Result: finding 028.

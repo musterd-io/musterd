@@ -1,0 +1,334 @@
+{
+ "r6-musterd": {
+  "pairs": 10,
+  "pairs_with_held_refusal": 10,
+  "holder_signals_total": 12,
+  "holder_signals_per_pair": [
+   1,
+   0,
+   2,
+   0,
+   1,
+   4,
+   0,
+   0,
+   3,
+   1
+  ],
+  "freed_to_edit_s": [
+   17.6,
+   33.5,
+   null,
+   27.2,
+   45.9,
+   34.9,
+   245.2,
+   98.4,
+   29.8,
+   34.9,
+   25.1
+  ],
+  "lane_freed_acts": 9,
+  "records": [
+   {
+    "pair": "r6-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3",
+    "db": "musterd-musterd.db",
+    "refusals": 2,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent1",
+      "holder": "agent2",
+      "refused_at": 1793036320233,
+      "holder_freed_at": 1793036447196,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1793036464826,
+      "freed_to_edit_s": 17.6
+     }
+    ],
+    "holder_signals": {
+     "agent2": [
+      "My changes are already pushed to team/agent2 (commit 9118e23f). You can proceed with your work on agent1 branch - we'll merge both branches at the end. Our edit"
+     ]
+    },
+    "holder_signal_count": 1,
+    "lane_freed_acts": [
+     {
+      "ts": 1793036447196,
+      "to": "agent1",
+      "body": "[lane] agent2's lane \"Add octal_str type for octal validation\" is done: 'outlines/types/__init__.py' is free. Their work is on agent2 at 4dd7802a8a50: bring it in before you edit.",
+      "receiver_next": "bash"
+     }
+    ]
+   },
+   {
+    "pair": "r6-musterd/coop/dspy_task/8563/f1_f4",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1793036304638,
+      "holder_freed_at": 1793036342991,
+      "holder_freed_how": "taken over by agent2 (handoff)",
+      "refused_next_edit_at": 1793036376539,
+      "freed_to_edit_s": 33.5
+     }
+    ],
+    "holder_signals": {
+     "agent1": []
+    },
+    "holder_signal_count": 0,
+    "lane_freed_acts": []
+   },
+   {
+    "pair": "r6-musterd/coop/go_chi_task/27/f3_f4",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1793036280592,
+      "holder_freed_at": null,
+      "holder_freed_how": null,
+      "refused_next_edit_at": null,
+      "freed_to_edit_s": null
+     }
+    ],
+    "holder_signals": {
+     "agent1": [
+      "I've already modified Handle (109-125) and HandleFunc (129-147) in mux.go - added pattern parsing with method detection to both, plus debug logging calls. Also ",
+      "Feature complete. patch.txt contains 190 lines with debug logging implementation (EnableDebugLogging API, logDebug infrastructure, extended HandleFunc method pa"
+     ]
+    },
+    "holder_signal_count": 2,
+    "lane_freed_acts": []
+   },
+   {
+    "pair": "r6-musterd/coop/llama_index_task/17244/f5_f6",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1793036649912,
+      "holder_freed_at": 1793036723488,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1793036750716,
+      "freed_to_edit_s": 27.2
+     }
+    ],
+    "holder_signals": {
+     "agent1": []
+    },
+    "holder_signal_count": 0,
+    "lane_freed_acts": [
+     {
+      "ts": 1793036723488,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Add get_image_mimetype() method to ImageBlock\" is done: 'llama-index-core/llama_index/core/base/llms/types.py' is free. Their work is on agent1 at b004ea099f70: bring it in befor",
+      "receiver_next": "bash"
+     }
+    ]
+   },
+   {
+    "pair": "r6-musterd/coop/openai_tiktoken_task/0/f4_f8",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1793036713805,
+      "holder_freed_at": 1793036744296,
+      "holder_freed_how": "lane.released",
+      "refused_next_edit_at": 1793036790166,
+      "freed_to_edit_s": 45.9
+     }
+    ],
+    "holder_signals": {
+     "agent1": [
+      "I've finished my chunk_size parameter implementation and pushed to team/agent1 (commit 0be3344). The encode function signature now includes chunk_size: int | No"
+     ]
+    },
+    "holder_signal_count": 1,
+    "lane_freed_acts": [
+     {
+      "ts": 1793036745462,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Add token chunking support\" is released: 'tiktoken/core.py' is free. Their work is on agent1 at 4560a8896f5f: bring it in before you edit.",
+      "receiver_next": "message:status_update"
+     }
+    ]
+   },
+   {
+    "pair": "r6-musterd/coop/pallets_click_task/2800/f1_f4",
+    "db": "musterd-musterd.db",
+    "refusals": 2,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1793036710467,
+      "holder_freed_at": 1793036895050,
+      "holder_freed_how": "act: no longer naming the file",
+      "refused_next_edit_at": 1793036929927,
+      "freed_to_edit_s": 34.9
+     },
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1793037089884,
+      "holder_freed_at": 1793036895050,
+      "holder_freed_how": "act: no longer naming the file",
+      "refused_next_edit_at": 1793037140224,
+      "freed_to_edit_s": 245.2
+     }
+    ],
+    "holder_signals": {
+     "agent1": [
+      "My changes are only in shell_completion.py (_resolve_context function). I don't need to edit core.py after all - the fix is just wrapping context creation with ",
+      "My changes are already committed on team/agent1. You can fetch my branch and work on top of it: `git fetch team && git merge team/agent1`. The docstring update ",
+      "Lane resolved. shell_completion.py is released. You can edit now.",
+      "Merged your branch successfully. Final patch.txt generated with both our changes. Ready for submission."
+     ]
+    },
+    "holder_signal_count": 4,
+    "lane_freed_acts": [
+     {
+      "ts": 1793036895050,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Fix resource leak in shell completion - close file contexts\" is no longer naming the file: 'src/click/core.py' is free. Their work is on agent1 at d8763b93021c: bring it in befor",
+      "receiver_next": "bash"
+     },
+     {
+      "ts": 1793037127079,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Fix resource leak in shell completion - close file contexts\" is done: 'src/click/shell_completion.py' is free. Their work is on agent1 at d8763b93021c: bring it in before you edi",
+      "receiver_next": "bash"
+     }
+    ]
+   },
+   {
+    "pair": "r6-musterd/coop/pallets_jinja_task/1559/f5_f8",
+    "db": "musterd-musterd.db",
+    "refusals": 2,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1793037026818,
+      "holder_freed_at": 1793037148632,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1793037247015,
+      "freed_to_edit_s": 98.4
+     }
+    ],
+    "holder_signals": {
+     "agent1": []
+    },
+    "holder_signal_count": 0,
+    "lane_freed_acts": [
+     {
+      "ts": 1793037148632,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Translation variable validation\" is done: 'src/jinja2/ext.py' is free. Their work is on agent1 at 896a62135bcc: bring it in before you edit.",
+      "receiver_next": "bash"
+     }
+    ]
+   },
+   {
+    "pair": "r6-musterd/coop/pallets_jinja_task/1621/f6_f10",
+    "db": "musterd-musterd.db",
+    "refusals": 2,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent2",
+      "holder": "agent1",
+      "refused_at": 1793037106251,
+      "holder_freed_at": 1793037310759,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1793037340552,
+      "freed_to_edit_s": 29.8
+     }
+    ],
+    "holder_signals": {
+     "agent1": []
+    },
+    "holder_signal_count": 0,
+    "lane_freed_acts": [
+     {
+      "ts": 1793037310759,
+      "to": "agent2",
+      "body": "[lane] agent1's lane \"Add path_transform to template loaders\" is done: 'src/jinja2/loaders.py' is free. Their work is on agent1 at a2920752fd11: bring it in before you edit.",
+      "receiver_next": "act not seen in stream"
+     }
+    ]
+   },
+   {
+    "pair": "r6-musterd/coop/react_hook_form_task/153/f2_f6",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent1",
+      "holder": "agent2",
+      "refused_at": 1793037433889,
+      "holder_freed_at": 1793037561854,
+      "holder_freed_how": "lane.released",
+      "refused_next_edit_at": 1793037596771,
+      "freed_to_edit_s": 34.9
+     }
+    ],
+    "holder_signals": {
+     "agent2": [
+      "Done with my implementation. Pushed to team/agent2 (commit 475d98e4). Tests all pass. You can now fetch and build your onFinally callback on top. Files are read",
+      "Released my lane. Files are yours now. My changes are on team/agent2 at 475d98e4, fetch and build on top.",
+      "Merged your changes. patch.txt generated with both features (133 lines). Ready for submission. Good collaboration!"
+     ]
+    },
+    "holder_signal_count": 3,
+    "lane_freed_acts": [
+     {
+      "ts": 1793037562090,
+      "to": "agent1",
+      "body": "[lane] agent2's lane \"feat: handleSubmit submission context\" is released: 'src/types/form.ts' is free. Their work is on agent2 at cec3267e12aa: bring it in before you edit.",
+      "receiver_next": "lane_submit"
+     }
+    ]
+   },
+   {
+    "pair": "r6-musterd/coop/typst_task/6554/f2_f6",
+    "db": "musterd-musterd.db",
+    "refusals": 1,
+    "pairs_refused_holder": [
+     {
+      "refused": "agent1",
+      "holder": "agent2",
+      "refused_at": 1793037537030,
+      "holder_freed_at": 1793037559732,
+      "holder_freed_how": "act: done",
+      "refused_next_edit_at": 1793037584803,
+      "freed_to_edit_s": 25.1
+     }
+    ],
+    "holder_signals": {
+     "agent2": [
+      "Both parameters can coexist - first(index?, skip-whitespace?) and last(index?, skip-whitespace?). I've completed my skip_whitespace implementation. Suggest: I c"
+     ]
+    },
+    "holder_signal_count": 1,
+    "lane_freed_acts": [
+     {
+      "ts": 1793037559732,
+      "to": "agent1",
+      "body": "[lane] agent2's lane \"Add skip_whitespace to str.first/last\" is done: 'crates/typst/src/foundations/str.rs' is free. Their work is on agent2 at b8034a343831: bring it in before you edit.",
+      "receiver_next": "edit"
+     }
+    ]
+   }
+  ]
+ }
+}

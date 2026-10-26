@@ -1,0 +1,8 @@
+[2026-10-26T17:35:29Z] pull 10 images, df 39G free
+[2026-10-26T17:35:30Z] pulled, df 39G free
+[2026-10-26T17:35:30Z] start r6-musterd
+[2026-10-26T18:02:30Z] r6-musterd run exit=0
+[2026-10-26T18:06:47Z] r6-musterd eval exit=0
+[2026-10-26T18:06:47Z] all done, spent $18.45
+[2026-10-26T18:06:47Z] run_arms exit=0
+[2026-10-26T18:06:47Z] readout exit=0
