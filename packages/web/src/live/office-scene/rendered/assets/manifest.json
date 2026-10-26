@@ -534,6 +534,17 @@
       "scale": 3.0
     },
     {
+      "id": "nook/armchair",
+      "file": "office-art-nook-armchair.webp",
+      "w": 145,
+      "h": 142,
+      "anchor": {
+        "x": 72.45,
+        "y": 106.54
+      },
+      "scale": 3.0
+    },
+    {
       "id": "nook/cooler",
       "file": "office-art-nook-cooler.webp",
       "w": 117,
@@ -547,11 +558,11 @@
     {
       "id": "nook/couch",
       "file": "office-art-nook-couch.webp",
-      "w": 330,
-      "h": 259,
+      "w": 270,
+      "h": 230,
       "anchor": {
-        "x": 163.82,
-        "y": 180.03
+        "x": 133.86,
+        "y": 165.53
       },
       "scale": 3.0
     },
@@ -578,13 +589,35 @@
       "scale": 3.0
     },
     {
+      "id": "nook/island",
+      "file": "office-art-nook-island.webp",
+      "w": 367,
+      "h": 279,
+      "anchor": {
+        "x": 183.09,
+        "y": 188.63
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "nook/stool",
+      "file": "office-art-nook-stool.webp",
+      "w": 84,
+      "h": 118,
+      "anchor": {
+        "x": 42.0,
+        "y": 95.0
+      },
+      "scale": 3.0
+    },
+    {
       "id": "nook/table",
       "file": "office-art-nook-table.webp",
-      "w": 208,
-      "h": 146,
+      "w": 152,
+      "h": 120,
       "anchor": {
-        "x": 103.92,
-        "y": 97.08
+        "x": 76.02,
+        "y": 84.0
       },
       "scale": 3.0
     },

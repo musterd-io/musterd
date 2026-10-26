@@ -73,9 +73,9 @@ describe('walkability grid', () => {
     // reception's waiting chair is solid, but the rug it stands on is floor
     expect(walkable(RECEPTION.chair.lx, RECEPTION.chair.ly)).toBe(false);
     expect(walkable(RECEPTION.rug.lx - 90, RECEPTION.rug.ly)).toBe(true);
-    // the nook couch is solid; the open rug in front of the away arc is floor
-    expect(walkable(NOOK.lx + 34, NOOK.ly - 2)).toBe(false);
-    expect(walkable(NOOK.lx - 58, NOOK.ly + 78)).toBe(true);
+    // the café island is solid; the open tile in front of the stools is floor
+    expect(walkable(NOOK.lx + 10, NOOK.ly - 6)).toBe(false);
+    expect(walkable(NOOK.lx + 10, NOOK.ly + 90)).toBe(true);
   });
 
   it('stands every away member on the café tile — clear of the lounge furniture', () => {
