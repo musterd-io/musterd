@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import {
   computeSiteGap,
   nextAction,
+  openGapAsk,
   replyOnAsk,
   siteGapAskBody,
   siteGapLine,
@@ -276,5 +277,31 @@ describe("replyOnAsk — the authorizer's answer, and only theirs", () => {
         'nick',
       ),
     ).toBe('accept');
+  });
+});
+
+describe('openGapAsk — two publishers, one ask (lane 01M5WQMRXC)', () => {
+  const ask = (id: string, deployed: string, from = 'live') => ({
+    id,
+    from,
+    act: 'ask',
+    meta: { site_gap: { deployed, tip: TIP } },
+  });
+  it("finds another instance's unresolved ask for the same deployed ref", () => {
+    expect(openGapAsk([ask('01A', DEPLOYED)], DEPLOYED)).toBe('01A');
+  });
+  it('ignores an ask the publisher already resolved, another ref, another seat, or no site_gap meta', () => {
+    expect(
+      openGapAsk(
+        [ask('01A', DEPLOYED), { id: '01R', from: 'live', act: 'resolve', thread: '01A' }],
+        DEPLOYED,
+      ),
+    ).toBe(null);
+    expect(openGapAsk([ask('01A', 'older')], DEPLOYED)).toBe(null);
+    expect(openGapAsk([ask('01A', DEPLOYED, 'miley')], DEPLOYED)).toBe(null);
+    expect(openGapAsk([{ id: '01A', from: 'live', act: 'ask', meta: {} }], DEPLOYED)).toBe(null);
+  });
+  it('the newest open one stands', () => {
+    expect(openGapAsk([ask('01A', DEPLOYED), ask('01B', DEPLOYED)], DEPLOYED)).toBe('01B');
   });
 });

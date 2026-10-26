@@ -216,3 +216,36 @@ export function replyOnAsk(
   }
   return reply;
 }
+
+/** The seat the publisher ticks as (ADR 232); every gap ask and its resolve come from it. */
+export const PUBLISHER_SEAT = 'live';
+
+/**
+ * An open gap ask another publisher instance already raised for this deployed ref (lane
+ * 01M5WQMRXC): two machines tick with one `live` seat and separate stamps, and each raised its own
+ * ask seventeen seconds apart. The raise carries `meta.site_gap`; a tick with no open ask of its own
+ * stands by when one from the publisher seat names the same deployed ref and no resolve from that
+ * seat closes it. Returns the newest such ask's id. Only the raiser reads the reply and deploys.
+ */
+export function openGapAsk(
+  envelopes: readonly { id: string; from: string; act: string; thread?: unknown; meta?: unknown }[],
+  deployed: string,
+  publisher: string = PUBLISHER_SEAT,
+): string | null {
+  const resolved = new Set<string>();
+  for (const e of envelopes) {
+    if (e.from === publisher && e.act === 'resolve' && typeof e.thread === 'string')
+      resolved.add(e.thread);
+  }
+  let open: string | null = null;
+  for (const e of envelopes) {
+    if (e.from !== publisher || e.act !== 'ask') continue;
+    const gap = ((e.meta ?? {}) as Record<string, unknown>)['site_gap'] as
+      | { deployed?: unknown }
+      | undefined;
+    if (!gap || gap.deployed !== deployed) continue;
+    if (resolved.has(e.id)) continue;
+    open = e.id;
+  }
+  return open;
+}
