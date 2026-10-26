@@ -86,7 +86,8 @@ In each container (`adapter.py`):
   the blocking wait, so the arm no longer sets `ENABLE_TOOL_SEARCH=false` and the instructions name
   the one-call wait instead of polling. Always-loaded surface, measured 2026-10-21 on this build
   with `measureToolSurface` (tools/list JSON, bytes/4): all 31 tools 21,713 B ≈ 5,428 tokens; the
-  four hot tools that load up front 3,002 B ≈ 751 tokens, plus the server instructions — against
+  four hot tools that load up front 3,002 B ≈ 751 tokens (thirteen, ≈12.4 KB, since ADR 741 on
+  2026-10-26: the lane lifecycle loads without a `ToolSearch` turn), plus the server instructions — against
   pilot 3's 39.6k first-call context (a runtime ruler, not this one; the residual is the ~4k
   finding 019 assumed). Falsifier: a first-call context on the claim run materially above the
   team arm's, with tool search on, puts the 16k back on the table. The gate/hold smokes and one smoke pair still owe a run on the next

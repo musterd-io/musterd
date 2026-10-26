@@ -249,15 +249,21 @@ goals, memory, insight) and `lane_*` (the work-board sub-surface). The split is 
 drift (MCP spec #2808's namespacing direction favors several small namespaces over one flat
 prefix); the full statement lives in `toolNames.ts`.
 
-### Hot tools load without a schema search (lane 01M4S53E79)
+### Hot tools load without a schema search (lane 01M4S53E79, ADR 741)
 
-`team_join`, `team_inbox_check`, `team_send` and `team_status` (`HOT_TOOLS` in `toolNames.ts`) carry
-`_meta: {"anthropic/alwaysLoad": true}` on their `tools/list` entries. Claude Code defers MCP tools
-behind ToolSearch by default and reads this key per tool, so these four are in the prompt from the
-first turn and the rest stay deferred (code.claude.com/docs/en/mcp, "Mark a tool to load upfront or
-stay deferred"). It needs no user config, and a user's server-level `"alwaysLoad": false` still
-overrides it. The four schemas are about 3 KB (~750 tokens) of standing context per turn, which is
-why the set is pinned by `hotTools.test.ts` rather than left to grow. Cursor documents no
+Thirteen tools (`HOT_TOOLS` in `toolNames.ts`) carry `_meta: {"anthropic/alwaysLoad": true}` on
+their `tools/list` entries: `team_join`, `team_inbox_check`, `team_send`, `team_status` (lane
+01M4S53E79), then `team_next`, `lane_board`, `lane_open`, `lane_claim`, `lane_update`, `lane_submit`,
+`lane_resolve`, `team_memory_read`, `team_memory_save` ([ADR 741](../decisions/741-mcp-hot-tools-lane-lifecycle.md)).
+Claude Code defers MCP tools behind ToolSearch by default and reads this key per tool, so these are
+in the prompt from the first turn and the other 18 stay deferred (code.claude.com/docs/en/mcp,
+"Mark a tool to load upfront or stay deferred"). It needs no user config, and a user's server-level
+`"alwaysLoad": false` still overrides it. The thirteen schemas are about 12.4 KB (~3,100 tokens) of
+standing context per turn; a deferred tool instead costs a whole turn at the session's full context
+the first time it is needed (median $0.30 and 2.7 s on revive, ADR 741), so a tool is hot when it
+is reached in most sessions and deferred when it is reached in few. The set is pinned by
+`hotTools.test.ts` rather than left to grow, and grows only on the measurement in
+`docs/research/hot-tools/toolsearch.py`. Cursor documents no
 per-tool or per-server loading control (cursor.com/docs/context/mcp, 2026-10-13); its dynamic-tool
 discovery step (`GetDynamicTools`, [the Cursor eval](../wiki/cursor-agent-live-doorbell-eval.md))
 is unchanged by this key.
@@ -521,7 +527,7 @@ src/
                   //   buildRemoteMcpServer(seat): the same tools for one remote MCP request (ADR 630)
   launch.ts       // the bundle's entry (dist/index.js): enables Node's compile cache, then imports index.ts and calls runAdapter() when launched (ADR 577)
   isMain.ts       // isMainModule(): was this module launched, not imported? Compares real paths, so a package-manager bin symlink (npm i -g, npx) counts as launched — a raw `file://${argv[1]}` compare exited 0 without starting there (lane 01M5BA7C3H)
-  toolNames.ts    // TOOL_NAMES: the registered-tool name list (dependency-free so guidance:check can import it; ADR 085); HOT_TOOLS: the four marked anthropic/alwaysLoad; REMOTE_TOOL_NAMES: the two registered on the remote rail only (ADR 630)
+  toolNames.ts    // TOOL_NAMES: the registered-tool name list (dependency-free so guidance:check can import it; ADR 085); HOT_TOOLS: the thirteen marked anthropic/alwaysLoad (ADR 741); REMOTE_TOOL_NAMES: the two registered on the remote rail only (ADR 630)
   config.ts       // env > binding.json > workspace.json, then occupancy surface follows capture unless MUSTERD_SURFACE or native musterd (ADR 275); + build (own dist stamp, ADR 135)
   client.ts       // HTTP + background WS client; join()/leave()/close(); `joined`/`claimed`; a liveness-ladder release first POSTs its rung to `/residency/session` (`presence.session_ended`, ADR 164 inc 2 — before `leave()`, while the Presence still authenticates it);; ADR 588 §6: `onDirected(listener)` fires on a delivered act addressed to the held seat (member `to` or eligible set) and `attestHearing()` sets a fixed heartbeat hearing for a holder with no idle-wake core; `vouchSession()` — the holder is the session (a native loop), so the ADR 164 ladder is not consulted on its heartbeat (ADR 588 §6: the `ppid` rung read launchd as an exit and released every resident wake at 15 s)
                   //   setIdentity() (late claim); addMember() (tokenless mint); buffers live while joined;
