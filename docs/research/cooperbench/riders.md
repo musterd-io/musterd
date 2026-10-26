@@ -143,3 +143,45 @@ of ADR 724 acts and push acts delivered is reported beside them with no rule.
 **Not gaming.** As riders 1–3: no instruction, hint or tool is added to any arm for it. The open
 lanes in the block and the push act are the product every seat on every team gets.
 
+
+## Rider 5: finding 026's two follow-ups — the push reaches the lanes that cover its files, and the pusher is told
+
+**Lanes:** `01M5V4GEP0` (this pre-registration), `01M5V4H40C` (the ADR and product change),
+`01M5V4HH6Z` (the run → finding 027); goal `coordination-cost`. **Status:** pre-registered 2026-10-25,
+before the product change has landed or run on CooperBench. Run manifest:
+[rider5-manifest.md](./rider5-manifest.md). Decided by nick, 2026-10-25, in session ("audience 3, head
+addition in, run it — go ahead").
+
+**What changes.** Finding 026 read ADR 730 on the 10 `core` pairs: the hook reported 20 of 20 pushes
+and the daemon recorded each, but it announced 4, because ADR 730 §3's audience — seats with an open
+ADR 724 watch on the lane — was empty for 16 (the refused seat's own push never has one; a holder's push
+before the partner's refusal or after the lane freed has none either). Three of the four announced
+holders said it again by hand, because the hook tells the pusher nothing. Three product changes, one
+ADR: (a) the audience becomes, beside the open watchers, every other seat owning a contending lane in
+the same project whose scope **covers** a file the pushing lane **names** — the ADR 150 / 691 relation
+the gate itself refuses on, so it exists before any refusal and survives the lane freeing (on the
+revive board the day of the decision: 2 lane pairs, against 12 for any glob overlap); (b) the push
+hook answers the pusher with one PostToolUse context line naming who was told, or that no other lane
+covers the lane's files; (c) the ADR 691 refusal names the lane's last pushed head when one is
+recorded, so a seat refused after the push already knows where the work is.
+
+**Read**, from the first complete musterd run on a build carrying the ADR over all 10 `core` pairs,
+with the claim run's residue scripts and rider 4's `rider4.py` unchanged:
+
+| | Count | Finding 026 (`core`) | Finding 025 |
+| --- | --- | --- | --- |
+| R5a | sends `is_signal` marks as pushed / fetch (`sends.py`) | 18 calls, $0.35 | 14, $0.26 |
+| R5b | recorded pushes of a lane's branch that fired at least one push act (`rider4.py`: pairs' `push_acts` by holder and head, over `git_pushes`) | 4 of 20 | — |
+| R5c | announced pushers who then sent a hand pushed / fetch message anyway (`rider4.py`: a `hand_pushed_sends` entry with `push_acts_so_far ≥ 1`, over the holders in `push_acts`) | 3 of 4 | — |
+
+**Verdict rule.** R5a **≤ 5** "the push event carried the signal", **≥ 12** "it did not"; between,
+"part of it", with the bodies. R5b **≥ 80%** of recorded pushes "the audience is the one that was
+missing", **≤ 40%** "it is not"; between, "part of it", with the three reasons of finding 026 re-counted.
+R5c **≤ 25%** "the pusher's line stopped the repeat", **≥ 60%** "it did not"; between, "part of it",
+with the bodies. Each rule stands alone. Reported beside them with no rule: the receiver's next move
+after each push act (`receiver_next`), ADR 724 acts, status updates, pass, cost, and how many
+refusals carried a pushed head.
+
+**Not gaming.** As riders 1–4: no instruction, hint or tool is added to any arm for it. The wider
+audience, the pusher's line and the head in the refusal are the product every seat on every team gets;
+the hook command text does not change, so the arm's pinned settings do not either.
