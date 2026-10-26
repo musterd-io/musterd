@@ -261,8 +261,8 @@ describe('pollHostOnce (ADR 131 inc 3 — lease → actuate → report)', () => 
       deferred: true,
       wakeability: 'not_enrolled',
     });
-    expect(calls.reports[0]!.reason).toMatch(/host registry/);
-    expect(lines.join('\n')).toMatch(/wake deferred: ghost.*host registry/);
+    expect(calls.reports[0]!.reason).toMatch(/registered on another machine/);
+    expect(lines.join('\n')).toMatch(/wake deferred: ghost.*registered on another machine/);
   });
 
   it('a hub seat deferred every tick logs once, still reports each time, and logs again when the reason changes (lane 01M41NQ05V)', async () => {
@@ -289,10 +289,19 @@ describe('pollHostOnce (ADR 131 inc 3 — lease → actuate → report)', () => 
     expect(reports).toBe(3);
     expect(lines.filter((l) => l.startsWith('wake deferred: ghost'))).toHaveLength(1);
     expect(lines.filter((l) => l.startsWith('wake due: ghost'))).toHaveLength(1);
+    // ADR 645 / lane 01M5WXYDQJ: a seat on the other machine behind this label is said to be there,
+    // and no hint anywhere prints the retired `--as` (ADR 442).
+    expect(lines.join('\n')).toMatch(/registered on another machine/);
+    expect(lines.join('\n')).toMatch(/--seat ghost --workspace <its folder>/);
+    expect(lines.join('\n')).not.toMatch(/--as/);
     // The seat gets registered here with a dead workspace: a different fault, so it is said.
     await poll([entryOf(), entryOf({ seat: 'ghost', workspace: '/ws/ghost' })]);
     expect(lines.filter((l) => l.startsWith('wake deferred: ghost'))).toHaveLength(2);
     expect(lines.at(-1)).toMatch(/missing or has no binding/);
+    expect(lines.at(-1)).toMatch(
+      /from an admin's own Workspace, re-run `musterd residency on --seat ghost/,
+    );
+    expect(lines.join('\n')).not.toMatch(/--as/);
   });
 
   it('a registered seat whose workspace is unreadable DEFERS as enrolled_dead_workspace (ADR 189)', async () => {
