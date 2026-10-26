@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   OAUTH_RATE_LIMITS,
@@ -374,32 +375,85 @@ function consentPage(input: {
 <input type="hidden" name="code_challenge" value="${e(input.code_challenge)}">
 <input type="hidden" name="code_challenge_method" value="S256">
 ${input.scope ? `<input type="hidden" name="scope" value="${e(input.scope)}">` : ''}`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in to ${e(input.team)} — musterd</title></head><body>
+  return htmlPage(
+    `Sign in to ${e(input.team)} — musterd`,
+    `<main>
+<p class="brand">musterd</p>
 <h1>${e(input.clientName)} wants to join <b>${e(input.team)}</b></h1>
-${input.clientHost ? `<p>Client ID host: <code>${e(input.clientHost)}</code></p>` : ''}
-<p>Signing in adds this app as your seat on the team. It can read the inbox and send as you until you revoke it.</p>
+${input.clientHost ? `<p class="host">Client ID host: <code>${e(input.clientHost)}</code></p>` : ''}
+<p class="lede">Signing in adds this app as your seat on the team. It can read the inbox and send as you until you revoke it.</p>
+<section class="primary">
 <h2>I'm new — I have an invite</h2>
 <form method="post" action="">
 ${hidden}
-<label>Invite (the room code, or the value from the join link) <input type="text" name="invite" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC-1234-5678"></label><br>
-<label>Pick a name <input type="text" name="member" autocomplete="off"></label><br>
+<label>Invite (the room code, or the value from the join link) <input class="mono" type="text" name="invite" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC-1234-5678"></label>
+<label>Pick a name <input type="text" name="member" autocomplete="off"></label>
 <button type="submit">Join ${e(input.team)}</button>
 </form>
+</section>
+<section>
 <h2>I already have a seat</h2>
 <form method="post" action="">
 ${hidden}
-<label>Seat name <input type="text" name="member" autocomplete="username"></label><br>
-<label>Credential (<code>mscr_…</code>) <input type="password" name="credential" autocomplete="current-password"></label><br>
+<label>Seat name <input type="text" name="member" autocomplete="username"></label>
+<label>Credential (<code>mscr_…</code>) <input class="mono" type="password" name="credential" autocomplete="current-password"></label>
 <button type="submit">Sign in this app as me</button>
 </form>
+</section>
+<section>
 <h2>Connecting an agent?</h2>
 <form method="post" action="">
 ${hidden}
-<label>Paste its connect link (or the code from the link's page) <input type="text" name="agent_connect" autocomplete="off" autocapitalize="off" spellcheck="false"></label><br>
+<label>Paste its connect link (or the code from the link's page) <input class="mono" type="text" name="agent_connect" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
 <button type="submit">Connect this agent to ${e(input.team)}</button>
-</form></body></html>`;
+</form>
+</section>
+</main>`,
+  );
+}
+
+/**
+ * The one stylesheet the OAuth pages carry (brand.md §2–3: zinc neutrals, mustard accent, DM Sans
+ * and JetBrains Mono where installed). It is inline so the pages need no asset route on the OAuth
+ * surface, and the page CSP admits exactly it by hash — no other style, no script, no image.
+ */
+const PAGE_CSS = `:root{color-scheme:light dark;--bg:#fafafa;--card:#fff;--line:#e4e4e7;--ink:#18181b;--muted:#71717a;--accent:#e1ad01;--accent-ink:#7a5a06;--focus:#b8860b}
+@media (prefers-color-scheme:dark){:root{--bg:#09090b;--card:#18181b;--line:#3f3f46;--ink:#fafafa;--muted:#a1a1aa;--accent-ink:#efc94c;--focus:#efc94c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:30rem;margin:0 auto;padding:2.5rem 1rem 3rem}
+.brand{margin:0 0 1.5rem;font-weight:700;letter-spacing:-.01em;color:var(--muted)}
+h1{margin:0 0 .5rem;font-size:1.5rem;line-height:1.25;font-weight:600;letter-spacing:-.01em}
+h1 b{font-weight:700;color:var(--accent-ink)}
+.host{margin:0 0 .75rem;color:var(--muted);font-size:.875rem}
+.lede{margin:0 0 1.5rem;color:var(--muted)}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+code{font-size:.875em}
+section{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:1.25rem;margin:0 0 .75rem}
+section.primary{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+h2{margin:0 0 1rem;font-size:1rem;font-weight:600}
+section:not(.primary) h2{color:var(--muted)}
+label{display:block;margin:0 0 .875rem;font-size:.875rem;color:var(--muted)}
+input{display:block;width:100%;margin-top:.375rem;padding:.625rem .75rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:1rem}
+input:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+button{width:100%;min-height:2.75rem;padding:.625rem 1rem;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit;font-weight:600;cursor:pointer}
+section.primary button{border-color:var(--accent);background:var(--accent);color:#18181b}
+@media (hover:hover){button:hover{filter:brightness(.95)}}`;
+
+/**
+ * The OAuth pages' CSP: only `PAGE_CSS`, never framed (a framed consent page is a clickjacking
+ * target), no base rewriting. Deliberately no `form-action`: Chrome applies it to the redirect a
+ * form submission follows, and the consent POST's 302 goes to the client's own origin.
+ */
+const PAGE_CSP = `default-src 'none'; style-src 'sha256-${createHash('sha256').update(PAGE_CSS).digest('base64')}'; frame-ancestors 'none'; base-uri 'none'`;
+
+function htmlPage(title: string, body: string): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>${title}</title><style>${PAGE_CSS}</style></head><body>
+${body}
+</body></html>`;
 }
 
 function sendHtml(res: ServerResponse, status: number, html: string): void {
@@ -409,6 +463,9 @@ function sendHtml(res: ServerResponse, status: number, html: string): void {
     'content-length': String(bytes),
     'cache-control': 'no-store',
     pragma: 'no-cache',
+    'content-security-policy': PAGE_CSP,
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'no-referrer',
   });
   res.end(html);
 }
@@ -1038,11 +1095,19 @@ export async function handleOAuthRoutes(
       sendHtml(
         res,
         200,
-        `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body>
-<h1>Sign out a phone seat on ${escapeHtml(slug)}</h1>
+        htmlPage(
+          `Sign out — ${escapeHtml(slug)} — musterd`,
+          `<main>
+<p class="brand">musterd</p>
+<h1>Sign out a phone seat on <b>${escapeHtml(slug)}</b></h1>
+<section class="primary">
 <form method="post" action="">
-<label>Token (<code>msat_…</code> or <code>msrt_…</code>) <input type="password" name="token"></label><br>
-<button type="submit">Revoke</button></form></body></html>`,
+<label>Token (<code>msat_…</code> or <code>msrt_…</code>) <input class="mono" type="password" name="token"></label>
+<button type="submit">Revoke</button>
+</form>
+</section>
+</main>`,
+        ),
       );
       return true;
     }
