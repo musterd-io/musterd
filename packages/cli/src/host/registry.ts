@@ -134,3 +134,16 @@ export function removeHostEntry(
   saveHostRegistry({ entries: rest }, path);
   return true;
 }
+
+/**
+ * The command an admin runs from their own Workspace to enrol a seat here (ADR 442): `--seat` is the
+ * agent and `--workspace` is that agent's folder. A caller that knows either fills it in; the angle
+ * brackets stay where it does not. One helper for the residency command AND the host loop, so no
+ * printed hint can drift back to the retired `--as <admin>` form (nick ran that on 2026-10-21).
+ */
+export function enrollHint(seat?: string, workspace?: string): string {
+  return `musterd residency on --seat ${seat ?? '<seat>'} --workspace ${workspace ?? '<its folder>'}`;
+}
+
+/** Printed beside the hint, so a copied command is not run inside the agent's folder. */
+export const FROM_ADMIN = "from an admin's own Workspace";

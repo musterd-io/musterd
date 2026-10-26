@@ -25,10 +25,12 @@ import { codexCapability, resolveCodexBin } from '../codexBin.js';
 import { findBinding, loadConfig, saveBinding } from '../config.js';
 import { CliError } from '../errors.js';
 import {
-  type HostRegistryEntry,
+  enrollHint,
+  FROM_ADMIN,
   hostRegistryPath,
   loadHostRegistry,
   removeHostEntry,
+  type HostRegistryEntry,
   upsertHostEntry,
 } from '../host/registry.js';
 import { keychainLookup, seatKeyService } from '../keychain.js';
@@ -69,17 +71,8 @@ const POLICY_FLAGS_USAGE =
   '[--transcript-max <MiB, fractions OK>] [--dream on|off] [--dream-nightly <1-3>] ' +
   '[--dream-budget <usd>]';
 
-/**
- * The command an admin runs from their own Workspace (ADR 442). `--seat` is the agent and
- * `--workspace` is that agent's folder. A caller that knows either fills it in; the angle brackets
- * stay where it does not. One helper, so the drift lines cannot name a different command.
- */
-function enrollHint(seat?: string, workspace?: string): string {
-  return `musterd residency on --seat ${seat ?? '<seat>'} --workspace ${workspace ?? '<its folder>'}`;
-}
-
-/** Printed beside the hint, so a copied command is not run inside the agent's folder. */
-const FROM_ADMIN = "from an admin's own Workspace";
+// The enrolment hint and its "from an admin's own Workspace" tail live in host/registry.ts (shared
+// with the host loop, lane 01M5WXYDQJ): one helper, so no printed line can drift back to `--as`.
 
 /**
  * The classes `--harness` accepts (ADR 281). Absent, or a short guess like `claude`, used to be

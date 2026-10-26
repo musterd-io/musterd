@@ -38,7 +38,13 @@ import {
   type MeteringGateway,
   type MeteringGatewayOptions,
 } from './gateway.js';
-import { canonicalServer, loadHostRegistry, type HostRegistryEntry } from './registry.js';
+import {
+  canonicalServer,
+  enrollHint,
+  FROM_ADMIN,
+  loadHostRegistry,
+  type HostRegistryEntry,
+} from './registry.js';
 import {
   SPEND_APPROVAL_WAKE_ENDED,
   armSpendApproval,
@@ -522,7 +528,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
     if (keyed.length === 0) {
       deps.log(
         `! no agent key readable for ${group.team} on ${group.server} — ` +
-          `re-run \`musterd residency on\` in a seat's workspace`,
+          `${FROM_ADMIN}, run \`${enrollHint()}\` for a seat that lives on this machine`,
       );
       return;
     }
@@ -589,8 +595,11 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         ? null
         : registered
           ? `workspace ${registered.workspace} is missing or has no binding — the registry entry ` +
-            `outlived it; re-run \`musterd residency on --as <admin>\` in the seat's real workspace`
-          : 'seat not in this machine’s host registry — re-run `musterd residency on` in its workspace';
+            `outlived it; ${FROM_ADMIN}, re-run \`${enrollHint(order.seat)}\` naming the seat's real workspace`
+          : // ADR 645: two machines can answer one host label, and the daemon hands each of them
+            // every due wake under it. A seat registered on the other one is not a fault here.
+            `seat is enrolled under this host label but registered on another machine — that host ` +
+            `wakes it; to host it here instead, ${FROM_ADMIN}, run \`${enrollHint(order.seat)}\``;
       const repeat = deferral !== null && deps.deferralsLogged?.get(order.seat) === deferral;
       if (entry) deps.deferralsLogged?.delete(order.seat);
       if (!repeat)
