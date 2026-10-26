@@ -187,3 +187,50 @@ refusals carried a pushed head.
 **Not gaming.** As riders 1–4: no instruction, hint or tool is added to any arm for it. The wider
 audience, the pusher's line and the head in the refusal are the product every seat on every team gets;
 the hook command text does not change, so the arm's pinned settings do not either.
+
+## Rider 6: finding 027's remainder — the push reaches the partner whose lane just ended, and carries what changed
+
+**Lanes:** `01M5WJGW3H` (this pre-registration), `01M5WJJAMF` (the ADR and product change),
+`01M5WJJGNJ` (the run → finding 028); goal `coordination-cost`. **Status:** pre-registered 2026-10-26,
+before the product change has landed or run on CooperBench. Run manifest:
+[rider6-manifest.md](./rider6-manifest.md). Decided by nick, 2026-10-26, in session ("Option 2 sounds
+good", with the derived hand-off folded in).
+
+**What changes.** Finding 027 read ADR 731 on the 10 `core` pairs: 12 of 22 recorded pushes fired an
+act, and all 10 silent ones came after the partner's lane had left the contending states — resolved (8),
+released (1 lane, 2 pushes) or handed off (1) minutes earlier — though in 7 of those 10 pairs that
+finished partner went on to merge the pusher's branch. The 8 of 12 announced pushers who said it again
+by hand all opened with what they had changed, which neither the push act nor the ADR 724 freed act
+carries. Two product changes, one ADR: (a) the covering audience also counts another owner's lane on a
+file the pushing lane names that **left the contending states within a window** (30 min) and still has
+an owner on record — the interest a lane recorded does not end with the lane; (b) the push hook reports
+the **commit subjects and changed files** since the remote-tracking ref's previous value (its reflog;
+on a first push, the pushed commits), capped, and the push act body carries them, so the receiver reads
+what changed without a hand message. The hook command text does not change.
+
+**Why these rules.** Rider 5's $18.54 went 28% to musterd calls, waits and gate refusals: 128
+`team_inbox_check` calls ($2.90), 82 of them in wait mode. The "pushed / fetch" sends riders 4 and 5
+read were $0.25. R6b is the first rule aimed at the wait bucket: the finished partner waiting to merge
+should be woken by the push act instead of polling.
+
+**Read**, from the first complete musterd run on a build carrying the ADR over all 10 `core` pairs,
+with the claim run's residue scripts, rider 4's `rider4.py` and rider 5's `rider5.py` unchanged:
+
+| | Count | Finding 027 (`core`) | Finding 026 |
+| --- | --- | --- | --- |
+| R6a | recorded pushes that fired at least one push act (`rider5.py`: `announced_pushes` over `recorded_pushes`) | 12 of 22 | 4 of 20 |
+| R6b | `team_inbox_check` calls in wait mode (`mtools.py`: the `musterd:team_inbox_check (wait)` line) | 82 calls, $1.52 | — |
+| R6c | announced pushers who then sent a hand pushed / fetch message anyway (`rider5.py`: `holders_repeating_by_hand` over `announced_holders`) | 8 of 12 | 3 of 4 |
+
+**Verdict rule.** R6a **≥ 90%** of recorded pushes "the ended partner was the missing audience",
+**≤ 70%** "it was not"; between, "part of it", with each silent push's reason from the daemon log. R6b
+**≤ 55** calls "the push act replaced the poll", **≥ 75** "it did not"; between, "part of it", with each
+wait's position relative to the partner's push. R6c **≤ 25%** "what changed in the act stopped the
+repeat", **≥ 60%** "it did not"; between, "part of it", with the bodies. Each rule stands alone.
+Reported beside them with no rule: plain `team_inbox_check` calls (46, $1.38), `ToolSearch` calls (60,
+$1.17), "pushed / fetch" sends (12, $0.25), the receiver's next move after each push act, ADR 724
+acts, board reads, status updates, pass, cost.
+
+**Not gaming.** As riders 1–5: no instruction, hint or tool is added to any arm for it. The ended-lane
+audience and the derived hand-off are the product every seat on every team gets; the hook command text
+does not change, so the arm's pinned settings do not either.
