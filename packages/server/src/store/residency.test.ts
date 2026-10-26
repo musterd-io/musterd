@@ -811,6 +811,8 @@ withDrivers('residency', (o, kind) => {
     it('ADR 735: the act lane wakes a plain message inside the cooldown, the order carries the act time, and the hourly cap still holds', async () => {
       const { db, team, nick, ada } = await seed();
       await enroll(db, team, ada, HOST, { lane: 'act' });
+      // The act lane's horizon is the enrollment's `updated_at`: let the clock move past it.
+      await new Promise((r) => setTimeout(r, 5));
       const now = Date.now();
       // A wake completed 5 minutes ago — inside the 30-minute batched cooldown the act lane ignores.
       await wakeOutcomeRow(db, team, 'Ada', 'old-act', 'residency.woke', now - 5 * 60_000);
@@ -826,6 +828,25 @@ withDrivers('residency', (o, kind) => {
       });
       expect(orders[0]!.act_ts).toBe(now - 90_000);
 
+      // An act received BEFORE the (re-)enrollment is backlog, not the next act: it never wakes.
+      const { db: db4, team: team4, nick: nick4, ada: ada4 } = await seed();
+      await msg(db4, team4, nick4, ada4, 'message', 'old', Date.now() - 10 * 60_000);
+      // Received ten minutes before the switch (receipt order is `created_at`, stamped at insert).
+      await db4.run('UPDATE messages SET created_at = ? WHERE id = ?', [
+        Date.now() - 10 * 60_000,
+        'old',
+      ]);
+      await enroll(db4, team4, ada4, HOST, { lane: 'act' });
+      expect(
+        await claimWakeLeases(db4, team4.id, team4.slug, HOST, PRESENCE_TIMEOUT_MS),
+      ).toHaveLength(0);
+      await msg(db4, team4, nick4, ada4, 'message', 'new', Date.now() + 5);
+      expect(
+        (await claimWakeLeases(db4, team4.id, team4.slug, HOST, PRESENCE_TIMEOUT_MS)).map(
+          (o) => o.act_id,
+        ),
+      ).toEqual(['new']);
+
       // The same message on the launch lanes: nothing, as the wiki page says.
       const { db: db2, team: team2, nick: nick2, ada: ada2 } = await seed();
       await enroll(db2, team2, ada2);
@@ -837,6 +858,7 @@ withDrivers('residency', (o, kind) => {
       // The hourly cap is not waived: at the cap, an act-lane seat waits like any other.
       const { db: db3, team: team3, nick: nick3, ada: ada3 } = await seed();
       await enroll(db3, team3, ada3, HOST, { lane: 'act' });
+      await new Promise((r) => setTimeout(r, 5));
       for (let i = 0; i < WAKE_HOURLY_CAP; i++) {
         await wakeOutcomeRow(db3, team3, 'Ada', `past-${i}`, 'residency.woke', now - 10 * 60_000);
       }

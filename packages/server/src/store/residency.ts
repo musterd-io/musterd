@@ -1551,12 +1551,17 @@ export async function listDirectedSince(
   db: Driver,
   member: { id: string; team_id: string },
   cursorTs: number,
+  /** The act-lane horizon (ADR 735 §1 amended): received at or after the (re-)enrollment. `>=`, not
+   *  `>`: the cursor is the last READ row, so it is strict; the horizon is a point in time an act may
+   *  share to the millisecond with the enroll that set it. */
+  since = 0,
 ): Promise<MessageRow[]> {
   return db.all<MessageRow>(
     `SELECT * FROM messages
-        WHERE team_id = ? AND to_member = ? AND from_member != ? AND created_at > ?
+        WHERE team_id = ? AND to_member = ? AND from_member != ?
+          AND created_at > ? AND created_at >= ?
         ORDER BY created_at ASC LIMIT 200`,
-    [member.team_id, member.id, member.id, cursorTs],
+    [member.team_id, member.id, member.id, cursorTs, since],
   );
 }
 
@@ -1570,6 +1575,10 @@ async function dueCandidates(
     /** ADR 735: the act lane — every unread directed act to the seat, any kind, is a batched-lane
      *  candidate; the caller has already waived the cooldown for this lane. */
     act: boolean;
+    /** ADR 735 (amended 2026-10-26): the act lane's horizon — the enrollment row's `updated_at`, i.e.
+     *  when the seat was last (re-)enrolled. An act received before it is backlog, not "the next
+     *  directed act": grokbot's first act-lane wake was a `message` that had waited 838 hours. */
+    actSince: number;
     raisedDeferralWakes: boolean;
     /** ADR 378 inc 4: does a huddle OPEN that names this seat summon it? Effective seat policy. */
     conveneHuddles: boolean;
@@ -1687,7 +1696,7 @@ async function dueCandidates(
   // the report and the ledger need no new value, and the order's `act_ts` says what the host prints.
   if (lanes.act) {
     const cursor = await getCursor(db, member.id);
-    for (const r of await listDirectedSince(db, member, cursor.last_read_ts)) {
+    for (const r of await listDirectedSince(db, member, cursor.last_read_ts, lanes.actSince)) {
       if (seen.has(r.id)) continue;
       seen.add(r.id);
       batched.push({
@@ -2375,6 +2384,7 @@ async function deriveSeatPasses(
         immediate: policy.lane !== 'batched',
         batched: cooled && policy.lane !== 'interrupt',
         act: policy.lane === 'act',
+        actSince: enrollment.updated_at,
         raisedDeferralWakes: policy.raised_deferral_wakes,
         conveneHuddles: policy.convene_huddles,
         wakeOnIncidentRoute,
