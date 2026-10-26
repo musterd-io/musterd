@@ -70,7 +70,7 @@ import {
   writeSeatFile,
 } from '../roster.js';
 import { cliBuild } from '../version.js';
-import { setPolicySigned } from './authority.js';
+import { collectApproval, setPolicySigned } from './authority.js';
 import { findWorkspaceDir, inherited, rejectAs, resolve, resolveRead } from './helpers.js';
 import { teamPolicyStyle } from './policy.js';
 
@@ -445,6 +445,39 @@ function installTarget(
   return dirs[0]!;
 }
 
+/**
+ * `credential_mint` is a listed high-authority act (ADR 662): the write goes first without a proof,
+ * which is all a human with no enrolled key could do; when the server answers
+ * `authority refused (no_signature)`, the server-built descriptor over the exact body is approved
+ * with the passkey and the same mint is sent again carrying the proof.
+ */
+export async function mintBootstrapCredentialSigned(
+  http: HttpClient,
+  team: string,
+  body: {
+    use: 'claim_seat' | 'claim_role' | 'host';
+    target: string;
+    label?: string;
+    expires_at?: number;
+  },
+) {
+  try {
+    return await http.mintBootstrapCredential(team, body);
+  } catch (err) {
+    if (!(err instanceof CliError && /authority refused \(no_signature\)/.test(err.message)))
+      throw err;
+  }
+  process.stdout.write(
+    'Minting a bootstrap credential is a high-authority act — approve it with your passkey.\n',
+  );
+  const approval = await collectApproval(http, team, 'credential_mint', body.target, {
+    action: 'bootstrap_mint',
+    use: body.use,
+    target: body.target,
+  });
+  return http.mintBootstrapCredential(team, { ...body, approval });
+}
+
 /** Admin lifecycle for ADR 344's independently scoped bootstrap credentials. */
 async function teamBootstrap(parsed: Parsed): Promise<number> {
   const action = parsed.positionals[1];
@@ -480,7 +513,7 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
     const installDir = install
       ? installTarget(team, target, server, flagStr(parsed.flags, 'into'))
       : undefined;
-    const minted = await http.mintBootstrapCredential(team, {
+    const minted = await mintBootstrapCredentialSigned(http, team, {
       use: use as 'claim_seat' | 'claim_role' | 'host',
       target,
       ...(flagStr(parsed.flags, 'label') ? { label: flagStr(parsed.flags, 'label')! } : {}),
