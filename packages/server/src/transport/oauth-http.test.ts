@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/server';
 import { OAUTH_RATE_LIMITS, PROTOCOL_VERSION } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -273,6 +273,15 @@ withDrivers('oauth-http', (_o, kind) => {
 
       const page = await get(authorizeUrl(clientId));
       expect(page.status).toBe(200);
+      // The page is styled by exactly one inline stylesheet, admitted by hash; never framed.
+      const csp = page.headers.get('content-security-policy')!;
+      const css = /<style>([\s\S]*?)<\/style>/.exec(page.text)![1]!;
+      const hash = createHash('sha256').update(css).digest('base64');
+      expect(csp).toContain(`style-src 'sha256-${hash}'`);
+      expect(csp).toContain("default-src 'none'");
+      expect(csp).toContain("frame-ancestors 'none'");
+      expect(csp).not.toContain('form-action'); // the consent POST's 302 leaves for the client
+      expect(page.headers.get('x-frame-options')).toBe('DENY');
       expect(page.text).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
       expect(page.text).toContain('chatgpt.com');
       expect(page.text).not.toContain('<script>alert(1)</script>');
