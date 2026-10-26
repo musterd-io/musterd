@@ -103,6 +103,8 @@ The host's dream-wake self-heal repaired 5 hooks on grokbot, wanderer and alfie 
 
 On night 2026-10-24 the falsifier came out the second way. In the dream batch (host.log lines 23555–23591), no seat printed a `wake self-heal:` line, and that includes grokbot, wanderer and alfie. This is one night, so the claim above stays as written. Two readings are still open: the repair held, or the batch stopped logging the line. The next batch that prints `repaired … 5 hooks` for any of the three seats decides between them.
 
+Night 2026-10-25 decided it: the line is back, so the night 2026-10-24 batch was a gap, not a fix. host.log line 23685 prints `wake self-heal: alfie — repaired 5 hooks.`, alfie's third such night out of four. The same batch adds seats the claim did not name: izzo repaired 5 hooks (line 23660), miley 2 (23664) and dolly 2 (23675). dolly had repaired no hooks on nights 2026-10-22 and 2026-10-23. grokbot and wanderer printed no self-heal line. The repair still has to run again on most nights (2026-10-25; falsify: two dream batches running in which alfie and izzo print no `repaired … hooks` line). <!-- claim: defect -->
+
 ## What it will never touch
 
 The ADR 261 permission floor, and any file outside the seat's worktree (the machine-wide Claude Code settings, Codex's git-common-dir `hooks.json`) — spec 2026-09-16, ADR 408 decision 2. Falsify: leave a seat's `.claude/settings.local.json` one floor entry short, run the probe, and check the entry is STILL absent and the line names `--refresh-permissions`.
