@@ -406,6 +406,8 @@ export function isDaemonUnreachable(err: unknown): boolean {
   );
 }
 
+const CONTENT_TYPE = 'content-type';
+
 /**
  * Parse a reply body as JSON, or say plainly what came back instead. A team server always answers
  * JSON, so a body that is not JSON was written by something in front of it: a Cloudflare or Fly
@@ -425,7 +427,9 @@ export function parseReplyBody(
   try {
     return JSON.parse(text);
   } catch {
-    const type = res.headers.get('content-type')?.split(';')[0]?.trim() || 'no content-type';
+    // A named header, not a quoted literal in the call: `cli-flags:check` reads a call with one
+    // quoted word as a flag read, and it follows every command that imports HttpClient into here.
+    const type = res.headers.get(CONTENT_TYPE)?.split(';')[0]?.trim() || 'no content-type';
     const head = text.trim().slice(0, 60).replace(/\s+/g, ' ');
     throw new CliError(
       `${method} ${path} answered HTTP ${String(res.status)} with ${type}, not JSON — ` +
