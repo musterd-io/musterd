@@ -70,7 +70,8 @@ launch lanes never wake on), failed wakes, and the per-wake cost on the launch l
    does, the manifest's finding records the value. _Done for `izzo` at 2026-10-26 ~19:33Z from nick's
    Workspace on his Mac (`/Users/nick/musterd/revive/agents/izzo`); the re-enrollment recorded the
    harness as **codex** (the row had said claude-code), overrides `{"lane":"act"}`, and noted a live
-   session that keeps its old grant until its next wake. `miley` and `grokbot` are nick's call._
+   session that keeps its old grant until its next wake. `miley` and `grokbot` followed by ~19:40Z, same
+   machine, same flag — all three proposed seats are on the lane; hourly cap at the team default (2)._
 4. **48 h on the lane**, counted from the first seat's switch. The kill rule is checked at the day
    boundary.
 5. **Read once**, write finding 029, and leave the seats on the lane or not as nick decides.
