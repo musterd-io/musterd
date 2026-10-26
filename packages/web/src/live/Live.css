@@ -9026,6 +9026,13 @@
   outline: 2px solid var(--lc-focus);
   outline-offset: -2px;
 }
+/* A share that failed, in the same card the choice used. */
+.lc-share--failed {
+  display: block;
+  padding: var(--lc-3) var(--lc-4);
+  font-size: 13px;
+  color: var(--lc-danger-ink);
+}
 .lc-share__label {
   font-size: 13px;
   font-weight: 600;

@@ -933,6 +933,15 @@ const WATCH_GRADES: { grade: WatchGrade; label: string; says: string }[] = [
  * Minting it takes a human admin's credential (ADR 580), so the button is only offered signed in, and
  * `cfg.token` is the member's own — used to mint, never put in the link.
  */
+/** The share failure in words a person acts on; the daemon's codes are for the audit (lane 01M5QE7HXP). */
+function watchLinkFailure(e: unknown): string {
+  const msg = e instanceof Error ? e.message : '';
+  if (/no_signature/.test(msg)) return 'No link made: this needs your passkey. Try again.';
+  if (/passkey|localhost URL/i.test(msg)) return `No link made: ${msg.replace(/; nothing was sent$/, '')}.`;
+  if (/admin|unauthorized|forbidden/i.test(msg)) return 'Only a team admin can share a watch link.';
+  return 'Could not make a watch link. Try again.';
+}
+
 function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
   const [choosing, setChoosing] = useState(false);
   const [copied, setCopied] = useState<WatchGrade | null>(null);
@@ -943,6 +952,17 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
   useEffect(() => {
     if (choosing) firstChoice.current?.focus();
   }, [choosing]);
+  // A failure stays up long enough to read, and goes on the next press anywhere.
+  useEffect(() => {
+    if (!failed) return;
+    const t = window.setTimeout(() => setFailed(null), 8000);
+    const away = () => setFailed(null);
+    document.addEventListener('pointerdown', away);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener('pointerdown', away);
+    };
+  }, [failed]);
   // A press anywhere else puts the card away, as any dropdown does.
   useEffect(() => {
     if (!choosing) return;
@@ -957,16 +977,16 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
     const { origin } = window.location;
     let creds;
     try {
-      creds = await acquireWatchLinkObserver(cfg.team, cfg.token, grade);
+      // Minting a seat is `admin.roster` (ADR 662): an enrolled human's passkey signs it, or the
+      // daemon refuses it no_signature. Lazily loaded, like the verdict rail's ceremony.
+      creds = await acquireWatchLinkObserver(cfg.team, cfg.token, grade, async (name) => {
+        const { authorityProofForObserver } = await import('../live/authorityProof');
+        return authorityProofForObserver(cfg, name);
+      });
     } catch (e) {
       // Minting failed — do NOT fall back to cfg.token. That fallback is the whole bug: it would
       // silently hand out a full-visibility credential at the exact moment we meant to withhold one.
-      setFailed(
-        e instanceof Error && /admin|unauthorized|forbidden/i.test(e.message)
-          ? 'Only a team admin can share a watch link'
-          : 'Could not make a watch link — try again',
-      );
-      window.setTimeout(() => setFailed(null), 2400);
+      setFailed(watchLinkFailure(e));
       return;
     }
     const url =
@@ -990,6 +1010,14 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
       <span className="lc-sr" role="status">
         {failed ?? (copied ? `${WATCH_GRADES.find((g) => g.grade === copied)!.label} copied` : '')}
       </span>
+      {/* The failure, where the eye already is: it used to land only in the status region above,
+          so a sighted reader saw nothing happen (lane 01M5QE7HXP). Hidden from assistive tech,
+          which hears the same words from that region. */}
+      {failed && !choosing && (
+        <span className="lc-share lc-share--failed" aria-hidden="true">
+          {failed}
+        </span>
+      )}
       {/* The two grades drop down under the button as a small card, each saying what it shows —
           not two more pills spilled into the topbar. */}
       {choosing && (
@@ -1014,7 +1042,10 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
       <button
         type="button"
         className={`lc__pbtn${copied || choosing ? ' lc__pbtn--on' : ''}`}
-        onClick={() => setChoosing((c) => !c)}
+        onClick={() => {
+          setFailed(null);
+          setChoosing((c) => !c);
+        }}
         aria-expanded={choosing}
         aria-label="Share a read-only watch link"
         title={failed ?? 'Share a read-only watch link'}
