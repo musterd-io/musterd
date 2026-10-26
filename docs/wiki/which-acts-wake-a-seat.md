@@ -13,6 +13,8 @@ A sleeping seat is woken by the daemon's residency poll ([ADR 131](../decisions/
 
 Read the SQL in `openDirectedLedger`: `m.act IN ('request_help','handoff') OR (m.to_kind = 'member' AND json_extract(m.meta, '$.urgent') = 1)`. Read the filter at the end of `pendingInterrupts`: `isUrgent(m) || m.act === 'steer' || isObligation(m) || …`. A plain **`message`** matches neither. Nor does a plain **`ask`** without `urgent` (ADR 225 keys the obligation class on the daemon-set `lane_review` marker precisely so a directed `ask` alone does not raise the line), and nor do `status_update`, `accept`, `decline`, `wait`, `resolve`, `insight`, `challenge`, `defer`.
 
+**A third lane since 2026-10-26 ([ADR 735](../decisions/735-act-lane-the-seat-ends-its-turn.md)): `act`.** A seat enrolled with `--lane act` is woken on **every unread directed act, any kind**, including a plain `message`, with no cooldown — only the hourly and attempt caps and ADR 434's discharge gate it. On that lane the note on the desk rings. Everything below is the two launch lanes, which every other seat still runs.
+
 So the honest reading of the act table is: **`message` is a note left on a desk.** If the desk is occupied it is read at the next tool boundary; if not, it waits for the seat to come in.
 
 ## The trap: the sender is told nothing (2026-09-17, stanley and dolly independently; falsify: send a `message` to a seat whose roster row is `wakeable` and not live, then `grep <act id> ~/.musterd/host.log` — no lease is ever minted for it) <!-- claim: defect -->

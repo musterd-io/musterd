@@ -28,12 +28,16 @@ export const WakeLaneSchema = z.enum(WAKE_LANES);
  * `residency off` (the kill switch); "pause this machine" is stopping the actuator.
  */
 export const ResidencyPolicySchema = z.object({
-  /** Which wake lanes are live for the seat: both (launch default), or one. */
-  lane: z.enum(['both', 'interrupt', 'batched']).default('both'),
-  /** Batched-lane cooldown between wakes (1min–24h). */
+  /** Which wake lanes are live for the seat: both (launch default), or one — or `act` (ADR 735):
+   *  every open directed act wakes the seat on the next poll, with no cooldown between wakes. The
+   *  hourly and attempt caps and ADR 434's discharge still gate it. The seat that runs this way
+   *  ends its turn instead of waiting; finding 028 measured the wait as the cost. */
+  lane: z.enum(['both', 'interrupt', 'batched', 'act']).default('both'),
+  /** Batched-lane cooldown between wakes (1min–24h). Not read on the act lane. */
   cooldown_ms: z.number().int().min(60_000).max(86_400_000).default(1_800_000),
-  /** Wakes per seat per hour, both lanes. */
-  hourly_cap: z.number().int().min(1).max(20).default(2),
+  /** Wakes per seat per hour, every lane. The range reaches 60 (ADR 735) so an act-lane seat may be
+   *  resumed once a minute at most; the default stays 2 and only a per-seat override goes past 20. */
+  hourly_cap: z.number().int().min(1).max(60).default(2),
   /** Attempts per act before a terminal `residency.wake_exhausted`. */
   attempt_cap: z.number().int().min(1).max(10).default(3),
   /** `reply-only` scopes the woken session to the musterd tools; `seat-policy` defers to the
@@ -592,6 +596,10 @@ export const WakeOrderSchema = z
     act: z.string().optional(),
     /** Delimited sender name. Absent on board continuation (the board is the work order). */
     sender: z.string().optional(),
+    /** ADR 735: when the triggering act was sent (ms epoch), so the host can say how long the act
+     *  waited for this wake — the one latency the act lane exists to shorten, readable from the
+     *  host's own log without the daemon's audit. Absent on board continuation and from an older daemon. */
+    act_ts: z.number().int().optional(),
     lane: WakeLaneSchema,
     /** The daemon-composed one-line spawn prompt (structured fields only, ADR 088 §4). */
     composed_line: z.string(),

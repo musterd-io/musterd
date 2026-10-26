@@ -18,7 +18,13 @@ import type {
   MeteringGateway,
   MeteringGatewayOptions,
 } from './gateway.js';
-import { healBeforeWake, pollHostOnce, type HostPollDeps, type WakeClient } from './loop.js';
+import {
+  healBeforeWake,
+  pollHostOnce,
+  waitedClause,
+  type HostPollDeps,
+  type WakeClient,
+} from './loop.js';
 import type { HostRegistryEntry } from './registry.js';
 import { SPEND_APPROVAL_WAKE_ENDED, type SpendApprovalSeat } from './spendApproval.js';
 
@@ -2042,5 +2048,16 @@ describe('spend approval is armed once per non-human wake (ADR 636)', () => {
     expect(supplement.reason).toBe(SPEND_APPROVAL_WAKE_ENDED);
     expect(supplement.budget_exhausted).toBeUndefined();
     expect(lines.some((l) => l.includes(SPEND_APPROVAL_WAKE_ENDED))).toBe(true);
+  });
+});
+
+describe('waitedClause (ADR 735)', () => {
+  it('says how long the act waited, in the unit that fits, and nothing when the order names no act time', () => {
+    const now = 1_700_000_000_000;
+    expect(waitedClause(now - 7_000, now)).toBe(', waited 7s');
+    expect(waitedClause(now - 432_000, now)).toBe(', waited 7m12s');
+    expect(waitedClause(now - 2 * 3_600_000 - 5 * 60_000, now)).toBe(', waited 2h5m');
+    expect(waitedClause(undefined, now)).toBe('');
+    expect(waitedClause(now + 1_000, now)).toBe('');
   });
 });

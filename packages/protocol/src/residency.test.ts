@@ -24,6 +24,16 @@ import {
   isDreamDue,
 } from './residency.js';
 
+describe('ResidencyPolicySchema (ADR 735) — the act lane and the wider hourly cap', () => {
+  it('accepts lane: act and an hourly cap up to 60, and refuses past it', () => {
+    expect(ResidencyPolicySchema.parse({ lane: 'act' }).lane).toBe('act');
+    expect(ResidencyPolicySchema.parse({ hourly_cap: 60 }).hourly_cap).toBe(60);
+    expect(ResidencyPolicySchema.safeParse({ hourly_cap: 61 }).success).toBe(false);
+    expect(ResidencyPolicySchema.safeParse({ lane: 'off' }).success).toBe(false);
+    expect(ResidencyPolicySchema.parse({}).hourly_cap).toBe(2);
+  });
+});
+
 describe('ResidencyPolicySchema (ADR 131 inc 5) — the knobs, defaults in ONE place', () => {
   it('parse({}) yields the launch defaults (owner call 2026-07-11)', () => {
     const p = ResidencyPolicySchema.parse({});

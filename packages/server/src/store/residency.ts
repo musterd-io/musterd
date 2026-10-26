@@ -1543,6 +1543,23 @@ async function sentFromWake(db: Driver, actId: string): Promise<boolean> {
  * lane (kept as a candidate there, ahead of the ledger's, since it is still interrupt-class), so
  * machine-to-machine chains run at cooldown cadence under the caps, without lineage tracking.
  */
+/**
+ * ADR 735: every directed act to the seat from someone else that the seat has not read — the act
+ * lane's candidate set, in receipt order. No kind filter: on this lane a plain `message` wakes.
+ */
+export async function listDirectedSince(
+  db: Driver,
+  member: { id: string; team_id: string },
+  cursorTs: number,
+): Promise<MessageRow[]> {
+  return db.all<MessageRow>(
+    `SELECT * FROM messages
+        WHERE team_id = ? AND to_member = ? AND from_member != ? AND created_at > ?
+        ORDER BY created_at ASC LIMIT 200`,
+    [member.team_id, member.id, member.id, cursorTs],
+  );
+}
+
 async function dueCandidates(
   db: Driver,
   teamSlug: string,
@@ -1550,6 +1567,9 @@ async function dueCandidates(
   lanes: {
     immediate: boolean;
     batched: boolean;
+    /** ADR 735: the act lane — every unread directed act to the seat, any kind, is a batched-lane
+     *  candidate; the caller has already waived the cooldown for this lane. */
+    act: boolean;
     raisedDeferralWakes: boolean;
     /** ADR 378 inc 4: does a huddle OPEN that names this seat summon it? Effective seat policy. */
     conveneHuddles: boolean;
@@ -1655,13 +1675,36 @@ async function dueCandidates(
         sender: delivery.from,
         lane: 'batched',
         derivation: 'batched',
+        act_ts: delivery.ts,
+      });
+    }
+  }
+
+  // ADR 735: the act lane. What `team_inbox_check {wait}` would have returned the seat — a directed
+  // act it has not read — is the wake reason, whatever the act's kind. The seat's own cursor is the
+  // edge (reading the inbox is what spends it), ADR 434 §2 keeps a spent act from re-waking, and the
+  // hourly cap in the caller bounds the rate. Batched in lane and derivation on purpose: the lease,
+  // the report and the ledger need no new value, and the order's `act_ts` says what the host prints.
+  if (lanes.act) {
+    const cursor = await getCursor(db, member.id);
+    for (const r of await listDirectedSince(db, member, cursor.last_read_ts)) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      batched.push({
+        act_id: r.id,
+        act: r.act,
+        sender: (await nameOf(r.from_member)) ?? '?',
+        lane: 'batched',
+        derivation: 'batched',
+        ...(r.thread_id ? { thread_id: r.thread_id } : {}),
+        act_ts: r.ts,
       });
     }
   }
 
   // ADR 211 §4: an act its recipient deferred is not a wake reason — they said "not now", and
-  // spawning them for it anyway would make the primitive a lie. Suppressed here for BOTH candidate
-  // sources above, since either can surface the same act.
+  // spawning them for it anyway would make the primitive a lie. Suppressed here for ALL candidate
+  // sources above, since any of them can surface the same act.
   //
   // The fold reads the party-scoped team timeline, not the inbox: `listInbox` excludes the member's
   // own sends and a deferring `wait` IS the member's own send.
@@ -2319,7 +2362,11 @@ async function deriveSeatPasses(
     }
     if ((await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap) continue;
 
-    const cooled = (await wakesSince(db, teamId, member.name, now - policy.cooldown_ms)) === 0;
+    // ADR 735: the act lane reads no cooldown — every open directed act is due on this poll; the
+    // hourly cap above and the attempt cap below are what bound it.
+    const cooled =
+      policy.lane === 'act' ||
+      (await wakesSince(db, teamId, member.name, now - policy.cooldown_ms)) === 0;
     const candidates = await dueCandidates(
       db,
       teamSlug,
@@ -2327,6 +2374,7 @@ async function deriveSeatPasses(
       {
         immediate: policy.lane !== 'batched',
         batched: cooled && policy.lane !== 'interrupt',
+        act: policy.lane === 'act',
         raisedDeferralWakes: policy.raised_deferral_wakes,
         conveneHuddles: policy.convene_huddles,
         wakeOnIncidentRoute,
@@ -2786,6 +2834,7 @@ async function writeSeatPass(
         ...(c.act_id !== undefined ? { act_id: c.act_id } : {}),
         ...(c.act !== undefined ? { act: c.act } : {}),
         ...(c.sender !== undefined ? { sender: c.sender } : {}),
+        ...(c.act_ts !== undefined ? { act_ts: c.act_ts } : {}),
         lane: c.lane,
         composed_line: isWorkOrder
           ? composeWorkOrderLine(member.name, teamSlug, c.lane_id!, kind, c.act_id)

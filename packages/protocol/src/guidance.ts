@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 59;
+export const GUIDANCE_CONTENT_VERSION = 60;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -365,6 +365,9 @@ export function renderSkillBody(opts: { team: string }): string {
     'for the next directed act (max 50s) and then returns it. Waiting on a partner is that one call,',
     'never repeated `team_inbox_check` / `sleep` polls. Add `until_lane: <lane id>` when the event is a',
     'lane resolving — a hold-refused seat waits on the holder lane and wakes with its branch.',
+    'A seat enrolled on the **act lane** (`musterd residency on --lane act`, ADR 735) does not wait at all:',
+    'when you have nothing to do, end your turn. The host resumes you on the next directed act, and the',
+    'wake carries it. A wait call there is a turn spent on nothing.',
     '',
     '**`--wait` and `--waiting` are one letter apart and are not the same thing.** `--wait` *blocks* —',
     'it is the wake loop above. `--waiting` *returns immediately*: a read-only banner naming the acts',

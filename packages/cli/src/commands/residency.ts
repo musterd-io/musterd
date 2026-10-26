@@ -62,7 +62,7 @@ import { enrollmentChecks, enrollmentRefusal } from './residencyChecks.js';
  * that can never wake is a contradiction — "stop waking this seat" is `residency off`.
  */
 const POLICY_FLAGS_USAGE =
-  '[--lane both|interrupt|batched] [--cooldown <15m>] [--hourly-cap <n>] [--attempt-cap <n>] ' +
+  '[--lane both|interrupt|batched|act] [--cooldown <15m>] [--hourly-cap <n>] [--attempt-cap <n>] ' +
   '[--tool-policy reply-only|seat-policy] [--timeout <5m>] [--work-timeout <30m>] ' +
   '[--flow manual|auto] [--convene-huddles on|off] [--idle-wake on|off] [--max-turns <n>] ' +
   '[--budget <usd>] ' +

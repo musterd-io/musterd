@@ -96,6 +96,9 @@ admin-authorized, audited, revocable, and visible on the roster (`offline · wak
   new way to command a teammate's machine, only a new state the existing one reaches.
 - **Batched lane** — ordinary unanswered directed acts (the ADR 090 open-directed ledger), woken
   on a cooldown window. This is the "your handoff gets handled overnight" half of the claim.
+  _(Amended 2026-10-26: [ADR 735](735-act-lane-the-seat-ends-its-turn.md) adds a third lane, `act` —
+  every unread directed act, any kind, no cooldown, under the same hourly and attempt caps — for a
+  seat that ends its turn instead of waiting.)_
 
 Launch defaults (owner call, 2026-07-11): **both lanes on**, batched conservative — ~30min
 cooldown, 2 wakes/hour/seat, 3 attempts per act — and **configurable**: team-level defaults with
@@ -242,6 +245,10 @@ Roster label: `offline · wakeable`.
 
 ## Consequences
 
+- _2026-10-26:_ [finding 028](../research/028-cooperbench-rider6-run.md) measured the wait call as the
+  cost of coordination on a two-seat task (94 of 98 waits returned an act: the waits are turns).
+  [ADR 735](735-act-lane-the-seat-ends-its-turn.md) adds the `act` lane so an enrolled seat can end
+  its turn and be resumed on the next directed act, and puts the act's wait time on the host line.
 - Schema v16 (additive): `residency` enrollment table + `wake_leases`; no wire bump (additive
   frame/enum fields only). Six new audit verbs render in `musterd audit` with no CLI change.
 - The build arc is five lanes, frozen in the contract doc's increment map: **2** wake ledger
