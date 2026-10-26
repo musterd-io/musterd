@@ -435,6 +435,8 @@ export interface LiveScriptOpts {
   nodeDir: string;
   /** Dir holding `git`. */
   gitDir: string;
+  /** The human whose accept deploys musterd.io (ADR 734); absent, the tick only reports the gap. */
+  deployAuthorizer?: string;
 }
 
 const GEN_HEADER =
@@ -518,13 +520,15 @@ cd "$WORKTREE" || { echo "$(date '+%F %T') cannot cd to $WORKTREE"; exit 1; }
 git fetch --quiet origin main 2>/dev/null || exit 0
 TIP="$(git rev-parse origin/main 2>/dev/null || true)"
 PUBLISHED="$(cat "$STAMP" 2>/dev/null || true)"
-# Landed is not live (ADR 308 §Observability, lane 01M2XD2RPG): on every poll, compare the build
-# marker musterd.io serves against this tip and, as the live service seat, tell the deploy-authorized
-# seat when the public site is behind — damped to one open ask per deployed ref, resolved when the
-# site catches up. Before the early exit on purpose: a deploy moves the site without moving main.
+# Landed is not live (ADR 308 §Observability, lane 01M2XD2RPG; ADR 734): on every poll, compare the
+# build marker musterd.io serves against this tip and, as the live service seat, ask the deploy
+# authorizer when the public site is behind — one open ask, withdrawn if main moves past it. On their
+# accept, once this tip is the published build, the tick stages and deploys it with this user's
+# wrangler login and says so on the record. Before the early exit on purpose: a deploy moves the
+# site without moving main.
 if command -v musterd >/dev/null 2>&1 && [ -n "$TIP" ]; then
   MUSTERD_SERVICE_TOKEN_FILE="$(dirname "$WEBROOT")/seat-token" \\
-    musterd service site-gap --raise --tip "$TIP" 2>&1 | sed "s/^/$(date '+%F %T') site-gap: /" || true
+    musterd service site-gap --raise --tip "$TIP" --published "$PUBLISHED"${o.deployAuthorizer ? ` --authorizer "${o.deployAuthorizer}"` : ''} 2>&1 | sed "s/^/$(date '+%F %T') site-gap: /" || true
 fi
 # Nothing to do when already on tip *and* that tip is what we last published — keep the poll cheap.
 # (Do not key off index.html alone: a failed build leaves an older bundle and would never retry.)

@@ -46,6 +46,10 @@ first written version of this rule was two-thirds true as a result.
 is ready. They do not seek per-publish approval, and other members do not run it: land the change
 and tell miley.
 
+_(Amended 2026-10-26: [ADR 734](734-site-deploy-on-the-human-accept.md) — the deploy is the live
+publisher's act on nick's accept of its ask; miley's `deploy:site` is the fallback, run only on the
+same ask-and-accept.)_
+
 Four boundaries, because the summary sentence is guessable in three wrong directions and each was
 guessed at least once while this was being written:
 
@@ -85,6 +89,11 @@ guessed at least once while this was being written:
   on the public origin catches what staging does not, and every deploy so far has been verified that
   way by the seat now holding the authorization. Making that a *requirement* is a separate decision
   and is not taken here.
+
+_(2026-10-26: [ADR 734](734-site-deploy-on-the-human-accept.md). The publisher's ask now goes to nick
+and binds; his accept makes the publisher deploy that tip and record it. The standing authorization
+narrows to the fallback. The eval below becomes readable from the record: ask `ts` to the deploy's
+`status_update`.)_
 
 ## Observability & Evaluation
 

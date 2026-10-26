@@ -6,12 +6,14 @@ import { afterAll, describe, expect, it } from 'vitest';
 import {
   computeSiteGap,
   nextAction,
+  replyOnAsk,
   siteGapAskBody,
   siteGapLine,
   sitePathspecs,
   SITE_PATHS,
   type GitReader,
   type SiteGap,
+  type SiteGapStamp,
 } from './siteGap.js';
 
 const TIP = 'ac064bb3ad79068118159709677c12e00fc8763d';
@@ -156,13 +158,15 @@ describe('the ask body', () => {
     tip: TIP,
     behind: [{ sha: '7ae57d44', subject: 'drop the LIVE pill' }],
   };
-  it('names the gap, the commits, the command and ADR 308, and that it self-resolves', () => {
+  it('names the gap, the commits, the exact tip an accept deploys, and what decline means (ADR 734)', () => {
     const body = siteGapAskBody(behind, 'https://musterd.io');
     expect(body).toContain('c432fbb3 — 1 site-affecting commit(s) behind ac064bb3');
     expect(body).toContain('7ae57d44 drop the LIVE pill');
+    expect(body).toMatch(/^Deploy \S+\? /);
+    expect(body).toContain(`Accept deploys exactly ${TIP.slice(0, 8)} (${TIP})`);
+    expect(body).toContain('Decline: no deploy');
     expect(body).toContain('deploy:site');
-    expect(body).toContain('ADR 308');
-    expect(body).toContain('resolves itself');
+    expect(body).toContain('ADR 734');
   });
   it('caps the list so a month of drift is one ask, not a scroll', () => {
     const many = {
@@ -173,7 +177,7 @@ describe('the ask body', () => {
   });
 });
 
-describe('nextAction — one open ask per deployed ref', () => {
+describe('nextAction — one open ask, withdrawn when main moves, acted on when answered (ADR 734)', () => {
   const behind: SiteGap = {
     status: 'behind',
     deployed: DEPLOYED,
@@ -181,22 +185,51 @@ describe('nextAction — one open ask per deployed ref', () => {
     behind: [{ sha: 'a', subject: 'b' }],
   };
   const current: SiteGap = { status: 'current', deployed: TIP, tip: TIP, behind: [] };
-  const stamp = (deployed: string | null, ask: string | null) => ({
+  const stamp = (
+    deployed: string | null,
+    ask: string | null,
+    extra: Partial<SiteGapStamp> = {},
+  ) => ({
     deployed,
     tip: TIP,
     ask,
     raised_at: 1,
+    asked_tip: ask ? TIP : null,
+    ...extra,
   });
 
   it('raises once when the site first reads behind', () => {
     expect(nextAction(null, behind)).toBe('raise');
     expect(nextAction(stamp(DEPLOYED, null), behind)).toBe('raise');
   });
-  it('does not raise again when main moves but the deployed ref has not', () => {
-    expect(nextAction(stamp(DEPLOYED, '01ASK'), { ...behind, tip: 'newer' })).toBe('none');
+  it('withdraws the open ask when main moves past the tip it named — an accept covers only what it listed', () => {
+    expect(nextAction(stamp(DEPLOYED, '01ASK'), { ...behind, tip: 'newer' })).toBe('moved');
+  });
+  it('a pre-734 stamp with no asked tip keeps its ask open across a move', () => {
+    expect(
+      nextAction(stamp(DEPLOYED, '01ASK', { asked_tip: null }), { ...behind, tip: 'newer' }),
+    ).toBe('none');
   });
   it('resolves the open ask when the deployed ref changes — a partial catch-up re-raises on the next tick', () => {
     expect(nextAction(stamp('older', '01ASK'), behind)).toBe('resolve');
+  });
+  it('deploys on accept once the tip is built, and waits for the build until then', () => {
+    expect(nextAction(stamp(DEPLOYED, '01ASK'), behind, 'accept', true)).toBe('deploy');
+    expect(nextAction(stamp(DEPLOYED, '01ASK'), behind, 'accept', false)).toBe('wait');
+  });
+  it('closes on decline and does not ask that tip again until main moves', () => {
+    expect(nextAction(stamp(DEPLOYED, '01ASK'), behind, 'decline')).toBe('decline');
+    const declined = stamp(DEPLOYED, null, { decided: { tip: TIP, outcome: 'declined' } });
+    expect(nextAction(declined, behind)).toBe('none');
+    expect(nextAction(declined, { ...behind, tip: 'newer' })).toBe('raise');
+  });
+  it('a failed deploy is not retried on the same tip', () => {
+    const failed = stamp(DEPLOYED, null, { decided: { tip: TIP, outcome: 'failed' } });
+    expect(nextAction(failed, behind)).toBe('none');
+    expect(nextAction(failed, { ...behind, tip: 'newer' })).toBe('raise');
+  });
+  it('an unanswered ask holds: nothing deploys on silence', () => {
+    expect(nextAction(stamp(DEPLOYED, '01ASK'), behind, null, true)).toBe('none');
   });
   it('resolves when the site catches up, and stays silent when it was never behind', () => {
     expect(nextAction(stamp(DEPLOYED, '01ASK'), current)).toBe('resolve');
@@ -210,5 +243,38 @@ describe('nextAction — one open ask per deployed ref', () => {
     expect(nextAction(null, { status: 'unknown_ref', deployed: 'x', tip: TIP, behind: [] })).toBe(
       'none',
     );
+  });
+});
+
+describe("replyOnAsk — the authorizer's answer, and only theirs", () => {
+  const ask = '01ASK';
+  it('reads an accept that names the ask in meta.in_reply_to, or carries it as the thread', () => {
+    expect(
+      replyOnAsk([{ from: 'nick', act: 'accept', meta: { in_reply_to: ask } }], ask, 'nick'),
+    ).toBe('accept');
+    expect(replyOnAsk([{ from: 'nick', act: 'decline', thread: ask, meta: {} }], ask, 'nick')).toBe(
+      'decline',
+    );
+  });
+  it("ignores another seat's answer, another thread, and any other act", () => {
+    expect(
+      replyOnAsk([{ from: 'miley', act: 'accept', meta: { in_reply_to: ask } }], ask, 'nick'),
+    ).toBe(null);
+    expect(
+      replyOnAsk([{ from: 'nick', act: 'accept', meta: { in_reply_to: '01OTHER' } }], ask, 'nick'),
+    ).toBe(null);
+    expect(replyOnAsk([{ from: 'nick', act: 'message', thread: ask }], ask, 'nick')).toBe(null);
+  });
+  it('the newest answer stands', () => {
+    expect(
+      replyOnAsk(
+        [
+          { from: 'nick', act: 'decline', meta: { in_reply_to: ask } },
+          { from: 'nick', act: 'accept', meta: { in_reply_to: ask } },
+        ],
+        ask,
+        'nick',
+      ),
+    ).toBe('accept');
   });
 });

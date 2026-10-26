@@ -55,6 +55,21 @@ describe('buildLiveBuildScript', () => {
       /if ! git checkout --quiet --force --detach origin\/main 2>&1; then\n.*checkout FAILED — serving .*\n\s+exit 1/,
     );
   });
+  it('asks the deploy authorizer with the published sha, and only reports when none is named (ADR 734)', () => {
+    expect(s).toContain(
+      'musterd service site-gap --raise --tip "$TIP" --published "$PUBLISHED" 2>&1',
+    );
+    expect(s).not.toContain('--authorizer');
+    const named = buildLiveBuildScript({
+      worktree: '/Users/x/agents-live',
+      sourceRepo: '/Users/x/agents',
+      webRoot: '/Users/x/.musterd/live/web',
+      nodeDir: '/opt/node/bin',
+      gitDir: '/opt/git/bin',
+      deployAuthorizer: 'nick',
+    });
+    expect(named).toContain('--published "$PUBLISHED" --authorizer "nick" 2>&1');
+  });
   it('atomically publishes the built bundle into the web-root (stage + rename swap)', () => {
     expect(s).toContain('cp -R "$SRC" "$STAGE"'); // stage on the web-root filesystem
     expect(s).toContain('mv "$STAGE" "$WEBROOT"'); // atomic swap into place

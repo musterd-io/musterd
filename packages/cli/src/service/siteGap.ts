@@ -109,9 +109,17 @@ export function siteGapLine(g: SiteGap, origin: string): string {
   }
 }
 
-/** The seat ADR 308 names. A constant, not config: the authorization is a person, and the ask says so. */
+/**
+ * The seat ADR 308 names, now the FALLBACK (ADR 734): the hand deploy is theirs when the publisher
+ * cannot, and the failure of a publisher deploy is sent to them. A constant, not config: the
+ * authorization is a person, and the message says so.
+ */
 export const DEPLOY_AUTHORIZED_SEAT = 'miley';
 
+/**
+ * The ask the publisher raises to the authorizing human (ADR 734): the commits, the exact tip an
+ * accept deploys, and what decline means. The tip is in full so the reply is checkable against it.
+ */
 export function siteGapAskBody(g: SiteGap, origin: string): string {
   const list = g.behind
     .slice(0, 12)
@@ -119,39 +127,92 @@ export function siteGapAskBody(g: SiteGap, origin: string): string {
     .join('\n');
   const more = g.behind.length > 12 ? `\n  … and ${g.behind.length - 12} more` : '';
   return (
-    `${siteGapLine(g, origin)}.\n${list}${more}\n` +
-    `Merged and accepted is not deployed (ADR 308): \`pnpm --filter @musterd/web deploy:site\` when ready. ` +
-    `This ask resolves itself once ${origin}/build.json reports the tip.`
+    `Deploy ${origin}? ${siteGapLine(g, origin)}.\n${list}${more}\n` +
+    `Accept deploys exactly ${short(g.tip)} (${g.tip}) from the publisher's build, with this machine's wrangler login (ADR 734). ` +
+    `If main moves first, this ask is withdrawn and a fresh one lists the new set. ` +
+    `Decline: no deploy, and no new ask until main moves. ` +
+    `The hand path, \`pnpm --filter @musterd/web deploy:site\`, stays ${DEPLOY_AUTHORIZED_SEAT}'s fallback (ADR 308).`
   );
 }
 
 /**
  * What the reporter remembers between ticks, at `~/.musterd/live/site-gap.json`. `ask` is the open
  * raise's id — also its thread (a root's thread is its own id, ADR 432) — so the tick that finds the
- * site caught up can close exactly what it opened.
+ * site caught up can close exactly what it opened. `asked_tip` is the tip that ask named, so a tip
+ * that moved is noticed (ADR 734 §3). `decided` is the last tip the human answered or the publisher
+ * acted on, and how: a declined or failed tip is not asked again until main moves (§4, §5).
  */
 export interface SiteGapStamp {
   deployed: string | null;
   tip: string;
   ask: string | null;
   raised_at: number | null;
+  asked_tip?: string | null;
+  decided?: { tip: string; outcome: 'deployed' | 'declined' | 'failed' } | null;
 }
 
-export type SiteGapAction = 'raise' | 'resolve' | 'none';
+/** The authorizer's answer on the open ask, as the tick read it from the live seat's inbox. */
+export type SiteGapReply = 'accept' | 'decline' | null;
+
+export type SiteGapAction =
+  /** Ask the authorizer to deploy the tip. */
+  | 'raise'
+  /** Close the open ask: the site caught up, or a deploy landed somewhere else. */
+  | 'resolve'
+  /** Main moved past the asked tip: withdraw the ask and raise a fresh one (ADR 734 §3). */
+  | 'moved'
+  /** Accepted, and the publisher's build of that tip is published: stage and deploy it. */
+  | 'deploy'
+  /** Accepted, but the build of that tip has not finished: deploy on a later tick. */
+  | 'wait'
+  /** Declined: close the ask and remember the tip. */
+  | 'decline'
+  | 'none';
 
 /**
- * Damping, stated as the rule rather than a window: ONE open ask per deployed ref. Main moving
- * again while the site is still behind does not re-raise (the ask already says "behind"; a second
- * one is the service chatter ADR 232 names as the failure mode). A deploy that lands somewhere
- * short of the tip resolves the old ask and raises a new one, because the fact changed. Catching up
- * resolves. `no_marker` and `unknown_ref` never raise — an ask that cannot name the gap is noise.
+ * The tick's decision, stated as rules. One open ask at a time. A deploy that lands somewhere short
+ * of the tip resolves the old ask (the fact changed; the next tick raises afresh). Main moving past
+ * the asked tip withdraws the ask, because an accept covers only the commits it named. A tip the
+ * human declined, or one the publisher failed on, is not asked again until the tip changes.
+ * Catching up resolves. `no_marker` and `unknown_ref` never raise — an ask that cannot name the gap
+ * is noise. `built` says the publisher's checkout is at the tip with that tip published.
  */
-export function nextAction(prev: SiteGapStamp | null, g: SiteGap): SiteGapAction {
+export function nextAction(
+  prev: SiteGapStamp | null,
+  g: SiteGap,
+  reply: SiteGapReply = null,
+  built = false,
+): SiteGapAction {
   const open = prev?.ask ?? null;
   if (g.status === 'behind') {
-    if (!open) return 'raise';
-    return prev!.deployed === g.deployed ? 'none' : 'resolve';
+    if (!open) return prev?.decided?.tip === g.tip ? 'none' : 'raise';
+    if (prev!.deployed !== g.deployed) return 'resolve';
+    if (prev!.asked_tip && prev!.asked_tip !== g.tip) return 'moved';
+    if (reply === 'decline') return 'decline';
+    if (reply === 'accept') return built ? 'deploy' : 'wait';
+    return 'none';
   }
   if (g.status === 'current') return open ? 'resolve' : 'none';
   return 'none';
+}
+
+/**
+ * The authorizer's answer among the envelopes the live seat read: the newest accept or decline from
+ * them that names the ask (`meta.in_reply_to`, or the ask as its thread). Anyone else's answer is
+ * not an answer — the ask was to one person.
+ */
+export function replyOnAsk(
+  envelopes: readonly { from: string; act: string; thread?: unknown; meta?: unknown }[],
+  ask: string,
+  authorizer: string,
+): SiteGapReply {
+  let reply: SiteGapReply = null;
+  for (const e of envelopes) {
+    if (e.from !== authorizer) continue;
+    if (e.act !== 'accept' && e.act !== 'decline') continue;
+    const meta = (e.meta ?? {}) as Record<string, unknown>;
+    if (meta['in_reply_to'] !== ask && e.thread !== ask) continue;
+    reply = e.act;
+  }
+  return reply;
 }

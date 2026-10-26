@@ -48,6 +48,8 @@ export interface LiveCtx {
   gitDir: string;
   /** How often the builder polls `origin/main` (seconds). */
   intervalSeconds: number;
+  /** The human whose accept deploys musterd.io (ADR 734); read from `<liveDir>/deploy-authorizer`. */
+  deployAuthorizer?: string;
   run: Runner;
   sleep?: (ms: number) => void;
 }
@@ -68,6 +70,7 @@ export function writeLiveArtifacts(ctx: LiveCtx): void {
       webRoot: ctx.webRoot,
       nodeDir: ctx.nodeDir,
       gitDir: ctx.gitDir,
+      ...(ctx.deployAuthorizer ? { deployAuthorizer: ctx.deployAuthorizer } : {}),
     }),
     { mode: 0o755 },
   );
