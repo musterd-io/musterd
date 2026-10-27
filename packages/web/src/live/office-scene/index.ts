@@ -56,7 +56,7 @@ import {
   SEAT_BACK,
   WAGON_PICKUP,
 } from './layout';
-import { computeLightEnv, type LightEnv } from './lighting';
+import { computeLightEnv, deskLampOn, type LightEnv } from './lighting';
 import { isWithinWorkingHours } from './workingHours';
 import { assignSeats, workingAtDesk, type Placement } from './seating';
 import {
@@ -1027,7 +1027,10 @@ export function mountOffice(
       ambientHost.style.setProperty('--lc-amb-tint', lightEnv.skyTint);
     }
     return (
-      Math.abs(lightEnv.veilAlpha - prev.veilAlpha) > 0.01 || lightEnv.lampsOn !== prev.lampsOn
+      Math.abs(lightEnv.veilAlpha - prev.veilAlpha) > 0.01 ||
+      lightEnv.lampsOn !== prev.lampsOn ||
+      // a desk lamp switched: each desk has its own level, so the lit set changes one desk at a time
+      DESK_SLOTS.some((s) => deskLampOn(lightEnv, s.id) !== deskLampOn(prev, s.id))
     );
   }
 
