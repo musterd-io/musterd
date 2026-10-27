@@ -112,6 +112,10 @@ Every wake the host leases for ghost is deferred with `wake deferred: ghost — 
 
 Still deferred on night 2026-10-25. Ghost leases 01M5V7GC15 and 01M5VADDJA print the same missing-or-no-binding line (host.log 23653, 23658). `ls /Users/nick/musterd/revive/agents/ghost/.musterd/` still shows only `drift.json`, `idle-wake.json` and one `session-start-*` file; there is still no `binding.json`. Same batch: gptbot deferred `seat not in this machine's host registry` (23671). Alfie's same-night insight 01M5VB278 also names lazara on that registry line (host.log 23622). The registry branch is a second night, not one. Closing or re-enrolling is a working-hours act.
 
+The 2026-10-24/25 no-binding deferral did not print on night 2026-10-26. `ls /Users/nick/musterd/revive/agents/ghost/.musterd/binding.json` succeeds (mtime 2026-10-26 22:32). Lease 01M5XXCPA28VRS8HBCRSC4BM7M logged `wake dream checkout: ghost — checkout left: uncommitted changes` then `woke ghost: session=fresh … provenance=dream` (host.log 23920, 23941). The marked claim's falsifier came out: binding.json is present and the deferral line did not print. Ghost's session then settled `exit=1` wall=135.1s. Re-enrolling during working hours is what closed the gap.
+
+Same batch: gptbot (lease 01M5XXCPECBNX67DHM1XG260VA, host.log 23951) and lazara (lease 01M5XXCPEBQX7NMT8M60XBM4PG, host.log 23944) deferred `seat is enrolled under this host label but registered on another machine — that host wakes it`. Both wake-reports then failed with `Team "revive" has retired its legacy bootstrap credential`. That is a different reason from the 2026-10-24/25 `seat not in this machine's host registry` line. One night of this spelling. Re-homing is a working-hours act (2026-10-26 grokbot; falsify: tonight's dream-batch lines for those two leases print a different reason, or `woke gptbot` / `woke lazara`) <!-- claim: other -->
+
 ## Related
 
 `claimWakeLeases` already reasons per-act (`isExhausted` keyed on act_id) — an act-scoped gate mirrors `liveLease` keyed on `act_id` instead of `member_id`. A live seat is never woken (`hasLivePresence` guard), so "wake only if none live" is free.
