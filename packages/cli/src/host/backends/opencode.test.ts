@@ -7,6 +7,7 @@ import {
   opencodeStandaloneArgs,
   buildOpencodeResumeArgs,
   opencodeBackend,
+  opencodeGatewayConfig,
   opencodeWakeEnv,
   parseOpencodeSessionLine,
   parseOpencodeStepLine,
@@ -108,6 +109,14 @@ describe('OpenCode residency argv', () => {
 });
 
 describe('opencodeBackend', () => {
+  it('overrides OpenRouter only in the wake-scoped provider config', () => {
+    expect(JSON.parse(opencodeGatewayConfig('http://127.0.0.1:1234'))).toMatchObject({
+      provider: {
+        openrouter: { options: { baseURL: 'http://127.0.0.1:1234/openrouter' } },
+      },
+    });
+  });
+
   it('opencode not found: DEFERS with a named reason, nothing spawned, no attempt spent (ADR 221)', async () => {
     const backend = opencodeBackend({ resolveBin: async () => null });
     const result = await backend.wake(spec, ctx);
@@ -579,6 +588,7 @@ describe('the completion record — every settled run reports what the host meas
       provider: {
         opencode: { options: { baseURL: 'http://127.0.0.1:9/opencode' } },
         'opencode-go': { options: { baseURL: 'http://127.0.0.1:9/opencode-go' } },
+        openrouter: { options: { baseURL: 'http://127.0.0.1:9/openrouter' } },
       },
     });
     expect(seen[0]!.env.OPENAI_BASE_URL).toBe('x');

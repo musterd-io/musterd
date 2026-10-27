@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   budgetRefusal,
+  defaultUpstreams,
   normaliseUsage,
   startMeteringGateway,
   UsageParser,
@@ -105,11 +106,14 @@ const anthropicSse = (model = 'claude-haiku-5-5') => [
 
 let gw: MeteringGateway | undefined;
 let up: Server | undefined;
+let extraUps: Server[] = [];
 afterEach(async () => {
   await gw?.close();
   gw = undefined;
   await new Promise<void>((r) => (up ? up.close(() => r()) : r()));
   up = undefined;
+  await Promise.all(extraUps.map((server) => new Promise<void>((r) => server.close(() => r()))));
+  extraUps = [];
 });
 
 describe('normaliseUsage — one shape across vendors', () => {
@@ -209,6 +213,12 @@ describe('UsageParser', () => {
 });
 
 describe('startMeteringGateway (ADR 583)', () => {
+  it('includes the OpenRouter upstream for wake-scoped OpenCode routing', () => {
+    expect(defaultUpstreams().find((upstream) => upstream.name === 'openrouter')).toMatchObject({
+      url: 'https://openrouter.ai/api/v1',
+    });
+  });
+
   it('meters an SSE stream the upstream sends with no content-type (ChatGPT backend, lane 01M4VQ3CMR)', async () => {
     const f = await fakeUpstream(() => ({
       headers: {},
@@ -266,6 +276,200 @@ describe('startMeteringGateway (ADR 583)', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ provider: 'opencode-go', model: 'minimax-m3.1-flash-free' });
     expect(calls[0]!.usage.input_tokens).toBe(700);
+  });
+
+  it('routes OpenRouter calls with usage enabled and accounts the reported cost', async () => {
+    const f = await fakeUpstream(() => ({
+      body: JSON.stringify({
+        model: 'vendor/model-unknown-to-musterd',
+        usage: { prompt_tokens: 1_000, completion_tokens: 100, cost: 0.2 },
+      }),
+      headers: { 'content-type': 'application/json' },
+    }));
+    up = f.server;
+    const calls: MeteredCall[] = [];
+    const logs: string[] = [];
+    gw = await startMeteringGateway({
+      leaseId: 'L-openrouter',
+      budgetUsd: 0.1,
+      upstreams: [{ name: 'openrouter', url: f.url }],
+      onCall: (call) => calls.push(call),
+      log: (line) => logs.push(line),
+    });
+
+    const first = await post(
+      `${gw.origin}/openrouter`,
+      '/chat/completions',
+      JSON.stringify({
+        model: 'vendor/model-unknown-to-musterd',
+        messages: [],
+        stream: true,
+        stream_options: { vendor_option: 'keep' },
+      }),
+      { authorization: 'Bearer sk-or-secret' },
+    );
+    expect(first.status).toBe(200);
+    expect(JSON.parse(f.seen[0]!.body)).toMatchObject({
+      usage: { include: true },
+      stream_options: { include_usage: true, vendor_option: 'keep' },
+    });
+    expect(f.seen[0]!.headers['authorization']).toBe('Bearer sk-or-secret');
+    expect(calls).toMatchObject([
+      {
+        provider: 'openrouter',
+        model: 'vendor/model-unknown-to-musterd',
+        cost_usd: 0.2,
+      },
+    ]);
+
+    const next = await post(
+      `${gw.origin}/openrouter`,
+      '/chat/completions',
+      JSON.stringify({ model: 'vendor/model-unknown-to-musterd', messages: [] }),
+      { authorization: 'Bearer sk-or-secret' },
+    );
+    expect(next.status).toBe(402);
+    expect(f.seen).toHaveLength(1);
+    expect(gw.summary()).toMatchObject({ calls: 1, cost_usd: 0.2, budget_exhausted: true });
+    expect(logs.join('\n')).not.toContain('sk-or-secret');
+  });
+
+  it('uses the dated price table for a known OpenRouter model when usage.cost is absent', async () => {
+    const f = await fakeUpstream(() => ({
+      body: JSON.stringify({
+        model: 'muse-spark-1.3',
+        usage: { prompt_tokens: 1_000, completion_tokens: 100 },
+      }),
+      headers: { 'content-type': 'application/json' },
+    }));
+    up = f.server;
+    gw = await startMeteringGateway({
+      leaseId: 'L-openrouter-table-fallback',
+      budgetUsd: 0.01,
+      upstreams: [{ name: 'openrouter', url: f.url }],
+    });
+
+    const response = await post(
+      `${gw.origin}/openrouter`,
+      '/chat/completions',
+      JSON.stringify({ model: 'muse-spark-1.3', messages: [] }),
+    );
+    expect(response.status).toBe(200);
+    expect(gw.summary()).toMatchObject({ calls: 1, cost_usd: 0.001675, budget_exhausted: false });
+  });
+
+  it('blocks further budgeted OpenRouter calls when upstream omits cost and no price row exists', async () => {
+    const f = await fakeUpstream(() => ({
+      body: JSON.stringify({
+        model: 'vendor/model-unknown-to-musterd',
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+      }),
+    }));
+    up = f.server;
+    gw = await startMeteringGateway({
+      leaseId: 'L-openrouter-unpriced',
+      budgetUsd: 1,
+      upstreams: [{ name: 'openrouter', url: f.url }],
+    });
+    const body = JSON.stringify({ model: 'vendor/model-unknown-to-musterd', messages: [] });
+    expect((await post(`${gw.origin}/openrouter`, '/chat/completions', body)).status).toBe(200);
+    expect(gw.summary().budget_exhausted).toBe(true);
+    expect((await post(`${gw.origin}/openrouter`, '/chat/completions', body)).status).toBe(402);
+    expect(f.seen).toHaveLength(1);
+    expect(gw.summary()).toMatchObject({ calls: 1, cost_usd: undefined, budget_exhausted: true });
+  });
+
+  it('blocks every model route after an unpriced OpenRouter call exhausts a wake budget', async () => {
+    const router = await fakeUpstream(() => ({
+      body: JSON.stringify({
+        model: 'vendor/model-unknown-to-musterd',
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+      }),
+    }));
+    const anthropic = await fakeUpstream(() => ({ body: anthropicJson(1, 1) }));
+    up = router.server;
+    extraUps.push(anthropic.server);
+    const calls: MeteredCall[] = [];
+    gw = await startMeteringGateway({
+      leaseId: 'L-openrouter-unpriced-cross-provider',
+      budgetUsd: 1,
+      upstreams: [
+        { name: 'openrouter', url: router.url },
+        { name: 'anthropic', url: anthropic.url },
+      ],
+      onCall: (call) => calls.push(call),
+    });
+    const openRouterBody = JSON.stringify({
+      model: 'vendor/model-unknown-to-musterd',
+      messages: [],
+    });
+    expect(
+      (await post(`${gw.origin}/openrouter`, '/chat/completions', openRouterBody)).status,
+    ).toBe(200);
+    expect((await post(`${gw.origin}/anthropic`, '/v1/messages', '{}')).status).toBe(402);
+    expect(router.seen).toHaveLength(1);
+    expect(anthropic.seen).toHaveLength(0);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('does not exhaust the budget for an OpenRouter catalog GET without usage', async () => {
+    const f = await fakeUpstream(() => ({ body: '{}' }));
+    up = f.server;
+    gw = await startMeteringGateway({
+      leaseId: 'L-openrouter-catalog',
+      budgetUsd: 1,
+      upstreams: [{ name: 'openrouter', url: f.url }],
+    });
+    const response = await new Promise<number>((resolve, reject) => {
+      const request = httpGet(`${gw!.origin}/openrouter/models`, (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode ?? 0));
+      });
+      request.on('error', reject);
+    });
+    expect(response).toBe(200);
+    expect(gw.summary().budget_exhausted).toBe(false);
+  });
+
+  it('reads OpenRouter reported cost from the final SSE usage chunk', async () => {
+    const model = 'vendor/model-from-router';
+    const f = await fakeUpstream(() => ({
+      headers: { 'content-type': 'text/event-stream' },
+      body: [
+        `data: ${JSON.stringify({ model, choices: [{ delta: { content: 'done' } }] })}\n\n`,
+        `data: ${JSON.stringify({ model, usage: { prompt_tokens: 12, completion_tokens: 3, cost: 0.004 } })}\n\n`,
+        'data: [DONE]\n\n',
+      ],
+    }));
+    up = f.server;
+    gw = await startMeteringGateway({
+      leaseId: 'L-openrouter-sse',
+      upstreams: [{ name: 'openrouter', url: f.url }],
+    });
+    const response = await post(
+      `${gw.origin}/openrouter`,
+      '/chat/completions',
+      JSON.stringify({ model, messages: [], stream: true }),
+    );
+    expect(response.status).toBe(200);
+    expect(gw.summary()).toMatchObject({
+      calls: 1,
+      models: [model],
+      usage: { input_tokens: 12, output_tokens: 3 },
+      cost_usd: 0.004,
+    });
+  });
+
+  it('rejects a non-JSON OpenRouter request before it reaches the provider', async () => {
+    const f = await fakeUpstream(() => ({ body: '{}' }));
+    up = f.server;
+    gw = await startMeteringGateway({
+      leaseId: 'L-openrouter-invalid',
+      upstreams: [{ name: 'openrouter', url: f.url }],
+    });
+    const response = await post(`${gw.origin}/openrouter`, '/chat/completions', '{bad json');
+    expect(response.status).toBe(400);
+    expect(f.seen).toHaveLength(0);
   });
 
   it('relays a JSON call unchanged, forwards headers byte-for-byte, meters and prices it', async () => {

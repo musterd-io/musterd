@@ -15,7 +15,7 @@ import type {
   WakeCompletion,
   WakeSpec,
 } from '../backend.js';
-import { OPENCODE_HOSTED_UPSTREAMS } from '../gateway.js';
+import { OPENCODE_HOSTED_UPSTREAMS, OPENCODE_OPENROUTER_UPSTREAM } from '../gateway.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
 import { holdWakeLease, type WakeLeaseDeps } from '../wakeLeaseFile.js';
 import { addUsage } from './codex.js';
@@ -52,7 +52,7 @@ export function opencodeStandaloneArgs(args: string[]): string[] {
  *  so the seat's opencode.json is never edited. */
 export function opencodeGatewayConfig(origin: string): string {
   const provider: Record<string, { options: { baseURL: string } }> = {};
-  for (const u of OPENCODE_HOSTED_UPSTREAMS)
+  for (const u of [...OPENCODE_HOSTED_UPSTREAMS, OPENCODE_OPENROUTER_UPSTREAM])
     provider[u.name] = { options: { baseURL: `${origin}/${u.name}` } };
   return JSON.stringify({ provider });
 }
