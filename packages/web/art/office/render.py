@@ -283,6 +283,19 @@ def _geom_key(o) -> str:
     return _h(np.round(co, 4).tobytes(), sm.tobytes(), mods, [_mat_key(sl.material) for sl in o.material_slots], o["layer"], bool(o["arm"]))
 
 
+def walk_contact(rig, frames: int) -> float:
+    """Peak-to-peak horizontal travel of an ankle over the walk clip, heading +x (E) — office v3-5."""
+    import figure
+
+    xs = {"L": [], "R": []}
+    for f in range(frames):
+        pose, lift = figure.action("walk", f / frames)
+        figure.apply_pose(rig, pose, lift, 0.0)
+        for side in xs:
+            xs[side].append(rig.joints[f"ankle{side}"].matrix_world.translation.x)
+    return max(max(v) - min(v) for v in xs.values())
+
+
 def render_figure(a: dict) -> None:
     """`--figure`: the member sprite sheets, one per identity layer, plus `figure.json` (figureSheet.ts's
     SheetSpec). Each frame is rendered twice — lit, neutral grey, under the day rig; and as flat ID
@@ -357,6 +370,11 @@ def render_figure(a: dict) -> None:
             # the directions this clip has: the rendered ones and their mirrors (the runtime falls back
             # to the base clip anywhere else)
             anims[name]["dirs"] = [d for d in figure.DIRS if d in dirs or MIRRORED.get(d) in dirs]
+        if name == "walk":
+            # office v3-5: how far a foot travels across one cycle, in floor units — the stance foot's
+            # backward sweep is the ground the body covers per step, so skeleton.ts's STRIDE (one cycle,
+            # two steps) is 2 × this; stride.test.ts holds them within 10%
+            anims[name]["contact"] = round(walk_contact(rig, frames), 1)
         rows += len(figure.DIRS)
     # Every cell's pixels, cropped to themselves: grid key (a layer, or `<layer>@arms`) → cell name
     # ("clip/dir/frame") → (uint8 RGBA, x0, y0 inside the nominal frame).

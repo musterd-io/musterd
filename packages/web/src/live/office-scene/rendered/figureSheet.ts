@@ -94,6 +94,9 @@ export interface AnimSpec {
    *  top); any other layer plays the same frame of `base`, its pixels being the same. */
   base?: Anim;
   layers?: string[];
+  /** The walk only (office v3-5): how far a foot sweeps across one cycle, in floor units, measured
+   *  from the rig by render.py. `STRIDE` (skeleton.ts, one cycle = two steps) is held to 2× this. */
+  contact?: number;
 }
 
 export interface SheetSpec {
