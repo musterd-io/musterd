@@ -1985,10 +1985,11 @@ const CHAIR_ARM_SALT = 22;
 /* Every chair in this office rolls (nick, 2026-09-14): the star base has arms AND wheels, which is what
    makes it read as a chair rather than as dots under a cushion. */
 
-// The office is a *fixed* set of 12 desks (three pods of four). A probability hash over so few ids doesn't
-// guarantee coverage — it can (and did) bucket all 12 into one variant, so the variety never shows. Instead
-// each desk's chair/monitor is a curated spread: every kind appears, and every pod shows a mix (adjacent
-// desks differ), which is exactly what makes the variety read. Still fully deterministic + stable per frame.
+// Keyed by desk slot id (`DESK_SLOTS`, 22 of them), wrapping every 12. A probability hash over so few ids
+// doesn't guarantee coverage — it can (and did) bucket every desk into one variant, so the variety never
+// shows. Instead the list is a curated spread: each block of four ids (0–3, 4–7, 8–11) shows every
+// kind. Still fully deterministic + stable per frame. The pod notes below date from
+// the 12-desk office and no longer name pods.
 const CHAIR_KINDS_BY_ID: readonly ChairKind[] = [
   'gamer',
   'wheeled',
@@ -2055,9 +2056,9 @@ function blitTinted(
 
 // ── monitor variety ─────────────────────────────────────────────────────────────────────────────────
 // Desks differ in what's on them: a lone monitor, two panels on a dual-arm stand, or one ultrawide curved
-// screen. Curated per desk (same reasoning as the chairs — a probability hash over 12 fixed ids doesn't
-// guarantee coverage, and did collapse to all-single). Every pod gets a mix, and the two camera-facing
-// desks (ids 0,1) carry the boldest setups so the variety actually reads. Every panel still lights teal
+// screen. Curated per desk slot id, wrapping every 12 (same reasoning as the chairs — a probability hash
+// doesn't guarantee coverage, and did collapse to all-single), so neighbouring slots get a mix. The pod
+// notes in the list date from the 12-desk office. Every panel still lights teal
 // when its member is `working` and stays dim otherwise — the load-bearing work cue is intact.
 type MonitorSetup = 'single' | 'dual' | 'ultrawide';
 // The two decorative laptop rigs (`laptopRiser`, `laptopDock`) were removed on 2026-09-04. They were
