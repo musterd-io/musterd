@@ -45,6 +45,13 @@ function printJson(value: unknown): number {
   return 0;
 }
 
+/** Human ceremony prompts go to stderr: stdout may carry `--json` output a script is
+ * parsing (create.sh's `bootstrap mint --json | jq`), and prompt text there kills the
+ * parser, then the writer dies EPIPE on the closed pipe (lane 01M5ZE7F4G). */
+function humanPrompt(text: string): void {
+  process.stderr.write(text);
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
@@ -85,14 +92,14 @@ export async function collectApproval(
     ...(actor ? { actor } : {}),
   });
   const d = descriptor as ApprovalDescriptor;
-  process.stdout.write(
+  humanPrompt(
     `descriptor (built by the server):\n  actor:  ${d.actor}\n  act:    ${d.act}\n` +
       `  target: ${d.target}\n  expires: ${new Date(d.expiry).toISOString()}\n`,
   );
   const url =
     `${browserOrigin(http.server)}/authority/approve?team=${encodeURIComponent(team)}` +
     `&nonce=${encodeURIComponent(d.nonce)}`;
-  process.stdout.write(`Approve at ${url}\nwaiting for the parked proof…\n`);
+  humanPrompt(`Approve at ${url}\nwaiting for the parked proof…\n`);
   const deadline = Date.now() + 4 * 60 * 1000;
   for (;;) {
     try {
@@ -122,7 +129,7 @@ export async function setPolicySigned(
     if (!(err instanceof CliError && /authority refused \(no_signature\)/.test(err.message)))
       throw err;
   }
-  process.stdout.write('Team policy is a high-authority act — approve it with your passkey.\n');
+  humanPrompt('Team policy is a high-authority act — approve it with your passkey.\n');
   const approval = await collectApproval(
     http,
     team,
@@ -490,15 +497,13 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     if (active.length > 0 && confirmedBy)
       throw new CliError('--confirmed-by only applies when this member has no active key', 2);
     if (active.length > 0) {
-      process.stdout.write('A device key already stands — the new passkey needs its approval.\n');
+      humanPrompt('A device key already stands — the new passkey needs its approval.\n');
       approval = await collectApproval(http, team, 'device_key_admin', member, {
         action: 'enroll',
         kind: 'passkey',
       });
     } else if (confirmedBy && suppliedCountersignProof) {
-      process.stdout.write(
-        `Using ${confirmedBy}'s hub-issued countersign proof for this enrollment.\n`,
-      );
+      humanPrompt(`Using ${confirmedBy}'s hub-issued countersign proof for this enrollment.\n`);
       countersign = { confirmer: confirmedBy, approval: suppliedCountersignProof };
     }
     const { challenge } = await http.issueEnrollmentChallenge(team);
@@ -511,7 +516,7 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
       `${browserOrigin(http.server)}/authority/passkey?team=${encodeURIComponent(team)}` +
       `&member=${encodeURIComponent(member)}&challenge=${encodeURIComponent(challenge)}` +
       fragment;
-    process.stdout.write(`Open ${url}\nwaiting for the passkey ceremony…\n`);
+    humanPrompt(`Open ${url}\nwaiting for the passkey ceremony…\n`);
     const deadline = Date.now() + 4 * 60 * 1000;
     for (;;) {
       const { keys } = await http.listDeviceKeys(team);

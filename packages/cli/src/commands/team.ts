@@ -467,7 +467,8 @@ export async function mintBootstrapCredentialSigned(
     if (!(err instanceof CliError && /authority refused \(no_signature\)/.test(err.message)))
       throw err;
   }
-  process.stdout.write(
+  // stderr, not stdout: `--json` callers pipe stdout to a parser (lane 01M5ZE7F4G).
+  process.stderr.write(
     'Minting a bootstrap credential is a high-authority act — approve it with your passkey.\n',
   );
   const approval = await collectApproval(http, team, 'credential_mint', body.target, {
