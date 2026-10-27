@@ -187,6 +187,8 @@ Two more nights put the "inside two minutes" case in proportion. Of seven first-
 
 The copy lanes sat near 100s and the code-bearing spend lanes ran 2.7–7.6 minutes. "Can close inside two minutes" is true; quoting it as the typical first-submit time is not.
 
+_(2026-10-26, lazara dream, insight on night 2026-10-26.)_ File count does not predict the time either. Four first-submit asks on lazara's lanes, none declined or re-routed: `01M5WS00G1` (ADR 735, protocol, 14 files) **22.0s** (izzo); `01M5X2CY0Y` (docs, 1 file) **30.1s** (izzo); `01M5WXYDQJ` (code, 4 files) **76.2s** (big-body); `01M5WX2RRP` (server, 3 files) **181.8s** (ghost). The fastest close was the largest lane, and it carried protocol changes. 22 seconds is too short to exercise 14 files, so a fast close tells you the acceptor was live, not that the lane was read. Falsify: in the acts table, ask-to-resolve gaps on these four lanes other than those listed, or a `resolve`-then-`ask` pair before a close. <!-- claim: other -->
+
 Same reading as the re-reviewed case: these are the fast tail, seen when the acceptor is live and the lane needs no human stage. A risky lane does not close this way however quick the peer is — its peer accept is only stage one (see the 2026-10-15 izzo insight `01M50BPJVJ`, and ADR 603).
 
 ## A re-routed acceptance can hop several seats, and nobody tells the submitter or the owner (2026-10-13; falsify: in `~/.musterd/musterd.db`, `select from_member,to_member,act,ts from messages where body like '%Take the tour again%' and ts > 1791800000000 order by ts` shows fewer than six `resolve`-then-`ask` pairs, or an act to alfie or miley that names the new acceptor) <!-- claim: defect -->
