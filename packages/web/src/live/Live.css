@@ -219,6 +219,138 @@
   font-size: 14px;
   letter-spacing: -0.01em;
 }
+/* ADR 744: /live's wordmark is 20px so the allowance chips fit; /board and other pages keep 28. */
+.lc__topbar:not(.lc__topbar--board) .lc__word .brand__chip {
+  width: auto;
+  height: 20px;
+}
+
+/* ─── allowance chips (ADR 744, option C) ─────────────────────────────────
+   One chip per human: face, the lowest window's percent, a thin bar of what is left. Same rules as
+   ADR 723's line: warn ink under 15%, muted type when the read is older than two minutes, no new
+   color. Dim the face on a quiet chip, never the words (2026-08-13). The card opens under its chip;
+   AllowanceChips shifts it left so it keeps 12px from the viewport's right edge on a phone. */
+.lc-allow {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lc-3);
+}
+.lc-allow__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  /* Load-bearing: a flex item shrinks under its 30px height otherwise (2026-09-21). */
+  flex: none;
+  height: 30px;
+  padding: 0 10px 0 4px;
+  border: 1px solid var(--lc-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--lc-text);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lc-allow__chip.is-open {
+  border-color: rgba(17, 24, 39, 0.22);
+}
+.lc-allow__chip.is-warn,
+.lc-allow__row.is-warn {
+  color: var(--lc-warn-ink);
+}
+.lc-allow__chip.is-quiet,
+.lc-allow__row.is-quiet {
+  color: var(--lc-muted);
+}
+.lc-allow__face {
+  display: inline-flex;
+  flex: none;
+}
+.lc-allow__chip.is-quiet .lc-allow__face {
+  opacity: 0.55;
+}
+.lc-allow__name {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.lc-allow__track {
+  flex: none;
+  width: 28px;
+  height: 2px;
+  background: var(--lc-border);
+}
+.lc-allow__track > i {
+  display: block;
+  height: 2px;
+  background: currentColor;
+}
+.lc-allow__card {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--lc-z-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(280px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(17, 24, 39, 0.12);
+  animation: lc-allow-in var(--lc-dur-1) var(--lc-ease-out);
+}
+@keyframes lc-allow-in {
+  from {
+    opacity: 0;
+  }
+}
+.lc-allow__who {
+  margin-bottom: 2px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--lc-text);
+}
+.lc-allow__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  font-size: 12px;
+  color: var(--lc-text);
+}
+.lc-allow__words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lc-allow__more,
+.lc-allow__note {
+  color: var(--lc-muted);
+  font-size: 11px;
+}
+.lc-allow__row .lc-allow__track {
+  width: 56px;
+}
+@media (max-width: 440px) {
+  .lc-allow__name {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-allow__card {
+    animation: none;
+  }
+}
+
 .lc__team {
   font-family: var(--font-mono, monospace);
   color: var(--lc-muted);
@@ -4080,46 +4212,6 @@
   font-size: 13px;
   font-weight: 650;
   color: var(--lc-text);
-}
-/* ADR 723: what's left, one 28px line under the name. The bar is what is left. No new color, no motion.
-   Quiet comes after warn so a stale low window is muted; the title still carries the percent. */
-.lc-team-card__left {
-  grid-column: 2;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--lc-text);
-}
-.lc-team-card__left.is-warn {
-  color: var(--lc-warn-ink);
-}
-.lc-team-card__left.is-quiet {
-  color: var(--lc-muted);
-}
-.lc-team-card__left-words {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lc-team-card__left-more {
-  color: var(--lc-muted);
-  font-size: 11px;
-}
-.lc-team-card__left-bar {
-  flex: 0 0 64px;
-  height: 2px;
-  background: var(--lc-border);
-}
-.lc-team-card__left-bar > i {
-  display: block;
-  height: 2px;
-  background: currentColor;
 }
 /* The viewer's own card (signed-in /live): the plate's "you", in the column's ink. */
 .lc-team-card__you {
@@ -9776,7 +9868,8 @@ a.lc-xp__hit:focus-visible {
    showing the bar steps up over it. Only then: at rest the rail keeps its place. */
 .lc__topbar:has(.lc-here__slot:hover),
 .lc__topbar:has(.lc-here__card.is-pinned),
-.lc__topbar:has(.lc-here :focus-visible) {
+.lc__topbar:has(.lc-here :focus-visible),
+.lc__topbar:has(.lc-allow__card) {
   z-index: calc(var(--lc-z-overlay) + 2);
 }
 @media (max-width: 640px) {

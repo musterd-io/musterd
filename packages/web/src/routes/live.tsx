@@ -110,6 +110,10 @@ const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ defa
 /** "Who is here" (ADR 692) is chrome the room does not need to paint: it follows the first roster
  *  read in its own chunk, so the faces and their cards stay off /live's eager graph. */
 const LazyWhoIsHere = lazy(() => import('../live/WhoIsHere').then((m) => ({ default: m.WhoIsHere })));
+/** ADR 744: the header's allowance chips load after the first roster read, as Who is here does. */
+const LazyAllowanceChips = lazy(() =>
+  import('../live/AllowanceChips').then((m) => ({ default: m.AllowanceChips })),
+);
 /** Settings (nick, 2026-10-19): opened from the working-hours calendar on the office wall, so its
  *  chunk loads on the calendar's first hover or on the click — never with the room. */
 const LazySettingsOverlay = lazy(() =>
@@ -669,7 +673,13 @@ function LivePage() {
           </span>
         )}
         {connected && <span id={NOW_SLOT_ID} className="lc__nowslot" />}
-        {connected && <span id={TOUR_SLOT_ID} className="lc__nowslot" />}
+        {/* ADR 744: each human's allowance sits here; the tour's entry button left this bar for
+            it (LazyTour still mounts, and finds no slot, so it offers no button on /live). */}
+        {connected && (
+          <Suspense fallback={null}>
+            <LazyAllowanceChips roster={roster} you={signedIn ? (cfg?.as ?? null) : null} />
+          </Suspense>
+        )}
         <span className="lc__spacer" />
         {/* One group, so a narrow topbar wraps the controls to a row of their own instead of
             pushing them off-screen (Live.css `.lc__tools`). */}

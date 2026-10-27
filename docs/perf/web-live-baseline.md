@@ -2416,6 +2416,16 @@ over its ceiling, so the ceiling moves by the bundle's own size and no more. No 
 animation loop (one custom property, set when the minutes change). Measured + 15% would loosen it (ADR 183). Folding
 the card's rules into `Broadcast.css` once that lane lands drops one stylesheet request; it does not change the bytes.
 
+## 2026-10-27 — allowance chips in the /live header; Total JS RAISED 358,000 → 360,600 B, Live CSS RAISED 27,950 → 28,200 B (lane 01M5ZFNPKA)
+
+ADR 744 moves each human's allowance off the member cards into the /live top bar: one chip per human and a card
+with every account (`live/AllowanceChips.tsx`). The chips load in their own lazy chunk after the first roster read,
+as Who is here does, so initial JS on /live fell from 147.9 to 147.4 KB (local, against main). Lazy-loading cannot
+move total JS: it went from 349.3 to 350.5 KB local (350.7 after rebasing on main), and CI reads ~0.8 KB above
+local, so the ceiling moves 2,600 B.
+Live CSS grew 0.2 KB net (the chip and card rules, less the deleted 28px card line), a few bytes over its ceiling,
+so it moves 250 B. Measured + 15% would loosen both (ADR 183).
+
 ## 2026-10-26 — /broadcast frame time on the hosted stream seat (lanes 01M5QE7HXP, 01M5WN8NB8)
 
 The run 2026-10-23's entry left open: `/broadcast` on a real stream seat, measured on the stream itself
