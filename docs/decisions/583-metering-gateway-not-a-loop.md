@@ -68,7 +68,9 @@ the agent loop, and without holding or reading any credential.
    at through the base-URL variable that harness documents. The gateway forwards every request
    to the real provider unchanged, relays the response (streaming included) unchanged, and reads
    the provider's usage block from the response as it passes. It is the one place musterd sees
-   model calls on every harness.
+   model calls on every harness. _(Amended 2026-10-27: OpenRouter POST JSON requests receive a
+   usage-reporting opt-in and bounded body rewrite; invalid or oversized requests receive a local
+   error response, while upstream response bytes remain unchanged.)_
 2. **Every call is attributed and priced where it is seen.** The gateway tags each call with the
    wake lease, seat and lane it was spawned for (the lease id is already in the child's
    environment as `MUSTERD_WAKE_LEASE`; the gateway is per-wake, so the mapping is by
@@ -163,6 +165,15 @@ the agent loop, and without holding or reading any credential.
   gateway's upstreams, and they stay on the artifact. Checked live on 2026-10-19: one free-model
   wake on this machine metered 2 calls, 0 unmetered. A model with no row in the price table is
   metered and left unpriced (`no_price_row`) instead of being guessed.
+
+- _OpenRouter note (dated, 2026-10-27, lane `01M5JE08RMK8QAQ4BVW9DAYHWS`)._ OpenCode's wake-scoped
+  `openrouter` route points to `https://openrouter.ai/api/v1`; the gateway preserves the bearer
+  header without logging it and rewrites only OpenRouter POST JSON bodies, adding `usage: {include:
+  true}` and, for streaming calls, `stream_options: {include_usage: true}`. The body limit is 16
+  MiB; malformed JSON receives 400 and oversized input receives 413 locally. Responses are relayed
+  unchanged. The gateway prefers OpenRouter's reported `usage.cost`, then the dated table for a
+  known model. If neither gives a cost, the call remains unpriced and the next budgeted model call
+  is refused. A controlled upstream test covers these paths.
 
 - _Codex note (dated, 2026-10-19, lane `01M4VQ3CMRRNRFAVH3C7WS6JZG`)._ Codex now runs behind the
   gateway. It reads no base-URL variable, but takes `-c openai_base_url=…` per invocation under

@@ -18,8 +18,8 @@ import {
 } from './gateway.js';
 
 /**
- * ADR 583: the gateway relays bytes unchanged, reads only the usage block, prices from the table,
- * refuses on budget, and keeps no credential. A fake upstream on loopback plays the provider.
+ * ADR 583: the gateway relays provider responses unchanged, reads only usage/model data, prices
+ * calls, refuses on budget, and keeps no credential. A fake upstream on loopback plays the provider.
  */
 
 interface Seen {
@@ -377,6 +377,28 @@ describe('startMeteringGateway (ADR 583)', () => {
     expect((await post(`${gw.origin}/openrouter`, '/chat/completions', body)).status).toBe(402);
     expect(f.seen).toHaveLength(1);
     expect(gw.summary()).toMatchObject({ calls: 1, cost_usd: undefined, budget_exhausted: true });
+  });
+
+  it('does not log a budget refusal for an unpriced OpenRouter call when no budget is configured', async () => {
+    const f = await fakeUpstream(() => ({
+      body: JSON.stringify({
+        model: 'vendor/model-unknown-to-musterd',
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+      }),
+    }));
+    up = f.server;
+    const logs: string[] = [];
+    gw = await startMeteringGateway({
+      leaseId: 'L-openrouter-unpriced-unbudgeted',
+      upstreams: [{ name: 'openrouter', url: f.url }],
+      log: (line) => logs.push(line),
+    });
+    const body = JSON.stringify({ model: 'vendor/model-unknown-to-musterd', messages: [] });
+    expect((await post(`${gw.origin}/openrouter`, '/chat/completions', body)).status).toBe(200);
+    expect((await post(`${gw.origin}/openrouter`, '/chat/completions', body)).status).toBe(200);
+    expect(f.seen).toHaveLength(2);
+    expect(logs.join('\n')).not.toContain('next model call refused under budget_usd');
+    expect(gw.summary()).toMatchObject({ calls: 2, cost_usd: undefined, budget_exhausted: false });
   });
 
   it('blocks every model route after an unpriced OpenRouter call exhausts a wake budget', async () => {

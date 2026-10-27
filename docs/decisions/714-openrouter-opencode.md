@@ -32,6 +32,9 @@ changing their interactive configuration, or silently bypassing wake metering.
    without a row; it does not claim an unpriced call was free or accurately priced. The first
    implementation must demonstrate how supported OpenRouter model usage is priced and how the
    configured wake budget behaves before it is enabled for general use.
+   _(Amended 2026-10-27: for OpenRouter responses, prefer the reported `usage.cost`; fall back to
+   the dated table for known models. If neither supplies cost, keep the call unpriced and refuse
+   further budgeted model calls for that wake.)_
 4. Interactive calls remain outside Musterd wake metering. No OpenRouter API key is written to
    project config, Musterd state, traces, or logs.
 
@@ -45,6 +48,13 @@ prices, and wake-budget behavior. OpenRouter pricing is model-specific and can c
 need dated provenance and unknown models remain visibly unpriced. The interaction between
 OpenRouter's returned usage/cost fields and the gateway's current table-based pricing must be settled
 and tested before declaring generic model coverage.
+
+- _Implementation note (dated, 2026-10-27, lane `01M5JE08RMK8QAQ4BVW9DAYHWS`)._ OpenRouter
+  responses request usage reporting and the gateway records the provider-reported `usage.cost`
+  when present, falling back to the dated price table for a known model. When both sources lack a
+  cost, the wake turn remains unpriced; with `budget_usd` configured, the gateway refuses the next
+  model call on any route. Controlled-upstream tests cover reported and table-derived costs,
+  unknown-cost budget refusal, and the unbudgeted case.
 
 Follows-up: implement interactive setup guidance and OpenRouter routing for metered OpenCode wakes
 under Goal `openrouter-opencode`, with unknown-price and budget handling covered by acceptance tests.
