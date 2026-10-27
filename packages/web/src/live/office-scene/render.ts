@@ -47,7 +47,7 @@ import {
 } from './layout';
 import type { ReadStatus } from '../experimentReads';
 import { READ_PIN_CAP, readPins, STICKY_CAP, stickySway, type WallBoard } from './wallboard';
-import { DAY_ENV, sunBeam, type LightEnv } from './lighting';
+import { DAY_ENV, deskLampOn, sunBeam, type LightEnv } from './lighting';
 import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
 import { workingAtDesk, type Placement } from './seating';
@@ -4194,7 +4194,7 @@ export function renderScene(
       deskOwned,
       t,
       hide,
-      lampsOn: env.lampsOn,
+      lampsOn: env.lampsOn && deskLampOn(env, slot.id),
       dpr: opts.dpr,
       rendered: opts.rendered,
     });

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  sunBeam, computeLightEnv } from './lighting';
+import { computeLightEnv, deskLampLevel, deskLampOn, sunBeam } from './lighting';
 
 /** The office lighting model: natural light follows the PST clock, overhead follows occupancy, desk lamps
  * follow the dark. These lock the behaviour the render/CSS wiring depends on. */
@@ -58,6 +57,24 @@ describe('computeLightEnv', () => {
     expect(computeLightEnv(12, true).lampsOn).toBe(false); // bright noon — lamps off
     expect(computeLightEnv(21, true).lampsOn).toBe(true); // night — lamps on
     expect(computeLightEnv(6, true).lampsOn).toBe(true); // early dawn, still dim — lamps on
+  });
+
+  it('switches desk lamps on one by one through dusk, in a scattered order (lane 01M5XS62RF)', () => {
+    const ids = Array.from({ length: 22 }, (_, i) => i);
+    const lit = (h: number) => ids.filter((id) => deskLampOn(computeLightEnv(h, true), id)).length;
+    expect(lit(18.0)).toBe(0);
+    expect(lit(19.5)).toBe(22);
+    // between, the count climbs a few desks at a time, never all at once
+    const counts = Array.from({ length: 31 }, (_, i) => lit(18.0 + i * 0.05));
+    for (let i = 1; i < counts.length; i++) {
+      expect(counts[i]!).toBeGreaterThanOrEqual(counts[i - 1]!);
+      expect(counts[i]! - counts[i - 1]!).toBeLessThanOrEqual(4);
+    }
+    // neighbours do not switch together: no two adjacent ids sit within one desk's step of each other
+    const step = (0.62 - 0.22) / 22;
+    for (let id = 1; id < 22; id++) {
+      expect(Math.abs(deskLampLevel(id) - deskLampLevel(id - 1))).toBeGreaterThan(step);
+    }
   });
 
   it('warms the sky tint at the horizon and cools it at high sun', () => {

@@ -25,8 +25,12 @@ const DAWN_END = 7.5;
 const DUSK_START = 17.5;
 const DUSK_END = 20.0;
 
-/** Below this daylight level, people flick their desk lamp (and the overhead) on. */
-const LAMP_THRESHOLD = 0.42;
+/** Desk lamps come on one by one as the light goes, the way people notice dusk at different moments
+ * (lane 01M5XS62RF): the first at this daylight level, the last at `LAMP_LAST`. Through a normal dusk that
+ * is about 18:30 to 19:20, one desk at a time. Dawn runs it backwards. The span is centred on the single
+ * threshold every lamp used before (0.42). */
+const LAMP_FIRST = 0.62;
+const LAMP_LAST = 0.22;
 
 /** Interior light budget: a small never-black floor, the sun through the windows, and the ceiling fill.
  *
@@ -66,7 +70,8 @@ export interface LightEnv {
   /** Overhead ceiling lights — on when the office is occupied *during declared working hours* (a late
    * worker doesn't flip the whole ceiling bank; they work by lamp under `AFTER_HOURS_SPILL`). */
   overheadOn: boolean;
-  /** Desk lamps want to be on (dark enough outside). Still gated per-desk on occupancy in render. */
+  /** Dark enough for the first desk lamp. Each desk switches at its own level (`deskLampOn`), and is
+   * still gated on occupancy in render. */
   lampsOn: boolean;
   /** The team declared working hours and this instant is outside them (presence spec §5.5). False when
    * no schedule exists — the off-shift flavor never appears without one. */
@@ -129,7 +134,7 @@ export function computeLightEnv(pstHours: number, occupied: boolean, inShift: bo
     ambient,
     overheadOn,
     afterHours,
-    lampsOn: daylight < LAMP_THRESHOLD,
+    lampsOn: daylight < LAMP_FIRST,
     veilAlpha: (1 - ambient) * VEIL_MAX,
     veilColor: VEIL_COLOR,
     skyTint: `rgb(${r}, ${g}, ${b})`,
@@ -137,6 +142,21 @@ export function computeLightEnv(pstHours: number, occupied: boolean, inShift: bo
     // it) and at night (where the veil takes over) — so it reads as *entering* light, not a flat filter.
     skyStrength: daylight * 0.5,
   };
+}
+
+/**
+ * The daylight level below which desk `id` has its lamp on. Spread evenly across `LAMP_FIRST`…`LAMP_LAST`
+ * by the golden-ratio sequence, so neighbouring desks switch far apart in time and the order looks
+ * scattered rather than a sweep across the room. Pure and stable per desk.
+ */
+export function deskLampLevel(id: number): number {
+  const rank = (((id + 1) * 0.6180339887) % 1 + 1) % 1;
+  return LAMP_FIRST - rank * (LAMP_FIRST - LAMP_LAST);
+}
+
+/** Is desk `id`'s lamp on under `env`? (Occupancy is the caller's gate.) */
+export function deskLampOn(env: Pick<LightEnv, 'daylight'>, id: number): boolean {
+  return env.daylight < deskLampLevel(id);
 }
 
 /** A fully-lit daytime env — the safe default for any renderer that hasn't wired the clock yet. */
