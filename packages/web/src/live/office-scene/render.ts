@@ -2693,9 +2693,10 @@ export const PROP_SPEC: Record<
      put every photo on an N/E desk — but a re-hash or a re-faced desk would have framed a photo
      inside a laptop cradle, and nothing would have said so. */
   photo: { salt: 4, prob: 0.42, along: -27, across: 24, w: 20, d: 6 },
-  // prob 0.38 → 0.12 (2026-10-27): with the bare-desk fallback below it put a fan on ten of 23 desks
-  // (nick: "too many desk fans"); a fan is a quirk a few desks have, the mug is the default.
-  fan: { salt: 6, prob: 0.12, along: -10, across: 38, w: 9, d: 9 },
+  // prob 0.38 → 0.12 → 0.22 (2026-10-27): 0.12 with the bare-desk fallback put a fan on ten of 23 desks
+  // (nick: "too many desk fans"); without the fallback 0.12 rolled none, 0.22 rolls three. A fan is a
+  // quirk a few desks have, and a mug (0.4 → nine of 22) is the other.
+  fan: { salt: 6, prob: 0.22, along: -10, across: 38, w: 9, d: 9 },
   /** A closed pad on the front lip — the one part of every desk that was empty on every facing. */
   notebook: { salt: 7, prob: 0.42, along: -27, across: -22, w: 18, d: 12 },
   /** Pen cup: short, with a few coloured stems. The near end of the sparse `+across` flank. */
@@ -2708,13 +2709,11 @@ export const PROP_SPEC: Record<
 const rolledProp = (id: number, kind: PropKind): boolean =>
   deskRnd(id, PROP_SPEC[kind].salt) < PROP_SPEC[kind].prob;
 export function deskHasProp(id: number, kind: PropKind): boolean {
-  if (rolledProp(id, kind)) return true;
-  // Every desk carries something that moves once someone sits at it (lane 01M50X1WRW): a desk the hash
-  // gave neither a fan nor a mug gets one of the two, picked by its own hash so the room still varies.
-  // Decided here, so the baked prop, the sip mug and the Tier-A overlay all agree.
-  if ((kind === 'fan' || kind === 'coffee') && !rolledProp(id, 'fan') && !rolledProp(id, 'coffee'))
-    return deskRnd(id, 23) < 0.25 === (kind === 'fan');
-  return false;
+  // Decided here, so the baked prop, the sip mug and the Tier-A overlay all agree. Lane 01M50X1WRW
+  // once filled every bare desk with a mug or a fan so no desk sat still; nick reversed that on
+  // 2026-10-27 ("fewer mugs"): on the stream each mug's three steam wisps are three CSS animations
+  // repainted in software every frame, 57 of the page's 117. A mug is the hash's call, like every prop.
+  return rolledProp(id, kind);
 }
 /** The mug colour a desk's coffee cup uses — one hash shared by the desk prop and the in-hand sip mug. */
 function deskMugColor(id: number): string {
