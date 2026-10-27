@@ -49,3 +49,28 @@ export function stepDomAnimations(
   }
   return stepped;
 }
+
+/**
+ * Broadcast only: the props step on every `every`th DRAWN frame, not every one. Each step forces a
+ * style recalc and a software repaint of ~120 animated elements over a 1920×1080 frame, and on the
+ * capture box that repaint cost ~8 draws/s: with the props frozen the office drew 26–29/s, stepping
+ * them every frame 17–20/s (2026-10-27, machine 822710a73, lane 01M5ZV5PA6). At 30 fps capture,
+ * `every` 3 moves steam, motes and twinkles at ~10 fps — the same wall-clock distance, in fewer,
+ * larger steps — and the compositor gets a third of the damage.
+ *
+ * Returns the wall time to step the props by on a frame that steps, or null on one that skips; the
+ * skipped frames' time is owed to the next step, so nothing drifts.
+ */
+export function domPropCadence(every: number): (frameMs: number) => number | null {
+  const n = Math.max(1, Math.floor(every));
+  let owed = 0;
+  let i = 0;
+  return (frameMs) => {
+    owed += frameMs;
+    if (++i < n) return null;
+    i = 0;
+    const dt = owed;
+    owed = 0;
+    return dt;
+  };
+}
