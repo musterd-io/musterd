@@ -280,18 +280,16 @@ describe('animatedDeskAnchors', () => {
     expect(animatedDeskAnchors(fit, minusOne).fans.length).toBe(full - 1);
   });
 
-  it('gives every occupied desk at least one moving prop — no desk sits still (lane 01M50X1WRW)', () => {
-    for (const slot of DESK_SLOTS) {
-      const { fans, coffees } = animatedDeskAnchors(fit, new Set([slot.id]));
-      expect(fans.length + coffees.length, `desk ${slot.id}`).toBeGreaterThan(0);
-    }
+  it('steams at most half the desks — a mug is a per-desk quirk, not a fixture (nick, 2026-10-27: "fewer mugs")', () => {
+    // Lane 01M50X1WRW gave every occupied desk a mug or a fan so no desk sat still; with fans capped at
+    // five that put a mug on 18+ of 23 desks, and on the stream each mug's three wisps are three CSS
+    // animations repainted in software every frame — 57 of the page's 117. Some desks now sit still.
+    const mugs = DESK_SLOTS.filter((s) => deskHasProp(s.id, 'coffee')).length;
+    expect(mugs).toBeGreaterThan(3);
+    expect(mugs).toBeLessThanOrEqual(Math.floor(DESK_SLOTS.length / 2));
   });
 
-  it('fills a bare desk with a fan or a mug, and not the same one everywhere', () => {
-    for (const slot of DESK_SLOTS)
-      expect(deskHasProp(slot.id, 'fan') || deskHasProp(slot.id, 'coffee'), `desk ${slot.id}`).toBe(
-        true,
-      );
+  it('keeps fans a quirk, not the same one everywhere', () => {
     const fans = DESK_SLOTS.filter((s) => deskHasProp(s.id, 'fan')).length;
     expect(fans).toBeGreaterThan(1);
     // A fan is a quirk, not a fixture: ten of 23 desks had one (nick, 2026-10-27: "too many desk
