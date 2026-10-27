@@ -859,6 +859,29 @@ describe('runInit — configures the harness that was chosen, not only Claude Co
   });
 });
 
+describe('runInit — OpenRouter setup guidance', () => {
+  it('shows OpenCode-native connection and model selection guidance when OpenCode is selected', async () => {
+    const clack = await import('@clack/prompts');
+    h.registry.push({ ...h.otherHarness, id: 'opencode', label: 'OpenCode' });
+    h.textQueue.push('dawn', 'nick', '', 'Ada', 'backend');
+    h.selectQueue.push('new', 'generalist');
+    h.multiQueue.push(['opencode']);
+    h.confirmQueue.push(true, true, true);
+
+    expect(await runInit()).toBe(0);
+
+    const guidance = vi
+      .mocked(clack.note)
+      .mock.calls.find(([, title]) => title === 'OpenRouter in OpenCode')?.[0];
+    expect(guidance).toContain('OpenRouter dashboard');
+    expect(guidance).toContain('`/connect`');
+    expect(guidance).toContain('`/models`');
+    expect(guidance).toContain('OpenCode manages this credential');
+    expect(guidance).toContain('billed by OpenRouter');
+    expect(guidance).toContain('outside musterd wake metering');
+  });
+});
+
 describe('runInit — add-agent happy path', () => {
   it('writes the seat file before adding the member on a file-backed team (lane 01M4RJF62E)', async () => {
     const home = join(cwd, 'roster');
