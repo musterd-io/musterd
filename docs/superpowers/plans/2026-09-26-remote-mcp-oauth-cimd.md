@@ -237,13 +237,14 @@ Run on 2026-10-26 (lane 01M3QQJENE): a throwaway daemon on its own database, rea
 | Client | Identity it chose | Discovery | Consent | Callback + code exchange | Tool call | Refresh |
 |---|---|---|---|---|---|---|
 | claude.ai web | CIMD, `https://claude.ai/oauth/mcp-oauth-client-metadata` | pass | pass, page shows "Client ID host: claude.ai" | pass | pass, `team_status` | pass, `oauth.token_rotated` after the 1h expiry |
-| ChatGPT web, Plus account | CIMD, a per-connector `https://chatgpt.com/oauth/<id>/client.json` | pass | pass | pass | pass, `team_status` | not observed (the run ended inside the first hour) |
+| ChatGPT web, Plus account | CIMD, a per-connector `https://chatgpt.com/oauth/<id>/client.json` | pass | pass | pass | pass, `team_status` | pass on the 2026-10-27 rerun: `oauth.token_rotated` after the 1h expiry, then `team_status` again with no new consent |
 | Codex CLI 0.162 | CIMD, `https://chatgpt.com/oauth/codex/<id>/client.json` | pass | failed with 400, then pass after ADR 743 | pass | `tools/list` pass; no tool call, because the machine's Codex model login was revoked | not observed |
 | DCR | a client registered over `/register`, driven by curl through the tunnel | pass | pass | pass | pass, `team_status` | pass |
 
 - Codex registers portless loopback redirects and authorizes from an ephemeral port, which the exact redirect match refused. Fixed by [ADR 743](../../decisions/743-oauth-loopback-redirect-any-port.md) (#3379); the same login then completed.
 - No real client used DCR. All three defaulted to CIMD, and claude.ai sent its CIMD client ID even with "Register automatically" selected on the connector. The DCR row is therefore the client shape driven by hand, as Rehearsal A did, and not a real client.
 - ChatGPT's "Add custom MCP server" is on a Plus account, not only Business, Enterprise or Edu.
+- ChatGPT refresh, rerun 2026-10-27 after the acceptor's decline: the same rig on a new quick tunnel, built at 65c9ee04 (the consent page now styled, the telemetry route open to talk-only seats). The token was issued at 09:51:57 PDT and the first `team_status` ran at 09:54:01. A second `team_status` at 10:55 made ChatGPT send a `refresh_token` grant at 10:55:49, recorded as `oauth.token_rotated`, and the call returned 200 with no authorize request between them.
 - The consent page renders as unstyled HTML, and a remote seat's `POST /teams/:team/telemetry/tool-calls` is refused 403 on every tool call. Both are noted here and not fixed in this run.
 
 - [ ] **Step 5: Publish and close the lane by the repository workflow**
