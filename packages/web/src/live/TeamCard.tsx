@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { allowanceLines } from './allowanceLine';
 import type { LiveConfig } from './client';
 import { isFeatureBehind } from './format';
 import { MemberFace } from './MemberFace';
@@ -69,8 +68,6 @@ export function TeamCard({
   // without it on the minute, with no event and no poll.
   const [, setTick] = useState(0);
   const statusLine = visibleStatusLine(card.member, Date.now());
-  // ADR 723: one 28px line per account, under the name. A stream card and an empty reading omit it.
-  const lines = still ? [] : allowanceLines(card.member.allowance, now);
   useEffect(() => {
     if (!statusLine) return;
     const t = window.setTimeout(() => setTick((n) => n + 1), statusLine.expiresAt - Date.now() + 50);
@@ -126,23 +123,6 @@ export function TeamCard({
           </span>
         )}
       </span>
-      {lines.map((left, index) => (
-        <span
-          key={index}
-          className={`lc-team-card__left${left.warn ? ' is-warn' : ''}${left.quiet ? ' is-quiet' : ''}`}
-          title={left.title}
-        >
-          <span className="lc-team-card__left-words">
-            {left.text}
-            {left.suffixes.length > 0 && (
-              <span className="lc-team-card__left-more"> {left.suffixes.join(' · ')}</span>
-            )}
-          </span>
-          <span className="lc-team-card__left-bar" aria-hidden="true">
-            <i style={{ width: `${left.bar}%` }} />
-          </span>
-        </span>
-      ))}
       {statusLine && (
         <span className="lc-team-card__status">
           <span aria-hidden="true" dangerouslySetInnerHTML={{ __html: HOURGLASS_SVG }} />

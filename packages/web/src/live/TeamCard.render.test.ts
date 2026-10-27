@@ -57,7 +57,7 @@ describe('TeamCard — a reported seat is flagged on the card (ADR 676 §8)', ()
   });
 });
 
-describe('TeamCard — what is left on the account (ADR 723)', () => {
+describe('TeamCard — allowance is not on the card (ADR 744)', () => {
   const now = 1_000_000;
   const allowance = {
     readAt: now,
@@ -66,50 +66,13 @@ describe('TeamCard — what is left on the account (ADR 723)', () => {
         provider: 'claude' as const,
         label: 'Claude Max',
         readAt: now,
-        windows: [
-          { name: 'week', left: 0.18, resetsAt: 2, kind: 'percent' as const },
-          { name: '5h', left: 0.1, resetsAt: 1, kind: 'percent' as const },
-        ],
+        windows: [{ name: '5h', left: 0.1, resetsAt: 1, kind: 'percent' as const }],
       },
     ],
   };
 
-  it('prints the tightest window, a warn class under 15% left, and a muted suffix', () => {
-    const html = render(card({ allowance }), { now });
-    expect(html).toContain('lc-team-card__left is-warn');
-    expect(html).toContain('Claude Max 10% left');
-    expect(html).toContain('lc-team-card__left-more');
-    expect(html).toContain('week 18%');
-    expect(html).toContain('width:10%');
-  });
-
-  it('separates two extra windows with a middot, so the spaces do not collapse', () => {
-    const html = render(
-      card({
-        allowance: {
-          readAt: now,
-          accounts: [
-            {
-              provider: 'claude' as const,
-              label: 'Claude Max',
-              readAt: now,
-              windows: [
-                { name: '5h', left: 0.1, resetsAt: 1, kind: 'percent' as const },
-                { name: 'week', left: 0.4, resetsAt: 2, kind: 'percent' as const },
-                { name: 'month', left: 0.7, resetsAt: 3, kind: 'percent' as const },
-              ],
-            },
-          ],
-        },
-      }),
-      { now },
-    );
-    expect(html).toContain('week 40% · month 70%');
-    expect(html).not.toContain('week 40%  month 70%');
-  });
-
-  it('is absent with no reading and on a stream card', () => {
-    expect(render(card(), { now })).not.toContain('lc-team-card__left');
-    expect(render(card({ allowance }), { now, still: true })).not.toContain('lc-team-card__left');
+  it('paints no what-is-left line for an agent or a human: it lives in the header', () => {
+    expect(render(card({ allowance }), { now })).not.toContain('Claude Max');
+    expect(render(card({ kind: 'human', allowance }), { now })).not.toContain('Claude Max');
   });
 });

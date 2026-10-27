@@ -109,6 +109,14 @@ access; roster handles and Presence remain visible.
   a heartbeat that pulses on every act (the last act's age on hover), and acts over the loaded span
   (never extrapolated). Counts of who is working on what are the Now card's, not the meter's
   (live-briefing spec, increment 4). The team log's door is a topbar button beside Seeds.
+- **Allowance chips** (`live/AllowanceChips.tsx`, from `live/allowanceLine.ts`;
+  [ADR 744](../decisions/744-allowance-in-the-live-header.md)) — in the /live top bar after the Now
+  slot: one chip per human with a reading, offline humans included, agents never. A chip is the
+  human's face, the lowest window's percent and a 28px bar of what is left; warn ink under 15%,
+  muted type and a dimmed face once the reading is two minutes old. A click opens a card with every
+  account, lowest first, and "last read 3h ago" (or "offline · last read …") when stale; Escape or
+  an outside press closes it. Under 440px the name hides. The tour's entry button left this bar for
+  it, and the bar's wordmark is 20px (28 on /board and the site).
 - **Who is here** (`live/WhoIsHere.tsx`, from `live/hereRow.ts`; [ADR 692](../decisions/692-live-who-is-here.md))
   — at the head of the topbar's tools: the faces of the members with /live open, others by arrival
   and the viewer last. A /live tab claims with `workspace: '/live'` (`LiveConfig.page`), and a member
@@ -135,7 +143,7 @@ access; roster handles and Presence remain visible.
   (`SeatDetail`, exported from `live/RosterPanel.tsx`): posture chip with offline reason
   (ADR 138/141), a `reported` chip when a human declined the seat's ask as "I did not expect this" (ADR 676 §8, also marked on the card itself), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
-  A 28px what's-left line sits under the name for the account that seat is signed into (ADR 723), and it is absent on a `still` card (`/broadcast`), when the column is collapsed, and when that member has no reading.
+  The card carries no what's-left line: ADR 723 put it here, and ADR 744 moved it to one chip per human in the top bar.
   At its foot, the Experiments section (`live/Experiments.tsx` + `experimentReads.ts`, ADR 644): every
   lane carrying `reads_on`, grouped by the server's `read_status` (overdue, due, waiting, read for 7
   days), so an overdue read is seen by the room; the folded rail carries the overdue count. A read
@@ -309,7 +317,8 @@ live/
   teamContact.ts                // the team's public address, per team and never derived from the slug; printed beside the office mark on /live and /broadcast
   TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type, goal + areas + age meta; click expands to `SeatDetail` (lazy: its chunk loads on the first expand)
-  allowanceLine.ts              // the 28px what's-left line (ADR 723): tightest window, a 2px bar of what is left, no zod
+  allowanceLine.ts              // what's left per account (ADR 723) and per human (`allowanceChips`, ADR 744): tightest window, stale note, no zod
+  AllowanceChips.tsx            // the /live top bar's allowance chips, one per human, and the account card a chip opens (ADR 744)
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words, carrying derived/declared areas from the shown lane (pure, node-tested)
   Experiments.tsx               // the team column's Experiments section (ADR 644): the dated reads as rows with shape marks, capped at five (urgent never hidden), linked to /board on /live, still on /broadcast
   ExperimentSpark.tsx           // an experiment's sparkline, a lazy chunk off /live's first paint (lane 01M5GE8AX4): one sample is the number · day 1, a dotted trail and the dot; more draw the line over a soft fill to an end dot; today's live point breathes beside `now`
@@ -353,7 +362,7 @@ live/
     welcomeWagon.ts             // the Welcome Wagon beat sequencer: 2 s waves, Act 1 / Act 2 / crowd scripts, mark/seat gates, backlog cap, busy-room cap — pure
     welcomeRoom.ts              // the Welcome Wagon's wiring behind ports: roster → arrivals → beats → residents, and the paint the renderer is shown (unit-tested; index.ts only plugs it in)
 components/                     // marketing surface (Hero, Roadmap, Footer, LiquidGlass, Wedge)
-  tour/                         // the first-run tour on /live and /board (lane 01M4M4DDYF, spec docs/design/tour-web-copy.md): Tour.tsx (lazy chunk, human viewers only; entry button portalled into the topbar), tourMachine.ts (the CLI tour's step machine, ported; copy from content/tour.data.ts via build-prep → content/generated/tour.ts); LaneTicket.tsx (the tour lane as a ticket: track, story, accept stamp; the spotlight reads data-member / data-lane on the team and lane cards)
+  tour/                         // the first-run tour on /live and /board (lane 01M4M4DDYF, spec docs/design/tour-web-copy.md): Tour.tsx (lazy chunk, human viewers only; entry button portalled into /board's topbar — /live's bar gave its slot to the allowance chips, ADR 744), tourMachine.ts (the CLI tour's step machine, ported; copy from content/tour.data.ts via build-prep → content/generated/tour.ts); LaneTicket.tsx (the tour lane as a ticket: track, story, accept stamp; the spotlight reads data-member / data-lane on the team and lane cards)
 brand/                          // unified marks — the tile mark (full + small cuts, chipMark.ts; ADR 702) + the nameplate wordmark (wordmarkMark.ts, wordmark.svg; ADR 704) rendered by the MusterdWord topbar lockup; social-card.png + siteMeta.ts (og:image on musterd.io)
 ```
 

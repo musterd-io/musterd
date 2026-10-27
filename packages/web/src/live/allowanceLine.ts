@@ -34,6 +34,9 @@ export interface AllowanceLine {
   bar: number;
   warn: boolean;
   quiet: boolean;
+  /** The top window's raw share left and reset, so lines from several accounts can be ranked. */
+  left: number;
+  resetsAt: number | null;
 }
 
 function percent(left: number): number {
@@ -92,7 +95,14 @@ function lineFor(account: AllowanceLineAccount, now: number): AllowanceLine | nu
     bar: n,
     warn: top.left < 0.15,
     quiet: now - account.readAt > ALLOWANCE_QUIET_MS,
+    left: top.left,
+    resetsAt: top.resetsAt,
   };
+}
+
+function byTightest(a: AllowanceLine, b: AllowanceLine): number {
+  if (a.left !== b.left) return a.left - b.left;
+  return (a.resetsAt ?? Number.POSITIVE_INFINITY) - (b.resetsAt ?? Number.POSITIVE_INFINITY);
 }
 
 /** One line per account. No accounts, no line. */
@@ -105,4 +115,66 @@ export function allowanceLines(
     const line = lineFor(account, now);
     return line ? [line] : [];
   });
+}
+
+/** How old a reading is, in the card's words (alfie's copy, lane 01M5ZFNPKA). */
+export function readingAge(ms: number): string {
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+export interface AllowanceChipMember {
+  name: string;
+  kind: string;
+  presence?: string | null | undefined;
+  allowance?: AllowanceLineView | null | undefined;
+}
+
+/** One human's chip in the /live header (ADR 744): the lowest account leads, the card lists all. */
+export interface AllowanceChip {
+  name: string;
+  /** Every account, lowest first. `lines[0]` is the one the chip shows. */
+  lines: AllowanceLine[];
+  offline: boolean;
+  /** "last read 3h ago", with "offline · " in front for an offline human; null while fresh. */
+  note: string | null;
+  label: string;
+}
+
+/**
+ * The header's chips: humans only, one per human with a reading, offline humans included. An
+ * agent's reading stays on the roster and is not painted (ADR 744). The signed-in viewer comes
+ * first, then online humans, then offline ones, by name within each.
+ */
+export function allowanceChips(
+  roster: readonly AllowanceChipMember[],
+  now: number,
+  you: string | null = null,
+): AllowanceChip[] {
+  const chips = roster.flatMap((member) => {
+    if (member.kind !== 'human' || !member.allowance) return [];
+    const lines = allowanceLines(member.allowance, now).sort(byTightest);
+    const top = lines[0];
+    if (!top) return [];
+    const offline = member.presence === 'offline';
+    const age = now - member.allowance.readAt;
+    const stale = age > ALLOWANCE_QUIET_MS;
+    const read = `last read ${readingAge(age)}`;
+    const note = stale ? (offline ? `offline · ${read}` : read) : null;
+    const label = [
+      `${member.name}'s allowance: ${top.text}`,
+      lines.length > 1 ? `the lowest of ${lines.length} accounts` : null,
+      stale && offline ? 'offline' : null,
+      stale ? read : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    return [{ name: member.name, lines, offline, note, label }];
+  });
+  const rank = (chip: AllowanceChip) => (chip.name === you ? 0 : chip.offline ? 2 : 1);
+  return chips.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 }
