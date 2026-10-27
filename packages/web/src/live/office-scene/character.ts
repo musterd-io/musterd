@@ -183,14 +183,15 @@ export function animFor(
     const a = anims[anim]!;
     return { anim, startT: t - pose.phase * (a.frames / a.fps) };
   }
-  // Seated with something to say: the hand goes up (the painter's help overlay), over the typing.
-  if (pose.sit > 0.9 && pose.bubble && anims['sit-hand'])
-    return { anim: 'sit-hand', startT: seed * 10 };
   // A casual seat — couch, stool, meeting chair — has no keyboard: hands in the lap, laptop under the
-  // arm (`sit-lap`, office v3-6) and never the typing clip; a sheet without it idles (v3-3 shipped the
-  // seats first).
+  // arm (`sit-lap`, office v3-6) and never the typing clip nor the raised hand over it (`sit-hand` is
+  // the keyboard arms plus one arm up — spec §2.8); a sheet without it idles (v3-3 shipped the seats
+  // first). This outranks the bubble below: a bubbled café sitter keeps the hands down.
   if (pose.sit > 0.9 && pose.casual)
     return { anim: anims['sit-lap'] ? 'sit-lap' : 'sit-idle', startT: seed * 10 };
+  // Seated at a desk with something to say: the hand goes up (the painter's help overlay), over the typing.
+  if (pose.sit > 0.9 && pose.bubble && anims['sit-hand'])
+    return { anim: 'sit-hand', startT: seed * 10 };
   if (pose.sit > 0.9) return { anim: typing > 0 ? 'sit-type' : 'sit-idle', startT: seed * 10 };
   if (pose.sit > 0) {
     const a = anims['sit-down'];
