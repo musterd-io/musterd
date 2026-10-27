@@ -88,6 +88,20 @@ describe('makeSpriteCache', () => {
     });
     expect(made[0]!.ops).toContain('setLineDash()');
   });
+  it('holds a full room frame by default — a second frame of 300 keys redraws nothing', () => {
+    // 2026-10-27: /broadcast cycled 151 keys a frame through a 128-entry LRU, so every key was evicted
+    // before its next use and the hosted stream re-rasterized the whole room at 4 fps (lane 01M5ZQ85TP).
+    const { made, createCanvas } = fakeCanvasFactory();
+    const cache = makeSpriteCache({ dpr: 1, createCanvas });
+    const frame = () => {
+      for (let i = 0; i < 300; i++) cache.get(`item·${i}`, box, () => {});
+    };
+    frame();
+    expect(made).toHaveLength(300);
+    frame();
+    expect(made).toHaveLength(300);
+  });
+
   it('evicts least-recently-used past max', () => {
     const { made, createCanvas } = fakeCanvasFactory();
     const cache = makeSpriteCache({ dpr: 1, max: 2, createCanvas });

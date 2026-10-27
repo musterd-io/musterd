@@ -42,7 +42,7 @@ export interface SpriteCache {
 export function makeSpriteCache(opts: { dpr: number; max?: number }): SpriteCache;
 ```
 
-- LRU, default `max` 128. ~30 items × a few variants at 1080p; sprites are typically 100–300 device px square, so a few MB total.
+- LRU, default `max` 128. ~30 items × a few variants at 1080p; sprites are typically 100–300 device px square, so a few MB total. _(Amended 2026-10-27: the default is 512. A frame of /broadcast touches ~151 keys — 36 desks × 4 sprites, 20 chairs × 2, the shell and the furniture — so at 128 every key was evicted before its next use and the cache missed on every item every frame; the hosted stream drew at 4 fps. The cap must exceed one frame's key count, lane 01M5ZQ85TP.)_
 - Rasterizes at the item's **actual device position**: the offscreen canvas origin is `(floor(x), floor(y))` and `draw` runs under `setTransform(dpr, 0, 0, dpr, fracX, fracY)` — the same pixel grid the sprite is later blitted onto, so sub-pixel antialiasing is identical.
 - Resets `globalAlpha`, `globalCompositeOperation`, shadow state, `lineWidth`, `lineCap/Join`, `font`, `textAlign/Baseline` to the canvas defaults before `draw`, so the offscreen context starts as the direct path's would.
 - The blit is `ctx.drawImage(sprite, box.x, box.y)` under an identity transform — integer coordinates, no resampling.
@@ -108,7 +108,7 @@ The render tests run in vitest under `environment: 'node'` against a recording m
 - **Dark by default.** `OfficeOptions.sprites?: boolean`; `/broadcast` reads `&sprites=1`. The default flips on only after (2) is byte-equal across the matrix **and** (3) clears 25 ms. Viewers never see an intermediate.
 - **Sequence:** (1) `SpriteCache` + tests → (2) workstations (most items, most cost) → (3) plants, shelves, entrance, bench → (4) background layer + lift clock and sign to live → (5) pixel gate script → (6) box measurement → (7) flip default, wiki claim, PR.
 - **Exit criterion:** if after step 4 the interleaved measurement does not reach ≤ 25 ms/draw, stop and report the number. Reaching for the lighting pass or loosening pixel identity is a new decision for nick, not a scope change.
-- **Memory:** LRU cap 128 sprites plus one full-stage background canvas (~8 MB at 1080p). Inside what the capture box already spends on Chrome.
+- **Memory:** LRU cap 128 sprites plus one full-stage background canvas (~8 MB at 1080p). Inside what the capture box already spends on Chrome. _(Amended 2026-10-27: cap 512; see above.)_
 
 ## Risks
 
