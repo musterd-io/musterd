@@ -3840,17 +3840,19 @@ export function deskStationItems(
      only churn the cache, so it paints live until the beat ends. */
   const resting = shift === 0 && yaw === 0;
   const chairKey = `chair·${slot.id}·${vacantPeek}·${chairColor}·${statKey}`;
-  // The rendered chair (lane 01M5D8EJ40): the kind's sprite for this seat axis, tinted with the chair colour.
+  // The rendered chair (lane 01M5D8EJ40): the kind's sprite, tinted with the chair colour. The base
+  // (a star) is the same from every side, so one image per seat axis; the back curves round the sitter
+  // and reclines (office v3-4), so it has one image per facing.
   const axis = FWD[slot.dir][1] !== 0 ? 'sn' : 'ew';
-  const chairArt = `chair/${chairVariantFor(slot.id)}/${axis}`;
+  const chairArt = `chair/${chairVariantFor(slot.id)}`;
   const drawBase = (c: CanvasRenderingContext2D) => {
     // the shadow untinted under the tinted chair (a multiply would show the tint in its soft edge)
-    if (opts.rendered.images.has(`${chairArt}/base`))
+    if (opts.rendered.images.has(`${chairArt}/${axis}/base`))
       blitIf(c, fit, opts.rendered, 'chair/shadow', cx, cy);
-    blitTinted(c, fit, opts.rendered, `${chairArt}/base`, cx, cy, chairColor);
+    blitTinted(c, fit, opts.rendered, `${chairArt}/${axis}/base`, cx, cy, chairColor);
   };
   const drawBack = (c: CanvasRenderingContext2D) => {
-    blitTinted(c, fit, opts.rendered, `${chairArt}/back`, bx, by, chairColor);
+    blitTinted(c, fit, opts.rendered, `${chairArt}/${slot.dir}/back`, bx, by, chairColor);
   };
   out.push({
     d: depth(cx, cy) - 0.2,

@@ -19,6 +19,7 @@ import {
   NOOK_CAP,
   NOOK_SPOTS,
   POD_SHAPE_SEATS,
+  PLANTS,
   PODS,
   RECEPTION,
   SEAT_BACK,
@@ -98,6 +99,16 @@ describe('desk pods', () => {
         expect(a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1).toBe(false);
       }
     }
+  });
+});
+
+describe('plants (office v3-4)', () => {
+  it('uses only the three rendered species, and a trailing pothos stands at the pinwheel hub', () => {
+    for (const p of PLANTS) expect(['snake', 'fiddle', 'pothos']).toContain(p.species);
+    const pw = PODS.find((p) => p.shape === 'pinwheel')!;
+    const hub = PLANTS.find((p) => p.lx === pw.cx && p.ly === pw.cy);
+    expect(hub?.species).toBe('pothos');
+    expect(PLANTS.filter((p) => p.species === 'pothos')).toHaveLength(2);
   });
 });
 

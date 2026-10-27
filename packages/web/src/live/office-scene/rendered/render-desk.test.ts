@@ -126,7 +126,8 @@ const STATIC_IDS: Record<string, number> = {
   'rug/meeting': 1,
   'rug/reception': 1,
   'bench/base': 1,
-  'plant/snake': 3, // two on the walls + the pinwheel's hub (v3-3: the one under the café shelf boxed its reader in)
+  'plant/snake': 2, // the two on the walls
+  'plant/pothos': 2, // the pinwheel's hub and the café corner (v3-4)
   'plant/fiddle': 5, // four on the floor + reception's (v3-3: the café corner's went for the couch)
   'shelf/0': 1,
   'shelf/1': 1,
@@ -532,9 +533,10 @@ describe('rendered desk chairs (lane 01M5D8EJ40)', () => {
   const styles = ['task', 'wheeled', 'wheeled-arms', 'exec', 'gamer'];
   const ids = [
     'chair/shadow',
-    ...styles.flatMap((s) =>
-      ['sn', 'ew'].flatMap((a) => [`chair/${s}/${a}/base`, `chair/${s}/${a}/back`]),
-    ),
+    ...styles.flatMap((s) => [
+      ...['sn', 'ew'].map((a) => `chair/${s}/${a}/base`),
+      ...['N', 'E', 'S', 'W'].map((f) => `chair/${s}/${f}/back`),
+    ]),
   ];
 
   it('each chair is its style’s sprite, tinted on a canvas the size of the sprite, never a default-sized one', () => {

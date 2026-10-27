@@ -17,13 +17,46 @@
       "scale": 3.0
     },
     {
-      "id": "chair/exec/ew/back",
-      "file": "office-art-chair-exec-ew-back.webp",
-      "w": 102,
-      "h": 178,
+      "id": "chair/exec/E/back",
+      "file": "office-art-chair-exec-E-back.webp",
+      "w": 118,
+      "h": 181,
       "anchor": {
-        "x": 51.0,
-        "y": 216.0
+        "x": 56.0,
+        "y": 219.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/exec/N/back",
+      "file": "office-art-chair-exec-N-back.webp",
+      "w": 118,
+      "h": 180,
+      "anchor": {
+        "x": 56.0,
+        "y": 218.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/exec/S/back",
+      "file": "office-art-chair-exec-S-back.webp",
+      "w": 118,
+      "h": 181,
+      "anchor": {
+        "x": 62.0,
+        "y": 219.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/exec/W/back",
+      "file": "office-art-chair-exec-W-back.webp",
+      "w": 118,
+      "h": 180,
+      "anchor": {
+        "x": 62.0,
+        "y": 218.0
       },
       "scale": 3.0
     },
@@ -39,17 +72,6 @@
       "scale": 3.0
     },
     {
-      "id": "chair/exec/sn/back",
-      "file": "office-art-chair-exec-sn-back.webp",
-      "w": 102,
-      "h": 178,
-      "anchor": {
-        "x": 51.0,
-        "y": 216.0
-      },
-      "scale": 3.0
-    },
-    {
       "id": "chair/exec/sn/base",
       "file": "office-art-chair-exec-sn-base.webp",
       "w": 164,
@@ -61,13 +83,46 @@
       "scale": 3.0
     },
     {
-      "id": "chair/gamer/ew/back",
-      "file": "office-art-chair-gamer-ew-back.webp",
-      "w": 104,
-      "h": 211,
+      "id": "chair/gamer/E/back",
+      "file": "office-art-chair-gamer-E-back.webp",
+      "w": 124,
+      "h": 217,
       "anchor": {
-        "x": 52.0,
-        "y": 249.0
+        "x": 62.0,
+        "y": 255.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/gamer/N/back",
+      "file": "office-art-chair-gamer-N-back.webp",
+      "w": 124,
+      "h": 202,
+      "anchor": {
+        "x": 62.0,
+        "y": 240.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/gamer/S/back",
+      "file": "office-art-chair-gamer-S-back.webp",
+      "w": 124,
+      "h": 217,
+      "anchor": {
+        "x": 62.0,
+        "y": 255.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/gamer/W/back",
+      "file": "office-art-chair-gamer-W-back.webp",
+      "w": 124,
+      "h": 202,
+      "anchor": {
+        "x": 62.0,
+        "y": 240.0
       },
       "scale": 3.0
     },
@@ -79,17 +134,6 @@
       "anchor": {
         "x": 82.0,
         "y": 130.0
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "chair/gamer/sn/back",
-      "file": "office-art-chair-gamer-sn-back.webp",
-      "w": 104,
-      "h": 211,
-      "anchor": {
-        "x": 52.0,
-        "y": 249.0
       },
       "scale": 3.0
     },
@@ -116,13 +160,46 @@
       "scale": 3.0
     },
     {
-      "id": "chair/task/ew/back",
-      "file": "office-art-chair-task-ew-back.webp",
-      "w": 94,
-      "h": 147,
+      "id": "chair/task/E/back",
+      "file": "office-art-chair-task-E-back.webp",
+      "w": 106,
+      "h": 149,
       "anchor": {
-        "x": 47.0,
-        "y": 185.0
+        "x": 49.0,
+        "y": 187.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/task/N/back",
+      "file": "office-art-chair-task-N-back.webp",
+      "w": 106,
+      "h": 149,
+      "anchor": {
+        "x": 49.0,
+        "y": 187.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/task/S/back",
+      "file": "office-art-chair-task-S-back.webp",
+      "w": 106,
+      "h": 149,
+      "anchor": {
+        "x": 57.0,
+        "y": 187.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/task/W/back",
+      "file": "office-art-chair-task-W-back.webp",
+      "w": 106,
+      "h": 149,
+      "anchor": {
+        "x": 57.0,
+        "y": 187.0
       },
       "scale": 3.0
     },
@@ -138,17 +215,6 @@
       "scale": 3.0
     },
     {
-      "id": "chair/task/sn/back",
-      "file": "office-art-chair-task-sn-back.webp",
-      "w": 94,
-      "h": 147,
-      "anchor": {
-        "x": 47.0,
-        "y": 185.0
-      },
-      "scale": 3.0
-    },
-    {
       "id": "chair/task/sn/base",
       "file": "office-art-chair-task-sn-base.webp",
       "w": 164,
@@ -160,13 +226,46 @@
       "scale": 3.0
     },
     {
-      "id": "chair/wheeled-arms/ew/back",
-      "file": "office-art-chair-wheeled-arms-ew-back.webp",
-      "w": 94,
-      "h": 153,
+      "id": "chair/wheeled-arms/E/back",
+      "file": "office-art-chair-wheeled-arms-E-back.webp",
+      "w": 107,
+      "h": 155,
       "anchor": {
-        "x": 47.0,
-        "y": 191.0
+        "x": 50.0,
+        "y": 193.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/wheeled-arms/N/back",
+      "file": "office-art-chair-wheeled-arms-N-back.webp",
+      "w": 107,
+      "h": 155,
+      "anchor": {
+        "x": 50.0,
+        "y": 193.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/wheeled-arms/S/back",
+      "file": "office-art-chair-wheeled-arms-S-back.webp",
+      "w": 107,
+      "h": 155,
+      "anchor": {
+        "x": 57.0,
+        "y": 193.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/wheeled-arms/W/back",
+      "file": "office-art-chair-wheeled-arms-W-back.webp",
+      "w": 107,
+      "h": 155,
+      "anchor": {
+        "x": 57.0,
+        "y": 193.0
       },
       "scale": 3.0
     },
@@ -182,17 +281,6 @@
       "scale": 3.0
     },
     {
-      "id": "chair/wheeled-arms/sn/back",
-      "file": "office-art-chair-wheeled-arms-sn-back.webp",
-      "w": 94,
-      "h": 153,
-      "anchor": {
-        "x": 47.0,
-        "y": 191.0
-      },
-      "scale": 3.0
-    },
-    {
       "id": "chair/wheeled-arms/sn/base",
       "file": "office-art-chair-wheeled-arms-sn-base.webp",
       "w": 164,
@@ -204,13 +292,46 @@
       "scale": 3.0
     },
     {
-      "id": "chair/wheeled/ew/back",
-      "file": "office-art-chair-wheeled-ew-back.webp",
-      "w": 94,
-      "h": 153,
+      "id": "chair/wheeled/E/back",
+      "file": "office-art-chair-wheeled-E-back.webp",
+      "w": 107,
+      "h": 155,
       "anchor": {
-        "x": 47.0,
-        "y": 191.0
+        "x": 50.0,
+        "y": 193.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/wheeled/N/back",
+      "file": "office-art-chair-wheeled-N-back.webp",
+      "w": 107,
+      "h": 155,
+      "anchor": {
+        "x": 50.0,
+        "y": 193.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/wheeled/S/back",
+      "file": "office-art-chair-wheeled-S-back.webp",
+      "w": 107,
+      "h": 155,
+      "anchor": {
+        "x": 57.0,
+        "y": 193.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "chair/wheeled/W/back",
+      "file": "office-art-chair-wheeled-W-back.webp",
+      "w": 107,
+      "h": 155,
+      "anchor": {
+        "x": 57.0,
+        "y": 193.0
       },
       "scale": 3.0
     },
@@ -222,17 +343,6 @@
       "anchor": {
         "x": 82.0,
         "y": 105.0
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "chair/wheeled/sn/back",
-      "file": "office-art-chair-wheeled-sn-back.webp",
-      "w": 94,
-      "h": 153,
-      "anchor": {
-        "x": 47.0,
-        "y": 191.0
       },
       "scale": 3.0
     },
@@ -350,10 +460,10 @@
       "id": "meeting/chair-0",
       "file": "office-art-meeting-chair-0.webp",
       "w": 126,
-      "h": 182,
+      "h": 183,
       "anchor": {
         "x": 62.94,
-        "y": 151.45
+        "y": 152.45
       },
       "scale": 3.0
     },
@@ -361,10 +471,10 @@
       "id": "meeting/chair-1",
       "file": "office-art-meeting-chair-1.webp",
       "w": 125,
-      "h": 182,
+      "h": 183,
       "anchor": {
         "x": 62.63,
-        "y": 151.39
+        "y": 152.39
       },
       "scale": 3.0
     },
@@ -372,10 +482,10 @@
       "id": "meeting/chair-2",
       "file": "office-art-meeting-chair-2.webp",
       "w": 126,
-      "h": 182,
+      "h": 183,
       "anchor": {
         "x": 63.04,
-        "y": 151.31
+        "y": 152.31
       },
       "scale": 3.0
     },
@@ -383,10 +493,10 @@
       "id": "meeting/chair-3",
       "file": "office-art-meeting-chair-3.webp",
       "w": 126,
-      "h": 162,
+      "h": 164,
       "anchor": {
         "x": 63.08,
-        "y": 131.22
+        "y": 133.22
       },
       "scale": 3.0
     },
@@ -624,22 +734,33 @@
     {
       "id": "plant/fiddle",
       "file": "office-art-plant-fiddle.webp",
-      "w": 118,
-      "h": 277,
+      "w": 124,
+      "h": 221,
       "anchor": {
-        "x": 60.0,
-        "y": 247.0
+        "x": 62.0,
+        "y": 188.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "plant/pothos",
+      "file": "office-art-plant-pothos.webp",
+      "w": 107,
+      "h": 187,
+      "anchor": {
+        "x": 50.0,
+        "y": 165.0
       },
       "scale": 3.0
     },
     {
       "id": "plant/snake",
       "file": "office-art-plant-snake.webp",
-      "w": 118,
-      "h": 428,
+      "w": 112,
+      "h": 281,
       "anchor": {
-        "x": 58.0,
-        "y": 338.0
+        "x": 55.0,
+        "y": 251.0
       },
       "scale": 3.0
     },
