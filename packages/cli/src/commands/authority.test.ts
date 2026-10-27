@@ -60,6 +60,15 @@ function captureStdout() {
   return out;
 }
 
+function captureStderr() {
+  const err: string[] = [];
+  vi.spyOn(process.stderr, 'write').mockImplementation((s) => {
+    err.push(String(s));
+    return true;
+  });
+  return err;
+}
+
 describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
   it('enroll with no standing key prints the ceremony link and waits for the new key', async () => {
     h.keys = [];
@@ -67,8 +76,9 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
       keys: [{ id: 'key-9', kind: 'passkey', created_at: 2, revoked_at: null }],
     });
     const out = captureStdout();
+    const err = captureStderr();
     expect(await authorityCommand(parsed(['enroll']))).toBe(0);
-    expect(out.join('')).toContain(
+    expect(err.join('')).toContain(
       '/authority/passkey?team=revive&member=nick&challenge=challenge-at-least-16-chars',
     );
     expect(out.join('')).toContain('passkey enrolled for nick (key-9)');
@@ -89,9 +99,11 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
         ],
       });
     const out = captureStdout();
+    const err = captureStderr();
     expect(await authorityCommand(parsed(['enroll']))).toBe(0);
-    expect(out.join('')).toContain('/authority/approve?team=revive');
-    expect(out.join('')).toContain('#approval=');
+    expect(err.join('')).toContain('/authority/approve?team=revive');
+    expect(err.join('')).toContain('#approval=');
+    expect(out.join('')).not.toContain('/authority/approve?team=revive');
     expect(h.createAuthorityDescriptor).toHaveBeenCalledWith(
       'revive',
       expect.objectContaining({ act: 'device_key_admin' }),
@@ -106,6 +118,7 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
       keys: [{ id: 'key-7', kind: 'passkey', created_at: 2, revoked_at: null }],
     });
     const out = captureStdout();
+    const err = captureStderr();
     expect(
       await authorityCommand(
         parsed(['enroll'], {
@@ -115,7 +128,8 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
       ),
     ).toBe(0);
     expect(h.createAuthorityDescriptor).not.toHaveBeenCalled();
-    const encoded = out.join('').match(/#countersign=([^\s]+)/)?.[1];
+    expect(out.join('')).not.toContain('#countersign=');
+    const encoded = err.join('').match(/#countersign=([^\s]+)/)?.[1];
     expect(encoded).toBeDefined();
     expect(JSON.parse(Buffer.from(encoded!, 'base64url').toString('utf8'))).toEqual({
       confirmer: 'root',
@@ -150,13 +164,34 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
         keys: [{ id: 'key-10', kind: 'passkey', created_at: 2, revoked_at: null }],
       });
       const out = captureStdout();
+      const err = captureStderr();
       expect(await authorityCommand(parsed(['enroll']))).toBe(0);
-      expect(out.join('')).toContain('Open http://localhost:4849/authority/passkey?');
-      expect(out.join('')).not.toContain('Open http://127.0.0.1:4849/authority/passkey?');
+      expect(err.join('')).toContain('Open http://localhost:4849/authority/passkey?');
+      expect(err.join('')).not.toContain('Open http://127.0.0.1:4849/authority/passkey?');
+      expect(out.join('')).not.toContain('authority/passkey?');
     } finally {
       h.server = 'http://localhost:4849';
       vi.restoreAllMocks();
     }
+  });
+
+  it('approve keeps stdout as pure JSON — approval prompts go to stderr (lane 01M5ZE7F4G)', async () => {
+    // Regression: create.sh captures `team bootstrap mint --json | jq`; approval chatter on
+    // stdout killed jq, then the mint died EPIPE writing to the closed pipe (2026-10-27).
+    const out = captureStdout();
+    const err = captureStderr();
+    try {
+      expect(
+        await authorityCommand(
+          parsed(['approve'], { act: 'credential_mint', target: 'cloud-delta-2', payload: '{}' }),
+        ),
+      ).toBe(0);
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(JSON.parse(out.join(''))).toEqual(expect.objectContaining({ key_id: 'key-1' }));
+    expect(out.join('')).not.toContain('Approve at');
+    expect(err.join('')).toContain('/authority/approve?team=revive');
   });
 
   it('keys lists the daemon keys', async () => {
