@@ -78,10 +78,6 @@ WAIT_CHAIR = 42
 END_TABLE = 26
 ENTRANCE = (47, 815)
 PRINTER = dict(lx=505, ly=60, w=46, d=34, h=32)
-PLANTS = [  # lx, ly, species
-    (70, 110, "snake"), (225, 330, "snake"), (55, 645, "fiddle"), (866, 490, "snake"),
-    (380, 870, "fiddle"), (66, 470, "fiddle"), (872, 878, "fiddle"),
-]
 SHELF_LONG, SHELF_DEEP, SHELF_H, DEEP_WIDE = 58, 20, 66, 22
 BOOKSHELVES = [  # lx, ly, dir, long, deep, high, rows, tone
     (130, SHELF_DEEP / 2, "S", 44, SHELF_DEEP, 88, 4, 1.0),
@@ -552,20 +548,6 @@ def rug(asset_id: str, lx: float, ly: float, w: float, d: float, fill: str, mark
     for sx in (-1, 1):
         for sy in (-1, 1):
             parts.append(cyl(f"{asset_id}/knot", lx + sx * (w / 2 - 4), ly + sy * (d / 2 - 4), 1.2, 4.2, 3.2, 1.2, accent, zs, 12))
-    return finish(asset_id, parts, lx, ly, col)
-
-
-def diamond_rug(asset_id: str, lx: float, ly: float, r: float, fill: str, mark: str, zs: float, col) -> bpy.types.Object:
-    """The nook's one big diamond rug: a square turned 45° in floor space, bound with a darker edge."""
-    base = fabric(f"rug-{fill}", srgb(fill), weave=1.4)
-    accent = fabric(f"rug-{mark}", srgb(mark), weave=1.4)
-    side = r * math.sqrt(2)
-    parts = []
-    for name, rr, z0, h, mat in (("field", r, 0, 1.2, base), ("border", r - 14, 1.2, 0.3, accent), ("inner", r - 26, 1.5, 0.3, base)):
-        o = box(f"{asset_id}/{name}", lx, ly, z0, rr * math.sqrt(2), rr * math.sqrt(2), h, mat, zs)
-        o.rotation_euler = (0, 0, math.radians(45))
-        bpy.ops.object.transform_apply(rotation=True)
-        parts.append(o)
     return finish(asset_id, parts, lx, ly, col)
 
 

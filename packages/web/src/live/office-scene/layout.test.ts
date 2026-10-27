@@ -58,7 +58,7 @@ describe('desk pods', () => {
   it('keeps at most MAX_S_FACING desks facing the viewer', () => {
     // A face is what makes a member read as a person rather than a coloured block, so the floor needs
     // some — but turning more of it toward the camera would make the room a stage set. Four is the
-    // ceiling with 28 desks: the pinwheel gives one, the zigzag at most two.
+    // ceiling with 22 desks: the pinwheel gives one, the zigzag at most two.
     expect(DESK_SLOTS.filter((s) => s.dir === 'S').length).toBeLessThanOrEqual(MAX_S_FACING);
   });
 

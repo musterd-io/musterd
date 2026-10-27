@@ -111,7 +111,8 @@ describe('walkability grid', () => {
   });
 
   it('returns a plain segment when the straight line is already clear', () => {
-    // x 40: the left-wall aisle west of the pinwheel (office v3); x 60 is its west chair's pad.
+    // x 40: the left-wall aisle west of the pinwheel (office v3), clear from just south of the west
+    // bookshelf to just north of the fiddle plant at (66, 470).
     const from = { lx: 40, ly: 290 };
     const to = { lx: 40, ly: 400 };
     expect(findPath(from, to)).toEqual([from, to]);

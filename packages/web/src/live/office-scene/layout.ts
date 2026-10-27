@@ -157,7 +157,7 @@ export interface Pod {
 
 /**
  * Layout E (office v3, 2026-10-26 — spec `docs/superpowers/specs/2026-10-26-office-v3-design.md`
- * §2.1): 28 desks on an asymmetric floor. The three-column room of 2026-08-03 (quad / quad / duo /
+ * §2.1): 22 desks on an asymmetric floor (28 at first; the café lanes of 2026-10-27 took six). The three-column room of 2026-08-03 (quad / quad / duo /
  * solo, 17 desks) is replaced wholesale; its history is in git. Positions were tuned within the
  * spec's ±40 against `layout.test.ts` and `nav.test.ts`.
  */
@@ -490,6 +490,8 @@ export const NOOK_SPOTS: ReadonlyArray<{ dx: number; dy: number }> = [
   // Office v3-3: four standing spots along the café's south threshold, between the stools —
   // idle members take the café's seats, away members stand small (spec §2.9). Each is inside CAFE,
   // walkable; a small away avatar may brush a seated stool's label, and away is rare (spec §2.9).
+  // Measured 2026-10-27: spots 2 and 3 stand 18 and 28 px on screen from the stool at (775, 239),
+  // under MIN_SPOT_GAP 46. No nudge inside the tile clears it; it needs the stools moved.
   // dy 135 → 108 → 94 (2026-10-27): the tile's south edge came in twice; the spots came with it.
   { dx: -82, dy: 94 },
   { dx: 12, dy: 94 },
