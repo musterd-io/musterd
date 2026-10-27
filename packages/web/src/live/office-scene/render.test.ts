@@ -294,7 +294,9 @@ describe('animatedDeskAnchors', () => {
       );
     const fans = DESK_SLOTS.filter((s) => deskHasProp(s.id, 'fan')).length;
     expect(fans).toBeGreaterThan(1);
-    expect(fans).toBeLessThan(DESK_SLOTS.length);
+    // A fan is a quirk, not a fixture: ten of 23 desks had one (nick, 2026-10-27: "too many desk
+    // fans"). A handful across the floor is the room; one on every second desk is a hardware store.
+    expect(fans).toBeLessThanOrEqual(5);
   });
 
   it('drops a mug steam the moment its desk empties (empty desk → empty, un-steaming mug)', () => {
