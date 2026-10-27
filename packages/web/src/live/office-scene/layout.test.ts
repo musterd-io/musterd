@@ -397,3 +397,21 @@ describe('BOOKSHELVES — flush to floor edges', () => {
     for (const s of BOOKSHELVES) expect(s.decor).toBeTruthy();
   });
 });
+
+describe('the reception counter keeps its own floor', () => {
+  // nick, 2026-10-27 (screenshot): "a desk that is on top of half of the reception desk" — pod 2's
+  // bottom zigzag step, facing E, ran its slab 30 units into the counter.
+  it('no desk slab overlaps the front desk', () => {
+    const fx0 = FRONT_DESK.lx - FRONT_DESK.long / 2;
+    const fx1 = FRONT_DESK.lx + FRONT_DESK.long / 2;
+    const fy0 = FRONT_DESK.ly - FRONT_DESK.deep / 2;
+    const fy1 = FRONT_DESK.ly + FRONT_DESK.deep / 2;
+    for (const s of DESK_SLOTS) {
+      const ew = s.dir === 'E' || s.dir === 'W';
+      const hw = (ew ? DESK_D : DESK_W) / 2;
+      const hd = (ew ? DESK_W : DESK_D) / 2;
+      const overlaps = s.lx - hw < fx1 && s.lx + hw > fx0 && s.ly - hd < fy1 && s.ly + hd > fy0;
+      expect(overlaps, `desk ${s.id} at (${s.lx},${s.ly}) sits on the front desk`).toBe(false);
+    }
+  });
+});
