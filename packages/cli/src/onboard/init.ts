@@ -782,6 +782,12 @@ export async function runInit(): Promise<number> {
     }),
   ) as string[];
   const desired = adapters.map((a) => a.id).filter((id) => picked.includes(id));
+  if (desired.includes('opencode')) {
+    p.note(
+      'Create an API key in your OpenRouter dashboard. In OpenCode, run `/connect`, choose OpenRouter, and enter the key. Then run `/models` to select a model. OpenCode manages this credential; interactive usage is billed by OpenRouter and stays outside musterd wake metering.',
+      'OpenRouter in OpenCode',
+    );
+  }
 
   // The primary EXTERNAL harness drives the human-facing bits a set can't (the manual-setup note,
   // the role-tool provisioning target, the activation hint). Fine to be absent: native-only works.
