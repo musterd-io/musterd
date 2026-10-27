@@ -12,10 +12,11 @@ import { SPEND_APPROVAL_WAKE_ENDED, type SpendApprovalVerdict } from './spendApp
 /**
  * The metering gateway (ADR 583): a loopback, per-wake, pass-through HTTP proxy the host points a
  * woken harness at through the base-URL variable that harness documents. Every request is
- * forwarded to the real provider unchanged (except OpenRouter's usage-reporting opt-in) and every
- * response relayed unchanged (streaming included); the gateway reads only the provider's usage
- * block and model id as the bytes pass, prices them from the host's table (OpenRouter supplies its
- * actual cost in `usage.cost`), and refuses the next call once the wake's `budget_usd` is
+ * forwarded to the real provider unchanged except OpenRouter POSTs, whose bounded JSON bodies are
+ * augmented with a usage-reporting opt-in; every response is relayed unchanged (streaming
+ * included). The gateway reads only the provider's usage block and model id as the bytes pass,
+ * prices them from the host's table (OpenRouter supplies its actual cost in `usage.cost`), and
+ * refuses the next call once the wake's `budget_usd` is
  * spent (§4) — a machine gate on a machine fact, never a model judgment.
  *
  * ADR 636: when the host passes `spendApprovalUsd`, a call that arrives with running cost at that
@@ -526,10 +527,10 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
         if (opts.budgetUsd !== undefined) {
           unknownCostBudgetBlocked = true;
           budgetExhausted = true;
+          log(
+            `OpenRouter call on lease ${opts.leaseId} returned usage without cost — next model call refused under budget_usd`,
+          );
         }
-        log(
-          `OpenRouter call on lease ${opts.leaseId} returned usage without cost — next model call refused under budget_usd`,
-        );
       }
       const call: MeteredCall = {
         turn: calls.length + 1,
