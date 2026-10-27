@@ -451,6 +451,17 @@ def bevel(o: bpy.types.Object, width: float = 1.2, segments: int = 3) -> None:
     b.limit_method = "ANGLE"
 
 
+def turn(o: bpy.types.Object, cx: float, cy: float, cz: float, zs: float, rx_deg: float, ry_deg: float, rz_rad: float = 0.0) -> None:
+    """Rotate a part about its OWN centre (cx, cy, cz — cz in floor units). `box`/`ball`/`cyl` bake the
+    part's location into the mesh (transform_apply), so a bare `rotation_euler` spins it round the
+    room's origin — which is what scattered the old snake plant's blades (office v3-4)."""
+    c = Vector((cx, cy, cz * zs))
+    R = Matrix.Rotation(math.radians(rx_deg), 4, "X") @ Matrix.Rotation(math.radians(ry_deg), 4, "Y") @ Matrix.Rotation(rz_rad, 4, "Z")
+    # matrix_basis, not matrix_world: the world matrix is not evaluated until the depsgraph runs, and reads
+    # as identity for a part whose location was just set (`cyl` keeps its location; `box`/`ball` bake it)
+    o.matrix_world = Matrix.Translation(c) @ R @ Matrix.Translation(-c) @ o.matrix_basis
+
+
 def shadow(name: str, cx: float, cy: float, rx: float, ry: float, zs: float, alpha_scale: float = 1.0) -> bpy.types.Object:
     """The soft contact shadow pooled under an item, a touch toward the viewer (+x +y)."""
     bpy.ops.mesh.primitive_circle_add(vertices=32, radius=1.0, fill_type="NGON")
@@ -559,34 +570,95 @@ def diamond_rug(asset_id: str, lx: float, ly: float, r: float, fill: str, mark: 
 
 
 def plant(asset_id: str, lx: float, ly: float, species: str, zs: float, col) -> bpy.types.Object:
-    """A potted plant: tapered terracotta pot, rim, soil, then snake-plant blades or a fiddle-leaf canopy."""
+    """A potted plant (rebuilt for office v3-4 — nick: "some of the plants are kind of messed up"):
+    `snake` — thin upright blades with a light rim; `fiddle` — a trunk with seven broad leaves on
+    visible stems, not a ball canopy; `pothos` — a pot on a tall stand with heart leaves trailing down
+    it on three vines."""
     pot = paint("pot", srgb("#b9603a"), rough=0.7)
     rim = paint("pot-rim", srgb("#cb6f45"), rough=0.7)
     soil = paint("soil", srgb("#4a3326"), rough=1.0)
-    parts = [
-        cyl(f"{asset_id}/pot", lx, ly, 0, 8.5, 12.5, 19, pot, zs),
-        cyl(f"{asset_id}/rim", lx, ly, 19, 13.5, 13.5, 3.5, rim, zs),
-        cyl(f"{asset_id}/soil", lx, ly, 22.0, 11.5, 11.5, 0.8, soil, zs),
-    ]
-    top = 22.5
+    parts: list[bpy.types.Object] = []
+
+    def potted(z: float, r: float = 12.5, h: float = 19) -> float:
+        parts.append(cyl(f"{asset_id}/pot", lx, ly, z, r * 0.68, r, h, pot, zs))
+        parts.append(cyl(f"{asset_id}/rim", lx, ly, z + h, r + 1, r + 1, 3.5, rim, zs))
+        parts.append(cyl(f"{asset_id}/soil", lx, ly, z + h + 3, r - 1, r - 1, 0.8, soil, zs))
+        return z + h + 3.5
+
     if species == "snake":
+        top = potted(0)
         blade = paint("snake-leaf", srgb("#3e6b3a"), rough=0.6)
+        edge = paint("snake-edge", srgb("#9fc46a"), rough=0.6)
         tip = paint("snake-tip", srgb("#6fa35a"), rough=0.6)
-        for i, (dx, dy, h, tilt) in enumerate(((0, 0, 60, 0), (-6, 2, 50, -8), (6, -1, 54, 9), (-3, -5, 44, -5), (4, 5, 46, 6), (-7, -3, 36, -12), (8, 3, 40, 11))):
-            b = ball(f"{asset_id}/blade{i}", lx + dx, ly + dy, top, 2.6, 4.2, h / 2, blade, zs)
-            b.rotation_euler = (math.radians(tilt * 0.4), math.radians(tilt), 0)
+        for i, (dx, dy, h, tilt) in enumerate(((0, 0, 62, 0), (-6, 2, 52, -8), (6, -1, 56, 9), (-3, -5, 46, -5), (4, 5, 48, 6),
+                                               (-7, -3, 38, -12), (8, 3, 42, 11), (2, -7, 34, 4), (-4, 7, 36, -6))):
+            # the light rim: a slightly wider, paler blade behind the dark one
+            e = ball(f"{asset_id}/edge{i}", lx + dx, ly + dy, top, 1.9, 4.0, h / 2, edge, zs)
+            turn(e, lx + dx, ly + dy, top, zs, tilt * 0.4, tilt)  # about the blade's foot, so it leans out of the soil
+            parts.append(e)
+            b = ball(f"{asset_id}/blade{i}", lx + dx, ly + dy + 0.3, top + 0.5, 1.5, 3.4, h / 2 - 1, blade, zs)
+            turn(b, lx + dx, ly + dy + 0.3, top + 0.5, zs, tilt * 0.4, tilt)
             parts.append(b)
-            parts.append(ball(f"{asset_id}/tip{i}", lx + dx * 1.1, ly + dy * 1.1, top + h - 10, 2.0, 3.0, 5, tip, zs))
-    else:
+            parts.append(ball(f"{asset_id}/tip{i}", lx + dx * 1.1, ly + dy * 1.1, top + h - 9, 1.4, 2.4, 4.5, tip, zs))
+        parts.append(shadow(f"{asset_id}/shadow", lx, ly, 20, 15, zs))
+    elif species == "fiddle":
+        top = potted(0)
         trunk = wood("trunk", srgb("#7c5a3c"), grain=0.1)
-        leaf = paint("fiddle-leaf", srgb("#6e9e52"), rough=0.5)
-        leaf_lit = paint("fiddle-leaf-lit", srgb("#86b368"), rough=0.5)
-        parts.append(cyl(f"{asset_id}/trunk", lx, ly, top, 1.8, 1.4, 30, trunk, zs, 10))
-        crown = top + 27
-        for i, (dx, dy, dz, r) in enumerate(((0, 0, 14, 13), (-10, 4, 6, 10), (10, -3, 8, 10), (-5, -9, 2, 9), (6, 9, 0, 9), (-12, -4, 18, 8), (11, 6, 20, 8), (0, -11, 20, 7))):
-            m = leaf_lit if i % 3 == 0 else leaf
-            parts.append(ball(f"{asset_id}/leaf{i}", lx + dx, ly + dy, crown + dz, r, r * 0.8, r * 0.55, m, zs))
-    parts.append(shadow(f"{asset_id}/shadow", lx, ly, 20, 15, zs))
+        stem = paint("stem", srgb("#5f7a3e"), rough=0.6)
+        leaf = paint("fiddle-leaf", srgb("#5f944a"), rough=0.5)
+        leaf_lit = paint("fiddle-leaf-lit", srgb("#7fb062"), rough=0.5)
+        parts.append(cyl(f"{asset_id}/trunk", lx, ly, top, 1.9, 1.3, 38, trunk, zs, 10))
+        # seven broad leaves on short stems, three heights, spread round the trunk, tilted out 25°
+        for i, (ang, dz, L) in enumerate(((10, 14, 11), (120, 18, 10), (235, 16, 10), (60, 26, 9), (180, 28, 9), (300, 25, 9), (0, 36, 8))):
+            a = math.radians(ang)
+            ux, uy = math.cos(a), math.sin(a)
+            z = top + dz
+            st = cyl(f"{asset_id}/stem{i}", lx + ux * 3, ly + uy * 3, z, 0.6, 0.5, 2.5, stem, zs, 8)
+            turn(st, lx + ux * 3, ly + uy * 3, z, zs, -uy * 65, ux * 65)  # about its foot on the trunk
+            parts.append(st)
+            cxl, cyl_ = lx + ux * (3 + L * 0.8), ly + uy * (3 + L * 0.8)
+            lf = ball(f"{asset_id}/leaf{i}", cxl, cyl_, z + 1.0, L, L * 0.66, 1.4, leaf_lit if i % 3 == 0 else leaf, zs)
+            turn(lf, cxl, cyl_, z + 1.0 + 1.4, zs, uy * 25, -ux * 25, a)
+            parts.append(lf)
+        parts.append(shadow(f"{asset_id}/shadow", lx, ly, 22, 16, zs))
+    else:  # pothos — a pot on a stand, vines trailing down it
+        metal = paint("stand", srgb("#4a4642"), rough=0.5)
+        leaf = paint("pothos-leaf", srgb("#4f8f45"), rough=0.5)
+        leaf_lit = paint("pothos-leaf-lit", srgb("#7cb35d"), rough=0.5)
+        vine = paint("vine", srgb("#5a7a3a"), rough=0.6)
+        H = 30.0  # stand height
+        for k in range(3):
+            a = math.radians(90 + 120 * k)
+            leg = cyl(f"{asset_id}/leg{k}", lx + math.cos(a) * 6, ly + math.sin(a) * 6, 0, 0.9, 0.9, H, metal, zs, 8)
+            turn(leg, lx + math.cos(a) * 6, ly + math.sin(a) * 6, H / 2, zs, -math.sin(a) * 7, math.cos(a) * 7)
+            parts.append(leg)
+        parts.append(cyl(f"{asset_id}/ring", lx, ly, H - 1.5, 8.5, 8.5, 1.5, metal, zs, 20))
+        top = potted(H, r=9.0, h=13)
+        # three vines down the stand, heart leaves along them
+        for v in range(3):
+            a0 = math.radians(30 + 120 * v)
+            for j in range(4):
+                t = j / 3
+                a = a0 + t * 0.9
+                r = 10 + 2 * t
+                z = top - 3 - t * (H + 6)
+                vx, vy = lx + math.cos(a) * r, ly + math.sin(a) * r
+                if j < 3:
+                    seg = cyl(f"{asset_id}/vine{v}{j}", vx, vy, z - 4, 0.5, 0.5, 10, vine, zs, 6)
+                    turn(seg, vx, vy, z + 1, zs, -math.sin(a) * 25, math.cos(a) * 25)
+                    parts.append(seg)
+                lxl, lyl = vx + math.cos(a) * 2.5, vy + math.sin(a) * 2.5
+                lf = ball(f"{asset_id}/leaf{v}{j}", lxl, lyl, z, 4.2, 3.6, 1.1, leaf_lit if (v + j) % 3 == 0 else leaf, zs)
+                turn(lf, lxl, lyl, z + 1.1, zs, math.sin(a) * 35, -math.cos(a) * 35, a)
+                parts.append(lf)
+        # a crown of leaves over the pot
+        for j in range(5):
+            a = math.radians(72 * j + 20)
+            cxl, cyl_ = lx + math.cos(a) * 6, ly + math.sin(a) * 6
+            lf = ball(f"{asset_id}/crown{j}", cxl, cyl_, top + 1, 4.4, 3.8, 1.2, leaf_lit if j % 2 else leaf, zs)
+            turn(lf, cxl, cyl_, top + 1 + 1.2, zs, math.sin(a) * 20, -math.cos(a) * 20, a)
+            parts.append(lf)
+        parts.append(shadow(f"{asset_id}/shadow", lx, ly, 14, 11, zs))
     return finish(asset_id, parts, lx, ly, col)
 
 
@@ -853,9 +925,11 @@ def meeting_chair(asset_id: str, lx: float, ly: float, facing: str, zs: float, c
     sn = facing in ("S", "N")
     parts = [
         box(f"{asset_id}/seat", lx, ly, 15, S - 8, S - 8, 5, fab, zs),
-        box(f"{asset_id}/back", lx - f[0] * (S / 2 - 8), ly - f[1] * (S / 2 - 8), 20, S - 10 if sn else 4, 4 if sn else S - 10, 22, fab, zs),
         cyl(f"{asset_id}/stem", lx, ly, 2, 1.6, 1.6, 13, dark, zs, 10),
     ]
+    # the back curves round the sitter and leans back a touch (v3-4), set a half-seat behind the centre
+    parts += curved_back(asset_id, lx - f[0] * (S / 2 - 8), ly - f[1] * (S / 2 - 8), facing, 20, S - 10, 22, 4.0, fab, zs,
+                         recline_deg=5.0, lumbar=False, arc_deg=50.0, slats=7)
     for i in range(5):
         a = i / 5 * math.tau
         parts.append(box(f"{asset_id}/spoke", lx + math.cos(a) * 7, ly + math.sin(a) * 7, 0, 3, 3, 2, dark, zs))
@@ -941,10 +1015,53 @@ def chair_shadow(asset_id: str, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, [shadow(f"{asset_id}/shadow", lx, ly, 17, 17, zs)], lx, ly, col)
 
 
-def chair_back(asset_id: str, style: str, sn: bool, zs: float, col) -> bpy.types.Object:
+_YAW = {"S": 0.0, "N": math.pi, "E": -math.pi / 2, "W": math.pi / 2}  # local +y (the sitter's facing) → world
+
+
+def _place(o: bpy.types.Object, lx: float, ly: float, facing: str, x: float, y: float, z: float, zs: float,
+           recline: float = 0.0, yaw: float = 0.0, pivot_z: float = 0.0) -> None:
+    """Put a part built at the origin at local (x, y, z) in a frame whose +y is the sitter's facing:
+    yawed by `yaw` in plan, and the whole frame reclined `recline` about the across axis through
+    `pivot_z` (the back's base), then turned to `facing` and moved to the asset's floor point."""
+    # the part was built at the origin with its centre there (`box(..., -h / 2, ...)`), so the matrix places its centre
+    o.matrix_world = (
+        Matrix.Translation((lx, ly, pivot_z * zs))
+        @ Matrix.Rotation(_YAW[facing], 4, "Z")
+        @ Matrix.Rotation(recline, 4, "X")
+        @ Matrix.Translation((x, y, (z - pivot_z) * zs))
+        @ Matrix.Rotation(yaw, 4, "Z")
+    )
+
+
+def curved_back(asset_id: str, lx: float, ly: float, facing: str, z0: float, bw: float, bh: float, thick: float, mat, zs: float,
+                recline_deg: float = 8.0, lumbar: bool = True, arc_deg: float = 60.0, slats: int = 11) -> list[bpy.types.Object]:
+    """A backrest that curves round the sitter in plan (an arc of `arc_deg`, chord `bw`) and reclines
+    `recline_deg` from vertical, with a lumbar bulge at 40% of its height (office v3-4; nick: "the office
+    chair backs are just straight backs — they should be more natural looking with slightly curved
+    backs"). Built as `slats` overlapping slabs along the arc, bevelled, so it reads as one padded panel."""
+    arc = math.radians(arc_deg)
+    R = bw / (2 * math.sin(arc / 2))
+    rho = math.radians(recline_deg)
+    sw = 2 * R * math.sin(arc / (2 * slats)) + 2.4  # one slat's chord, overlapping its neighbours so the seams close
+    parts = []
+    for i in range(slats):
+        a = -arc / 2 + arc * (i + 0.5) / slats
+        o = box(f"{asset_id}/slat{i}", 0, 0, -bh / 2, sw, thick, bh, mat, zs)
+        bevel(o, min(1.0, thick * 0.25), 2)
+        # concave toward the sitter (+y): the edges come forward
+        _place(o, lx, ly, facing, R * math.sin(a), R * (1 - math.cos(a)), z0 + bh / 2, zs, rho, a, z0)
+        parts.append(o)
+    if lumbar:
+        lb = ball(f"{asset_id}/lumbar", 0, 0, -bh * 0.11, bw * 0.38, thick * 0.5 + 0.5, bh * 0.11, mat, zs)
+        _place(lb, lx, ly, facing, 0, thick * 0.5 - 0.6, z0 + bh * 0.38, zs, rho, 0.0, z0)
+        parts.append(lb)
+    return parts
+
+
+def chair_back(asset_id: str, style: str, facing: str, zs: float, col) -> bpy.types.Object:
     """The backrest at its own floor point (the painter sorts it apart from the seat): a spine from the
-    tilt plate up to a rounded, padded back, and the racing chair's wings and headrest when the style
-    has them."""
+    tilt plate up to a curved, reclined, padded back (`curved_back`), and the racing chair's wings and
+    headrest when the style has them. One image per facing — a curved back is not mirror-symmetric."""
     st = CHAIR_STYLES[style]
     lx = ly = FLOOR / 2
     back = fabric("chair-back", _grey(0.85), 1.2)
@@ -953,19 +1070,19 @@ def chair_back(asset_id: str, style: str, sn: bool, zs: float, col) -> bpy.types
     post = paint("chair-post", _grey(0.45), 0.3)
     z0 = _SEAT_TOP + 3
     bw, bh = st["back_w"], st["back_h"]
+    rho = math.radians(8.0)
     parts = [box(f"{asset_id}/spine", lx, ly, 15.0, 3.0, 3.0, z0 + 4 - 15.0, post, zs)]
-    b = box(f"{asset_id}/back", lx, ly, z0, bw if sn else 5, 5 if sn else bw, bh, back, zs)
-    bevel(b, 2.4, 5)
-    parts.append(b)
+    parts += curved_back(asset_id, lx, ly, facing, z0, bw, bh, 5.0, back, zs)
     if st["wings"]:
         for sgn in (-1, 1):
-            wx, wy = (lx + sgn * (bw / 2 - 1), ly) if sn else (lx, ly + sgn * (bw / 2 - 1))
-            wb = box(f"{asset_id}/wing", wx, wy, z0 + bh * 0.35, 4, 4, bh * 0.65, wing, zs)
+            wb = box(f"{asset_id}/wing", 0, 0, -bh * 0.325, 4, 4, bh * 0.65, wing, zs)
             bevel(wb, 1.6, 3)
+            _place(wb, lx, ly, facing, sgn * (bw / 2 - 1), 2.0, z0 + bh * 0.35 + bh * 0.325, zs, rho, 0.0, z0)
             parts.append(wb)
     if st["headrest"]:
-        hb = box(f"{asset_id}/headrest", lx, ly, z0 + bh + 1.5, 20 if sn else 5, 5 if sn else 20, 9, head, zs)
+        hb = box(f"{asset_id}/headrest", 0, 0, -4.5, 20, 5, 9, head, zs)
         bevel(hb, 2.2, 4)
+        _place(hb, lx, ly, facing, 0, 0, z0 + bh + 1.5 + 4.5, zs, rho, 0.0, z0)
         parts.append(hb)
     return finish(asset_id, parts, lx, ly, col)
 
@@ -1576,6 +1693,7 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     a["bench/base"] = bench("bench/base", zs, export)
     a["plant/snake"] = plant("plant/snake", C, C, "snake", zs, export)
     a["plant/fiddle"] = plant("plant/fiddle", C, C, "fiddle", zs, export)
+    a["plant/pothos"] = plant("plant/pothos", C, C, "pothos", zs, export)
     for i, (lx, ly, d, long, deep, high, rows, tone) in enumerate(BOOKSHELVES):
         a[f"shelf/{i}"] = bookshelf(f"shelf/{i}", lx, ly, d, long, deep, high, rows, tone, zs, export)
     a["entrance"] = entrance("entrance", zs, export)
@@ -1612,7 +1730,8 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     for style in CHAIR_STYLES:
         for axis, sn in (("sn", True), ("ew", False)):
             a[f"chair/{style}/{axis}/base"] = chair_base(f"chair/{style}/{axis}/base", style, sn, zs, export)
-            a[f"chair/{style}/{axis}/back"] = chair_back(f"chair/{style}/{axis}/back", style, sn, zs, export)
+        for facing in ("N", "E", "S", "W"):  # a curved, reclined back is one image per facing (v3-4)
+            a[f"chair/{style}/{facing}/back"] = chair_back(f"chair/{style}/{facing}/back", style, facing, zs, export)
     a["desk/lamp-off"] = desk_lamp("desk/lamp-off", False, zs, export)
     a["desk/lamp-on"] = desk_lamp("desk/lamp-on", True, zs, export)
     for frame in range(4):

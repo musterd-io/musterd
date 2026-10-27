@@ -658,15 +658,18 @@ export const PRINTER = { lx: 505, ly: 60, w: 46, d: 34, h: 32 };
 export interface Plant {
   lx: number;
   ly: number;
-  species: 'snake' | 'fiddle';
+  species: 'snake' | 'fiddle' | 'pothos';
 }
 
 /** Big floor plants — mostly on the perimeter, where they soften the wall edges and break up the bare
  * floor between zones without standing in a walking line. */
 export const PLANTS: Plant[] = [
   { lx: 70, ly: 110, species: 'snake' },
-  // The pinwheel's hub (office v3): the four desks turn around this plant.
-  { lx: 225, ly: 330, species: 'snake' },
+  // The pinwheel's hub (office v3): the four desks turn around this plant — a trailing pothos on a
+  // stand (v3-4), tall enough to read over the desks.
+  { lx: 225, ly: 330, species: 'pothos' },
+  // The café's corner (v3-4): behind the couch, against the north-east walls.
+  { lx: 862, ly: 22, species: 'pothos' },
   // (a fiddle stood at 480,55 — removed with the bench: it landed against the counter's end, and a
   // plant wedged between a bench and a printer is clutter, not softening.)
   { lx: 55, ly: 645, species: 'fiddle' }, // left wall, in the gap between pod 2 and reception
