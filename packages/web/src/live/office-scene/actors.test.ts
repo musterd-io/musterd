@@ -1302,6 +1302,26 @@ describe('the laptop on the person (laptop/dock design §0)', () => {
     expect(p.carry).toBe('laptop');
   });
 
+  it('every non-errand walk carries it: a help walk there, the hold, and the walk home (v3-6 audit)', () => {
+    // An errand's prop WINS for its duration (the plate, the bottle, the box); an act walk names no
+    // prop, so the laptop is under the arm for every leg of it.
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    for (let i = 0; i < 60; i++) actors.step(0.05); // settle at the desk
+    expect(actors.walk('Ada', { kind: 'help', to: 'Bo', urgent: false })).toBe(true);
+    let frames = 0;
+    let guard = 0;
+    while (actors.active() && guard++ < 2000) {
+      actors.step(0.05);
+      const p = actors.poses().get('Ada')!;
+      if (p.sit > 0.9) continue; // back in the chair: the dock takes it
+      frames++;
+      expect(p.carry).toBe('laptop');
+    }
+    expect(frames).toBeGreaterThan(20);
+  });
+
   it('and they still have it mid-walk, not only at the door', () => {
     const actors = createActors();
     const empty = world([]);

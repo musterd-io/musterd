@@ -365,7 +365,7 @@ def render_figure(a: dict) -> None:
         anims[name] = {"row": rows, "frames": frames, "fps": figure.FPS, "loop": loop}
         if name in figure.CARRY_BASE:
             anims[name]["base"] = figure.CARRY_BASE[name]
-            anims[name]["layers"] = list(figure.CARRY_OWN)
+            anims[name]["layers"] = list(figure.own_layers(name))
         if dirs is not None:
             # the directions this clip has: the rendered ones and their mirrors (the runtime falls back
             # to the base clip anywhere else)

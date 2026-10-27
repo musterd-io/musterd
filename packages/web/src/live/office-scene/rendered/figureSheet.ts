@@ -79,6 +79,7 @@ export const ANIMS: readonly Anim[] = [
   ...CARRY_ANIMS,
   // Task 17: a seated member with a bubble puts a hand up, as the painter's help overlay does
   'sit-hand',
+  'sit-lap',
 ];
 
 export interface AnimSpec {

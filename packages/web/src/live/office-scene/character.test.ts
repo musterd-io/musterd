@@ -126,6 +126,11 @@ describe('carrying clips (plan Task 16: the hands hold what is carried)', () => 
     expect(animFor(pose({ carry: 'box' }), 0, 5, 0.3, withCarry).anim).toBe('idle-hold2');
   });
 
+  it('the laptop is not a grip: it rides under the arm, so the plain walk and idle play (v3-6)', () => {
+    expect(animFor(pose({ moving: true, carry: 'laptop' }), 0, 5, 0.3, withCarry).anim).toBe('walk');
+    expect(animFor(pose({ carry: 'laptop' }), 0, 5, 0.3, withCarry).anim).toBe('idle');
+  });
+
   it('a sheet from before the carrying clips falls back to the plain walk and idle', () => {
     expect(animFor(pose({ moving: true, carry: 'box' }), 0, 5, 0.3, anims).anim).toBe('walk');
     expect(animFor(pose({ carry: 'card' }), 0, 5, 0.3, anims).anim).toBe('idle');
