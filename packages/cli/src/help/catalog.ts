@@ -298,7 +298,9 @@ export const CATALOG: readonly CommandEntry[] = [
       '`start --perf` records capture timings into the machine’s log, and `perf --out <file>` reads ' +
       'them back as JSONL with a one-line summary — the machine and any file on it end with the stream. ' +
       'Fly keeps only about 90 s of log, so `perf --follow` reads the log live until it holds `--secs` ' +
-      '(default 300) of samples.',
+      '(default 300) of samples. ' +
+      'An optional Twitch user token (MUSTERD_TWITCH_CLIENT_ID and MUSTERD_TWITCH_TOKEN) is ' +
+      'presence-checked the same way; missing, the stream still starts and the title is left alone.',
     examples: [
       'musterd stream doctor',
       'musterd stream build',

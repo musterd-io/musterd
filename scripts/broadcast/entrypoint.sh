@@ -171,6 +171,13 @@ RESTART_MIN_INTERVAL=10
 RESTARTABLE_AFTER_S=60
 short_runs=0
 
+# Title before ingest (ADR 711). Once, not on every in-machine relaunch: a bounce keeps the
+# title, and a human-set title is left alone. A missing token, a rejected token, or a title we
+# did not set prints one line and does not stop the stream. Old images have no subcommand;
+# `|| true` lets them stream. The token is a Fly secret this process may read; the line never
+# includes it. MUSTERD_STREAM_TITLE and MUSTERD_STREAM_TITLE_PREV are the non-secret strings.
+node /app/packages/cli/dist/bin.js stream apply-title || true
+
 while :; do
   started=$SECONDS
   # The measured configuration — change it in an ADR before changing it here.

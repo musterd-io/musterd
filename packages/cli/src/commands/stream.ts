@@ -19,10 +19,17 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { makeEnvelope } from '@musterd/protocol';
+import { LANE_CONTENDING_STATES, makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
+import {
+  STANDING_TITLE,
+  applyChannelTitle,
+  isSessionTitle,
+  sessionTitle,
+  streamTitleEnv,
+} from '../broadcast/channelTitle.js';
 import {
   DEFAULT_APP,
   describeStaleness,
@@ -101,7 +108,16 @@ export interface StreamDeps {
   /** Tail the app's live log (`fly logs -a <app>`), calling `onLine` per line until it returns
    * true or the log ends. Injected so tests never reach Fly (`stream perf --follow`). */
   followLog?: (app: string, onLine: (line: string) => boolean) => Promise<void>;
+  /**
+   * The session title `start` should ask for (ADR 711). Injected so a test never dials the daemon.
+   * Absent, `start` reads the board itself and a failed read keeps the previous title.
+   */
+  titleFor?: (flags: Record<string, string | boolean>) => Promise<TitleRead>;
+  /** Env for `apply-title`. The container's process env; tests pass a closed set. */
+  env?: NodeJS.ProcessEnv;
 }
+
+export type TitleRead = { ok: true; title: string } | { ok: false };
 
 /** The daemon's loopback origin — the upgrade probe aims here and spoofs only the `Host` header. */
 function daemonOrigin(server: string): { hostname: string; port: number } {
@@ -219,6 +235,7 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
     mintSeat,
     stageSeat,
     postWindDown,
+    ...(deps.titleFor ? { titleFor: deps.titleFor } : {}),
   };
 
   switch (sub) {
@@ -268,6 +285,8 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
           parsed.flags['follow'] === true ? { secs, tail: deps.followLog ?? realFollowLog } : null,
       });
     }
+    case 'apply-title':
+      return applyTitleVerb(out, deps.env ?? process.env);
     default:
       throw new CliError(`unknown subcommand \`${sub}\`\n${USAGE}`, 2);
   }
@@ -457,6 +476,7 @@ interface Sup {
   mintSeat: (team: string) => Promise<BroadcastSeat>;
   stageSeat: (app: string, seat: BroadcastSeat) => { code: number; output: string };
   postWindDown: (team: string, stopAt: number | null) => Promise<boolean>;
+  titleFor?: (flags: Record<string, string | boolean>) => Promise<TitleRead>;
 }
 
 /**
@@ -482,6 +502,8 @@ function launchArgs(a: {
   extra?: string | undefined;
   /** Record capture perf (`start --perf`). */
   perf?: boolean;
+  /** Set on `start` and on a relaunch that has a stored title. Omitted, the machine is not told one. */
+  title?: { desired: string; prev: string };
 }): string[] {
   return [
     'machine',
@@ -507,6 +529,7 @@ function launchArgs(a: {
     // The recorder's JSONL goes to the machine's own stdout: a file on the machine dies with `--rm`,
     // and the log is the one thing that outlives it. `stream perf` reads it back.
     ...(a.perf ? ['--env', 'MUSTERD_BROADCAST_PERF=/dev/stdout'] : []),
+    ...(a.title ? streamTitleEnv(a.title.desired, a.title.prev) : []),
   ];
 }
 
@@ -627,6 +650,39 @@ function realFollowLog(app: string, onLine: (line: string) => boolean): Promise<
   });
 }
 
+/** One line, exit 0. A missing token, a rejected token, or a human title does not stop the stream. */
+async function applyTitleVerb(out: (s: string) => void, env: NodeJS.ProcessEnv): Promise<number> {
+  out(`${await applyChannelTitle(env)}\n`);
+  return 0;
+}
+
+/**
+ * Only the states the derivation can use, as the board query ADR 582 §1 defines it. `sessionTitle`
+ * ignores every terminal lane, so reading them would only cost rows — and on a long-lived team it
+ * costs more than that: one done lane carrying more claims than `LaneBoardSchema` allows (16) makes
+ * the whole unfiltered response fail the schema, and the title would then never be derived at all.
+ * Built from the protocol's set, so a new contending state is picked up here, not forgotten.
+ */
+export const TITLE_BOARD_QUERY = [...LANE_CONTENDING_STATES].map((s) => `state:${s}`).join(' ');
+
+/**
+ * The board, with a hard timeout. A failure is `{ ok: false }` — not the standing title. The
+ * standing title is what a successful read returns when the session has no single subject, and a
+ * daemon blip must not be mistaken for that.
+ */
+async function defaultTitleFor(flags: Record<string, string | boolean>): Promise<TitleRead> {
+  try {
+    const { http, team } = resolveRead(flags, { timeoutMs: 4_000 });
+    const [board, goals] = await Promise.all([
+      http.laneBoard(team, { q: TITLE_BOARD_QUERY }),
+      http.goals(team),
+    ]);
+    return { ok: true, title: sessionTitle({ lanes: board.lanes, goals: goals.goals }) };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /** Resolve the launch preconditions (image digest + tailnet address) or throw the doctor hint. */
 function launchPreconditions(a: { exec: Exec; repoRoot: string | null; statePath: string }): {
   digest: string;
@@ -700,12 +756,27 @@ async function startVerb(
   // Intent is recorded BEFORE the launch (ADR 293): a start that fails at `fly` still says "this
   // stream should be live", and the supervisor's next tick retries it inside the flap budget. The
   // exception is `--once` — a deliberately unsupervised run records `stopped` so nothing ever
-  // resurrects it (time-boxed `--duration` streams ride this).
+  // resurrects it (time-boxed `--duration` streams ride this). The title is part of that intent
+  // (ADR 711), read after the seat is staged so a refusal leaves no live record behind.
   const once = a.parsed.flags['once'] === true;
+  const previous = readStreamState(a.statePath)?.title;
+  const read = await (a.titleFor ?? defaultTitleFor)(a.parsed.flags);
+  const title = read.ok && isSessionTitle(read.title) ? read.title : (previous ?? STANDING_TITLE);
+  if (!read.ok) {
+    a.err(`${theme.warn('!')} could not read the board — keeping the last title\n`);
+  }
   writeStreamState(
     a.statePath,
     once
-      ? { desired: 'stopped', by: a.who(), at: a.now(), reason: '--once run', team, restarts: [] }
+      ? {
+          desired: 'stopped',
+          by: a.who(),
+          at: a.now(),
+          reason: '--once run',
+          team,
+          restarts: [],
+          title,
+        }
       : {
           desired: 'live',
           by: a.who(),
@@ -713,6 +784,7 @@ async function startVerb(
           team,
           image: digest,
           restarts: [],
+          title,
           ...(extra ? { args: extra } : {}),
         },
   );
@@ -723,7 +795,16 @@ async function startVerb(
   // Not recorded in the state file: a measured run is one deliberate start, and a supervisor
   // relaunch is not part of the measurement.
   const perf = a.parsed.flags['perf'] === true;
-  const args = launchArgs({ app: a.app, digest, addr, team, extra, perf });
+  a.out(`${theme.meta(`title · ${title}`)}\n`);
+  const args = launchArgs({
+    app: a.app,
+    digest,
+    addr,
+    team,
+    extra,
+    perf,
+    title: { desired: title, prev: previous ?? '' },
+  });
   // Captured across every attempt so the `finally` can record whichever machine the attempt left,
   // including one whose output named an id and then threw.
   let launchedOutput = '';
@@ -1212,7 +1293,15 @@ async function ensureVerb(
       const digest = d.state.image ?? checkoutDigest;
       const team = d.state.team ?? process.env['MUSTERD_TEAM'] ?? 'revive';
       const { code, output } = await a.launch(
-        launchArgs({ app: a.app, digest, addr, team, extra: d.state.args }),
+        launchArgs({
+          app: a.app,
+          digest,
+          addr,
+          team,
+          extra: d.state.args,
+          // The stored title, as both desired and previous. A relaunch must not derive a new one.
+          ...(d.state.title ? { title: { desired: d.state.title, prev: d.state.title } } : {}),
+        }),
       );
       if (code !== 0) {
         a.err(`${theme.err('✗')} relaunch failed (fly exit ${code}) — next tick retries\n`);

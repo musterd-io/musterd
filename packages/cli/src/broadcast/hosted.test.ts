@@ -66,6 +66,8 @@ function greenExec(over: Partial<Record<string, ExecResult>> = {}): Exec {
         JSON.stringify([
           { name: 'TS_AUTHKEY', digest: 'dc45' },
           { name: 'MUSTERD_STREAM_KEY', digest: '26a8' },
+          { name: 'MUSTERD_TWITCH_CLIENT_ID', digest: 'a1b2' },
+          { name: 'MUSTERD_TWITCH_TOKEN', digest: 'c3d4' },
         ]),
       );
     return fail(`unexpected: ${key}`);
@@ -371,6 +373,27 @@ describe('runChecks', () => {
       const checks = await runChecks({ ...green, exec: greenExec({ tailscale: absent }) });
       expect(by(checks, 'capture-nodes').state).toBe('skip');
     });
+  });
+
+  it('skips the title token when it is unset, and that skip does not fail the required secrets', async () => {
+    const checks = await runChecks({
+      ...green,
+      exec: greenExec({
+        'fly secrets list': ok(
+          JSON.stringify([
+            { name: 'TS_AUTHKEY', digest: 'dc45' },
+            { name: 'MUSTERD_STREAM_KEY', digest: '26a8' },
+          ]),
+        ),
+      }),
+    });
+    expect(by(checks, 'secrets').state).toBe('ok');
+    const title = by(checks, 'twitch-title');
+    expect(title.state).toBe('skip');
+    expect(title.fix).toBeUndefined();
+    expect(title.detail).toContain('the stream still starts');
+    expect(title.detail).toContain('MUSTERD_TWITCH_CLIENT_ID=<app client id>');
+    expect(title.detail).toContain('MUSTERD_TWITCH_TOKEN=<user token, channel:manage:broadcast>');
   });
 
   it('names the missing secret and never asks for a value it could print', async () => {

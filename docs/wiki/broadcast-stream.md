@@ -790,3 +790,7 @@ _(2026-10-17: fixed and verified on the box.)_ On image `ddf9a318eb81` (built at
 `stopping (SIGINT) — again to force`, and the main child exited with code 0 one second later, with no
 `SIGTERM` line. ffmpeg's last sample reads `Lsize=`, so it closed the container. The same run put a
 `speed=` line in `fly logs` every 10 s while it was live.
+
+## A session title is set before ingest, and only when the channel still shows one we set (2026-10-22; falsify: start a stream whose channel title is a sentence you typed by hand, and `fly logs` shows `title left alone` with that sentence unchanged) <!-- claim: other -->
+
+`stream start` derives `Coffee & musterd - <tail>` from the one goal being worked (ADR 711) and passes it to the machine as `MUSTERD_STREAM_TITLE`. The entrypoint runs `stream apply-title` once, before ffmpeg. The Twitch user token stays a Fly secret (`MUSTERD_TWITCH_CLIENT_ID`, `MUSTERD_TWITCH_TOKEN`). Absent, the line is `title off — twitch token unset` and the stream still starts. A title that is not the standing title, not the last one we asked for, and not the one we are about to ask for is left alone, including its category.
