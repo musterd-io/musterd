@@ -143,8 +143,10 @@ export MUSTERD_KEY_ENV="${MUSTERD_KEY_ENV:-ANTHROPIC_API_KEY}"
 
 log "host starting: server $MUSTERD_SERVER team $MUSTERD_TEAM host $MUSTERD_HOST model $MUSTERD_MODEL${MUSTERD_HUB:+ (hub mode, joiner of $MUSTERD_HUB)}"
 # The host's own output goes to the volume log AND to stdout, so `fly logs` shows it: create.sh
-# waits for the host's "◉ polling" line there before it mints.
-exec > >(tee -a "$LOG") 2>&1
+# waits for the host's "◉ polling" line there before it mints. `stdbuf -oL` is load-bearing:
+# a plain tee block-buffers when its stdout is a pipe (Fly's log collector), so the polling
+# line could sit in tee's buffer indefinitely while create.sh timed out (lane 01M5D7TP).
+exec > >(stdbuf -oL tee -a "$LOG") 2>&1
 exec musterd host --cloud-provision \
   --server "$MUSTERD_SERVER" --team "$MUSTERD_TEAM" --host "$MUSTERD_HOST" \
   --key-env "$MUSTERD_KEY_ENV"

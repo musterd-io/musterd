@@ -99,6 +99,11 @@ run() {
 }
 say() { printf '%s\n' "$*"; }
 
+# flyctl's own installer puts fly in ~/.fly/bin, which a fresh shell may not have on PATH —
+# a fly that vanishes mid-run otherwise fails every later step silently (lane 01M5D7TP).
+if ! command -v fly >/dev/null && [ -x "$HOME/.fly/bin/fly" ]; then
+  PATH="$HOME/.fly/bin:$PATH"
+fi
 for tool in fly musterd git jq; do
   command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }
 done
@@ -187,11 +192,13 @@ HUB_SECRETS=()
 if [ "$DRY_RUN" = 1 ]; then
   printf '  $ fly secrets set --app %s MUSTERD_HOST_KEY=… %s=… GH_TOKEN=…%s\n' "$APP" "$KEY_ENV" "${HUB:+ MUSTERD_INVITE=… TAILSCALE_AUTHKEY=… [ROSTER_TOKEN=…]}"
 else
+  # ${arr[@]+...}: a bare "${HUB_SECRETS[@]}" on an empty array is an unbound-variable
+  # error under `set -u` on bash 3.2 — this script's shebang on a sponsor's Mac.
   fly secrets set --app "$APP" \
     "MUSTERD_HOST_KEY=$HOST_KEY" \
     "$KEY_ENV=$MODEL_KEY" \
     "GH_TOKEN=${GH_TOKEN:-}" \
-    "${HUB_SECRETS[@]}"
+    ${HUB_SECRETS[@]+"${HUB_SECRETS[@]}"}
 fi
 unset HOST_KEY MODEL_KEY GH_TOKEN INVITE TAILSCALE_AUTHKEY ROSTER_TOKEN HUB_SECRETS
 
@@ -214,14 +221,30 @@ fi
 if [ "$SKIP_SPONSOR" = 0 ]; then
   say "-- host: waiting for '$HOST_LABEL' to poll (the provision is queued only while it does)"
   if [ "$DRY_RUN" = 1 ]; then
-    printf '  (poll `fly logs --app %s` for "◉ polling", then one tick)\n' "$APP"
+    printf '  (poll `fly logs --app %s` for the host polling line, then one tick)\n' "$APP"
   else
+    # Match the bare word: the line is theme-wrapped ("◉ polling" inside colour codes when the
+    # host's stdout is a tty, plain when it is not), so the glyph and codes are not stable text.
+    # A failing `fly logs` (fly off PATH mid-run, app not yet logging) is recorded, never
+    # swallowed: the timeout message below names it instead of claiming the host never polled
+    # (lane 01M5D7TP — the 2026-10-20 canary minted by hand after exactly that silent loop).
     seen=0
+    last_fly_error=""
     for _ in $(seq 1 24); do
-      if fly logs --app "$APP" --no-tail 2>/dev/null | grep -q '◉ polling'; then seen=1; break; fi
+      if logs_now="$(fly logs --app "$APP" --no-tail 2>&1)"; then
+        last_fly_error=""
+        if printf '%s' "$logs_now" | grep -q 'polling'; then seen=1; break; fi
+      else
+        last_fly_error="$(printf '%s' "$logs_now" | tail -1)"
+      fi
       sleep 10
     done
-    [ "$seen" = 1 ] || { echo "host '$HOST_LABEL' never reported polling — fly logs --app $APP" >&2; exit 1; }
+    if [ "$seen" != 1 ]; then
+      echo "host '$HOST_LABEL' never reported polling — fly logs --app $APP" >&2
+      [ -z "$last_fly_error" ] || echo "last fly logs error: $last_fly_error" >&2
+      echo "the machine-side log is /data/log/host.log (fly ssh console --app $APP)" >&2
+      exit 1
+    fi
     sleep 15   # one poll tick, so the server has seen the host before the mint
   fi
   say "-- sponsor: hosted budget \$$HOSTED_BUDGET_USD per wake (ADR 463 §2 — a claim without one fails no_budget)"
