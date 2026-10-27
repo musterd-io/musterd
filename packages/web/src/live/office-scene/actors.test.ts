@@ -1773,7 +1773,7 @@ describe('pinning a finished lane on the board', () => {
  */
 describe('meeting in the aisle', () => {
   const run = () => {
-    const { placements, byName } = world([node('Ada'), node('Bo'), node('Cy')]);
+    const { placements, byName } = world([node('ghost'), node('Ada'), node('Cy')]); // ghost + Ada, not Ada + Bo: at 22 seats (and again after the café rework) the pair has to hash to desks within five legs of one aisle (2026-10-27)
     const actors = createActors();
     actors.setHomes(placements, byName, true);
     return {
@@ -1784,19 +1784,19 @@ describe('meeting in the aisle', () => {
 
   it('both leave home, stand near each other, exchange gestures, and both come back', () => {
     const { actors, homes } = run();
-    expect(actors.aisleMeet('Ada', 'Bo', () => 0.5)).toBe(true);
+    expect(actors.aisleMeet('ghost', 'Ada', () => 0.5)).toBe(true);
     let closest = Infinity;
     let bothOut = false;
     let gestured = false;
     let guard = 0;
     while (actors.active() && guard++ < 6000) {
       actors.step(0.05);
-      const a = actors.poses().get('Ada')!;
-      const b = actors.poses().get('Bo')!;
+      const a = actors.poses().get('ghost')!;
+      const b = actors.poses().get('Ada')!;
       const d = Math.hypot(a.lx - b.lx, a.ly - b.ly);
       closest = Math.min(closest, d);
-      const ha = homes.get('Ada')!;
-      const hb = homes.get('Bo')!;
+      const ha = homes.get('ghost')!;
+      const hb = homes.get('Ada')!;
       if (
         Math.hypot(a.lx - ha.lx, a.ly - ha.ly) > 10 &&
         Math.hypot(b.lx - hb.lx, b.ly - hb.ly) > 10
@@ -1809,7 +1809,7 @@ describe('meeting in the aisle', () => {
     expect(closest).toBeLessThan(60);
     expect(closest).toBeGreaterThan(4); // facing each other, not inside each other
     expect(gestured).toBe(true);
-    for (const n of ['Ada', 'Bo']) {
+    for (const n of ['ghost', 'Ada']) {
       seated(actors, n);
       const p = actors.poses().get(n)!;
       expect(p.lx).toBeCloseTo(homes.get(n)!.lx, 5);
@@ -1819,10 +1819,10 @@ describe('meeting in the aisle', () => {
 
   it('is ambient: a real act for either sends both home, and a busy member refuses', () => {
     const { actors } = run();
-    expect(actors.aisleMeet('Ada', 'Ada')).toBe(false);
-    expect(actors.aisleMeet('Ada', 'Nobody')).toBe(false);
-    expect(actors.aisleMeet('Ada', 'Bo')).toBe(true);
-    expect(actors.aisleMeet('Ada', 'Cy')).toBe(false); // Ada is already on her way
+    expect(actors.aisleMeet('ghost', 'ghost')).toBe(false);
+    expect(actors.aisleMeet('ghost', 'Nobody')).toBe(false);
+    expect(actors.aisleMeet('ghost', 'Ada')).toBe(true);
+    expect(actors.aisleMeet('ghost', 'Cy')).toBe(false); // Ada is already on her way
     for (let i = 0; i < 20; i++) actors.step(0.1);
     expect(actors.ambientOnly()).toBe(true);
     actors.cancelAmbient();

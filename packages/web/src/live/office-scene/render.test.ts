@@ -315,7 +315,7 @@ describe('working monitor desktop', () => {
   const fit = fitFloor(1200, 900);
 
   function paintsFor(activity: OfficeNode['activity']): string[] {
-    const member = node('stanley', activity);
+    const member = node('mallory', activity);
     const members = new Map([[member.name, member]]);
     const placements = assignSeats([member]);
     const paints: string[] = [];
@@ -324,7 +324,7 @@ describe('working monitor desktop', () => {
   }
 
   it('renders Stanley’s working window desk as a living desktop', () => {
-    // Stanley hashes to desk-slot index 15, whose stable desk ID is 20. The layout's sparse IDs must
+    // Mallory hashes to window desk 20 (stanley did until the floor went to 22 seats, 2026-10-27). The layout's sparse IDs must
     // never make this working, camera-facing screen fall back to the dark idle slab.
     expect(paintsFor('working')).toContain('#2f9a8a');
   });

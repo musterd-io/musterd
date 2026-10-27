@@ -29,6 +29,7 @@ THICK = 22          # iso.ts: floor slab thickness
 WALL_H = 188        # iso.ts: back-wall height
 DESK_W = 100
 DESK_D = 68
+DESK_CW, DESK_CD = 88, 62  # the compact workstation (layout.ts DESK_COMPACT)
 DESK_LEG_H = 29
 DESK_SLAB = 7
 DESK_UP = DESK_LEG_H + DESK_SLAB
@@ -54,26 +55,26 @@ POD_RUGS = {  # shape → (along, across) — mirrors layout.ts podRug()
 POD_RUG_FIELD_ALPHA = 0.25
 BENCH = dict(lx=320, ly=56, long=300, deep=30)
 NOOK = (725, 175)
-CAFE = (620, 4, 896, 330)  # x0, y0, x1, y1 — mirrors layout.ts CAFE: the tiled café corner (office v3-2)
-LOUNGE = dict(
-    fridge=dict(dx=-104, dy=-60, w=36, d=30, h=72),
-    counter=dict(dx=-30, dy=-86, w=120, d=30, h=34),
-    machine=dict(dx=-71, dy=-86),
-    sink=dict(dx=-49, dy=-86),
-    cooler=dict(dx=42, dy=-92, w=26, d=26, h=52),
-    island=dict(dx=45, dy=8, w=130, d=40, h=34),
-    stools=[(-21, 54), (45, 54), (111, 54)],
-    couch=dict(dx=135, dy=-90, len=80, dep=44),
-    armchair=dict(dx=135, dy=-4),
-    table=dict(dx=135, dy=-50, w=40, d=30),
+CAFE = (620, 4, 896, 280)  # x0, y0, x1, y1 — mirrors layout.ts CAFE: the tiled café corner (office v3-2)
+LOUNGE = dict(  # mirrors layout.ts LOUNGE — layout.test.ts holds the sizes the sprites bake in
+    fridge=dict(dx=-56, dy=-60, w=36, d=30, h=72),
+    counter=dict(dx=5, dy=-86, w=80, d=30, h=34),
+    machine=dict(dx=-20, dy=-86),
+    sink=dict(dx=10, dy=-86),
+    cooler=dict(dx=62, dy=-92, w=26, d=26, h=52),
+    island=dict(dx=50, dy=18, w=60, d=40, h=34),
+    stools=[(50, 64)],
+    couch=dict(dx=131, dy=-90, len=80, dep=44),
+    armchair=dict(dx=143, dy=20),
+    table=dict(dx=131, dy=-36, w=40, d=30),
 )
 STOOL = 26
 MEETING = dict(lx=500, ly=805, w=150, d=80, h=30, rug=(250, 175, "#9aa886", "#7e8c6b", "stripes"),
-               chairs=[(-40, -72, "S"), (40, -72, "S"), (-124, 0, "E"), (124, 0, "W")], chair=36)
+               chairs=[(-40, -72, "S"), (40, -72, "S"), (-124, 0, "E"), (124, 0, "W"), (-40, 72, "N"), (40, 72, "N")], chair=36)
 RECEPTION = dict(rug=(140, 810, 200, 120, "#c07a55", "#9c5c3c", "border"), chair=(205, 856, "N"),
                  end_table=(152, 860), plant=(268, 872))
 FRONT_DESK = dict(lx=165, ly=742, long=92, deep=50, high=DESK_UP)
-WAIT_CHAIR = 34
+WAIT_CHAIR = 42
 END_TABLE = 26
 ENTRANCE = (47, 815)
 PRINTER = dict(lx=505, ly=60, w=46, d=34, h=32)
@@ -84,7 +85,6 @@ PLANTS = [  # lx, ly, species
 SHELF_LONG, SHELF_DEEP, SHELF_H, DEEP_WIDE = 58, 20, 66, 22
 BOOKSHELVES = [  # lx, ly, dir, long, deep, high, rows, tone
     (130, SHELF_DEEP / 2, "S", 44, SHELF_DEEP, 88, 4, 1.0),
-    (FLOOR - DEEP_WIDE / 2, 320, "W", 76, DEEP_WIDE, 46, 2, 0.94),
     (SHELF_DEEP / 2, 240, "E", SHELF_LONG, SHELF_DEEP, SHELF_H, 3, 1.05),
     (DEEP_WIDE / 2, 560, "E", 70, DEEP_WIDE, 48, 2, 0.97),
 ]
@@ -495,9 +495,9 @@ def finish(asset_id: str, parts: list[bpy.types.Object], lx: float, ly: float, c
 
 
 # ── furniture ──────────────────────────────────────────────────────────────────────────────
-def desk(asset_id: str, lx: float, ly: float, along_x: bool, zs: float, col: bpy.types.Collection) -> bpy.types.Object:
+def desk(asset_id: str, lx: float, ly: float, along_x: bool, zs: float, col: bpy.types.Collection, size=(DESK_W, DESK_D)) -> bpy.types.Object:
     """One workstation base — legs and slab (the bevelled lip is the render's own highlight)."""
-    w, d = (DESK_W, DESK_D) if along_x else (DESK_D, DESK_W)
+    w, d = size if along_x else (size[1], size[0])
     oak = wood("oak", OAK)
     dark = wood("oak-dark", OAK_DARK, grain=0.1)
     slab = box(f"{asset_id}/slab", lx, ly, DESK_LEG_H, w, d, DESK_SLAB, oak, zs)
@@ -864,15 +864,26 @@ def low_table(asset_id: str, lx: float, ly: float, w: float, d: float, h: float,
 
 
 def armchair(asset_id: str, lx: float, ly: float, S: float, facing: str, zs: float, col) -> bpy.types.Object:
+    """A real armchair: a wide low seat, two arms, and a back as tall as a task chair's (2026-10-27 —
+    the old one was a 34-unit cube with a 32-high back, and read as a footstool next to the desks)."""
     fab = fabric("couch", COUCH)
     fab_dark = fabric("couch-dark", tuple(c * 0.9 for c in COUCH))
     sn = facing in ("S", "N")
     f = {"S": (0, 1), "N": (0, -1), "E": (1, 0), "W": (-1, 0)}[facing]
-    seat = box(f"{asset_id}/seat", lx, ly, 0, S - 2 if sn else S, S if sn else S - 2, 20, fab, zs)
+    # across = the axis the arms sit on; along = the facing axis
+    inner = S - 16  # seat width between the two 8-wide arms
+    seat = box(f"{asset_id}/seat", lx, ly, 0, inner if sn else S, S if sn else inner, 18, fab, zs)
     bevel(seat, 2.0)
-    back = box(f"{asset_id}/back", lx - f[0] * (S / 2 - 6), ly - f[1] * (S / 2 - 6), 0, S - 2 if sn else 10, 10 if sn else S - 2, 32, fab_dark, zs)
+    back = box(f"{asset_id}/back", lx - f[0] * (S / 2 - 5), ly - f[1] * (S / 2 - 5), 0, S if sn else 10, 10 if sn else S, 44, fab_dark, zs)
     bevel(back, 2.0)
-    parts = [seat, back, ball(f"{asset_id}/cushion", lx + f[0] * 2, ly + f[1] * 2, 19, S / 2 - 5, S / 2 - 5, 3, fabric("cushion", srgb("#eabf50")), zs)]
+    parts = [seat, back]
+    for side in (-1, 1):
+        ax = lx + (side * (S / 2 - 4) if sn else 0)
+        ay = ly + (0 if sn else side * (S / 2 - 4))
+        arm = box(f"{asset_id}/arm{side}", ax, ay, 0, 8 if sn else S - 4, S - 4 if sn else 8, 28, fab_dark, zs)
+        bevel(arm, 2.0)
+        parts.append(arm)
+    parts.append(ball(f"{asset_id}/cushion", lx + f[0] * 2, ly + f[1] * 2, 17, inner / 2 - 3, inner / 2 - 3, 3, fabric("cushion", srgb("#eabf50")), zs))
     parts.append(shadow(f"{asset_id}/shadow", lx, ly, S * 0.62, S * 0.62, zs))
     return finish(asset_id, parts, lx, ly, col)
 
@@ -1690,6 +1701,8 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     a["rug/reception"] = rug("rug/reception", rlx, rly, rw, rd, rf, rm, rv, zs, export)
     a["desk/base"] = desk("desk/base", C, C, True, zs, export)
     a["desk/base-ew"] = desk("desk/base-ew", C, C, False, zs, export)
+    a["desk/base-c"] = desk("desk/base-c", C, C, True, zs, export, (DESK_CW, DESK_CD))
+    a["desk/base-c-ew"] = desk("desk/base-c-ew", C, C, False, zs, export, (DESK_CW, DESK_CD))
     a["bench/base"] = bench("bench/base", zs, export)
     a["plant/snake"] = plant("plant/snake", C, C, "snake", zs, export)
     a["plant/fiddle"] = plant("plant/fiddle", C, C, "fiddle", zs, export)

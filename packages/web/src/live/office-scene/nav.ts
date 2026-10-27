@@ -5,9 +5,8 @@ import {
   FRONT_DESK,
   CHAIR_OFF,
   CHAIR_SIZE,
-  DESK_D,
+  deskDims,
   DESK_SLOTS,
-  DESK_W,
   END_TABLE,
   ENTRANCE,
   FWD,
@@ -82,12 +81,13 @@ function solidRects(): Rect[] {
       );
     } else {
       const sn = slot.dir === 'S' || slot.dir === 'N';
+      const { w, d } = deskDims(slot);
       out.push(
         rect(
           slot.lx,
           slot.ly,
-          sn ? DESK_W : DESK_D,
-          sn ? DESK_D : DESK_W,
+          sn ? w : d,
+          sn ? d : w,
           BODY_R,
           `desk-${slot.id}`,
         ),
@@ -135,16 +135,8 @@ function solidRects(): Rect[] {
   // Stools and the armchair are seats: padded lightly like every chair so their own spot stays reachable.
   for (const st of L.stools)
     out.push(rect(NOOK.lx + st.dx, NOOK.ly + st.dy, STOOL, STOOL, 4, 'stool'));
-  out.push(
-    rect(
-      NOOK.lx + L.armchair.dx,
-      NOOK.ly + L.armchair.dy,
-      WAIT_CHAIR,
-      WAIT_CHAIR,
-      4,
-      'cafe-armchair',
-    ),
-  );
+  for (const a of L.armchairs)
+    out.push(rect(NOOK.lx + a.dx, NOOK.ly + a.dy, WAIT_CHAIR, WAIT_CHAIR, 4, 'cafe-armchair'));
   out.push(rect(MEETING.lx, MEETING.ly, MEETING.w, MEETING.d, BODY_R, 'meeting-table'));
   for (const c of MEETING.chairs) {
     out.push(

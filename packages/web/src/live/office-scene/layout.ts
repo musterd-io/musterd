@@ -1,4 +1,3 @@
-import { FLOOR } from './iso';
 import type { Dir } from './types';
 
 /**
@@ -37,6 +36,11 @@ export const SEAT_BACK = 40;
  * walkability grid (nav.ts) so walkers route around exactly what is drawn. */
 export const DESK_W = 100;
 export const DESK_D = 68;
+/** The compact workstation (2026-10-27): the spine's desks, a size down so the dense block in the
+ * middle of the room and the café beside it both get air (nick: "reduce the desk sizes for some of
+ * the desks"). Props keep their standard offsets: the monitor still sits 9 in from the back edge and
+ * the widest flank prop (pens, across 42) stays inside the 44 half-width. */
+export const DESK_COMPACT = { w: 88, d: 62 } as const;
 export const CHAIR_SIZE = 34;
 /** The chair sits directly under the seat point, not behind it — a member seated at `SEAT_BACK` lands on
  * the seat rather than hovering in front of it. (Seat 40 back, chair centred 42 back: pelvis on cushion.) */
@@ -82,6 +86,13 @@ export interface DeskSlot {
    * right wall, facing the room with the window light behind it.
    */
   kind: 'pod' | 'bench' | 'window';
+  /** The compact workstation; absent means the standard 100×68 (`deskDims`). */
+  size?: 'compact';
+}
+
+/** A desk's slab footprint, unrotated: `w` across the facing, `d` along it. */
+export function deskDims(slot: { size?: 'compact' }): { w: number; d: number } {
+  return slot.size === 'compact' ? DESK_COMPACT : { w: DESK_W, d: DESK_D };
 }
 
 /**
@@ -116,7 +127,7 @@ export const POD_SHAPE_SEATS: Record<PodShape, number> = {
   quad: 4,
   duo: 2,
   solo: 1,
-  spine: 8,
+  spine: 7, // 4 + 3 since 2026-10-27 (the NE desk went for the café)
   pinwheel: 4,
   zigzag: 3,
 };
@@ -140,6 +151,8 @@ export interface Pod {
   /** The pod's floor rug — a zone marker under the whole cluster, seats included. With no divider to carry
    * it, the rug is the *only* thing that makes a pod a place: it is what lets a member say "the blue pod". */
   rug: Rug;
+  /** Every desk of this pod is the compact workstation (`DESK_COMPACT`). */
+  compact?: boolean;
 }
 
 /**
@@ -168,6 +181,7 @@ export const PODS: Pod[] = [
     cy: 440,
     axis: 'ns',
     shape: 'spine',
+    compact: true,
     rug: { shape: 'rect', weave: 'stripes', fill: '#97a7b8', mark: '#7c8ca0' },
   },
   {
@@ -270,6 +284,7 @@ function podDesks(pod: Pod): Omit<DeskSlot, 'id'>[] {
     dir,
     pod: pod.id,
     kind: 'pod',
+    ...(pod.compact ? { size: 'compact' as const } : {}),
   });
   const off = (o: { dx: number; dy: number; dir: Dir }): Omit<DeskSlot, 'id'> => ({
     lx: pod.cx + o.dx,
@@ -277,6 +292,7 @@ function podDesks(pod: Pod): Omit<DeskSlot, 'id'>[] {
     dir: o.dir,
     pod: pod.id,
     kind: 'pod',
+    ...(pod.compact ? { size: 'compact' as const } : {}),
   });
   switch (pod.shape) {
     case 'solo':
@@ -295,8 +311,10 @@ function podDesks(pod: Pod): Omit<DeskSlot, 'id'>[] {
       const lo: Dir = ns ? 'E' : 'S';
       const hi: Dir = ns ? 'W' : 'N';
       const alongs = [-150, -50, 50, 150];
+      // The high column's first desk is gone (2026-10-27): it was the one desk nearest the café, and
+      // with it out the corner reads as the café's, not the spine's (nick). Seven desks, 4 + 3.
       return [
-        ...alongs.map((along) => at(along, POD_ACROSS, hi)),
+        ...alongs.slice(1).map((along) => at(along, POD_ACROSS, hi)),
         ...alongs.map((along) => at(along, -POD_ACROSS, lo)),
       ];
     }
@@ -346,8 +364,9 @@ export const WINDOW_DESKS: ReadonlyArray<{ lx: number; ly: number; dir: Dir }> =
   // reception at the bottom and the door posts in between. The one built there measured a 5.6x detour
   // from the door — a seat nobody could reach without crossing the whole room first.
   // Office v3: the lower one rose to 580 so the corner duo could take the SE corner.
-  { lx: 776, ly: 400, dir: 'W' },
-  { lx: 776, ly: 580, dir: 'W' },
+  // 400 → 425 and 580 → 595 (2026-10-27): a step further from the café tile (nick).
+  { lx: 776, ly: 425, dir: 'W' },
+  { lx: 776, ly: 595, dir: 'W' },
 ];
 
 const benchSlots: Omit<DeskSlot, 'id'>[] = Array.from({ length: BENCH.seats }, (_, i) => ({
@@ -386,7 +405,7 @@ export const NOOK = { lx: 725, ly: 175 };
  * wall, north wall down past the stools and the couch. Mirrored by `scene.py` `CAFE`, which paints
  * it; `nav.test.ts` holds every away standing spot inside it.
  */
-export const CAFE = { x0: 620, y0: 4, x1: 896, y1: 330 } as const;
+export const CAFE = { x0: 620, y0: 4, x1: 896, y1: 280 } as const;
 export function insideCafe(lx: number, ly: number): boolean {
   return lx >= CAFE.x0 && lx <= CAFE.x1 && ly >= CAFE.y0 && ly <= CAFE.y1;
 }
@@ -412,10 +431,12 @@ export const LOUNGE = {
   // down was sealed. Three of the four errand dwell points ended up inside furniture. Pushing the run
   // back opens a walkable lane in front of it without touching the seating nick tuned; the counter was
   // never on the rug anyway, so there is nothing behind it to give up.
-  fridge: { dx: -104, dy: -60, w: 36, d: 30, h: 72 },
-  counter: { dx: -30, dy: -86, w: 120, d: 30, h: 34 },
-  machine: { dx: -71, dy: -86 },
-  cooler: { dx: 42, dy: -92, w: 26, d: 26, h: 52 }, // water cooler
+  // The run slid 24 east (2026-10-27) so the fridge stands on the tile, not half off its west edge
+  // (nick: "the fridge/freezer is not on the kitchen tile"); `layout.test.ts` holds every piece on it.
+  fridge: { dx: -56, dy: -60, w: 36, d: 30, h: 72 },
+  counter: { dx: 5, dy: -86, w: 80, d: 30, h: 34 },
+  machine: { dx: -20, dy: -86 },
+  cooler: { dx: 62, dy: -92, w: 26, d: 26, h: 52 }, // water cooler
   // (a nook plant used to sit at dx 112 — removed to thin the nook's right edge, which already has the
   // big floor plant at 830,330 and the right-wall bookshelf beside it.)
   // Conversation set in the front. The gaps are the point: a coffee table sits a stride from a couch,
@@ -427,18 +448,29 @@ export const LOUNGE = {
   // stay walkable, and it is 130 wide rather than the spec's 180 so the lane keeps a two-cell
   // opening at its west end (a 180 island sealed the lane against the fridge and the couch set, and
   // every coffee errand cut through it). Stools are 66 apart: 46.7 on screen, just over MIN_SPOT_GAP.
-  island: { dx: 45, dy: 8, w: 130, d: 40, h: 34 },
-  stools: [
-    { dx: -21, dy: 54 },
-    { dx: 45, dy: 54 },
-    { dx: 111, dy: 54 },
-  ],
+  // 130 → 100 wide, three stools → two (66 apart, as before: MIN_SPOT_GAP on screen), and 10 further
+  // from the counter (2026-10-27): clear of the couch set, and the kitchenette lane keeps a two-cell
+  // opening past the fridge.
+  // One stool (2026-10-27): with the fridge a step in from the tile's edge and two armchairs down the
+  // right wall, a two-stool island fused with both on the nav grid and boxed the armchairs in. A
+  // breakfast island for one keeps the lane past the fridge and the floor beside the chairs.
+  island: { dx: 50, dy: 18, w: 60, d: 40, h: 34 },
+  stools: [{ dx: 50, dy: 64 }],
   // The corner set is placed by SCREEN x, not floor x: a seat "behind" a stool along the lx+ly
   // diagonal collapses onto it (the iso squashes that axis), so the couch and armchair sit far
   // enough east that their occupants land right of the stools on screen.
-  couch: { dx: 135, dy: -90, len: 80, dep: 44 }, // NE corner, faces S; its pad stays off BOARD_STAND's row
-  armchair: { dx: 135, dy: -4 }, // below the table, faces W (its seat clears the couch's on screen by 1.5)
-  table: { dx: 135, dy: -50, w: 40, d: 30 },
+  couch: { dx: 131, dy: -90, len: 80, dep: 44 }, // NE corner, faces S; its pad stays off BOARD_STAND's row
+  // Three armchairs (2026-10-27), all facing W: two down the right wall below the couch and its table,
+  // where the tile had bare floor (nick: "we may need one or two more arm chairs"), and one on the
+  // right flank between the window desks as a reading chair, where the snake plant stood. All NOOK
+  // offsets, because the painter, nav and the leisure seats read them from here.
+  armchairs: [
+    { dx: 143, dy: 20 },
+    { dx: 143, dy: 84 },
+    { dx: 870 - NOOK.lx, dy: 505 - NOOK.ly },
+  ],
+  // dy -50 → -36 (2026-10-27): a clear gap between the couch front and the table (nick).
+  table: { dx: 131, dy: -36, w: 40, d: 30 },
   // The chairs stay where they were. Pushing them out with the table walked chairW into a reading
   // spot (MIN_SPOT_GAP) and put an away member's stand point on furniture — the gap this set needed
   // was between the couch and the table, and widening everything just moved the crowding outward.
@@ -458,10 +490,11 @@ export const NOOK_SPOTS: ReadonlyArray<{ dx: number; dy: number }> = [
   // Office v3-3: four standing spots along the café's south threshold, between the stools —
   // idle members take the café's seats, away members stand small (spec §2.9). Each is inside CAFE,
   // walkable; a small away avatar may brush a seated stool's label, and away is rare (spec §2.9).
-  { dx: -54, dy: 135 },
-  { dx: 12, dy: 135 },
-  { dx: 78, dy: 135 },
-  { dx: 118, dy: 100 }, // east end, between the third stool and the corner shelf's reader
+  // dy 135 → 108 → 94 (2026-10-27): the tile's south edge came in twice; the spots came with it.
+  { dx: -82, dy: 94 },
+  { dx: 12, dy: 94 },
+  { dx: 78, dy: 94 },
+  { dx: 100, dy: 98 }, // east end
 ];
 
 /**
@@ -470,13 +503,13 @@ export const NOOK_SPOTS: ReadonlyArray<{ dx: number; dy: number }> = [
  * so the spot directly in front of the machine is the one place along the counter a body cannot stand.
  */
 export const COFFEE_STAND = {
-  lx: NOOK.lx + LOUNGE.machine.dx + 8,
+  lx: NOOK.lx + LOUNGE.machine.dx + 14, // +8 → +14 (2026-10-27): the fridge's pad reaches 8 past it now
   ly: NOOK.ly + LOUNGE.counter.dy + 38,
 };
 
 /** The kitchenette sink's spot on the counter (centre-run, between the machine and the bean bag) —
  * shared by the counter painter and the fridge errand's plate drop-off. */
-export const SINK = { dx: -49, dy: -86 };
+export const SINK = { dx: 10, dy: -86 };
 
 // ── errand stand points (ADR 086 Phase 3: purposeful errands) ─────────────────────────────────────────
 // Each is where the walker *stands* during the errand's dwell, just clear of the appliance's inflated
@@ -519,7 +552,10 @@ export const ENTRANCE = { lx: 47, ly: 815 };
  */
 
 /**
- * The meeting table in the front corner: a long table with four chairs, on its own rug.
+ * The meeting table in the front corner: a long table with six chairs, on its own rug.
+ *
+ * Two down each long side and one at each head (nick, 2026-10-27: the front strip has the floor for a
+ * wall-side pair again). The history below is why it was four for a while:
  *
  * **Chairs down one long side and one at each end**, not two down each side — because the front strip
  * of floor is shallower than a both-sides table needs. Between the pod rugs (which reach ly 685) and
@@ -557,6 +593,9 @@ export const MEETING = {
     { dx: 40, dy: -72, dir: 'S' as Dir },
     { dx: -124, dy: 0, dir: 'E' as Dir },
     { dx: 124, dy: 0, dir: 'W' as Dir },
+    // Two on the wall side again (nick, 2026-10-27): the front strip has the floor for them now.
+    { dx: -40, dy: 72, dir: 'N' as Dir },
+    { dx: 40, dy: 72, dir: 'N' as Dir },
   ],
   chairSize: 36,
   rug: { w: 250, d: 175, shape: 'rect', weave: 'stripes', fill: '#9aa886', mark: '#7e8c6b' },
@@ -574,7 +613,7 @@ export const MEETING = {
  * competing with the real one, and it ate the floor the cubicles needed. Two chairs and an end table
  * say "wait here a moment" instead of "settle in", in a fraction of the footprint.
  */
-export const WAIT_CHAIR = 34;
+export const WAIT_CHAIR = 42; // 34 → 42 (2026-10-27): an armchair is wider than a task chair, not the same block
 /** A café stool's footprint (office v3-3): a round seat on a post. */
 export const STOOL = 26;
 export const END_TABLE = 26;
@@ -677,7 +716,6 @@ export const PLANTS: Plant[] = [
   // (a fiddle stood at 480,55 — removed with the bench: it landed against the counter's end, and a
   // plant wedged between a bench and a printer is clutter, not softening.)
   { lx: 55, ly: 645, species: 'fiddle' }, // left wall, in the gap between pod 2 and reception
-  { lx: 866, ly: 490, species: 'snake' }, // right flank, between the two window desks (400 and 580), clear of both stand-behinds
   { lx: 380, ly: 870, species: 'fiddle' },
   { lx: 66, ly: 470, species: 'fiddle' }, // left flank, in the rug gap between pods 0 and 2
   // Front corner, past the meeting table. Kept clear of the aisle the east head chair is pulled out
@@ -865,19 +903,8 @@ export const BOOKSHELVES: Bookshelf[] = [
     tone: 1.0,
     decor: 'plant',
   },
-  // right wall below the lounge — low wide, and the one shelved backwards
-  {
-    lx: FLOOR - DEEP_WIDE / 2,
-    ly: 320,
-    dir: 'W',
-    long: 76,
-    deep: DEEP_WIDE,
-    high: 46,
-    rows: 2,
-    tone: 0.94,
-    reversed: true,
-    decor: 'photo',
-  },
+  // (The right-wall unit below the café, the one shelved backwards, went on 2026-10-27: it crowded
+  // the couch — nick: "get rid of one of the book shelves".)
   // left wall beside pod 0 — the standard unit, i.e. the constants above
   {
     lx: SHELF_DEEP / 2,
@@ -1012,14 +1039,14 @@ export const LEISURE_SPOTS: LeisureSpot[] = (() => {
       casual: true,
     })),
     ...couchSeats('lounge', NOOK.lx + L.couch.dx, NOOK.ly + L.couch.dy, 'S'),
-    {
+    ...L.armchairs.map((a) => ({
       zone: 'lounge' as const,
-      lx: NOOK.lx + L.armchair.dx - CHAIR_SEAT_FWD,
-      ly: NOOK.ly + L.armchair.dy,
+      lx: NOOK.lx + a.dx - CHAIR_SEAT_FWD,
+      ly: NOOK.ly + a.dy,
       dir: 'W' as Dir,
       sit: 1,
       casual: true,
-    },
+    })),
   ];
   // Reception's two waiting chairs, which inherit the huddle's job of being the second leisure zone.
   // Someone idling in the waiting chairs is a true thing for an office to show, and it keeps four
@@ -1035,7 +1062,7 @@ export const LEISURE_SPOTS: LeisureSpot[] = (() => {
       sit: 1,
     };
   });
-  // All four meeting chairs are seats — see MEETING for why they sit along one side and the two ends
+  // All six meeting chairs are seats — see MEETING for why they sit along one side and the two ends
   // rather than down both sides. `nav.test.ts` holds every offered spot to having open floor beside it,
   // so an arrangement that walls a chair in fails a test rather than shipping as a seat nobody can
   // walk to.

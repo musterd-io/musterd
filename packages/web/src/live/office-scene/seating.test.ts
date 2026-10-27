@@ -290,8 +290,8 @@ describe('assignSeats — the huddle gathers at the meeting table (ADR 378 inc 2
     expect(seats.get('typer')).toMatchObject({ kind: 'desk' });
   });
 
-  it('gives the table four chairs and no more — the fifth talker stays at their desk', () => {
-    const names = ['a1', 'a2', 'a3', 'a4', 'a5'];
+  it('gives the table six chairs and no more — the seventh talker stays at their desk', () => {
+    const names = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7'];
     const seats = assignSeats(names.map((n) => member(n)), new Set(names));
     const seated = names.filter((n) => isMeeting(seats.get(n)!));
     expect(seated).toHaveLength(meetingSpots.length);

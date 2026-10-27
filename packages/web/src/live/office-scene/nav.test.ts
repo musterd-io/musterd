@@ -74,8 +74,8 @@ describe('walkability grid', () => {
     expect(walkable(RECEPTION.chair.lx, RECEPTION.chair.ly)).toBe(false);
     expect(walkable(RECEPTION.rug.lx - 90, RECEPTION.rug.ly)).toBe(true);
     // the café island is solid; the open tile in front of the stools is floor
-    expect(walkable(NOOK.lx + 10, NOOK.ly - 6)).toBe(false);
-    expect(walkable(NOOK.lx + 10, NOOK.ly + 90)).toBe(true);
+    expect(walkable(NOOK.lx + 35, NOOK.ly + 18)).toBe(false); // the island
+    expect(walkable(NOOK.lx + 10, NOOK.ly + 105)).toBe(true); // the open tile south of the stools
   });
 
   it('stands every away member on the café tile — clear of the lounge furniture', () => {

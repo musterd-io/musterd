@@ -23,10 +23,10 @@ import {
   BOOKSHELVES,
   CHAIR_OFF,
   DESK_D,
+  deskDims,
   BENCH,
   DESK_SLOTS,
   DESK_UP,
-  DESK_W,
   ENTRANCE,
   FRONT_DESK,
   RECEPTIONIST,
@@ -1791,12 +1791,7 @@ function nookItems(
       at(L.island.dx, L.island.dy, 'island', r('nook/island', L.island.dx, L.island.dy)),
       ...L.stools.map((st, i) => at(st.dx, st.dy, `stool-${i}`, r('nook/stool', st.dx, st.dy))),
       at(L.couch.dx, L.couch.dy, 'couch', r('nook/couch', L.couch.dx, L.couch.dy)),
-      at(
-        L.armchair.dx,
-        L.armchair.dy,
-        'armchair',
-        r('nook/armchair', L.armchair.dx, L.armchair.dy),
-      ),
+      ...L.armchairs.map((a, i) => at(a.dx, a.dy, `armchair-${i}`, r('nook/armchair', a.dx, a.dy))),
       at(L.table.dx, L.table.dy, 'table', r('nook/table', L.table.dx, L.table.dy)),
     ],
   };
@@ -2999,17 +2994,24 @@ export function benchPropSort(
  *
  * `render.test.ts` pins the ordering at all four facings, which is the check #1394 did not have.
  */
+/** The rendered base for a desk: `desk/base` (S/N) or `desk/base-ew`, with a `-c` compact pair. */
+export function deskBaseId(slot: { dir: Dir; size?: 'compact' }): string {
+  const sn = slot.dir === 'S' || slot.dir === 'N';
+  return `desk/base${slot.size === 'compact' ? '-c' : ''}${sn ? '' : '-ew'}`;
+}
+
 /** Clip `ctx` to the near half's silhouette — the extruded box from the floor to the worktop over the
  * +ly half of the desk. The caller saves and restores. */
 function clipToNearHalf(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
-  slot: { lx: number; ly: number; dir: Dir },
+  slot: { lx: number; ly: number; dir: Dir; size?: 'compact' },
 ): void {
   const { lx, ly, dir } = slot;
   const sn = dir === 'S' || dir === 'N';
-  const wx = sn ? DESK_W : DESK_D;
-  const dy = sn ? DESK_D : DESK_W;
+  const { w, d } = deskDims(slot);
+  const wx = sn ? w : d;
+  const dy = sn ? d : w;
   const corners: Pt[] = [];
   for (const [cx, cy] of [
     [lx - wx / 2, ly],
@@ -3050,14 +3052,13 @@ function deskNearHalf(
   slot: DeskSlot,
   rendered: RenderedAssets,
 ): void {
-  const { lx, ly, dir } = slot;
-  const sn = dir === 'S' || dir === 'N';
+  const { lx, ly } = slot;
   // The same base image again, clipped to the near half's silhouette (the extruded box from the floor
   // to the worktop) — the same pixels, so additive by construction. The half NEAREST THE CAMERA is
   // +lx / +ly — a property of the projection, not of the facing (`clipToNearHalf`).
   ctx.save();
   clipToNearHalf(ctx, fit, slot);
-  blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
+  blitIf(ctx, fit, rendered, deskBaseId(slot), lx, ly);
   ctx.restore();
 }
 
@@ -3077,12 +3078,13 @@ function deskNearHalf(
  * and `nearDepth` never could.
  */
 export function deskNearDepth(
-  slot: { lx: number; ly: number; dir: Dir },
+  slot: { lx: number; ly: number; dir: Dir; size?: 'compact' },
   seatedAt: { lx: number; ly: number } | null,
 ): number {
   const sn = slot.dir === 'S' || slot.dir === 'N';
-  const wx = sn ? DESK_W : DESK_D;
-  const dy = sn ? DESK_D : DESK_W;
+  const { w, d } = deskDims(slot);
+  const wx = sn ? w : d;
+  const dy = sn ? d : w;
   const corner = depth(slot.lx + wx / 2, slot.ly + dy / 2);
   if (!seatedAt) return corner;
   return Math.min(corner, depth(seatedAt.lx, seatedAt.ly) - 0.2);
@@ -3162,8 +3164,7 @@ export function drawWorkstation(
 
   // The base — legs, slab and its bevelled lip — is one rendered image: `desk/base` for a S/N desk,
   // `desk/base-ew` for an E/W one (plan Task 3).
-  if (phase !== 'post' && !nearOnly)
-    blitIf(ctx, fit, rendered, sn ? 'desk/base' : 'desk/base-ew', lx, ly);
+  if (phase !== 'post' && !nearOnly) blitIf(ctx, fit, rendered, deskBaseId(slot), lx, ly);
 
   // Surface props, placed in desk-relative (along-facing, across) coords and self-sorted back-to-front so
   // overlaps paint correctly regardless of the desk's facing. `along` +toward the monitor, −toward the seat.
