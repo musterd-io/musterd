@@ -66,6 +66,22 @@ describe('animFor (office realism Task 13: the pose picks the clip)', () => {
     expect(animFor(pose({ sit: 1, casual: false }), 0, 5, 0.3, withLap).anim).toBe('sit-idle');
   });
 
+  it('a casual sitter with something to say keeps the hands in the lap — never sit-hand (spec §2.8)', () => {
+    // sit-hand is the seated idle with one arm raised, which types on a keyboard that is not there
+    // (whole-branch review, 2026-10-26): on a stool or at the meeting table a bubble stays sit-lap.
+    const withBoth = {
+      ...anims,
+      'sit-lap': { row: 64, frames: 8, fps: 12, loop: true },
+      'sit-hand': { row: 72, frames: 1, fps: 12, loop: true },
+    };
+    const a = animFor(pose({ sit: 1, casual: true, bubble: '?' as never }), 0, 5, 0.3, withBoth);
+    expect(a.anim).toBe('sit-lap');
+    // …while a desk member with a bubble still raises the hand over the keyboard.
+    expect(animFor(pose({ sit: 1, casual: false, bubble: '?' as never }), 0, 5, 0.3, withBoth).anim).toBe(
+      'sit-hand',
+    );
+  });
+
   it('a half-sat pose scrubs the sit-down clip by `sit`', () => {
     const a = animFor(pose({ sit: 0.5 }), 0, 10, 0.3, anims);
     expect(a.anim).toBe('sit-down');
