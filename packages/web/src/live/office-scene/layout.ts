@@ -252,7 +252,10 @@ const PINWHEEL_ARMS: ReadonlyArray<{ dx: number; dy: number; dir: Dir }> = [
 const ZIGZAG_STEPS: ReadonlyArray<{ dx: number; dy: number; dir: Dir }> = [
   { dx: -110, dy: -90, dir: 'E' },
   { dx: 0, dy: 0, dir: 'W' },
-  { dx: -60, dy: 102, dir: 'E' },
+  // dx -60 → 25 (2026-10-27): the SW step's slab ran 30 units into the reception counter (nick:
+  // "a desk that is on top of half of the reception desk"). Stepping SE instead keeps the diagonal
+  // and clears the counter's east edge (x 211) by 15; `layout.test.ts` holds every slab off it.
+  { dx: 25, dy: 102, dir: 'W' },
 ];
 
 /** The desks of a pod, in pod-local order (north/west row first). Slot ids are assigned
@@ -643,9 +646,10 @@ export const CHECK_IN_S = 1.2;
  * The Welcome Wagon's stop (lane 01M3F81DD9): it waits just off the counter's east end, on the
  * arrivals side — the dog collects it there. Pinned walkable by `nav.test.ts`: the counter's padded
  * footprint swallows anything much closer than this. (Its second stop, where a deskless newcomer's
- * polaroid went under the wall board, retired 2026-10-12 with the polaroids.)
+ * polaroid went under the wall board, retired 2026-10-12 with the polaroids.) ly 760 → 772
+ * (2026-10-27): pod 2's bottom step now stands at (260,697) and its padded slab reached 760.
  */
-export const WAGON_PICKUP = { lx: 240, ly: 760 };
+export const WAGON_PICKUP = { lx: 240, ly: 772 };
 /** Where a member stands to take a card off the wall board when they claim a lane (nick, 2026-10-09):
  * the floor under the board's middle (lx ≈ 796, its centre at tc 0.885), clear of the counter's padded
  * footprint. Pinned walkable and reachable from every desk by `nav.test.ts`. */
