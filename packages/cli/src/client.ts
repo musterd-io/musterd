@@ -1038,6 +1038,9 @@ export class HttpClient {
     lane_verdict?: { lane: string; state: 'done' | 'active' };
     /** ADR 662: this human lane-review answer was recorded but did not count without A2. */
     lane_authority_refused?: { lane: string; reason: string };
+    /** Lane 01M5Z3NAJE: this accept was refused by the lane's close rules (ADR 644's read verdict)
+     *  and moved nothing; `guidance` says why and what unblocks it. */
+    lane_verdict_refused?: { lane: string; reason: string; guidance: string };
     /** ADR 539: this accept was the peer confirmation on a risky lane; who (if anyone) was asked. */
     lane_escalation?: { lane: string; human: string | null };
     lane_ack?: { lane: string };
@@ -1073,6 +1076,7 @@ export class HttpClient {
       ask_contract?: AskContract;
       lane_verdict?: { lane: string; state: 'done' | 'active' };
       lane_authority_refused?: { lane: string; reason: string };
+      lane_verdict_refused?: { lane: string; reason: string; guidance: string };
       lane_escalation?: { lane: string; human: string | null };
       lane_ack?: { lane: string };
       lane_superseded?: {

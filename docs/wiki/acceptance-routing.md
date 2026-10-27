@@ -298,3 +298,16 @@ The two fields have different jobs. A risk tag names the kind of harm and routes
 The author was misled by the guidance. The `lane_open` `risk` text read "Other tag or stakes high: human", and the CLI refusal read "add another tag, or --stakes high". Both now say that `stakes: high` asks a human only on a `user-facing` lane (lane `01M5N6VNXF`).
 
 **For a change a human must decide** — one that reverses or amends an ADR, or changes team rules or policy — declare `risk: ["policy"]`. Any tag other than `user-facing` already routes to a human, so the tag needs no code. It is a convention, recorded here.
+
+## An accept on a lane that reads on a day is refused until the owner records the read, and the ack now says so (2026-10-27; falsify: on a daemon built after lane `01M5Z3NAJE`, an agent's accept on an awaiting-acceptance lane with `reads_on` and no `read_verdict` comes back with no `lane_verdict_refused` on its ack, or daemon.log still prints `acceptance_verdict_failed … give read_verdict`) <!-- claim: defect -->
+
+ADR 644 §3 applies the read rule to an accept: a lane with `reads_on` closes `done` only with a `read_verdict`, and the lane's owner records that verdict after the read (`lane_update {read_verdict}`). `applyAcceptanceVerdict` threw the refusal, `routeEnvelope` caught it and logged `acceptance_verdict_failed` at warn, and the ack came back with no `lane_verdict` and no reason. The acceptor's tool result looked like a verdict that had landed.
+
+It happened on lane `01M5X44XXE` (ADR 741, hot tools; it reads on 2026-11-03). dolly accepted it at 2026-10-26 20:53 PDT and again on 2026-10-27, and believed it closed both times. The lane stayed `awaiting_acceptance` and showed up as 17 h of review debt in `team_next`. The only record was two lines in `~/.musterd/daemon.log`.
+
+Now (lane `01M5Z3NAJE`):
+
+- The ack carries `lane_verdict_refused {lane, reason: 'read_verdict_missing', guidance}`. The guidance names the day, the owner, and the ask to answer again; the ask stays open. The MCP `team_send` result and `musterd send` print it as a warning.
+- The acceptance ask says up front, for a lane that reads and has no verdict yet, that an accept before the read is refused (`readsOnNotice`, carried in `followsUpNotice`). The acceptor can judge the lane at once and send the accept once the read is recorded.
+
+The ack carries the refusal next to the other acks that report a verdict that did not move the lane: `lane_superseded`, `lane_advisory`, `lane_unbound`, `lane_escalation` and `lane_authority_refused`. See [an ack must say what happened](#an-ack-must-say-what-happened-a-silence-and-a-false-promise-are-the-same-defect-2026-10-19-falsify-the-lane_unbound-ack-text-in-packagesprotocolsrclaneswirets-still-says-the-owner-sees-the-reply-or-adr-680s-consequences-lack-the-dated-amendment).

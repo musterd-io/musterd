@@ -1728,6 +1728,58 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         return { laneId, reviewer, auth, askId: ask.id as string };
       }
 
+      // Lane 01M5Z3NAJE: an accept on a lane that reads on a day (ADR 644) is refused until its owner
+      // records the read verdict. The refusal used to be a `warn` in daemon.log and a clean ack, so
+      // two accepts on lane 01M5X44XXE each left the acceptor believing the lane had closed.
+      it('an accept on a lane that reads on a day is refused on the ack until the read verdict is in', async () => {
+        const { nickTok, ada, gee } = await setup();
+        const lane = await post(
+          '/teams/dawn/lanes',
+          { title: 'the dated lane', reads_on: '2099-01-01', claim: true },
+          ada,
+        );
+        const laneId = lane.json.lane.id as string;
+        const ready = await patchLane(
+          laneId,
+          { state: 'ready_for_review', merged: { pr: 8, sha: 'feedbee', authorized_by: 'nick' } },
+          ada,
+        );
+        const reviewer = ready.json.review.reviewer as string;
+        const auth: Auth | string = reviewer === 'nick' ? nickTok : gee;
+        const inbox = await get('/teams/dawn/inbox?unread=1', auth);
+        const ask = inbox.json.messages.find(
+          (m: { act: string; meta?: { lane_review?: { lane?: string } } }) =>
+            m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+        );
+        // The ask says so before the acceptor judges.
+        expect(ask.body).toContain('This lane reads on 2099-01-01 (ADR 644)');
+
+        const refused = await verdict(auth, reviewer, ask.id as string, 'accept');
+        expect(refused.status).toBe(201);
+        expect(refused.json.lane_verdict).toBeUndefined();
+        expect(refused.json.lane_verdict_refused).toMatchObject({
+          lane: laneId,
+          reason: 'read_verdict_missing',
+        });
+        expect(refused.json.lane_verdict_refused.guidance).toContain('did NOT close the lane');
+        expect(refused.json.lane_verdict_refused.guidance).toContain(ask.id as string);
+        const still = (await get('/teams/dawn/lanes', nickTok)).json.lanes.find(
+          (l: { id: string }) => l.id === laneId,
+        );
+        expect(isAwaitingAcceptance(still.state)).toBe(true);
+
+        // The owner records the read; the same accept on the same ask now closes it.
+        const read = await patchLane(
+          laneId,
+          { read_verdict: { outcome: 'met', note: 'read on the day' } },
+          ada,
+        );
+        expect(read.status).toBe(200);
+        const bound = await verdict(auth, reviewer, ask.id as string, 'accept');
+        expect(bound.json.lane_verdict_refused).toBeUndefined();
+        expect(bound.json.lane_verdict).toEqual({ lane: laneId, state: 'done' });
+      });
+
       it('closes the lane on accept, with the same verified derivation the board produces', async () => {
         const { nickTok, ada, gee } = await setup();
         const { laneId, reviewer, auth, askId } = await laneAwaitingAcceptance(nickTok, ada, gee);

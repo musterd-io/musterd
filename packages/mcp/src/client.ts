@@ -842,6 +842,9 @@ export class MusterdClient {
     ask_contract?: AskContract;
     handoff_lane?: HandoffLaneAck;
     lane_verdict?: LaneVerdictWire;
+    /** Lane 01M5Z3NAJE: this accept was refused by the lane's close rules (ADR 644's read verdict)
+     *  and moved nothing; `guidance` says why and what unblocks it. */
+    lane_verdict_refused?: { lane: string; reason: string; guidance: string };
     /** ADR 539: this accept was the peer confirmation on a risky lane; who (if anyone) was asked. */
     lane_escalation?: LaneEscalationWire;
     lane_ack?: { lane: string };
@@ -864,6 +867,7 @@ export class MusterdClient {
       ask_contract?: AskContract;
       handoff_lane?: HandoffLaneAck;
       lane_verdict?: LaneVerdictWire;
+      lane_verdict_refused?: { lane: string; reason: string; guidance: string };
       lane_escalation?: LaneEscalationWire;
       lane_ack?: { lane: string };
       lane_superseded?: LaneSupersededWire;

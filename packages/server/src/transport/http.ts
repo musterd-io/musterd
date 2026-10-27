@@ -7327,6 +7327,11 @@ export async function handleHttp(
           ...(result.lane_authority_refused
             ? { lane_authority_refused: result.lane_authority_refused }
             : {}),
+          // Lane 01M5Z3NAJE: an agent's accept the lane's close rules refused (ADR 644's read
+          // verdict) — told on the spot, so the acceptor does not walk away believing it closed.
+          ...(result.lane_verdict_refused
+            ? { lane_verdict_refused: result.lane_verdict_refused }
+            : {}),
           // ADR 539: an accept taken as the PEER confirmation on a risky lane — told on the spot
           // that it closed nothing and who now holds the verdict.
           ...(result.lane_escalation ? { lane_escalation: result.lane_escalation } : {}),
