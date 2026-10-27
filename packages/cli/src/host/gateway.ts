@@ -12,9 +12,10 @@ import { SPEND_APPROVAL_WAKE_ENDED, type SpendApprovalVerdict } from './spendApp
 /**
  * The metering gateway (ADR 583): a loopback, per-wake, pass-through HTTP proxy the host points a
  * woken harness at through the base-URL variable that harness documents. Every request is
- * forwarded to the real provider unchanged and every response relayed unchanged (streaming
- * included); the gateway reads only the provider's usage block and model id as the bytes pass,
- * prices them from the host's table, and refuses the next call once the wake's `budget_usd` is
+ * forwarded to the real provider unchanged (except OpenRouter's usage-reporting opt-in) and every
+ * response relayed unchanged (streaming included); the gateway reads only the provider's usage
+ * block and model id as the bytes pass, prices them from the host's table (OpenRouter supplies its
+ * actual cost in `usage.cost`), and refuses the next call once the wake's `budget_usd` is
  * spent (§4) — a machine gate on a machine fact, never a model judgment.
  *
  * ADR 636: when the host passes `spendApprovalUsd`, a call that arrives with running cost at that
@@ -88,6 +89,7 @@ export function defaultUpstreams(env: NodeJS.ProcessEnv = process.env): GatewayU
     // OpenCode's hosted providers, as models.dev lists their `api` (2026-10-19). OpenCode reads no
     // base-URL variable; its backend points them here through OPENCODE_CONFIG_CONTENT.
     ...OPENCODE_HOSTED_UPSTREAMS,
+    OPENCODE_OPENROUTER_UPSTREAM,
     CODEX_CHATGPT_UPSTREAM,
   ];
 }
@@ -105,6 +107,12 @@ export const OPENCODE_HOSTED_UPSTREAMS: GatewayUpstream[] = [
   { name: 'opencode', url: 'https://opencode.ai/inference/openai/v1' },
   { name: 'opencode-go', url: 'https://opencode.ai/inference/go/openai/v1' },
 ];
+
+/** OpenRouter's OpenAI-compatible API. OpenCode's credential store supplies its bearer key. */
+export const OPENCODE_OPENROUTER_UPSTREAM: GatewayUpstream = {
+  name: 'openrouter',
+  url: 'https://openrouter.ai/api/v1',
+};
 
 /** Usage in the `wake_turns` shape (ADR 251 §7): cached input is split OUT of `input_tokens` for
  *  every provider, so one price formula and one floor definition hold across vendors. */
@@ -197,6 +205,8 @@ const HOP_BY_HOP = new Set([
  *  is relayed unmetered rather than buffered — the gateway holds no bodies by design. */
 const PARSE_LIMIT_BYTES = 4 * 1024 * 1024;
 const LINE_LIMIT_BYTES = 256 * 1024;
+/** Bound the transient JSON rewrite that asks OpenRouter to include its authoritative usage cost. */
+const OPENROUTER_REQUEST_LIMIT_BYTES = 16 * 1024 * 1024;
 /** The field names an SSE stream can open with (WHATWG event stream), for the content-type sniff. */
 const SSE_FIELDS = ['event:', 'data:', 'id:', 'retry:'];
 /** How long `close` waits for a provider response already in flight. The body is on the wire;
@@ -248,6 +258,7 @@ export function normaliseUsage(u: unknown): GatewayUsage | null {
 function usageIn(ev: Record<string, unknown>): {
   usage: GatewayUsage | null;
   model: string | null;
+  cost_usd: number | undefined;
 } {
   const candidates: Record<string, unknown>[] = [ev];
   for (const k of ['message', 'response']) {
@@ -256,12 +267,19 @@ function usageIn(ev: Record<string, unknown>): {
   }
   let usage: GatewayUsage | null = null;
   let model: string | null = null;
+  let cost_usd: number | undefined;
   for (const c of candidates) {
-    const u = normaliseUsage(c['usage']);
+    const rawUsage = c['usage'];
+    const u = normaliseUsage(rawUsage);
     if (u) usage = u;
+    if (rawUsage && typeof rawUsage === 'object') {
+      const cost = (rawUsage as Record<string, unknown>)['cost'];
+      if (typeof cost === 'number' && Number.isFinite(cost) && cost >= 0)
+        cost_usd = Math.max(cost_usd ?? 0, cost);
+    }
     if (typeof c['model'] === 'string') model = c['model'];
   }
-  return { usage, model };
+  return { usage, model, cost_usd };
 }
 
 /** Fold a stream of usage sightings into one record: Anthropic splits input (`message_start`)
@@ -290,6 +308,7 @@ function foldUsage(acc: GatewayUsage | null, next: GatewayUsage): GatewayUsage {
 export class UsageParser {
   private usage: GatewayUsage | null = null;
   private model: string | null = null;
+  private cost_usd: number | undefined;
   private buf = '';
   private overflow = false;
   constructor(private sse: boolean | undefined) {}
@@ -322,19 +341,61 @@ export class UsageParser {
     if (!json || json === '[DONE]' || !json.includes('usage')) return;
     try {
       const ev = JSON.parse(json) as Record<string, unknown>;
-      const { usage, model } = usageIn(ev);
+      const { usage, model, cost_usd } = usageIn(ev);
       if (usage) this.usage = foldUsage(this.usage, usage);
       if (model) this.model = model;
+      if (cost_usd !== undefined) this.cost_usd = Math.max(this.cost_usd ?? 0, cost_usd);
     } catch {
       /* not JSON — a content line */
     }
   }
 
-  result(): { usage: GatewayUsage | null; model: string | null } {
+  result(): { usage: GatewayUsage | null; model: string | null; cost_usd: number | undefined } {
     if (!this.sse && this.buf) this.take(this.buf);
     this.buf = '';
-    return { usage: this.usage, model: this.model };
+    return { usage: this.usage, model: this.model, cost_usd: this.cost_usd };
   }
+}
+
+async function openRouterRequestBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const raw of req) {
+    const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+    size += chunk.length;
+    if (size > OPENROUTER_REQUEST_LIMIT_BYTES) {
+      throw Object.assign(new Error('request too large for metered OpenRouter usage'), {
+        status: 413,
+      });
+    }
+    chunks.push(chunk);
+  }
+  let body: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.concat(chunks, size).toString('utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      throw new Error('object required');
+    body = parsed as Record<string, unknown>;
+  } catch {
+    throw Object.assign(new Error('OpenRouter request must be a JSON object'), { status: 400 });
+  }
+  const usage = body['usage'];
+  body['usage'] = {
+    ...(usage && typeof usage === 'object' && !Array.isArray(usage)
+      ? (usage as Record<string, unknown>)
+      : {}),
+    include: true,
+  };
+  if (body['stream'] === true) {
+    const streamOptions = body['stream_options'];
+    body['stream_options'] = {
+      ...(streamOptions && typeof streamOptions === 'object' && !Array.isArray(streamOptions)
+        ? (streamOptions as Record<string, unknown>)
+        : {}),
+      include_usage: true,
+    };
+  }
+  return Buffer.from(JSON.stringify(body));
 }
 
 /** The error body a refused call answers with: the Anthropic error envelope, which the OpenAI
@@ -366,6 +427,7 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
   let refused = 0;
   let unmetered = 0;
   let unpriceable = false;
+  let unknownCostBudgetBlocked = false;
   let spent = 0;
   let budgetExhausted = false;
   type ApprovalDecision = 'forward' | 'decline' | 'wake_ended';
@@ -407,6 +469,7 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
       resolveDone = resolve;
     });
     let finished = false;
+    let localResponse = false;
     const finish = (): void => {
       if (finished) return;
       finished = true;
@@ -417,18 +480,57 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
     let parser: UsageParser | undefined;
     const commit = (fromEnd: boolean): void => {
       if (recorded || frozen) return;
-      const { usage, model } = parser?.result() ?? { usage: null, model: null };
+      const {
+        usage,
+        model,
+        cost_usd: reportedCost,
+      } = parser?.result() ?? {
+        usage: null,
+        model: null,
+        cost_usd: undefined,
+      };
       if (!usage || status >= 400) {
         // A GET (Codex's `/models` catalog) is no model call: relayed, never counted unmetered.
         // An abort with no usage is not "unmetered" — the response never finished.
         if (fromEnd && !usage && status < 400 && req.method !== 'GET') unmetered += 1;
+        if (
+          fromEnd &&
+          up.name === OPENCODE_OPENROUTER_UPSTREAM.name &&
+          status < 400 &&
+          req.method !== 'GET' &&
+          req.method !== 'HEAD' &&
+          opts.budgetUsd !== undefined
+        ) {
+          unknownCostBudgetBlocked = true;
+          budgetExhausted = true;
+          log(
+            `OpenRouter call on lease ${opts.leaseId} returned no usage cost — next model call refused under budget_usd`,
+          );
+        }
         if (fromEnd) recorded = true;
         return;
       }
       recorded = true;
-      const cost = model ? price(model, usage) : undefined;
+      // OpenRouter reports the actual routed provider cost in usage.cost. Prefer that exact charge
+      // over the table; when it is absent, keep the existing dated-table behavior for known models.
+      // Unknown models with no reported cost stay unpriced and cannot make another budgeted call.
+      const cost =
+        up.name === OPENCODE_OPENROUTER_UPSTREAM.name
+          ? (reportedCost ?? (model ? price(model, usage) : undefined))
+          : model
+            ? price(model, usage)
+            : undefined;
       if (cost === undefined) unpriceable = true;
       else spent += cost;
+      if (cost === undefined && up.name === OPENCODE_OPENROUTER_UPSTREAM.name) {
+        if (opts.budgetUsd !== undefined) {
+          unknownCostBudgetBlocked = true;
+          budgetExhausted = true;
+        }
+        log(
+          `OpenRouter call on lease ${opts.leaseId} returned usage without cost — next model call refused under budget_usd`,
+        );
+      }
       const call: MeteredCall = {
         turn: calls.length + 1,
         provider: up.name,
@@ -482,6 +584,10 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
       });
     });
     upstream.on('error', (err) => {
+      if (localResponse) {
+        if (!finished) finish();
+        return;
+      }
       if (!res.headersSent && !res.destroyed) {
         res.writeHead(502, { 'content-type': 'application/json' });
         res.end(
@@ -497,7 +603,44 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
       if (!finished && status === 0) finish();
     });
     req.on('aborted', () => upstream.destroy());
-    req.pipe(upstream);
+    if (
+      up.name === OPENCODE_OPENROUTER_UPSTREAM.name &&
+      req.method !== 'GET' &&
+      req.method !== 'HEAD'
+    ) {
+      void openRouterRequestBody(req)
+        .then((body) => {
+          if (upstream.destroyed) return;
+          upstream.setHeader('content-length', String(body.length));
+          upstream.end(body);
+        })
+        .catch((err: unknown) => {
+          localResponse = true;
+          const statusCode =
+            err && typeof err === 'object' && 'status' in err && typeof err.status === 'number'
+              ? err.status
+              : 400;
+          if (!res.destroyed && !res.headersSent) {
+            res.writeHead(statusCode, { 'content-type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                type: 'error',
+                error: {
+                  type: 'invalid_request_error',
+                  code: 'musterd_openrouter_request_invalid',
+                  message:
+                    statusCode === 413
+                      ? 'musterd: OpenRouter request exceeds the metering gateway body limit'
+                      : 'musterd: OpenRouter request must be a JSON object',
+                },
+              }),
+            );
+          }
+          upstream.destroy();
+        });
+    } else {
+      req.pipe(upstream);
+    }
   };
 
   const writeApprovalRefusal = (
@@ -616,11 +759,29 @@ export async function startMeteringGateway(opts: MeteringGatewayOptions): Promis
       req.resume();
       return;
     }
-    if (opts.budgetUsd !== undefined && spent >= opts.budgetUsd) {
+    if (
+      opts.budgetUsd !== undefined &&
+      (spent >= opts.budgetUsd ||
+        (unknownCostBudgetBlocked && req.method !== 'GET' && req.method !== 'HEAD'))
+    ) {
       refused += 1;
       budgetExhausted = true;
       res.writeHead(402, { 'content-type': 'application/json' });
-      res.end(budgetRefusal(opts.leaseId, opts.budgetUsd, spent, calls.length));
+      res.end(
+        unknownCostBudgetBlocked &&
+          spent < opts.budgetUsd &&
+          req.method !== 'GET' &&
+          req.method !== 'HEAD'
+          ? JSON.stringify({
+              type: 'error',
+              error: {
+                type: 'invalid_request_error',
+                code: 'musterd_budget_exhausted',
+                message: `musterd: the previous OpenRouter call had no reported cost ($${spent.toFixed(4)} priced over ${String(calls.length)} calls, lease ${opts.leaseId}); no further model calls under budget_usd`,
+              },
+            })
+          : budgetRefusal(opts.leaseId, opts.budgetUsd, spent, calls.length),
+      );
       req.resume();
       if (refused === 1)
         log(
