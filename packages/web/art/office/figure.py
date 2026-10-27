@@ -562,7 +562,7 @@ def build_props(r: Rig) -> None:
 
     # the member's own closed laptop, tucked under the right arm — it rides the elbow, so the arm's
     # swing carries it, and sits just inside the arm against the body
-    lap = Prop("laptop", ["idle", "walk", "speak", "turn"],
+    lap = Prop("laptop", ["idle", "walk", "speak", "turn", "sit-lap"],
                lambda rig, f, l, zs: rig.joints["elbowR"].matrix_world.translation + l * 2.2 - up(zs, 1.5))
     o = scene.box("carry/laptop", 0, 0, -6, 17, 1.4, 12, m("laptop", "#c7ccd2", 0.35), 1)
     scene.bevel(o, 0.5, 2)
@@ -792,6 +792,10 @@ def action(name: str, t: float) -> tuple[dict, float]:
     """The pose and root lift of action `name` at phase `t` (0 → 1 over the clip)."""
     if name.startswith("g-"):
         return gesture_pose(name[2:], t)
+    if name == "sit-lap":
+        # The seated idle's breath and sway with the arms down: hands resting in the lap (v3-6).
+        pose, lift = action("sit-idle", t)
+        return _merge(pose, LAP), lift
     if name == "sit-hand":
         # Seated with something to say (a bubble): the painter's help hand — the right hand up and a
         # little out, so it reads as "over here" from across the room.
@@ -895,23 +899,36 @@ CLIPS = [  # name, frames, loop, dirs — "not smooth enough" (nick, 2026-10-20)
     # so an eight-frame wave cost 519 KB and two frames 165 KB — the painter's wave is a ±3-unit
     # wobble nobody reads at office scale, the raised hand is what reads
     ("sit-hand", 1, True, None),
+    # office v3-6 — a casual seat (stool, couch, meeting chair): hands in the lap, the closed laptop
+    # under the right arm — "hands should be down (macbook under 1 arm)" (nick, 2026-10-26)
+    ("sit-lap", 8, True, None),
 ]
 # A carrying clip changes only the arms, the sleeves and what is held (and the lanyard the arms can
 # cover): every other layer is the same pixels as the walk or the idle it is laid over, so it is not
 # stored again — `frameCell` reads those layers from the base clip (`base` and `layers` in figure.json).
 CARRY_BASE = {"walk-hold2": "walk", "walk-hold1": "walk", "walk-call": "walk", "idle-hold2": "idle", "idle-hold1": "idle",
               # the raised hand is the same: only the arm moves over the seated idle
-              "sit-hand": "sit-idle"}
+              "sit-hand": "sit-idle",
+              # office v3-6: the lap arms over the seated idle
+              "sit-lap": "sit-idle"}
 CARRY_OWN = ("skin", "top/", "carry/", "lanyard")
+# Layers a carrying clip stores beyond CARRY_OWN: the lap arms lie across the trousers, so sit-lap's
+# `bottom` cells are its own (spec §8); every other carrying clip keeps the base clip's.
+CARRY_OWN_EXTRA = {"sit-lap": ("bottom",)}
+
+
+def own_layers(clip: str) -> tuple[str, ...]:
+    """The layer prefixes `clip` stores itself (figure.json `layers`) when it rides a base clip."""
+    return CARRY_OWN + CARRY_OWN_EXTRA.get(clip, ())
 
 
 def stored_in(clip: str, layer: str) -> bool:
     """Whether `layer` has frames of its own in `clip`."""
-    return clip not in CARRY_BASE or layer.startswith(CARRY_OWN)
+    return clip not in CARRY_BASE or layer.startswith(own_layers(clip))
 
 
 # The clips a member plays seated at a desk — the ones whose arms the overlay pass redraws.
-SEATED_CLIPS = {"sit-type", "sit-idle", "sit-hand"} | {f"g-{g}" for g, (base, _, _) in GESTURES.items() if base == "seated"} | {
+SEATED_CLIPS = {"sit-type", "sit-idle", "sit-hand", "sit-lap"} | {f"g-{g}" for g, (base, _, _) in GESTURES.items() if base == "seated"} | {
     f"g-{g}" for g, base in SEQ_BASE.items() if base == "seated"}
 FPS = 12
 DIRS = ["E", "SE", "S", "SW", "W", "NW", "N", "NE"]  # figureSheet.ts DIR8, heading 0 = E, +45° clockwise
