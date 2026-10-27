@@ -126,13 +126,13 @@ const STATIC_IDS: Record<string, number> = {
   'rug/meeting': 1,
   'rug/reception': 1,
   'bench/base': 1,
-  'plant/snake': 2, // the two on the walls
+  'plant/snake': 1, // the one on the wall; the right-flank one went for the reading chair (2026-10-27)
   'plant/pothos': 2, // the pinwheel's hub and the café corner (v3-4)
   'plant/fiddle': 5, // four on the floor + reception's (v3-3: the café corner's went for the couch)
   'shelf/0': 1,
   'shelf/1': 1,
   'shelf/2': 1,
-  'shelf/3': 1,
+  // shelf/3 (right wall) and the café divider both went (2026-10-27)
   entrance: 1,
   'nook/fridge': 1,
   'nook/counter': 1,
@@ -140,8 +140,8 @@ const STATIC_IDS: Record<string, number> = {
   'nook/couch': 1,
   'nook/table': 1,
   'nook/island': 1,
-  'nook/stool': 3,
-  'nook/armchair': 1,
+  'nook/stool': 1, // one since the island shrank for the armchairs (2026-10-27)
+  'nook/armchair': 3, // two in the café, one reading chair on the right flank (2026-10-27)
   'reception/desk': 1,
   'reception/endtable': 1,
   'reception/armchair': 1,
@@ -150,6 +150,8 @@ const STATIC_IDS: Record<string, number> = {
   'meeting/chair-1': 1,
   'meeting/chair-2': 1,
   'meeting/chair-3': 1,
+  'meeting/chair-4': 1, // the wall-side pair came back (nick, 2026-10-27)
+  'meeting/chair-5': 1,
   printer: 1,
 };
 

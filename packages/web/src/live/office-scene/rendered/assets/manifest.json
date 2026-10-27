@@ -369,6 +369,28 @@
       "scale": 3.0
     },
     {
+      "id": "desk/base-c",
+      "file": "office-art-desk-base-c.webp",
+      "w": 322,
+      "h": 256,
+      "anchor": {
+        "x": 161.0,
+        "y": 183.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/base-c-ew",
+      "file": "office-art-desk-base-c-ew.webp",
+      "w": 322,
+      "h": 256,
+      "anchor": {
+        "x": 161.0,
+        "y": 183.0
+      },
+      "scale": 3.0
+    },
+    {
       "id": "desk/base-ew",
       "file": "office-art-desk-base-ew.webp",
       "w": 360,
@@ -497,6 +519,28 @@
       "anchor": {
         "x": 63.08,
         "y": 133.22
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "meeting/chair-4",
+      "file": "office-art-meeting-chair-4.webp",
+      "w": 125,
+      "h": 164,
+      "anchor": {
+        "x": 62.5,
+        "y": 133.14
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "meeting/chair-5",
+      "file": "office-art-meeting-chair-5.webp",
+      "w": 125,
+      "h": 165,
+      "anchor": {
+        "x": 62.19,
+        "y": 134.08
       },
       "scale": 3.0
     },
@@ -646,11 +690,11 @@
     {
       "id": "nook/armchair",
       "file": "office-art-nook-armchair.webp",
-      "w": 145,
-      "h": 142,
+      "w": 178,
+      "h": 185,
       "anchor": {
-        "x": 72.45,
-        "y": 106.54
+        "x": 86.51,
+        "y": 140.92
       },
       "scale": 3.0
     },
@@ -679,11 +723,11 @@
     {
       "id": "nook/counter",
       "file": "office-art-nook-counter.webp",
-      "w": 325,
-      "h": 306,
+      "w": 239,
+      "h": 263,
       "anchor": {
-        "x": 162.39,
-        "y": 225.64
+        "x": 119.63,
+        "y": 205.05
       },
       "scale": 3.0
     },
@@ -701,11 +745,11 @@
     {
       "id": "nook/island",
       "file": "office-art-nook-island.webp",
-      "w": 367,
-      "h": 279,
+      "w": 219,
+      "h": 204,
       "anchor": {
-        "x": 183.09,
-        "y": 188.63
+        "x": 109.49,
+        "y": 153.8
       },
       "scale": 3.0
     },
@@ -778,11 +822,11 @@
     {
       "id": "reception/armchair",
       "file": "office-art-reception-armchair.webp",
-      "w": 145,
-      "h": 142,
+      "w": 178,
+      "h": 185,
       "anchor": {
-        "x": 72.16,
-        "y": 105.9
+        "x": 91.16,
+        "y": 140.9
       },
       "scale": 3.0
     },
@@ -943,17 +987,6 @@
     {
       "id": "shelf/1",
       "file": "office-art-shelf-1.webp",
-      "w": 224,
-      "h": 240,
-      "anchor": {
-        "x": 116.91,
-        "y": 187.64
-      },
-      "scale": 3.0
-    },
-    {
-      "id": "shelf/2",
-      "file": "office-art-shelf-2.webp",
       "w": 172,
       "h": 284,
       "anchor": {
@@ -963,8 +996,8 @@
       "scale": 3.0
     },
     {
-      "id": "shelf/3",
-      "file": "office-art-shelf-3.webp",
+      "id": "shelf/2",
+      "file": "office-art-shelf-2.webp",
       "w": 201,
       "h": 245,
       "anchor": {

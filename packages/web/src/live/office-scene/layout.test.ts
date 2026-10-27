@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { FLOOR, project, WALL_H } from './iso';
 import {
@@ -6,6 +7,14 @@ import {
   FRONT_DESK,
   RECEPTIONIST,
   BOOKSHELVES,
+  CAFE,
+  DESK_COMPACT,
+  deskDims,
+  LOUNGE,
+  NOOK,
+  SINK,
+  STOOL,
+  WAIT_CHAIR,
   DESK_D,
   DESK_SLOTS,
   DESK_W,
@@ -31,10 +40,11 @@ import {
 } from './layout';
 
 describe('desk pods', () => {
-  it('seats 23: bench 4, pinwheel 4, spine 8, zigzag 3, corner duo 2, window 2', () => {
+  it('seats 22: bench 4, pinwheel 4, spine 7, zigzag 3, corner duo 2, window 2', () => {
     // 20 on 2026-08-02; 18 → 17 as the floor read crowded; 23 on 2026-10-26 (office v3, spec
     // 2026-10-26-office-v3-design.md §2.1): the v2 figure is smaller and the room has air again.
-    expect(DESK_SLOTS).toHaveLength(23);
+    // 22 on 2026-10-27: the spine's NE desk went so the café could breathe (nick).
+    expect(DESK_SLOTS).toHaveLength(22);
     const podSeats = PODS.reduce((n, p) => n + POD_SHAPE_SEATS[p.shape], 0);
     expect(DESK_SLOTS).toHaveLength(podSeats + BENCH.seats + WINDOW_DESKS.length);
     expect(new Set(DESK_SLOTS.map((s) => s.id)).size).toBe(DESK_SLOTS.length);
@@ -129,7 +139,7 @@ describe('zone rugs', () => {
 });
 
 describe('LEISURE_SPOTS', () => {
-  it('offers five café seats to idle members and four standing spots to away ones (office v3-3)', () => {
+  it('offers five lounge seats to idle members and four standing spots to away ones (2026-10-27)', () => {
     // Three stools at the island, one couch cushion, one armchair. Away members stand small at the
     // island's east end and the café's south threshold — idle sits, away stands (spec §2.9).
     expect(LEISURE_SPOTS.filter((s) => s.zone === 'lounge' && s.sit === 1)).toHaveLength(5);
@@ -387,10 +397,8 @@ describe('BOOKSHELVES — flush to floor edges', () => {
     expect(byHeight[0]!.rows).toBeLessThan(byHeight[byHeight.length - 1]!.rows);
   });
 
-  it('has exactly one shelved backwards, and it is on the right wall', () => {
-    const reversed = BOOKSHELVES.filter((s) => s.reversed);
-    expect(reversed).toHaveLength(1);
-    expect(reversed[0]!.dir).toBe('W');
+  it('has none shelved backwards since the right-wall unit went (2026-10-27)', () => {
+    expect(BOOKSHELVES.filter((s) => s.reversed)).toHaveLength(0);
   });
 
   it('gives every unit something for its top', () => {
@@ -408,10 +416,61 @@ describe('the reception counter keeps its own floor', () => {
     const fy1 = FRONT_DESK.ly + FRONT_DESK.deep / 2;
     for (const s of DESK_SLOTS) {
       const ew = s.dir === 'E' || s.dir === 'W';
-      const hw = (ew ? DESK_D : DESK_W) / 2;
-      const hd = (ew ? DESK_W : DESK_D) / 2;
+      const { w, d } = deskDims(s);
+      const hw = (ew ? d : w) / 2;
+      const hd = (ew ? w : d) / 2;
       const overlaps = s.lx - hw < fx1 && s.lx + hw > fx0 && s.ly - hd < fy1 && s.ly + hd > fy0;
       expect(overlaps, `desk ${s.id} at (${s.lx},${s.ly}) sits on the front desk`).toBe(false);
     }
+  });
+});
+
+describe('the café keeps everything on its tile (nick, 2026-10-27)', () => {
+  const inside = (x0: number, y0: number, x1: number, y1: number): boolean =>
+    x0 >= CAFE.x0 && x1 <= CAFE.x1 && y0 >= CAFE.y0 && y1 <= CAFE.y1;
+  const at = (dx: number, dy: number, w: number, d: number) =>
+    inside(NOOK.lx + dx - w / 2, NOOK.ly + dy - d / 2, NOOK.lx + dx + w / 2, NOOK.ly + dy + d / 2);
+  it('the fridge, counter, cooler, island, stools, couch, table and the café armchairs stand on the tile', () => {
+    const L = LOUNGE;
+    expect(at(L.fridge.dx, L.fridge.dy, L.fridge.w, L.fridge.d), 'fridge').toBe(true);
+    expect(at(L.counter.dx, L.counter.dy, L.counter.w, L.counter.d), 'counter').toBe(true);
+    expect(at(L.cooler.dx, L.cooler.dy, L.cooler.w, L.cooler.d), 'cooler').toBe(true);
+    expect(at(L.island.dx, L.island.dy, L.island.w, L.island.d), 'island').toBe(true);
+    for (const st of L.stools) expect(at(st.dx, st.dy, STOOL, STOOL), 'stool').toBe(true);
+    expect(at(L.couch.dx, L.couch.dy, L.couch.len, L.couch.dep), 'couch').toBe(true);
+    expect(at(L.table.dx, L.table.dy, L.table.w, L.table.d), 'table').toBe(true);
+    for (const a of L.armchairs.slice(0, 2)) expect(at(a.dx, a.dy, WAIT_CHAIR, WAIT_CHAIR), 'armchair').toBe(true);
+    // and the fridge a full step in from the tile's west edge, not on the line (nick, 2026-10-27)
+    expect(NOOK.lx + L.fridge.dx - L.fridge.w / 2).toBeGreaterThanOrEqual(CAFE.x0 + 30);
+  });
+});
+
+describe('desk sizes', () => {
+  it('the spine desks are the compact size; every other desk is the standard one', () => {
+    for (const s of DESK_SLOTS) {
+      const dims = deskDims(s);
+      if (s.kind === 'pod' && PODS[s.pod]!.shape === 'spine') expect(dims).toEqual(DESK_COMPACT);
+      else expect(dims).toEqual({ w: DESK_W, d: DESK_D });
+    }
+    expect(DESK_COMPACT.w).toBeLessThan(DESK_W);
+    expect(DESK_COMPACT.d).toBeLessThan(DESK_D);
+  });
+});
+
+describe('scene.py mirrors the café it renders', () => {
+  // The counter and island sprites are built at scene.py's own copy of LOUNGE. When that copy drifts,
+  // the picture and the nav disagree: on 2026-10-27 the island drew 130 wide over a 60-wide footprint
+  // and looked as if it ran under the fridge. Pin the sizes the sprites bake in.
+  const py = readFileSync(new URL('../../../art/office/scene.py', import.meta.url), 'utf8');
+  const num = (re: RegExp): number => Number(py.match(re)![1]);
+  it('island and counter sizes, and the fixtures the counter sprite bakes in', () => {
+    expect(num(/island=dict\(dx=(-?\d+)/)).toBe(LOUNGE.island.dx);
+    expect(num(/island=dict\([^)]*\bw=(\d+)/)).toBe(LOUNGE.island.w);
+    expect(num(/counter=dict\(dx=(-?\d+)/)).toBe(LOUNGE.counter.dx);
+    expect(num(/counter=dict\([^)]*\bw=(\d+)/)).toBe(LOUNGE.counter.w);
+    expect(num(/machine=dict\(dx=(-?\d+)/)).toBe(LOUNGE.machine.dx);
+    expect(num(/sink=dict\(dx=(-?\d+)/)).toBe(SINK.dx);
+    expect(num(/fridge=dict\(dx=(-?\d+)/)).toBe(LOUNGE.fridge.dx);
+    expect(num(/cooler=dict\(dx=(-?\d+)/)).toBe(LOUNGE.cooler.dx);
   });
 });

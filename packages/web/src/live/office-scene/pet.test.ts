@@ -396,7 +396,7 @@ describe('petFollow (tagging along on a coffee run)', () => {
 });
 
 describe('petBeg (somebody is carrying food to the lounge)', () => {
-  const seat = { lx: NOOK.lx + 40, ly: NOOK.ly + 6 };
+  const seat = { lx: NOOK.lx + 10, ly: NOOK.ly + 100 }; // open tile south of the island (2026-10-27)
 
   it('sets off for the meal and plans to sit through the whole thing', () => {
     const pet = createPet(lcg(3));
