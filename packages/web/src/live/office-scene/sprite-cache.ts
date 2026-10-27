@@ -91,11 +91,18 @@ function domCanvas(w: number, h: number): HTMLCanvasElement {
 
 export function makeSpriteCache(opts: {
   dpr: number;
-  /** LRU cap. ~30 items × a few state variants at 1080p is a few MB; 128 is generous. */
+  /**
+   * LRU cap. It must hold MORE keys than one frame touches, or every key is evicted before its next
+   * use and the cache misses on every item every frame — the room re-rasterizes continuously and
+   * nothing says so. /broadcast touches ~151 keys a frame (36 desks × 4, 20 chairs × 2, the room
+   * shell and the furniture); the old cap of 128 thrashed exactly like that and the hosted stream
+   * drew at 4 fps (2026-10-27, lane 01M5ZQ85TP). 512 leaves room for state variants and growth;
+   * at 1080p that is still only tens of MB.
+   */
   max?: number;
   createCanvas?: (w: number, h: number) => HTMLCanvasElement;
 }): SpriteCache {
-  const max = opts.max ?? 128;
+  const max = opts.max ?? 512;
   const create = opts.createCanvas ?? domCanvas;
   // Map preserves insertion order; delete+set on a hit moves the key to the back, so the front is LRU.
   // One entry per key holds both the measured box and the sprite, so they are evicted together.
