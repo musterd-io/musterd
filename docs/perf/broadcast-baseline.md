@@ -566,6 +566,8 @@ half-believed.
 
 | Date | Change | Result |
 | ---- | ------ | ------ |
+| 2026-10-27 | Sprite cache cap 128 → 512 (#3405, lane 01M5ZQ85TP) | A `/broadcast` frame touches ~151 sprite keys; at 128 the LRU evicted every key before its next use and the room re-rasterized every frame (~316 new canvases/frame, CDP-profiled on the box). Machine `822710a7320768` (performance-4x): draws **4.0/s → 18/s**, chrome 159% either way. |
+| 2026-10-27 | DOM props step every third drawn frame (lane 01M5ZV5PA6) | Per-draw stepping of the 117 CSS animations (57 steam) forced a style recalc + software repaint per office frame. Experiment on the same box: props frozen **26–29 draws/s**, stepped per frame 17–20/s. `domPropCadence(3)` steps them by the owed wall time on every third draw (~10 fps props at 30 fps capture). Re-measure after merge with `stream perf`. |
 | 2026-07-31 | Cap broadcast draw rate to capture fps | Code: `ambientFrameBudgetMs` returns `1000/fps`; `shouldCoalesceDraw` applies under broadcast even during walks/cues (closes the known gap). CLI threads `?fps=` via `broadcastUrl`. **Re-measure on Fly `performance-4x` 720p25 before/after** — queue growth + delivered fps + chrome %CPU. Eye-check walking members for #368 judder. |
 
 ## Deliberately not done

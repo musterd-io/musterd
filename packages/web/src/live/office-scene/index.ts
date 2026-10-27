@@ -19,7 +19,7 @@ import {
   plateCoversBoard, layoutPlates, leaderFrom, type PlateBox, type PlateMemo } from './plateLayout';
 import { helpWalks } from './mapping';
 import { REPLAY_TEMPO, replayAge } from './replay';
-import { stepDomAnimations } from './domCadence';
+import { domPropCadence, stepDomAnimations } from './domCadence';
 import {
   ambientFrameBudgetMs,
   coalesceStep,
@@ -2480,6 +2480,8 @@ export function mountOffice(
   let draws = 0;
   // Broadcast only: the DOM animations this cadence has paused and now owns (./domCadence.ts).
   const heldAnims = new WeakSet<object>();
+  // Every third drawn frame, by the wall time owed since the last step (domCadence.ts, measured).
+  const domPropDue = domPropCadence(3);
   let beats = 0; // drift-heartbeat frames — the only counter that moves in a parked room
   const since = performance.now();
   function tick(now: number) {
@@ -2512,9 +2514,13 @@ export function mountOffice(
     }
     draws++;
     const dt = Math.min(0.05, acc / 1000);
-    // The DOM props (steam, motes, twinkles, fan, banner) advance by the wall time this frame covers
-    // and only now, so the software compositor composes one frame per draw, not sixty a second.
-    if (broadcast) stepDomAnimations(document.getAnimations(), acc, heldAnims);
+    // The DOM props (steam, motes, twinkles, fan, banner) advance by the wall time since their last
+    // step, on every third draw, so the software compositor repaints them ~10 times a second, not
+    // sixty — and not once per office frame either (that repaint cost ~8 draws/s on the capture box).
+    if (broadcast) {
+      const owed = domPropDue(acc);
+      if (owed !== null) stepDomAnimations(document.getAnimations(), owed, heldAnims);
+    }
     acc = 0;
     clock += dt;
     // Replay on open runs the walkers at tempo until the replayed walks have all landed; everything

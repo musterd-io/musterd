@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stepDomAnimations, type SteppableAnimation } from './domCadence';
+import { domPropCadence, stepDomAnimations, type SteppableAnimation } from './domCadence';
 
 function anim(playState: AnimationPlayState, currentTime: number | null = 0) {
   const a = {
@@ -44,5 +44,23 @@ describe('stepDomAnimations — broadcast drives DOM animations at the draw cade
     const a = anim('running', null);
     stepDomAnimations([a], 40, held);
     expect(a.currentTime).toBe(40);
+  });
+});
+
+describe('domPropCadence — the props step on every Nth drawn frame, by the wall time since their last step', () => {
+  it('owes the skipped frames to the step it does take, so nothing drifts', () => {
+    const due = domPropCadence(3);
+    expect(due(33)).toBeNull(); // frame 1: skip, 33 ms owed
+    expect(due(33)).toBeNull(); // frame 2: skip, 66 ms owed
+    expect(due(34)).toBeCloseTo(100); // frame 3: step by everything owed
+    expect(due(33)).toBeNull();
+    expect(due(33)).toBeNull();
+    expect(due(33)).toBeCloseTo(99);
+  });
+
+  it('every=1 steps on every frame — the pre-cadence behaviour', () => {
+    const due = domPropCadence(1);
+    expect(due(33)).toBeCloseTo(33);
+    expect(due(40)).toBeCloseTo(40);
   });
 });
