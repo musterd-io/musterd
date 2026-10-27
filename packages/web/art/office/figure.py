@@ -804,18 +804,28 @@ def action(name: str, t: float) -> tuple[dict, float]:
         return _merge(pose, CARRY_ARMS[arms]), lift
     ph = 2 * math.pi * t
     if name == "idle":
+        # office v3-5 (nick: "the rocking animation for members is a little too much"): the sway is a
+        # third of what it was — spine yaw 1.2° → 0.4°, pitch 1.5° → 0.8°, head 1.2° → 0.6°, shoulders ±4 → ±2
         breath = math.sin(ph)
-        return {"spine": (0, swing(1.5 * breath), 1.2 * math.sin(ph * 0.5)), "shoulderL": (0, 0, 4), "shoulderR": (0, 0, -4),
-                "elbowL": (0, swing(8), 0), "elbowR": (0, swing(8), 0), "head": (0, swing(1.2 * breath), 0)}, 0.0
+        return {"spine": (0, swing(0.8 * breath), 0.4 * math.sin(ph * 0.5)), "shoulderL": (0, 0, 2), "shoulderR": (0, 0, -2),
+                "elbowL": (0, swing(8), 0), "elbowR": (0, swing(8), 0), "head": (0, swing(0.6 * breath), 0)}, 0.0
     if name == "walk":
+        # office v3-5 (nick: "gliding, walking on ice"): the walk plants its feet. The swing leg lifts
+        # higher (knee to 50°), the stance leg is straight with its ankle counter-rotated so the sole
+        # reads flat on the floor, the hips swing wider, the body bobs more and leans in, and the pelvis
+        # rolls so the weight visibly transfers. `STRIDE` (skeleton.ts) is measured from this clip's
+        # ankle travel by render.py (`anims.walk.contact`), so one gait cycle moves one stride.
         s = math.sin(ph)
-        kneeL = 38 * max(0.0, -math.sin(ph - 0.4))
-        kneeR = 38 * max(0.0, math.sin(ph - 0.4))
-        return {"hipL": (0, swing(30 * s), 0), "hipR": (0, swing(-30 * s), 0),
+        hipL, hipR = 34 * s, -34 * s
+        kneeL = 50 * max(0.0, -math.sin(ph - 0.4))
+        kneeR = 50 * max(0.0, math.sin(ph - 0.4))
+        return {"hips": (3 * s, 0, 0),
+                "hipL": (0, swing(hipL), 0), "hipR": (0, swing(hipR), 0),
                 "kneeL": (0, swing(-kneeL), 0), "kneeR": (0, swing(-kneeR), 0),
-                "shoulderL": (0, swing(-26 * s), 0), "shoulderR": (0, swing(26 * s), 0),
-                "elbowL": (0, swing(22), 0), "elbowR": (0, swing(22), 0),
-                "spine": (0, swing(5), 3 * s), "head": (0, swing(2), -2 * s)}, 1.4 * abs(s)
+                "ankleL": (0, swing(-hipL * 0.7 + kneeL * 0.5), 0), "ankleR": (0, swing(-hipR * 0.7 + kneeR * 0.5), 0),
+                "shoulderL": (0, swing(-30 * s), 0), "shoulderR": (0, swing(30 * s), 0),
+                "elbowL": (0, swing(26), 0), "elbowR": (0, swing(26), 0),
+                "spine": (0, swing(4 + 1.0 * s), 3 * s), "head": (0, swing(2), -2 * s)}, 2.2 * abs(s)
     if name in ("sit-type", "sit-idle"):
         pose = dict(SEATED)
         if name == "sit-type":

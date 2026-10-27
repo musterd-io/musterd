@@ -21,7 +21,14 @@ export const smooth = (t: number): number => {
   return x * x * (3 - 2 * x);
 };
 
-export const STRIDE = 46;
+/**
+ * Floor units one gait cycle covers — two steps. Measured from the rendered walk (office v3-5): the
+ * stance foot sweeps 43.4 units back across half a cycle (`figure.json` `anims.walk.contact`, written
+ * by render.py), so the body covers 87 per cycle. It was 46 against a clip that swept ~77, which is
+ * why the feet read as skating: they moved faster than the floor under them. `stride.test.ts` holds
+ * this to the measured number.
+ */
+export const STRIDE = 87;
 
 /**
  * The gesture-kind registry — every in-place beat a member can play (`SkelInput.gesture`). One named
