@@ -97,6 +97,13 @@ export interface RouteResult {
    * `lane_verdict` is — before this, the refusal existed only in the audit and a log line,
    * and the sender's surface marked the ask answered. */
   lane_authority_refused?: { lane: string; reason: string };
+  /** Lane 01M5Z3NAJE — an agent's verdict on a `lane_review` ask that the lane's own close rules
+   *  refused (ADR 644: a lane that reads on a day closes `done` only with a read verdict): the act
+   *  landed, the lane did not move, and the ask stays open. `guidance` says why and what unblocks
+   *  it. Before this the refusal was a `warn` in daemon.log and the ack read like a verdict that had
+   *  landed — two accepts on lane 01M5X44XXE (2026-10-26/27) each left the acceptor believing the
+   *  lane was closed. */
+  lane_verdict_refused?: { lane: string; reason: string; guidance: string };
   /** ADR 539 — this accept was the PEER confirmation on a risky lane (ADR 188 §4) and moved nothing:
    *  `human` is who was asked for the human verdict, null when nobody live could be (the reaper
    *  retries when a human comes live) or when this daemon is a joiner and the hub decides on fold.
@@ -331,6 +338,7 @@ async function routeEnvelopeInner(
   let handoffLane: RouteResult['handoff_lane'];
   let laneVerdict: RouteResult['lane_verdict'];
   let laneAuthorityRefused: RouteResult['lane_authority_refused'];
+  let laneVerdictRefused: RouteResult['lane_verdict_refused'];
   let laneEscalation: RouteResult['lane_escalation'];
   let laneAck: RouteResult['lane_ack'];
   let laneSuperseded: RouteResult['lane_superseded'];
@@ -949,6 +957,7 @@ async function routeEnvelopeInner(
           );
           laneVerdict = applied.verdict;
           laneAuthorityRefused = applied.authorityRefused;
+          laneVerdictRefused = applied.verdictRefused;
         }
       } catch (err) {
         log.warn({ msg: 'acceptance_verdict_failed', err: String(err) });
@@ -1142,6 +1151,7 @@ async function routeEnvelopeInner(
     ...(handoffLane ? { handoff_lane: handoffLane } : {}),
     ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
     ...(laneAuthorityRefused ? { lane_authority_refused: laneAuthorityRefused } : {}),
+    ...(laneVerdictRefused ? { lane_verdict_refused: laneVerdictRefused } : {}),
     ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),
     ...(laneAck ? { lane_ack: laneAck } : {}),
     ...(laneSuperseded ? { lane_superseded: laneSuperseded } : {}),
@@ -1911,6 +1921,26 @@ async function unboundLaneReview(
 }
 
 /**
+ * Lane 01M5Z3NAJE: the ack for an accept the ADR 644 read rule refused. Addressed to the acceptor,
+ * who cannot give the read verdict — the lane's owner records it after the read — so it names the
+ * owner, the day, and that the ask stays open for the same accept once the verdict is in.
+ */
+function readVerdictRefusal(
+  lane: Lane,
+  askId: string,
+): NonNullable<RouteResult['lane_verdict_refused']> {
+  return {
+    lane: lane.id,
+    reason: 'read_verdict_missing',
+    guidance:
+      `Lane ${lane.id}: your accept did NOT close the lane — it reads on ${lane.reads_on ?? 'a set day'} ` +
+      `(ADR 644), and a lane that reads closes done only with a read verdict. ` +
+      `${lane.owner_seat ? `Its owner, ${lane.owner_seat},` : 'Its owner'} records it after the read (lane_update {read_verdict}); then send this accept again on ask ` +
+      `${askId}, which stays open. Nothing moved.`,
+  };
+}
+
+/**
  * ADR 202 — an acceptance verdict moves the lane it judges.
  *
  * `accept` closes the lane the ask named; `decline` sends it back to `active`, which is exactly what
@@ -1943,6 +1973,7 @@ async function applyAcceptanceVerdict(
 ): Promise<{
   verdict?: RouteResult['lane_verdict'];
   authorityRefused?: RouteResult['lane_authority_refused'];
+  verdictRefused?: RouteResult['lane_verdict_refused'];
 }> {
   const replied = await ctx.db.get<{ meta: string | null }>(
     'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
@@ -2009,7 +2040,17 @@ async function applyAcceptanceVerdict(
   // ADR 644 §3: an accept closes the lane `done`, so it meets the same rule as any close: a lane
   // that reads on a day cannot close without a verdict. The refusal tells the acceptor why; the
   // owner gives the verdict (`lane_update {read_verdict}`) and the accept can be sent again.
-  if (act === 'accept') decideReadVerdict(before, { state: 'done' });
+  // Lane 01M5Z3NAJE: returned for the ack, not thrown — a throw here was caught by the caller and
+  // logged, so the acceptor's ack came back clean and the lane sat unclosed with nobody told.
+  if (act === 'accept') {
+    try {
+      decideReadVerdict(before, { state: 'done' });
+    } catch (err) {
+      if (!(err instanceof MusterdError)) throw err;
+      log.info({ msg: 'acceptance_verdict_refused', lane: laneId, decider: decider.name });
+      return { verdictRefused: readVerdictRefusal(before, repliedToId) };
+    }
+  }
 
   // ADR 585: the acceptor's independent re-check of the submitter's claims, run in the acceptor's
   // own clone and carried on the verdict act as `meta.claims`. Stamped with the decider's name

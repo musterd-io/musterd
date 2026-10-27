@@ -430,6 +430,9 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
         ? { ...envelope, ask_contract: ackBody?.ask_contract ?? askContract(askTier) }
         : envelope),
       ...(ackBody?.lane_verdict ? { lane_verdict: ackBody.lane_verdict } : {}),
+      ...(ackBody?.lane_verdict_refused
+        ? { lane_verdict_refused: ackBody.lane_verdict_refused }
+        : {}),
       ...(ackBody?.lane_ack ? { lane_ack: ackBody.lane_ack } : {}),
       ...(ackBody?.lane_superseded ? { lane_superseded: ackBody.lane_superseded } : {}),
       ...(ackBody?.lane_unbound ? { lane_unbound: ackBody.lane_unbound } : {}),
@@ -472,6 +475,10 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   // closed and not that `decline` would fail to reopen it.
   const verdict = ackBody?.lane_verdict;
   if (verdict) process.stdout.write(theme.dim(laneVerdictAck(verdict).guidance) + '\n');
+  // Lane 01M5Z3NAJE: an accept the lane's close rules refused (ADR 644's read verdict), at parity
+  // with the MCP reply — a warning, because "✓ sent" alone reads like a verdict that landed.
+  if (ackBody?.lane_verdict_refused)
+    process.stdout.write(theme.warn(`⚠ ${ackBody.lane_verdict_refused.guidance}`) + '\n');
   // Lane 01M2P2E2H6: and the acknowledge, at the same parity. A `wait` on an acceptance ask is
   // recorded and moves nothing — worth one line, because the whole point of offering the move is
   // that the sender can tell it apart from the one that decides.

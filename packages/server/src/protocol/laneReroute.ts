@@ -111,7 +111,25 @@ export async function followsUpNotice(db: Driver, teamId: string, lane: Lane): P
   const left = todos.length
     ? ` Unfinished to-dos at submit: ${todos.slice(0, 5).join('; ')}${todos.length > 5 ? `; +${todos.length - 5} more` : ''}.`
     : '';
-  return (await followsUpAnswer(db, teamId, lane)) + left;
+  return (await followsUpAnswer(db, teamId, lane)) + left + readsOnNotice(lane);
+}
+
+/**
+ * Lane 01M5Z3NAJE: a lane that reads on a day (ADR 644) closes `done` only with a read verdict, so
+ * an accept sent before its owner records one is refused. Said in the ask, before the acceptor
+ * judges — two accepts on lane 01M5X44XXE were refused before anyone knew the rule applied. Rides
+ * `followsUpNotice` because every acceptance ask already composes it from the lane.
+ */
+export function readsOnNotice(
+  lane: Pick<Lane, 'reads_on' | 'read_verdict' | 'owner_seat'>,
+): string {
+  if (!lane.reads_on || lane.read_verdict) return '';
+  return (
+    ` This lane reads on ${lane.reads_on} (ADR 644): it closes done only with a read verdict, which ` +
+    `${lane.owner_seat ?? 'its owner'} records after the read (lane_update {read_verdict}). An accept ` +
+    `before then is refused and moves nothing — judge it now if you like, and send the accept once ` +
+    `the verdict is in.`
+  );
 }
 
 async function followsUpAnswer(db: Driver, teamId: string, lane: Lane): Promise<string> {

@@ -354,6 +354,10 @@ export function registerSend(
           ? laneVerdictAck(ackBody.lane_verdict)
           : undefined;
         const verdictGuidance = laneVerdict ? ` ${laneVerdict.guidance}` : '';
+        // Lane 01M5Z3NAJE: an accept the lane's own close rules refused (ADR 644: a lane that reads
+        // closes only with a read verdict) — said on the spot, or it reads like a verdict that landed.
+        const verdictRefused = ackBody?.lane_verdict_refused;
+        const refusedGuidance = verdictRefused ? ` ⚠ ${verdictRefused.guidance}` : '';
         const claimsGuidance =
           laneVerdict && acceptorClaims && acceptorClaims.length > 0
             ? ` Your re-check recorded: ${claimsLine(acceptorClaims)}.`
@@ -425,6 +429,7 @@ export function registerSend(
           deafGuidance +
           handoffGuidance +
           verdictGuidance +
+          refusedGuidance +
           claimsGuidance +
           escalationGuidance +
           supersededGuidance +
@@ -451,6 +456,7 @@ export function registerSend(
             ...(proseChoiceNotice ? { prose_choice_notice: proseChoiceNotice } : {}),
             ...(handoffLane ? { handoff_lane: handoffLane } : {}),
             ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
+            ...(verdictRefused ? { lane_verdict_refused: verdictRefused } : {}),
             ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),
             ...(laneAck ? { lane_ack: laneAck } : {}),
             ...(laneSuperseded ? { lane_superseded: laneSuperseded } : {}),
