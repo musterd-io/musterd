@@ -91,7 +91,10 @@ if [ -n "${MUSTERD_HUB:-}" ]; then
   # lane 01M5DTSKAB) — no human is minted here. The invite is single use and scrubbed below.
   if ! grep -q "\"$MUSTERD_TEAM\"" "$HOME/.musterd/node.json" 2>/dev/null; then
     for _ in $(seq 1 30); do curl -sf --max-time 2 "$MUSTERD_HUB_URL/health" >/dev/null && break; sleep 2; done
-    MUSTERD_SERVER=http://127.0.0.1:4849 musterd node join "$MUSTERD_HUB_URL" "${MUSTERD_INVITE:?first boot in hub mode needs MUSTERD_INVITE}" \
+    # --team is load-bearing: a fresh joiner has no binding, no env identity and no
+    # config.current for resolveRead to find the team in, so without it the join dies
+    # "no team" and Fly reboots the machine into the same failure (delta-2, 2026-10-27).
+    MUSTERD_SERVER=http://127.0.0.1:4849 musterd node join "$MUSTERD_HUB_URL" "${MUSTERD_INVITE:?first boot in hub mode needs MUSTERD_INVITE}" --team "$MUSTERD_TEAM" \
       || { log "node join failed — is the invite fresh (single use, 15 m) and the hub awake at $MUSTERD_HUB_URL?"; exit 1; }
     log "enrolled at $MUSTERD_HUB_URL"
   fi
