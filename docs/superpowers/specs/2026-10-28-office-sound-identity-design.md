@@ -42,7 +42,7 @@ One object in the room is musterd's and only musterd's: a short row of hanging b
 beside the work board (`WALL_BOARD`, `layout.ts`), so the thing that rings for finished work hangs
 next to the thing that shows it. Eight bars, wood with a metal sleeve in the render, one note each.
 
-- **Scale:** C major pentatonic across two octaves, C4 to E6 (C D E G A C D E). Pentatonic so that
+- **Scale:** C major pentatonic from C4 to E5 (C D E G A C D E; corrected 2026-10-28 in inc 3 — the first draft said E6). Pentatonic so that
   any bars struck together are consonant: a busy day cannot play a wrong note.
 - **Timbre:** a struck bar — soft mallet attack (no click), a fundamental with one inharmonic
   partial at ×2.76 for the "bar" quality, 1.5–2.5 s decay, a touch of air. Warm, not glassy. The

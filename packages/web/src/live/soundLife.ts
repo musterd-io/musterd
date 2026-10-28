@@ -246,13 +246,12 @@ export function keypressPlan(kb: Keyboard): ReadonlyArray<{ freq: number; gain: 
 /** The room's placed reactions — diegetic, on the room-tone layer; NOT the firehose act cues.
  *  E3 gave the room its moments; E4 adds the viewer's own hand (plate, board, the directed whoosh). */
 export type Moment =
-  | 'fanfare'
   | 'door'
-  | 'askbell'
   | 'plateOpen'
   | 'plateClose'
   | 'boardOpen'
   | 'boardClose'
+  // The welcome wagon's toss; no longer the directed-act sound (inc 3).
   | 'whoosh'
   // The Welcome Wagon (lane 01M3F81DD9): the desk phone, the label maker, the wagon's wheels, the
   // front-door chime and the confetti pop. All synthesized — no audio files (ADR 151 bytes).
@@ -274,7 +273,7 @@ export type Moment =
   | 'machine'
   // The musterd voice (sound identity spec §2.2–2.3): the shelf chimes for finished work, the desk
   // bells for a question / a redirect / a handoff, the door cousin for arrivals and departures.
-  // `fanfare`, `askbell`, `whoosh` and `doorbell` are superseded; their emit sites move in inc 2.
+  // `fanfare` and `askbell` left in inc 3; `doorbell` stays as the welcome's arrival.
   | 'laneDone'
   | 'goalDone'
   | 'question'

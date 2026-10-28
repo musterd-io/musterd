@@ -76,6 +76,8 @@ export const CUES: Record<string, Note[]> = {
   // A redirect: one low note damped short, the mallet's thud left in. The one allowed to be tense.
   redirect: [{ freq: C4, t: 0, dur: 0.12, type: tri, gain: 0.09 }],
   // Passing hands: one note here, the answer a third up over there, 300 ms later.
+  // The answer's 0.3 s stands only on the stream; the room emits the two notes as separate moments
+  // (`handoffSend` / `handoffAnswer`, inc 2) and the engine strips the offset there.
   handoff: [
     { freq: E4, t: 0, dur: 0.34, type: sine, gain: 0.08 },
     { freq: G4, t: 0.3, dur: 0.5, type: sine, gain: 0.08 },
@@ -289,6 +291,7 @@ const ROOM_GAIN = 0.075;
  */
 const LIFE_GAIN = 34;
 
+
 /** The whoosh's length, seconds — `--lc-dur-5` (600ms), the `lc-trace-draw` timing, so the pan
  *  sweep lands with the visual (E4 spec: one number, pinned). */
 const WHOOSH_S = 0.6;
@@ -496,14 +499,12 @@ export class RoomTone {
     out.connect(bus);
     setTimeout(() => out.disconnect(), 4000);
     switch (name) {
-      case 'fanfare': return this.fanfare(ctx, out);
       case 'door': return this.doorMoment(ctx, out);
-      case 'askbell': return this.askbell(ctx, out);
+      case 'whoosh': return this.whoosh(ctx, out); // welcome wagon foley only (inc 3)
       case 'plateOpen': return this.plateTick(ctx, out, true);
       case 'plateClose': return this.plateTick(ctx, out, false);
       case 'boardOpen': return this.boardPaper(ctx, out, true);
       case 'boardClose': return this.boardPaper(ctx, out, false);
-      case 'whoosh': return this.whoosh(ctx, out);
       case 'ring': return this.ring(ctx, out);
       case 'ratchet': return this.ratchet(ctx, out);
       case 'rattle': return this.rattle(ctx, out);
@@ -523,7 +524,7 @@ export class RoomTone {
       case 'question': return this.cueNotes(ctx, out, CUES['question']!, 0.018);
       case 'redirect': return this.cueNotes(ctx, out, CUES['redirect']!, 0.02);
       case 'handoffSend': return this.cueNotes(ctx, out, [CUES['handoff']![0]!], 0.016);
-      case 'handoffAnswer': return this.cueNotes(ctx, out, [CUES['handoff']![1]!], 0.016);
+      case 'handoffAnswer': return this.cueNotes(ctx, out, [{ ...CUES['handoff']![1]!, t: 0 }], 0.016);
       case 'arrive': return this.cueNotes(ctx, out, CUES['arrive']!, 0.014);
       case 'leave': return this.cueNotes(ctx, out, [...CUES['arrive']!].reverse().map((n, i) => ({ ...n, t: i * 0.09 })), 0.014);
       default: {
@@ -703,7 +704,9 @@ export class RoomTone {
     src.stop(t0 + dur + 0.03);
   }
 
-  /** The directed-act whoosh (E4): lowpassed air with a gentle arc over the trace's 600ms, its pan
+
+
+  /** The welcome wagon's toss (welcomeRoom; the directed-act whoosh left in inc 3): lowpassed air with a gentle arc over the trace's 600ms, its pan
    *  swept by `moment` above. Quiet by design — it accompanies a line, it is not the line. */
   private whoosh(ctx: AudioContext, out: AudioNode): void {
     const t0 = ctx.currentTime + 0.02;
@@ -723,27 +726,11 @@ export class RoomTone {
     src.start(t0);
     src.stop(t0 + WHOOSH_S + 0.03);
   }
-
-  /** Acceptance lands (E3): a quick rising major triad off the cue ladder, and a soft paper
-   *  flutter underneath — the confetti's own sound. A celebration you notice, not a jingle. */
-  private fanfare(ctx: AudioContext, out: AudioNode): void {
-    const t0 = ctx.currentTime + 0.02;
-    const triad = [523.25, 659.25, 783.99]; // C5 E5 G5 — the resolve chord, placed in the room
-    triad.forEach((f, i) => {
-      this.ping(ctx, out, t0 + i * (0.07 + Math.random() * 0.03), f * (0.995 + Math.random() * 0.01), 0.02 + Math.random() * 0.006);
-    });
-    // The flutter: a handful of tiny bright taps scattered over the ring — paper coming down.
-    let at = t0 + 0.25;
-    for (let i = 0; i < 5 + Math.floor(Math.random() * 4); i++) {
-      this.click(ctx, out, at, 1800 + Math.random() * 1400, 0.012 + Math.random() * 0.008, 0.03);
-      at += 0.05 + Math.random() * 0.07;
-    }
-  }
-
   /** The door (E3): a low latch click, the closer arm's short sigh, then a few steps from that side. */
   private doorMoment(ctx: AudioContext, out: AudioNode): void {
     const t0 = ctx.currentTime + 0.02;
-    this.click(ctx, out, t0, 320 + Math.random() * 120, 0.08, 0.05); // the latch
+    // Halved (inc 3): the door is foley under the arrive/leave cousin now, −6 dB across the board.
+    this.click(ctx, out, t0, 320 + Math.random() * 120, 0.04, 0.05); // the latch
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer(ctx);
     src.loop = true;
@@ -753,34 +740,18 @@ export class RoomTone {
     lp.frequency.exponentialRampToValueAtTime(320, t0 + 0.55);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t0 + 0.08);
-    g.gain.exponentialRampToValueAtTime(0.045, t0 + 0.2);
+    g.gain.exponentialRampToValueAtTime(0.022, t0 + 0.2);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.55); // the closer's sigh
     src.connect(lp).connect(g).connect(out);
     src.start(t0 + 0.08);
     src.stop(t0 + 0.6);
     let at = t0 + 0.45;
     for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
-      this.click(ctx, out, at, 110 + Math.random() * 60, 0.07, 0.07); // steps from the door's side
+      this.click(ctx, out, at, 110 + Math.random() * 60, 0.035, 0.07); // steps from the door's side
       at += 0.4 + Math.random() * 0.12;
     }
   }
 
-  /** An ask lands (E3): one soft held tone with a slow decay — weight, not alarm, and quieter than
-   *  the firehose doorbell that may ring beside it. */
-  private askbell(ctx: AudioContext, out: AudioNode): void {
-    const t0 = ctx.currentTime + 0.02;
-    const f = 440 * (0.98 + Math.random() * 0.05);
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = f;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.018, t0 + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.2);
-    osc.connect(g).connect(out);
-    osc.start(t0);
-    osc.stop(t0 + 1.25);
-  }
 
   /** Schedule the next sparse event, and re-arm from it. One timer, always. The gap tightens with
    *  work density — a full sprint hums about twice as often as a quiet room (E2 spec §4). */
@@ -935,7 +906,9 @@ export class RoomTone {
 
   /** A mug, a stapler, something set down on a desk. `body` picks how heavy it lands. */
   private tap(ctx: AudioContext, out: AudioNode, body: number): void {
-    this.click(ctx, out, ctx.currentTime + 0.02, 260 + Math.random() * 420, 0.12 * body, 0.13);
+    // 0.12 → 0.05 (sound identity inc 3): at 0.108 a pen tap sat 4× a keystroke, the level the
+    // keystroke itself was cut from. Twice a keystroke, like a step or a sip.
+    this.click(ctx, out, ctx.currentTime + 0.02, 260 + Math.random() * 420, 0.05 * body, 0.13);
   }
 
 
@@ -944,8 +917,9 @@ export class RoomTone {
    *  is what keeps them from reading as the same object. */
   private stapler(ctx: AudioContext, out: AudioNode): void {
     const t0 = ctx.currentTime + 0.02;
-    this.click(ctx, out, t0, 380 + Math.random() * 120, 0.05, 0.04);
-    this.click(ctx, out, t0 + 0.07 + Math.random() * 0.03, 900 + Math.random() * 300, 0.14, 0.05);
+    // 0.05 + 0.14 → 0.03 + 0.07 (inc 3): the ka-CHUNK was the loudest noise in the room, 5× keys.
+    this.click(ctx, out, t0, 380 + Math.random() * 120, 0.03, 0.04);
+    this.click(ctx, out, t0 + 0.07 + Math.random() * 0.03, 900 + Math.random() * 300, 0.07, 0.05);
   }
 
   /** A wooden drawer: a low slide swelling over a third of a second, ended by a hard stop. The slide
@@ -964,7 +938,7 @@ export class RoomTone {
     bp.frequency.exponentialRampToValueAtTime(260 + Math.random() * 80, t0 + dur);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.1, t0 + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.05, t0 + dur * 0.6); // 0.1 → 0.05 (inc 3): 2× keys
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(bp).connect(g).connect(out);
     src.start(t0);
@@ -1136,10 +1110,12 @@ export class RoomTone {
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
     bp.frequency.value = freq;
-    bp.Q.value = 2.2;
+    // Q 2.2 → 1.6 and attack 4 → 8 ms (inc 3, spec §2.5): a wider band and a slower edge take the
+    // click out of every transient in the room — warm means the edges are rounded, not quieter.
+    bp.Q.value = 1.6;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(gain, at + 0.004);
+    g.gain.exponentialRampToValueAtTime(gain, at + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     src.connect(bp).connect(g).connect(out);
     src.start(at);
