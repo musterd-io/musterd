@@ -861,8 +861,15 @@ export function getTeamPolicy(cfg: LiveConfig): Promise<TeamPolicyRead> {
 export function setTeamPolicy(
   cfg: LiveConfig,
   stored: TeamPolicyRead['stored'],
+  approval: ApprovalProof | null = null,
 ): Promise<TeamPolicyRead> {
-  return postAsWeb(cfg, `/teams/${encodeURIComponent(cfg.team)}/policy`, stored);
+  // ADR 662: an enrolled admin's write carries the A2 proof beside the doc; the daemon reads
+  // `approval` off the body and parses the rest as the policy.
+  return postAsWeb(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/policy`,
+    approval ? { ...stored, approval } : stored,
+  );
 }
 
 /** ADR 747: the Team's wiki index, read from its repo by the daemon. */

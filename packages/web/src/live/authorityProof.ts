@@ -74,6 +74,17 @@ export async function authorityProofForObserver(
   });
 }
 
+/**
+ * A team policy write (`admin.team_policy`, ADR 662): the whole stored doc is the payload, exactly as
+ * `POST /policy` will parse it, so the caller signs the doc it is about to send and nothing else.
+ */
+export async function authorityProofForPolicy(
+  cfg: LiveConfig,
+  stored: Record<string, unknown>,
+): Promise<ApprovalProof | null> {
+  return authorityProofForDescriptor(cfg, 'admin.team_policy', cfg.team, stored);
+}
+
 async function authorityProofForDescriptor(
   cfg: LiveConfig,
   act: string,
