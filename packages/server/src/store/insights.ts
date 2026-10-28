@@ -685,6 +685,48 @@ export const WAKE_AUDIT_SQL = `SELECT action, target, ts, detail FROM audit
                          'residency.wake_report_rejected')
           AND ts > ?`;
 
+/** ADR 749: the window's leases, for `waited_ms`. Its own query so the spend-cap read, which
+ *  shares `WAKE_AUDIT_SQL`, does not carry lease rows. Seeks `(team_id, action, ts)`. */
+export const WAKE_LEASED_SQL = `SELECT target, ts, json_extract(detail, '$.act') AS act FROM audit
+        WHERE team_id = ? AND action = 'residency.wake_leased' AND ts > ?`;
+
+/**
+ * ADR 749. Per seat, how long each directed act waited for its wake: the act's FIRST lease minus
+ * the act's ts, ascending. A re-lease does not restart the clock. A lease whose act is not a
+ * message (a dream, a continuation) has no act ts and is skipped.
+ */
+async function wakeWaitsBySeat(
+  db: Driver,
+  teamId: string,
+  now: number,
+): Promise<Map<string, number[]>> {
+  const leases = await db.all<{ target: string; ts: number; act: string | null }>(WAKE_LEASED_SQL, [
+    teamId,
+    now - WAKE_WINDOW_MS,
+  ]);
+  const first = new Map<string, { seat: string; ts: number }>();
+  for (const l of leases) {
+    if (!l.act) continue;
+    const key = `${l.target}\u0000${l.act}`;
+    const seen = first.get(key);
+    if (!seen || l.ts < seen.ts) first.set(key, { seat: l.target, ts: l.ts });
+  }
+  const bySeat = new Map<string, number[]>();
+  for (const [key, lease] of first) {
+    const act = key.slice(key.indexOf('\u0000') + 1);
+    const msg = await db.get<{ ts: number }>(
+      'SELECT ts FROM messages WHERE team_id = ? AND id = ?',
+      [teamId, act],
+    );
+    if (!msg) continue;
+    const list = bySeat.get(lease.seat) ?? [];
+    list.push(Math.max(0, lease.ts - msg.ts));
+    bySeat.set(lease.seat, list);
+  }
+  for (const list of bySeat.values()) list.sort((a, b) => a - b);
+  return bySeat;
+}
+
 /**
  * Wake metrics (ADR 131 O&E, increment 5) — derived from `residency.*` audit rows joined to the
  * message log, the `deriveSteeringMetrics` shape. The headline pair:
@@ -944,6 +986,9 @@ export async function deriveWakeMetrics(
   // Per-seat economics against the effective budget_usd (a per-run report bound: over_budget
   // when any single wake's attested cost exceeded it).
   const teamPolicy = await getPolicy(db, teamId);
+  // ADR 749: a seat leased but never woken still waited, so its row is kept with 0 wakes.
+  const waits = await wakeWaitsBySeat(db, teamId, now);
+  for (const seat of waits.keys()) if (!wakesBySeat.has(seat)) wakesBySeat.set(seat, 0);
   const by_seat: WakeSeatCost[] = (
     await Promise.all(
       [...wakesBySeat.entries()].map(async ([seat, wakes]) => {
@@ -963,6 +1008,7 @@ export async function deriveWakeMetrics(
           budget_usd: budget,
           over_budget: budget !== null && costs.some((c) => c > budget),
           by_day: wakeCostByDay(priced),
+          ...(waits.has(seat) ? { waited_ms: waits.get(seat) } : {}),
         };
       }),
     )

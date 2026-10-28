@@ -13,6 +13,7 @@ import { sweepSeriesPath } from '../session/sweep-series.js';
 import { claimAgentHttp } from '../test-auth.js';
 import { goalCommand } from './goal.js';
 import { renderTraceReport, reportCommand } from './report.js';
+import { sendCommand } from './send.js';
 import { teamCommand } from './team.js';
 
 describe('report command', () => {
@@ -175,6 +176,30 @@ describe('report command', () => {
     expect(exact.out).toContain('window 7d');
     // ADR 748: the seat's priced total, by the UTC day it arrived.
     expect(exact.out).toContain(`${new Date(now).toISOString().slice(0, 10)} $12.00 · 1 priced`);
+
+    // ADR 749: a lease on a message act prints that act's wait under the seat.
+    await capture(() =>
+      sendCommand(parseArgs(['--to', '@team', '--act', 'status_update', 'ping'])),
+    );
+    const msg = await server.store.get<{ id: string; ts: number }>(
+      'SELECT id, ts FROM messages WHERE team_id = ? ORDER BY ts DESC LIMIT 1',
+      [team!.id],
+    );
+    expect(msg).toBeDefined();
+    await server.store.run(
+      `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
+       VALUES (?, ?, ?, NULL, 'residency.wake_leased', 'nick', 'allow', ?, ?)`,
+      [
+        ulid(),
+        team!.id,
+        msg!.ts + 5 * 60_000,
+        JSON.stringify({ act: msg!.id, lease_id: 'L1' }),
+        now,
+      ],
+    );
+    const waited = await capture(() => reportCommand(parseArgs(['residency'])));
+    expect(waited.out).toContain('waited median 5m');
+    expect(waited.out).toContain('· 1 act');
   });
 
   it('shows the per-wake approval threshold on its own line, and says nothing when unset (ADR 635)', async () => {

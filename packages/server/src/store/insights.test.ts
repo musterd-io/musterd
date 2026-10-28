@@ -1045,7 +1045,8 @@ withDrivers('insights', (o) => {
         | 'residency.wake_failed'
         | 'residency.wake_deferred'
         | 'residency.wake_exhausted'
-        | 'residency.wake_cost',
+        | 'residency.wake_cost'
+        | 'residency.wake_leased',
       seat: string,
       detail: Record<string, unknown>,
       ts: number,
@@ -1054,7 +1055,12 @@ withDrivers('insights', (o) => {
         actor: null,
         action,
         target: seat,
-        result: action === 'residency.woke' || action === 'residency.wake_cost' ? 'allow' : 'deny',
+        result:
+          action === 'residency.woke' ||
+          action === 'residency.wake_cost' ||
+          action === 'residency.wake_leased'
+            ? 'allow'
+            : 'deny',
         detail,
       });
       await db.run(
@@ -1330,6 +1336,54 @@ withDrivers('insights', (o) => {
         { day: '2026-10-27', priced: 2, cost_usd_total: expect.closeTo(12.3) as number },
       ]);
       expect(wakeCostByDay([])).toEqual([]);
+    });
+
+    it('waited_ms is each act’s first lease minus its ts, message acts only (ADR 749)', async () => {
+      const { db, team, nick, ada } = await wakeSeed();
+      await directed(db, team, nick, ada, 'handoff', 'h1', NOW - 60 * 60_000);
+      await directed(db, team, nick, ada, 'request_help', 'h2', NOW - 30 * 60_000);
+      // h1: leased at +5 min, re-leased at +20 min — the first lease is the wait.
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_leased',
+        'ada',
+        { act: 'h1', lease_id: 'L1' },
+        NOW - 55 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_leased',
+        'ada',
+        { act: 'h1', lease_id: 'L2' },
+        NOW - 40 * 60_000,
+      );
+      // h2: leased at +1 min, never woken.
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_leased',
+        'ada',
+        { act: 'h2', lease_id: 'L3' },
+        NOW - 29 * 60_000,
+      );
+      // A dream lease has no message: skipped.
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_leased',
+        'ada',
+        { act: 'dream', lease_id: 'L4' },
+        NOW - 10 * 60_000,
+      );
+      const k = await deriveWakeMetrics(db, team.id, NOW);
+      expect(k.by_seat).toHaveLength(1);
+      expect(k.by_seat[0]).toMatchObject({
+        seat: 'ada',
+        wakes: 0,
+        waited_ms: [60_000, 5 * 60_000],
+      });
     });
 
     it('by_day counts a lease once, on its wake_cost row’s day', async () => {
