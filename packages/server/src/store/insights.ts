@@ -22,6 +22,7 @@ import {
   type WaitingOnEntry,
   type WakeMetrics,
   type WakeSeatCost,
+  type WakeSeatDay,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { deriveCiTrend } from './ci.js';
@@ -724,16 +725,32 @@ async function loadWakeAuditRows(db: Driver, teamId: string, now: number): Promi
     });
 }
 
-/** Cost per lease: primary report fields first, a supplementary `wake_cost` row wins. */
-function foldLeaseCosts(rows: WakeAuditRow[]): Map<string, { seat: string; cost: number }> {
-  const costByLease = new Map<string, { seat: string; cost: number }>();
+/** Cost per lease: primary report fields first, a supplementary `wake_cost` row wins. `ts` is the
+ *  winning row's, so a lease is counted on the day its price arrived (ADR 748). */
+function foldLeaseCosts(
+  rows: WakeAuditRow[],
+): Map<string, { seat: string; cost: number; ts: number }> {
+  const costByLease = new Map<string, { seat: string; cost: number; ts: number }>();
   for (const r of rows) {
     if (r.detail.lease_id === undefined || r.detail.cost_usd === undefined) continue;
     if (r.action === 'residency.wake_cost' || !costByLease.has(r.detail.lease_id)) {
-      costByLease.set(r.detail.lease_id, { seat: r.target, cost: r.detail.cost_usd });
+      costByLease.set(r.detail.lease_id, { seat: r.target, cost: r.detail.cost_usd, ts: r.ts });
     }
   }
   return costByLease;
+}
+
+/** ADR 748. A seat's priced leases summed per UTC day, oldest first. */
+export function wakeCostByDay(leases: ReadonlyArray<{ cost: number; ts: number }>): WakeSeatDay[] {
+  const days = new Map<string, WakeSeatDay>();
+  for (const l of leases) {
+    const day = new Date(l.ts).toISOString().slice(0, 10);
+    const acc = days.get(day) ?? { day, priced: 0, cost_usd_total: 0 };
+    acc.priced += 1;
+    acc.cost_usd_total += l.cost;
+    days.set(day, acc);
+  }
+  return [...days.values()].sort((a, b) => a.day.localeCompare(b.day));
 }
 
 /**
@@ -930,7 +947,8 @@ export async function deriveWakeMetrics(
   const by_seat: WakeSeatCost[] = (
     await Promise.all(
       [...wakesBySeat.entries()].map(async ([seat, wakes]) => {
-        const costs = [...costByLease.values()].filter((c) => c.seat === seat).map((c) => c.cost);
+        const priced = [...costByLease.values()].filter((c) => c.seat === seat);
+        const costs = priced.map((c) => c.cost);
         const total = costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null;
         const member = await getMemberByName(db, teamId, seat);
         const enrollment = member ? await getResidency(db, teamId, member.id) : null;
@@ -944,6 +962,7 @@ export async function deriveWakeMetrics(
           cost_usd_total: total,
           budget_usd: budget,
           over_budget: budget !== null && costs.some((c) => c > budget),
+          by_day: wakeCostByDay(priced),
         };
       }),
     )

@@ -22,6 +22,7 @@ import {
   flowMetrics,
   goalFlowMetrics,
   waitingOn,
+  wakeCostByDay,
 } from './insights.js';
 import { openLane, updateLane } from './lanes.js';
 import { addMember } from './members.js';
@@ -1299,7 +1300,60 @@ withDrivers('insights', (o) => {
       );
       const k = await deriveWakeMetrics(db, team.id, NOW);
       expect(k.by_seat).toEqual([
-        { seat: 'ada', wakes: 1, cost_usd_total: 0.8, budget_usd: 0.5, over_budget: true },
+        {
+          seat: 'ada',
+          wakes: 1,
+          cost_usd_total: 0.8,
+          budget_usd: 0.5,
+          over_budget: true,
+          by_day: [
+            {
+              day: new Date(NOW - 50 * 60_000).toISOString().slice(0, 10),
+              priced: 1,
+              cost_usd_total: 0.8,
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('by_day splits a seat’s priced leases by the UTC day the price arrived (ADR 748)', () => {
+      const day = Date.UTC(2026, 9, 27);
+      expect(
+        wakeCostByDay([
+          { cost: 6.1, ts: day + 23 * 3_600_000 },
+          { cost: 0.5, ts: day - 1 },
+          { cost: 6.2, ts: day + 3_600_000 },
+        ]),
+      ).toEqual([
+        { day: '2026-10-26', priced: 1, cost_usd_total: 0.5 },
+        { day: '2026-10-27', priced: 2, cost_usd_total: expect.closeTo(12.3) as number },
+      ]);
+      expect(wakeCostByDay([])).toEqual([]);
+    });
+
+    it('by_day counts a lease once, on its wake_cost row’s day', async () => {
+      const { db, team, nick, ada } = await wakeSeed();
+      await directed(db, team, nick, ada, 'handoff', 'h1', NOW - 30 * 60 * 60_000);
+      await residencyRow(
+        db,
+        team.id,
+        'residency.woke',
+        'ada',
+        { act: 'h1', lease_id: 'L1', cost_usd: 0.1 },
+        NOW - 30 * 60 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_cost',
+        'ada',
+        { act: 'h1', lease_id: 'L1', cost_usd: 0.9 },
+        NOW - 60_000,
+      );
+      const k = await deriveWakeMetrics(db, team.id, NOW);
+      expect(k.by_seat[0]?.by_day).toEqual([
+        { day: new Date(NOW - 60_000).toISOString().slice(0, 10), priced: 1, cost_usd_total: 0.9 },
       ]);
     });
 

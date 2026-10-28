@@ -294,6 +294,18 @@ export type SteeringMetrics = z.infer<typeof SteeringMetricsSchema>;
 /** Per-seat wake economics (ADR 131 inc 5, finding c): spend against the seat's `budget_usd`
  *  report bound. `over_budget` FLAGS — nothing was stopped (no backend can kill a run on dollars;
  *  spend control stays cooldown/caps/watchdog). */
+/**
+ * ADR 748. One UTC day of a seat's priced wakes. A lease counts on the day of the row that carried
+ * its price (a supplementary `wake_cost` row wins, as in the total). Unpriced leases are not here.
+ */
+export const WakeSeatDaySchema = z.object({
+  /** UTC calendar day, `YYYY-MM-DD`. */
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  priced: z.number().int().nonnegative(),
+  cost_usd_total: z.number(),
+});
+export type WakeSeatDay = z.infer<typeof WakeSeatDaySchema>;
+
 export const WakeSeatCostSchema = z.object({
   seat: z.string(),
   wakes: z.number().int(),
@@ -302,6 +314,8 @@ export const WakeSeatCostSchema = z.object({
   /** The seat's effective `budget_usd` report bound; null when unset. */
   budget_usd: z.number().nullable(),
   over_budget: z.boolean(),
+  /** ADR 748. The priced total split by UTC day, oldest first. Optional for back-compat. */
+  by_day: z.array(WakeSeatDaySchema).optional(),
 });
 export type WakeSeatCost = z.infer<typeof WakeSeatCostSchema>;
 

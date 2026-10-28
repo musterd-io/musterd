@@ -173,6 +173,8 @@ describe('report command', () => {
     expect(exact.out).toContain('OVER');
     expect(exact.out).toContain('agent wakes held');
     expect(exact.out).toContain('window 7d');
+    // ADR 748: the seat's priced total, by the UTC day it arrived.
+    expect(exact.out).toContain(`${new Date(now).toISOString().slice(0, 10)} $12.00 · 1 priced`);
   });
 
   it('shows the per-wake approval threshold on its own line, and says nothing when unset (ADR 635)', async () => {
