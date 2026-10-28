@@ -55,15 +55,15 @@ POD_RUGS = {  # shape → (along, across) — mirrors layout.ts podRug()
 POD_RUG_FIELD_ALPHA = 0.25
 BENCH = dict(lx=320, ly=56, long=300, deep=30)
 NOOK = (725, 175)
-CAFE = (620, 4, 896, 280)  # x0, y0, x1, y1 — mirrors layout.ts CAFE: the tiled café corner (office v3-2)
+CAFE = (560, 4, 896, 280)  # x0, y0, x1, y1 — mirrors layout.ts CAFE: the tiled café corner (office v3-2)
 LOUNGE = dict(  # mirrors layout.ts LOUNGE — layout.test.ts holds the sizes the sprites bake in
-    fridge=dict(dx=-56, dy=-60, w=36, d=30, h=72),
+    fridge=dict(dx=-116, dy=-60, w=36, d=30, h=72),
     counter=dict(dx=5, dy=-86, w=80, d=30, h=34),
     machine=dict(dx=-20, dy=-86),
     sink=dict(dx=10, dy=-86),
     cooler=dict(dx=62, dy=-92, w=26, d=26, h=52),
-    island=dict(dx=50, dy=18, w=60, d=40, h=34),
-    stools=[(50, 64)],
+    island=dict(dx=20, dy=18, w=120, d=40, h=34),
+    stools=[(-13, 64), (53, 64)],
     couch=dict(dx=131, dy=-90, len=80, dep=44),
     armchair=dict(dx=143, dy=20),
     table=dict(dx=131, dy=-36, w=40, d=30),

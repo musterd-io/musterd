@@ -405,7 +405,9 @@ export const NOOK = { lx: 725, ly: 175 };
  * wall, north wall down past the stools and the couch. Mirrored by `scene.py` `CAFE`, which paints
  * it; `nav.test.ts` holds every away standing spot inside it.
  */
-export const CAFE = { x0: 620, y0: 4, x1: 896, y1: 280 } as const;
+// x0 620 → 560 (2026-10-28, nick: the island grows left, and the tile with it): the strip between the
+// printer station (ends lx 528) and the old edge becomes café, and the fridge moves onto it.
+export const CAFE = { x0: 560, y0: 4, x1: 896, y1: 280 } as const;
 export function insideCafe(lx: number, ly: number): boolean {
   return lx >= CAFE.x0 && lx <= CAFE.x1 && ly >= CAFE.y0 && ly <= CAFE.y1;
 }
@@ -433,7 +435,7 @@ export const LOUNGE = {
   // never on the rug anyway, so there is nothing behind it to give up.
   // The run slid 24 east (2026-10-27) so the fridge stands on the tile, not half off its west edge
   // (nick: "the fridge/freezer is not on the kitchen tile"); `layout.test.ts` holds every piece on it.
-  fridge: { dx: -56, dy: -60, w: 36, d: 30, h: 72 },
+  fridge: { dx: -116, dy: -60, w: 36, d: 30, h: 72 }, // dx -56 → -116 (2026-10-28): 60 west with the tile; still a step in from its edge
   counter: { dx: 5, dy: -86, w: 80, d: 30, h: 34 },
   machine: { dx: -20, dy: -86 },
   cooler: { dx: 62, dy: -92, w: 26, d: 26, h: 52 }, // water cooler
@@ -454,8 +456,17 @@ export const LOUNGE = {
   // One stool (2026-10-27): with the fridge a step in from the tile's edge and two armchairs down the
   // right wall, a two-stool island fused with both on the nav grid and boxed the armchairs in. A
   // breakfast island for one keeps the lane past the fridge and the floor beside the chairs.
-  island: { dx: 50, dy: 18, w: 60, d: 40, h: 34 },
-  stools: [{ dx: 50, dy: 64 }],
+  // Two stools again (2026-10-28, nick: "we have space to make the kitchen island a little bit bigger
+  // to accommodate 1 more stool"): the island grows 60 → 120 to the WEST — east is sealed by the
+  // armchairs (the 2026-10-27 lesson) — and the fridge and the tile's west edge move 60 west with it.
+  // The fridge's footprint and the island's west end are the two sides of the only entrance to the
+  // kitchenette lane (two cells, 30 units), so the island can only grow left as far as the fridge
+  // gives way, and the fridge can only move as far as the tile does.
+  island: { dx: 20, dy: 18, w: 120, d: 40, h: 34 },
+  stools: [
+    { dx: -13, dy: 64, dir: 'N' as Dir },
+    { dx: 53, dy: 64, dir: 'N' as Dir },
+  ],
   // The corner set is placed by SCREEN x, not floor x: a seat "behind" a stool along the lx+ly
   // diagonal collapses onto it (the iso squashes that axis), so the couch and armchair sit far
   // enough east that their occupants land right of the stools on screen.
@@ -496,8 +507,10 @@ export const NOOK_SPOTS: ReadonlyArray<{ dx: number; dy: number }> = [
   // and 28 px on screen from the island stool, under its label. They now stand on the tile's open
   // west half. The stool stays: it and the island were placed to keep the lane past the fridge open.
   { dx: -82, dy: 94 },
-  { dx: 12, dy: 94 },
-  { dx: -39, dy: 5 },
+  // (12, 94) and (-39, 5) stood where the wider island's west stool is now (2026-10-28); their
+  // replacements are on the new west strip of tile and in the gap between the fridge and the counter.
+  { dx: -156, dy: 84 },
+  { dx: -72, dy: -60 },
   { dx: -95, dy: 21 },
 ];
 
@@ -1088,7 +1101,7 @@ export const LEISURE_SPOTS: LeisureSpot[] = (() => {
       zone: 'lounge' as const,
       lx: NOOK.lx + st.dx,
       ly: NOOK.ly + st.dy,
-      dir: 'N' as Dir,
+      dir: st.dir,
       sit: 1,
       casual: true,
     })),
