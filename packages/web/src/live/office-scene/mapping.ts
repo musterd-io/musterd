@@ -30,6 +30,9 @@ export function actToEvent(env: Envelope): OfficeEvent | null {
   // Lane open/resolve/handoff (ADR 083 §4: an ordinary `message` + meta, no new act) get their own
   // choreography instead of collapsing into the generic team megaphone or 1:1 note.
   if (lane === 'lane_open') return { kind: 'screen-pulse', who: from, tone };
+  // A goal's outcome note marks it shipped (value layer, ADR 258): the room rolls the chimes for it.
+  const outcome = env.meta?.['goal_outcome'] as { goal_id?: unknown } | undefined;
+  if (typeof outcome?.goal_id === 'string') return { kind: 'goal-done', who: from, goal: outcome.goal_id };
   // A claim walks the claimer to the wall board for the card (nick, 2026-10-09). Before this it fell
   // through to `message` and played the team megaphone, which said nothing about taking work.
   if (lane === 'lane_claim') {

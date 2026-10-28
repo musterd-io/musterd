@@ -362,3 +362,15 @@ describe('finishing a lane (nick, 2026-10-12)', () => {
     expect(actToEvent(env('ask', { meta: { species: 'approve', tier: 'standard' } }))).toBeNull();
   });
 });
+
+describe('a goal shipping (sound identity spec §2.2)', () => {
+  it('maps a goal outcome note to a goal-done event, from whoever recorded it', () => {
+    const act = env('message', {
+      from: 'nick',
+      to: { kind: 'team' } as Recipient,
+      meta: { goal_outcome: { goal_id: 'live-delight', outcome: 'the office sounds like ours' } },
+      body: 'shipped',
+    });
+    expect(actToEvent(act)).toEqual({ kind: 'goal-done', who: 'nick', goal: 'live-delight' });
+  });
+});
