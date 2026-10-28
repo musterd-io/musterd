@@ -591,7 +591,7 @@ export interface Actors {
    * stays on the keyboard. Quantised to 45° or 90° on the nearer side; a target straight ahead needs no
    * turn and a target behind gets the 90°, never an owl. `delay` keeps the head at rest that long
    * first, so a row of lookers turns in sequence. Returns the look played (a `GESTURE.look*` id), or 0
-   * when the member can't (absent, small, walking, already busy) or has nothing to turn toward.
+   * when the member can't (absent, small, walking, already busy, dnd) or has nothing to turn toward.
    */
   lookAt(who: string, at: { lx: number; ly: number }, opts?: { hold?: number; delay?: number }): number;
   /** True while `name` is on a walk (an errand, a stroll, a meet) rather than seated or gesturing in place. */
@@ -1629,6 +1629,8 @@ export function createActors(): Actors {
     lookAt(who, at, opts = {}) {
       const h = homes.get(who);
       if (!h || !canGesture(who) || h.sit <= 0) return 0;
+      // dnd is do-not-interrupt made physical (§4 lane 4): they don't look up either.
+      if (live.get(who)?.dnd) return 0;
       const kind = lookToward(h.dir, h.lx, h.ly, at.lx, at.ly);
       if (!kind) return 0;
       const delay = Math.max(0, opts.delay ?? 0);
