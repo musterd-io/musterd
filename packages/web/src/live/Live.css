@@ -471,10 +471,6 @@
 }
 /* The room-tone icon is all strokes — its leading path is the level meter, not a speaker body, so it
    must opt out of the filled-first-path rule the arrival-cue icon relies on. */
-.lc__sound--room svg path:first-child {
-  fill: none;
-  stroke: currentColor;
-}
 
 /* ─── Shared Seeds tray (ADR 319) ───────────────────────────────────── */
 .lc-seeds {
@@ -9858,11 +9854,6 @@ a.lc-xp__hit:focus-visible {
   color: var(--lc-muted);
   white-space: nowrap;
 }
-.lc-here__alone {
-  font-size: 12px;
-  color: var(--lc-faint);
-  white-space: nowrap;
-}
 /* "nick opened /live": a few seconds beside the row, then gone. */
 .lc-here__whisper:empty {
   display: none;
@@ -9899,10 +9890,7 @@ a.lc-xp__hit:focus-visible {
 }
 @media (max-width: 640px) {
   .lc-here__whisper,
-  .lc-here__alone {
-    display: none;
-  }
-  /* A phone's row sits near the left edge, where a card centred on its face runs off-screen: the
+    /* A phone's row sits near the left edge, where a card centred on its face runs off-screen: the
      card hangs from the row's left instead, and loses the caret that would point at nothing. */
   .lc-here {
     position: relative;

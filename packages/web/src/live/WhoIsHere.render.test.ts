@@ -25,9 +25,10 @@ describe('WhoIsHere (ADR 692)', () => {
     expect(html).toContain('aria-label="nick (you), person"');
   });
 
-  it('says an agent session is one, and a lone viewer is alone', () => {
-    expect(render([onLive('Ada', 'agent')], null)).toContain('agent session');
-    expect(render([onLive('nick', 'human')], 'nick')).toContain('just you here');
+  it('shows nothing for one watcher, you or not, and appears at two (nick, 2026-10-28)', () => {
+    expect(render([onLive('nick', 'human')], 'nick')).toBe('');
+    expect(render([onLive('Ada', 'agent')], null)).toBe('');
+    expect(render([onLive('Ada', 'agent'), onLive('nick', 'human')], 'nick')).toContain('agent session');
   });
 
   it('folds faces past five into a count that still names them', () => {

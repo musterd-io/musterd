@@ -721,19 +721,8 @@ function LivePage() {
           )}
           {/* An admin's "pause…" moved into settings' Team sheet (nick, 2026-10-19); the banner
               still appears above the room while a hold is in force. */}
-          {connected && (
-            <button
-              type="button"
-              className={`lc__pbtn${seedsOpen ? ' lc__pbtn--on' : ''}`}
-              onClick={() => setSeedsOpen(true)}
-              aria-pressed={seedsOpen}
-              title="Shared Seeds — Team ideas before they become Lanes"
-            >
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M8 13V7M8 8C5.4 8 3.4 6.6 3 4c2.7-.2 4.7 1 5 4ZM8 10c2.6 0 4.6-1.4 5-4-2.7-.2-4.7 1-5 4Z" />
-              </svg>
-            </button>
-          )}
+          {/* The Seeds button left the bar (nick, 2026-10-28: "hide the seeds button for now, maybe
+              put that on the workboard instead"). The tray and its state stay for the day it does. */}
           {connected && (
             <button
               type="button"
@@ -751,7 +740,6 @@ function LivePage() {
           {/* Signed in only: minting a link takes a human admin's credential (ADR 580), which a
               watching page does not hold, so offering it there would only ever fail. */}
           {connected && signedIn && <WatchLinkButton cfg={cfg!} />}
-          {connected && <RoomToneToggle />}
           {connected && <SoundToggle />}
           <Clock />
         </span>
@@ -1124,49 +1112,14 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
 }
 
 /**
- * Mute/unmute the firehose's per-act sound cues. Default OFF: enabling is the user gesture that lets
- * the AudioContext start (browser autoplay policy), and a one-shot blip confirms it's live.
+ * Sound, one switch (nick, 2026-10-28: "get rid of the 2 separate audio buttons"): the act cues and
+ * the room tone come on and go off together. Each engine still keeps its own stored preference, so a
+ * viewer who had one of them on before keeps that; the button reads "on" when either is. Default OFF:
+ * the click is the user gesture that lets the AudioContext start (browser autoplay policy), and the
+ * room's own sounds confirm it is live.
  */
 function SoundToggle() {
-  const [on, setOn] = useState(() => firehoseSound.enabled);
-  const toggle = () => {
-    const next = !on;
-    firehoseSound.setEnabled(next);
-    setOn(next);
-    if (next) firehoseSound.chime('handoff'); // a friendly two-note "sound is on" confirmation
-  };
-  return (
-    <button
-      type="button"
-      className={`lc__sound${on ? ' lc__sound--on' : ''}`}
-      onClick={toggle}
-      aria-pressed={on}
-      title={on ? 'Mute arrival sounds' : 'Play a sound on every new message'}
-    >
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M3 6.2h2.2L8.3 3.6v8.8L5.2 9.8H3z" />
-        {on ? (
-          <path d="M10.4 5.6a3.2 3.2 0 0 1 0 4.8M12.2 4a5.6 5.6 0 0 1 0 8" />
-        ) : (
-          <path d="m10.8 6 3.4 4M14.2 6l-3.4 4" />
-        )}
-      </svg>
-    </button>
-  );
-}
-
-/**
- * Room tone: the sound of the office being *there* — ventilation, a low building hum, and somebody
- * typing a few desks away. Its own switch rather than a mode of the one above, because the two
- * answer different questions (see the room-tone block in `sound.ts`): a viewer may reasonably want
- * arrivals audible in a silent room, or a lived-in room that never pings at them.
- *
- * Default OFF, like the cues, and for the same reason — the click IS the gesture that lets the
- * AudioContext start. A preference restored from an earlier session cannot start itself, so this
- * button is also where `resumeIfEnabled` gets its chance.
- */
-function RoomToneToggle() {
-  const [on, setOn] = useState(() => roomTone.enabled);
+  const [on, setOn] = useState(() => firehoseSound.enabled || roomTone.enabled);
   // A stored `on` from a previous visit needs a gesture before it can make a sound. Any click
   // anywhere on the page is gesture enough, and one is cheaper to catch than to ask for.
   useEffect(() => {
@@ -1177,23 +1130,25 @@ function RoomToneToggle() {
   }, []);
   const toggle = () => {
     const next = !on;
+    firehoseSound.setEnabled(next);
     roomTone.setEnabled(next);
     setOn(next);
   };
   return (
     <button
       type="button"
-      className={`lc__sound lc__sound--room${on ? ' lc__sound--on' : ''}`}
+      className={`lc__sound${on ? ' lc__sound--on' : ''}`}
       onClick={toggle}
       aria-pressed={on}
-      title={on ? 'Silence the room' : 'Play the room: quiet office ambience'}
+      title={on ? 'Sound off' : 'Sound on: the room, and a sound when something happens'}
     >
-      {/* Three rising bars behind a mug — "the room is running", not "a message arrived". Muted, the
-          bars flatten to one line: the room is still there, it just is not making a sound. */}
       <svg viewBox="0 0 16 16" aria-hidden="true">
-        {on ? <path d="M2.5 9.5v2M5 7.5v4M7.5 5.5v6" /> : <path d="M2.5 11.5h5.2" />}
-        <path d="M10.5 6.5h3.2v3a2 2 0 0 1-2 2h-1.2z" />
-        <path d="M13.7 7.5h.6a1.1 1.1 0 0 1 0 2.2h-.6" />
+        <path d="M3 6.2h2.2L8.3 3.6v8.8L5.2 9.8H3z" />
+        {on ? (
+          <path d="M10.4 5.6a3.2 3.2 0 0 1 0 4.8M12.2 4a5.6 5.6 0 0 1 0 8" />
+        ) : (
+          <path d="m10.8 6 3.4 4M14.2 6l-3.4 4" />
+        )}
       </svg>
     </button>
   );
