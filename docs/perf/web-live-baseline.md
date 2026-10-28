@@ -2512,3 +2512,23 @@ tree). The motion-tied sounds (four small synths in `soundEngine.ts`, the `Motio
 measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 382,000 B with both lanes in.
+
+## 2026-10-28 — the sound identity; Initial JS RAISED 151,520 → 152,500 B, Total JS RAISED 382,000 → 384,000 B (lanes 01M61R493R, 01M61R4CBA)
+
+| Budget     | Before (main)    | This branch (CI)        | Ceiling                       |
+| ---------- | ---------------- | ----------------------- | ----------------------------- |
+| initial JS | 148.0 KB ceiling | 148.0 KB (13 eager)     | RAISED 151,520 → 152,500 B    |
+| total JS   | 373.0 KB ceiling | 373.2 KB (73 chunks)    | RAISED 382,000 → 384,000 B    |
+
+Inc 1 (#3447) replaced twelve cue recipes with the bar voice, four gesture recipes and eight new
+moments in `soundEngine.ts` — the lazy sound chunk — and shipped under the ceiling. Inc 2 adds the
+emit sites to the office chunk (`laneDone` at the board, the goal roll, the desk bells, the door
+cousin, the handoff pair, a `goal-done` event) and one eager line in `useLiveStream.ts` (the
+stream's cue stands down while the room tone is on). CI read initial JS over by bytes (148.0 of
+148.0, the ceiling was sitting on the measurement) and total over by ~0.2 KB. The chimes' pure
+logic was split into `soundVoice.ts` so the office chunk does not pull `soundLife.ts`'s keyboard
+and life-roll code (that import alone was ~0.1 KB of the total). Measured in CI, not locally: the
+laptop hosts the team's seats (no local full builds for measurement). A re-baseline to measured
++ 15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports initial JS at or under 152,500 B and total JS at or under 384,000 B with both lanes in.
