@@ -10,6 +10,7 @@ import {
   type Report,
   type PeerDemand,
   type TraceReport,
+  type WakeHold,
 } from '@musterd/protocol';
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
@@ -267,6 +268,23 @@ export function renderDisputes(d: NonNullable<Report['disputes']>, w: (s: string
       );
     }
   }
+}
+
+/** ADR 753: each gate state's share of all waited time, largest first — `present 71% · snoozed 22%`.
+ *  Null when there is no waited time to split. */
+export function heldShares(holds: readonly WakeHold[]): string | null {
+  const total = new Map<string, number>();
+  let sum = 0;
+  for (const h of holds)
+    for (const [state, ms] of Object.entries(h.by_state)) {
+      total.set(state, (total.get(state) ?? 0) + ms);
+      sum += ms;
+    }
+  if (sum === 0) return null;
+  return [...total.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([state, ms]) => `${state} ${String(Math.round((ms / sum) * 100))}%`)
+    .join(' · ');
 }
 
 /** The median of an ascending, non-empty list (the two middles averaged when even). */
@@ -606,6 +624,9 @@ async function residencyReport(parsed: Parsed): Promise<number> {
         w(
           `    ${theme.meta('waited')} median ${ago(medianOf(waited))} ${theme.meta(`· ${String(waited.length)} act${waited.length === 1 ? '' : 's'}`)}\n`,
         );
+      // ADR 753: what held those waits — each gate state's share of all waited time.
+      const held = heldShares(s.holds ?? []);
+      if (held) w(`    ${theme.meta('held')}: ${held}\n`);
       // ADR 748: the priced total by UTC day, so a per-day spend rule reads off the hub.
       for (const d of s.by_day ?? [])
         w(

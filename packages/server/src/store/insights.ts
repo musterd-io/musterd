@@ -21,6 +21,9 @@ import {
   type RawDisputeRow,
   type WaitingOnEntry,
   type WakeMetrics,
+  type WakeGateState,
+  WakeGateStateSchema,
+  type WakeHold,
   type WakeSeatCost,
   type WakeSeatDay,
 } from '@musterd/protocol';
@@ -699,7 +702,7 @@ async function wakeWaitsBySeat(
   db: Driver,
   teamId: string,
   now: number,
-): Promise<Map<string, number[]>> {
+): Promise<Map<string, { act_ts: number; waited_ms: number }[]>> {
   const leases = await db.all<{ target: string; ts: number; act: string | null }>(WAKE_LEASED_SQL, [
     teamId,
     now - WAKE_WINDOW_MS,
@@ -711,7 +714,7 @@ async function wakeWaitsBySeat(
     const seen = first.get(key);
     if (!seen || l.ts < seen.ts) first.set(key, { seat: l.target, ts: l.ts });
   }
-  const bySeat = new Map<string, number[]>();
+  const bySeat = new Map<string, { act_ts: number; waited_ms: number }[]>();
   for (const [key, lease] of first) {
     const act = key.slice(key.indexOf('\u0000') + 1);
     const msg = await db.get<{ ts: number }>(
@@ -720,11 +723,88 @@ async function wakeWaitsBySeat(
     );
     if (!msg) continue;
     const list = bySeat.get(lease.seat) ?? [];
-    list.push(Math.max(0, lease.ts - msg.ts));
+    list.push({ act_ts: msg.ts, waited_ms: Math.max(0, lease.ts - msg.ts) });
     bySeat.set(lease.seat, list);
   }
-  for (const list of bySeat.values()) list.sort((a, b) => a - b);
+  for (const list of bySeat.values()) list.sort((a, b) => a.waited_ms - b.waited_ms);
   return bySeat;
+}
+
+/** ADR 753: a stretch with no `residency.wake_gate` row longer than this is `unobserved` — the
+ *  hourly keepalive plus a quarter hour for a slow poll. */
+export const WAKE_GATE_STALE_MS = 75 * 60 * 1000;
+
+export const WAKE_GATE_SQL = `SELECT target, ts, json_extract(detail, '$.state') AS state FROM audit
+        WHERE team_id = ? AND action = 'residency.wake_gate' AND ts > ?`;
+
+/**
+ * ADR 753. Split the wait `[from, to)` by the gate rows (ascending by ts) of one seat. Each row's
+ * state holds until the next row or for {@link WAKE_GATE_STALE_MS}, whichever is first; time no
+ * row covers is `unobserved`.
+ */
+export function splitWaitByGate(
+  rows: ReadonlyArray<{ ts: number; state: WakeGateState }>,
+  from: number,
+  to: number,
+): WakeHold['by_state'] {
+  const by: Partial<Record<WakeGateState | 'unobserved', number>> = {};
+  const add = (k: WakeGateState | 'unobserved', ms: number) => {
+    if (ms > 0) by[k] = (by[k] ?? 0) + ms;
+  };
+  let t = from;
+  // The row in force at `from`, if any: the newest at or before it.
+  let cur: { ts: number; state: WakeGateState } | null = null;
+  for (const r of rows) if (r.ts <= from) cur = r;
+  for (const r of rows) {
+    if (r.ts <= from) continue;
+    if (r.ts >= to) break;
+    const coveredTo = cur ? Math.min(r.ts, cur.ts + WAKE_GATE_STALE_MS) : t;
+    if (cur) add(cur.state, Math.max(0, coveredTo - t));
+    add('unobserved', r.ts - Math.max(t, coveredTo));
+    cur = r;
+    t = r.ts;
+  }
+  const coveredTo = cur ? Math.min(to, Math.max(t, cur.ts + WAKE_GATE_STALE_MS)) : t;
+  if (cur) add(cur.state, Math.max(0, coveredTo - t));
+  add('unobserved', to - Math.max(t, coveredTo));
+  return by;
+}
+
+/** ADR 753: each seat's waits split by gate state, in the seat's `waited_ms` order. */
+async function wakeHoldsBySeat(
+  db: Driver,
+  teamId: string,
+  now: number,
+  waits: Map<string, { act_ts: number; waited_ms: number }[]>,
+): Promise<Map<string, WakeHold[]>> {
+  const out = new Map<string, WakeHold[]>();
+  if (waits.size === 0) return out;
+  const earliest = Math.min(...[...waits.values()].flat().map((w) => w.act_ts));
+  const raw = await db.all<{ target: string; ts: number; state: string | null }>(WAKE_GATE_SQL, [
+    teamId,
+    Math.min(earliest, now - WAKE_WINDOW_MS) - WAKE_GATE_STALE_MS,
+  ]);
+  const rowsBySeat = new Map<string, { ts: number; state: WakeGateState }[]>();
+  for (const r of raw) {
+    const state = WakeGateStateSchema.safeParse(r.state);
+    if (!state.success) continue;
+    const list = rowsBySeat.get(r.target) ?? [];
+    list.push({ ts: r.ts, state: state.data });
+    rowsBySeat.set(r.target, list);
+  }
+  for (const list of rowsBySeat.values()) list.sort((a, b) => a.ts - b.ts);
+  for (const [seat, list] of waits) {
+    const rows = rowsBySeat.get(seat) ?? [];
+    out.set(
+      seat,
+      list.map((w) => ({
+        act_ts: w.act_ts,
+        waited_ms: w.waited_ms,
+        by_state: splitWaitByGate(rows, w.act_ts, w.act_ts + w.waited_ms),
+      })),
+    );
+  }
+  return out;
 }
 
 /**
@@ -988,6 +1068,7 @@ export async function deriveWakeMetrics(
   const teamPolicy = await getPolicy(db, teamId);
   // ADR 749: a seat leased but never woken still waited, so its row is kept with 0 wakes.
   const waits = await wakeWaitsBySeat(db, teamId, now);
+  const holds = await wakeHoldsBySeat(db, teamId, now, waits);
   for (const seat of waits.keys()) if (!wakesBySeat.has(seat)) wakesBySeat.set(seat, 0);
   const by_seat: WakeSeatCost[] = (
     await Promise.all(
@@ -1008,7 +1089,8 @@ export async function deriveWakeMetrics(
           budget_usd: budget,
           over_budget: budget !== null && costs.some((c) => c > budget),
           by_day: wakeCostByDay(priced),
-          ...(waits.has(seat) ? { waited_ms: waits.get(seat) } : {}),
+          ...(waits.has(seat) ? { waited_ms: waits.get(seat)!.map((w) => w.waited_ms) } : {}),
+          ...(holds.has(seat) ? { holds: holds.get(seat) } : {}),
         };
       }),
     )

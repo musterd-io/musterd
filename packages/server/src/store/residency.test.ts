@@ -43,6 +43,8 @@ import {
   settleWakeLease,
   markWakeSpawned,
   pruneRepeatedEdgeExhaustion,
+  resetWakeGateMemo,
+  WAKE_GATE_KEEPALIVE_MS,
 } from './residency.js';
 import type { MemberRow, TeamRow } from './rows.js';
 import { createTeam, getPolicy, setPolicy } from './teams.js';
@@ -380,6 +382,43 @@ withDrivers('residency', (o, kind) => {
     });
   });
 
+  describe('claimWakeLeases — the gate that held a seat is written on change (ADR 753)', () => {
+    it('writes on a change and hourly, not per poll, and a restart seeds from the table', async () => {
+      const { db, team, ada } = await seed();
+      await enroll(db, team, ada);
+      resetWakeGateMemo();
+      const gates = async () =>
+        (await listAudit(db, team.id))
+          .filter((r) => r.action === 'residency.wake_gate')
+          .map((r) => (JSON.parse(r.detail as string) as { state: string }).state);
+      const t0 = Date.now();
+      vi.useFakeTimers({ now: t0, toFake: ['Date'] });
+      try {
+        await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+        expect(await gates()).toEqual(['passed']);
+        // The same state on the next polls: nothing new.
+        vi.setSystemTime(t0 + 10_000);
+        await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+        // A restart forgets the memo; the newest row seeds it, so still nothing new.
+        resetWakeGateMemo();
+        vi.setSystemTime(t0 + 20_000);
+        await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+        expect(await gates()).toEqual(['passed']);
+        // A change writes at once.
+        await attach(db, ada.id, 'claude-code', 'conn1');
+        await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+        expect((await gates()).sort()).toEqual(['passed', 'present']);
+        // An unchanged state is rewritten once the keepalive has passed.
+        vi.setSystemTime(t0 + 20_000 + WAKE_GATE_KEEPALIVE_MS);
+        await attach(db, ada.id, 'claude-code', 'conn2');
+        await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+        expect((await gates()).sort()).toEqual(['passed', 'present', 'present']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('claimWakeLeases — an unreadable act_id is never leased (ADR 600)', async () => {
     it('does not lease a plain @team request_help, and a side message does not re-fire it', async () => {
       // The open ledger still owes the act (a message discharges nothing, ADR 436 clause 5). What
@@ -648,7 +687,8 @@ withDrivers('residency', (o, kind) => {
       const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
       expect(orders.map((o) => o.seat).sort()).toEqual(['Ada', 'bob']);
       // One transaction per seat that got an order; each is the recheck, the insert and its audit.
-      expect(txStatements).toHaveLength(2);
+      // ADR 753 adds one short append per seat whose gate state changed — here both, first poll.
+      expect(txStatements).toHaveLength(4);
       for (const n of txStatements) expect(n).toBeLessThanOrEqual(8);
     });
 

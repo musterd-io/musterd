@@ -11,6 +11,7 @@ import type {
   WakeContextPacket,
   WakeContextRequest,
   WakeDerivation,
+  WakeGateState,
   WakeLane,
   WakeOrder,
   Residence,
@@ -24,6 +25,7 @@ import {
   lastWorkingDayEnd,
   ResidencyPolicyOverrideSchema,
   ResidencyPolicySchema,
+  WakeGateStateSchema,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
@@ -2252,6 +2254,61 @@ async function applyWakeHold(
   pass.spendHold = wakeHoldEntry(pass.member.name, spend, unpriced);
 }
 
+/** ADR 753: how often an unchanged gate state is rewritten, so a gap longer than this reads as
+ *  `unobserved` on the report rather than as the last state held forever. */
+export const WAKE_GATE_KEEPALIVE_MS = 3_600_000;
+
+/** ADR 753: the last `residency.wake_gate` written per team and seat, seeded from the table. */
+const lastWakeGate = new Map<string, { state: WakeGateState; at: number }>();
+
+/** Test seam: forget the in-memory seed, as a daemon restart does. */
+export function resetWakeGateMemo(): void {
+  lastWakeGate.clear();
+}
+
+/**
+ * ADR 753: write a `residency.wake_gate` row for each seat whose gate state changed since the last
+ * row, or whose last row is a keepalive old. Best-effort: a failure is logged and the poll goes on.
+ */
+async function recordWakeGates(
+  db: Driver,
+  teamId: string,
+  host: string,
+  now: number,
+  gates: { seat: string; state: WakeGateState }[],
+): Promise<void> {
+  for (const { seat, state } of gates) {
+    const key = `${teamId}\u0000${seat}`;
+    try {
+      let last = lastWakeGate.get(key);
+      if (!last) {
+        const row = await db.get<{ ts: number; state: string | null }>(
+          `SELECT ts, json_extract(detail, '$.state') AS state FROM audit
+            WHERE team_id = ? AND action = 'residency.wake_gate' AND target = ?
+            ORDER BY ts DESC, id DESC LIMIT 1`,
+          [teamId, seat],
+        );
+        const parsed = WakeGateStateSchema.safeParse(row?.state);
+        if (row && parsed.success) last = { state: parsed.data, at: row.ts };
+      }
+      if (last && last.state === state && now - last.at < WAKE_GATE_KEEPALIVE_MS) {
+        lastWakeGate.set(key, last);
+        continue;
+      }
+      await appendAudit(db, teamId, {
+        actor: null,
+        action: 'residency.wake_gate',
+        target: seat,
+        result: 'allow',
+        detail: { state, host },
+      });
+      lastWakeGate.set(key, { state, at: now });
+    } catch (err) {
+      log.warn({ msg: 'wake_gate_write_failed', seat, err: String(err) });
+    }
+  }
+}
+
 /**
  * The host's poll (ADR 131 §4 as amended by ADR 576). Each enrolled seat's wake is worked out with
  * plain reads, outside any transaction, and then each seat that has one is rechecked and written in
@@ -2281,6 +2338,7 @@ export async function claimWakeLeases(
   // Lane 01M4VJNEX2: the backlog is rows already written, one per poll. Drop the repeats once
   // per process, before this poll's scans. A failure here must not stop the poll.
   await scheduleEdgeExhaustionPrune(db);
+  const gates: { seat: string; state: WakeGateState }[] = [];
   const passes = await deriveSeatPasses(
     db,
     teamId,
@@ -2291,7 +2349,9 @@ export async function claimWakeLeases(
     scope,
     breach,
     unpriced,
+    gates,
   );
+  await recordWakeGates(db, teamId, host, now, gates);
   const orders: WakeOrder[] = [];
   for (const pass of passes) {
     const order = await writeSeatPass(db, teamId, teamSlug, host, presenceTimeoutMs, now, pass);
@@ -2312,6 +2372,7 @@ async function deriveSeatPasses(
   scope: HostScope,
   breach: SpendCapBreach | null,
   unpriced: UnpricedWakeBreach | null,
+  gates: { seat: string; state: WakeGateState }[] = [],
 ): Promise<SeatPass[]> {
   const passes: SeatPass[] = [];
   const reclaimable = await listReclaimableMemberIds(db, teamId, now);
@@ -2339,14 +2400,28 @@ async function deriveSeatPasses(
     // ADR 463 §1 (Review Focus 1): whatever else shares the host label, a key wakes only the
     // seats it may serve — a sponsored seat only from its sponsor's own key.
     if (!hostMayServe(scope, member)) continue;
-    if (await hasLivePresence(db, member.id, presenceTimeoutMs)) continue;
-    if (reclaimable.has(member.id)) continue;
-    if (await liveLease(db, member.id, now)) continue;
+    // ADR 753: each gate below that holds the seat is noted, so the report can split a wait by it.
+    const gate = (state: WakeGateState) => gates.push({ seat: member.name, state });
+    if (await hasLivePresence(db, member.id, presenceTimeoutMs)) {
+      gate('present');
+      continue;
+    }
+    if (reclaimable.has(member.id)) {
+      gate('reclaimable');
+      continue;
+    }
+    if (await liveLease(db, member.id, now)) {
+      gate('lease_live');
+      continue;
+    }
     // Local-session guard snooze (increment 4): the host reported a live local session in this
     // seat's workspace — don't re-derive a lease every tick while someone is plainly working there.
     // ADR 485: a repeated local-session deferral backs off instead of re-deriving every 5 min.
     const snoozeUntil = await deferralSnoozeUntil(db, teamId, member.name);
-    if (snoozeUntil !== null && now < snoozeUntil) continue;
+    if (snoozeUntil !== null && now < snoozeUntil) {
+      gate('snoozed');
+      continue;
+    }
     const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
     const pass: SeatPass = {
       member,
@@ -2374,15 +2449,20 @@ async function deriveSeatPasses(
       const sponsorName = (await getMemberById(db, provisioned.sponsor_id))?.name ?? '?';
       pass.plan = { kind: 'provisioned', provisionId: provisioned.id, sponsorName };
       await applyWakeHold(db, teamId, pass, breach, unpriced);
+      gate('passed');
       continue;
     }
-    if ((await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap) continue;
+    if ((await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap) {
+      gate('hourly_cap');
+      continue;
+    }
 
     // ADR 735: the act lane reads no cooldown — every open directed act is due on this poll; the
     // hourly cap above and the attempt cap below are what bound it.
     const cooled =
       policy.lane === 'act' ||
       (await wakesSince(db, teamId, member.name, now - policy.cooldown_ms)) === 0;
+    gate(cooled ? 'passed' : 'cooldown');
     const candidates = await dueCandidates(
       db,
       teamSlug,

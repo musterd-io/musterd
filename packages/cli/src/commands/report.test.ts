@@ -200,6 +200,19 @@ describe('report command', () => {
     const waited = await capture(() => reportCommand(parseArgs(['residency'])));
     expect(waited.out).toContain('waited median 5m');
     expect(waited.out).toContain('· 1 act');
+
+    // ADR 753: a gate row inside that wait prints what held it, as shares of the waited time.
+    for (const [state, at] of [
+      ['present', msg!.ts - 60_000],
+      ['passed', msg!.ts + 4 * 60_000],
+    ] as const)
+      await server.store.run(
+        `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
+         VALUES (?, ?, ?, NULL, 'residency.wake_gate', 'nick', 'allow', ?, ?)`,
+        [ulid(), team!.id, at, JSON.stringify({ state, host: 'h' }), now],
+      );
+    const held = await capture(() => reportCommand(parseArgs(['residency'])));
+    expect(held.out).toContain('held: present 80% · passed 20%');
   });
 
   it('shows the per-wake approval threshold on its own line, and says nothing when unset (ADR 635)', async () => {

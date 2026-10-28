@@ -388,6 +388,9 @@ export type AuditAction =
   | 'residency.enrolled'
   | 'residency.revoked'
   | 'residency.wake_leased'
+  // ADR 753: the gate that held an enrolled seat on a poll (detail: { state, host }), written
+  // when the seat's state changes and at most hourly as a keepalive. Actor null.
+  | 'residency.wake_gate'
   | 'residency.dispatch_suppressed'
   // ADR 716: a musterd continuation the picker skipped because the lane's latest
   // `lane.claims_filed` reading has an unconfirmed claim. One row per filing id
@@ -877,6 +880,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'residency.enrolled': 'actor',
   'residency.revoked': 'actor',
   'residency.wake_leased': 'none',
+  'residency.wake_gate': 'none',
   'residency.dispatch_suppressed': 'none',
   'residency.continuation_held': 'none',
   'residency.woke': 'none',
@@ -1199,6 +1203,8 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'residency.enrolled',
   'residency.revoked',
   'residency.wake_leased',
+  // ADR 753 — the gate state beside the lease, so a hub's report splits a joiner-minted wait too.
+  'residency.wake_gate',
   'residency.host_suspended',
   'residency.session_captured',
   'residency.session_ended',

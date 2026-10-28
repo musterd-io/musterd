@@ -306,6 +306,34 @@ export const WakeSeatDaySchema = z.object({
 });
 export type WakeSeatDay = z.infer<typeof WakeSeatDaySchema>;
 
+/**
+ * ADR 753. The gate that held a seat on a poll — the first of `deriveSeatPasses`' gates to stop it,
+ * or `passed` — written as a `residency.wake_gate` row on change. `unobserved` is the report's own
+ * state for a stretch with no row at all (no host polled, or the daemon was down); never written.
+ */
+export const WakeGateStateSchema = z.enum([
+  'present',
+  'reclaimable',
+  'lease_live',
+  'snoozed',
+  'hourly_cap',
+  'cooldown',
+  'passed',
+]);
+export type WakeGateState = z.infer<typeof WakeGateStateSchema>;
+
+/** ADR 753. One act's wait (a `waited_ms` value) split by the gate state the seat was in. */
+export const WakeHoldSchema = z.object({
+  act_ts: z.number().int(),
+  waited_ms: z.number().int().nonnegative(),
+  /** Milliseconds per state; a state the wait never touched is absent. */
+  by_state: z.record(
+    z.union([WakeGateStateSchema, z.literal('unobserved')]),
+    z.number().int().nonnegative(),
+  ),
+});
+export type WakeHold = z.infer<typeof WakeHoldSchema>;
+
 export const WakeSeatCostSchema = z.object({
   seat: z.string(),
   wakes: z.number().int(),
@@ -322,6 +350,9 @@ export const WakeSeatCostSchema = z.object({
    * A list, not a median, so a reader can pool any set of seats exactly. Optional for back-compat.
    */
   waited_ms: z.array(z.number().int().nonnegative()).optional(),
+  /** ADR 753. Each `waited_ms` act's wait split by gate state, in `waited_ms` order. Optional for
+   *  back-compat; absent when the seat has no waits. */
+  holds: z.array(WakeHoldSchema).optional(),
 });
 export type WakeSeatCost = z.infer<typeof WakeSeatCostSchema>;
 
