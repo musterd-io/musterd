@@ -13,6 +13,7 @@ import { deriveAsks } from '../live/asks';
 import type { sendAct } from '../live/client';
 import type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode } from '../live/office-scene';
 import { spritesFromUrl } from './broadcast';
+import { projectWallBoard } from '../live/office-scene/wallboard';
 
 // `?promptbar`: the /live composer on the preview floor, so it can be looked at without a signed-in
 // admin seat (on /live it mounts only for one). There is no daemon here, so its sends go to a fake that
@@ -370,6 +371,33 @@ const CAPTIONS: Caption[] = [
 const previewSearch = () =>
   new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
 
+/**
+ * `?board` — a board as full as a busy team's (ADR 751): six goals, about eighty lanes across every
+ * column, so the wall's goal rows, tabs and piles can be eyeballed. Deterministic, so a reload looks
+ * the same. Without the flag the board hangs empty, as it always has here.
+ */
+const BOARD_GOALS = ['security', 'live-delight', 'office-realism', 'cloud', 'launch', 'demo'];
+function fixtureBoard(): NonNullable<OfficeData['wallBoard']> {
+  const states = ['open', 'claimed', 'active', 'blocked', 'awaiting_acceptance', 'done'] as const;
+  const lanes = Array.from({ length: 80 }, (_, i) => {
+    const goal = i % 9 === 8 ? null : BOARD_GOALS[(i * 7) % BOARD_GOALS.length]!;
+    const state = states[(i * 5 + (i >> 2)) % states.length]!;
+    return {
+      id: `01FIXTURE${String(i).padStart(4, '0')}`,
+      state,
+      goal_id: goal,
+      updated_at: 1_700_000_000_000 + i * 60_000,
+    };
+  });
+  return projectWallBoard(
+    { lanes, warnings: [] } as unknown as Parameters<typeof projectWallBoard>[0],
+    new Set(),
+    1_700_000_000_000 + 90 * 60_000,
+    ['due', 'waiting', 'overdue', 'read'],
+    BOARD_GOALS,
+  )!;
+}
+
 function OfficePreviewPage() {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLDivElement>(null);
@@ -513,6 +541,7 @@ function OfficePreviewPage() {
         }),
         ...newcomers,
       ],
+      ...(previewSearch().has('board') ? { wallBoard: fixtureBoard() } : {}),
     }),
     [teamName, present, away, idle, stale, offlineSet, dndSet, dreamSet, newcomers, devRole],
   );

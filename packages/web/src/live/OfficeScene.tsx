@@ -68,6 +68,9 @@ function laneTitlesOf(board: LaneBoard | null): ReadonlyMap<string, string> | un
   return titles;
 }
 
+/** One shared empty list, so a route without goals never re-runs the room's memo. */
+const NO_GOALS: readonly string[] = [];
+
 function computeData(
   teamName: string,
   teamWorkingHours: WorkingHours | null,
@@ -78,6 +81,7 @@ function computeData(
   asks: readonly AskView[],
   you: string | null = null,
   now: number = Date.now(),
+  goals: readonly string[] = NO_GOALS,
 ): OfficeData {
   const byName = new Map(entries.map((e) => [e.name, e]));
   const humans = new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name));
@@ -94,6 +98,7 @@ function computeData(
       stalledLaneIds(board, now),
       now,
       experimentEntries(board, now).map((e) => e.status),
+      goals,
     ),
     laneOwners: laneOwnersOf(board),
     // Who is in an open huddle right now (ADR 378 increment 2) — folded from the timeline the page
@@ -210,6 +215,7 @@ export function OfficeScene({
   fit = 'room',
   entries,
   board,
+  goals = NO_GOALS,
   asks,
   onReady,
   topSlot,
@@ -315,9 +321,10 @@ export function OfficeScene({
     return () => window.clearTimeout(t);
   }, [roster, lingerTick]);
   const data = useMemo(
-    () => computeData(teamName, teamWorkingHours, roster, entries, board, envelopes, asks, you),
+    () =>
+      computeData(teamName, teamWorkingHours, roster, entries, board, envelopes, asks, you, Date.now(), goals),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- lingerTick re-reads the clock
-    [teamName, teamWorkingHours, roster, entries, board, envelopes, asks, you, lingerTick],
+    [teamName, teamWorkingHours, roster, entries, board, envelopes, asks, you, goals, lingerTick],
   );
   // Latest-value refs for the mount effect below, which subscribes ONCE and must not re-run when a
   // prop identity changes (re-running it would tear down and rebuild the whole canvas scene).

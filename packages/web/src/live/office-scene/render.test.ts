@@ -72,7 +72,7 @@ import type { Weather } from './weather';
 import { assignSeats } from './seating';
 import type { RenderOpts } from './render';
 import type { OfficeNode, Pose, WelcomePaint } from './types';
-import { projectWallBoard, STICKY_CAP, type WallBoard } from './wallboard';
+import { projectWallBoard, type WallBoard } from './wallboard';
 import { fmtOps, recordingCtx, type RecordedOp } from './recording-ctx';
 import { deviceBox, measureBounds, type SpriteCache } from './sprite-cache';
 import type { Lane, LaneState, WorkingHours } from '@musterd/protocol';
@@ -122,7 +122,7 @@ const measuredBox: SpriteCache['box'] = (_key, draw) => {
 };
 
 /** A minimal lane for wall-board fixtures — only id and state matter to the wall. */
-function laneFix(id: string, state: LaneState): Lane {
+function laneFix(id: string, state: LaneState, over: Partial<Lane> = {}): Lane {
   return {
     id,
     team: 'revive',
@@ -146,6 +146,7 @@ function laneFix(id: string, state: LaneState): Lane {
     claimed_at: null,
     resolved_at: null,
     updated_at: 1,
+    ...over,
   };
 }
 
@@ -502,22 +503,22 @@ describe('the wall agile board', () => {
     expect(texts).toContain('11am–3pm');
   });
 
-  it('writes only the overflow badge — a column past its cap says +N, nothing else says anything', () => {
+  it('writes only the goal tabs — a board without goals says nothing at all (ADR 751)', () => {
+    const lanes = Array.from({ length: 12 }, (_, i) =>
+      laneFix(`L${i}`, 'open', { goal_id: i % 3 === 0 ? 'office-realism' : i % 3 === 1 ? 'security' : null }),
+    );
     const texts: string[] = [];
-    const crowded = projectWallBoard({
-      lanes: Array.from({ length: STICKY_CAP + 2 }, (_, i) => laneFix(`L${i}`, 'open')),
-      warnings: [],
-    })!;
-    boardScene(textCtx([], texts), crowded);
-    expect(texts).toContain('+2');
+    const rowed = projectWallBoard({ lanes, warnings: [] }, new Set(), 1, [], ['security', 'office-realism'])!;
+    boardScene(textCtx([], texts), rowed);
+    // The calendar beside it writes its own words; the board's are the tab labels, in row order.
+    expect(texts.filter((t) => ['security', 'office', 'other'].includes(t))).toEqual(['security', 'office', 'other']);
     const quiet: string[] = [];
     boardScene(textCtx([], quiet), wallData());
-    expect(quiet.some((t) => /^\+\d+$/.test(t))).toBe(false);
+    expect(quiet.filter((t) => !texts.includes(t) || ['security', 'office', 'other'].includes(t))).toEqual([]);
   });
 
-  /** Fills painted in sticky-paper colours — the wall's DOM-cap analogue: never more than 6 columns
-   * of STICKY_CAP notes (each note is two fills: paper + header edge), however big the real board. */
-  it('never pins more paper than the cap allows, however many lanes exist', () => {
+  /** Every lane on the board is a card on the wall now (ADR 751): paper piles, nothing is capped. */
+  it('pins a card for every lane on the board, however many there are', () => {
     const paints: string[] = [];
     const flood = projectWallBoard({
       lanes: Array.from({ length: 80 }, (_, i) =>
@@ -526,10 +527,8 @@ describe('the wall agile board', () => {
       warnings: [],
     })!;
     boardScene(textCtx(paints, []), flood);
-    const paper = new Set(['#EFE8D8', '#E6E3F8', '#D8D4F3', '#F5DAD4', '#DFDCF6', '#D5ECDF']);
-    const notes = paints.filter((c) => paper.has(c)).length;
-    expect(notes).toBeGreaterThan(0);
-    expect(notes).toBeLessThanOrEqual(6 * STICKY_CAP);
+    // One cast shadow under each card, whatever its state's paper.
+    expect(paints.filter((c) => c === 'rgba(60, 35, 10, 0.26)')).toHaveLength(80);
   });
 
   // A stopped plan's cards (lane 01M4V9YKMG): sun-bleached paper, paler tape, a curled corner.
@@ -1875,20 +1874,21 @@ describe('background layer (sprite cache)', () => {
     const holeFills = (ops: string[]) =>
       ops.filter((o) => o.includes('rgba(52, 28, 8, 0.75)')).length;
     const full = board();
-    // `projectWallBoard` derives `held` from the board (lane 01M50WEBTC); strip it for a cork with no history.
+    // `projectWallBoard` derives holes from the board (lane 01M50WEBTC); strip them for a cork with no history.
     const emptied: WallBoard = full.map((c) => ({ key: c.key, count: c.count, stickies: [] }));
     // never held: a cork with no history shows no holes at all
     expect(holeFills(draw(emptied))).toBe(0);
-    // held 3 slots in the first column and 2 in the second, now empty: five holes
+    // three places held in the first column and two in the second, now empty: five holes
+    const hole = (x: number) => ({ row: 0, x, y: 0.5 });
     const held: WallBoard = emptied.map((c, i) =>
-      i === 0 ? { ...c, held: 3 } : i === 1 ? { ...c, held: 2 } : c,
+      i === 0 ? { ...c, holes: [hole(0.1), hole(0.5), hole(0.9)] } : i === 1 ? { ...c, holes: [hole(0.2), hole(0.8)] } : c,
     );
     expect(holeFills(draw(held))).toBe(5);
-    // a card back on one of those slots covers its hole: held 3, one card hanging -> two holes remain
-    const oneBack: WallBoard = held.map((c, i) =>
-      i === 0 ? { ...c, stickies: full[0]!.stickies.slice(0, 1) } : c,
+    // past three in a cell they read as a scribble, so the cork keeps only three
+    const worn: WallBoard = emptied.map((c, i) =>
+      i === 0 ? { ...c, holes: [0.1, 0.3, 0.5, 0.7, 0.9].map(hole) } : c,
     );
-    expect(holeFills(draw(oneBack))).toBe(4);
+    expect(holeFills(draw(worn))).toBe(3);
   });
 
   it('the sign and the board paint only when there is one; the clock hands always do', () => {

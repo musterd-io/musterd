@@ -844,8 +844,13 @@ export const BEAM_SHEAR = 46;
  * `h` 88 (was 74) is the read strip along the bottom (ADR 644 increment 3): 14 units of cork under an
  * oak rail, one pin per dated read. It grew downward, so `uc` came down by half of it and the top edge
  * and every column stayed where they hung.
+ *
+ * 170 × 120 (lane 01M61T07DA, ADR 751): the board holds the goal grid now — a row per goal, a gutter
+ * for their tabs — and paper that stays where it was pinned, which needs room to spread. It grew 20
+ * along the wall (16 units of plaster left before window 2, 12 before the wall's end) and 32 down, so
+ * its top edge still hangs where it always has.
  */
-export const WALL_BOARD = { wall: 1 as const, tc: 0.885, uc: 0.5628, w: 150, h: 88 };
+export const WALL_BOARD = { wall: 1 as const, tc: 0.8922, uc: 0.4787, w: 170, h: 120 };
 
 /** What sits on a shelf top. A credenza-height top is a real surface — leaving it bare repeats the
  *  same uniformity problem one shelf down. */

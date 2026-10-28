@@ -28,6 +28,8 @@ export interface OfficeRoomProps {
   liveIds: Set<string>;
   entries: RoomEntry[];
   board: LaneBoard | null;
+  /** The team's goal ids in its own order (`report.goals`): the wall board's rows (ADR 751). */
+  goals?: readonly string[];
   /** The derived asks with the tier clock applied (ADR 464 §3.3) — the room's ask moment reads them. */
   asks: readonly AskView[];
   status: ConnStatus;
@@ -64,7 +66,12 @@ export interface RoomStream {
 export function officeRoom(
   teamName: string,
   stream: RoomStream,
-  derived: { entries: RoomEntry[]; board: LaneBoard | null; asks: readonly AskView[] },
+  derived: {
+    entries: RoomEntry[];
+    board: LaneBoard | null;
+    asks: readonly AskView[];
+    goals?: readonly { id: string; status?: string }[] | undefined;
+  },
 ): OfficeRoomProps {
   return {
     teamName,
@@ -74,6 +81,8 @@ export function officeRoom(
     liveIds: stream.liveIds,
     entries: derived.entries,
     board: derived.board,
+    // Shipped goals give up their rows: their cards join the everything-else row.
+    goals: (derived.goals ?? []).filter((g) => g.status !== 'shipped').map((g) => g.id),
     asks: derived.asks,
     status: stream.status,
     pulses: stream.pulses,
