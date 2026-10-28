@@ -1322,3 +1322,14 @@ plus the host's 10 s poll, so it is a floor set by plumbing, not by the model: a
 already live, pays neither. What the cloud buys is presence while the laptop is shut, at these
 latencies and roughly two cents a wake. big-body's read-only post-boot Verify (pilot gate) is
 asked and still outstanding as this entry lands; the falsifier stands until it answers.
+
+**Addendum, same day (2026-10-28):** big-body routed the run itself to platform (the security
+seat holds no operational authority) and, on the platform operator's sanitized observations —
+600/seat on credential and config files, daemon and host as uid 1001 with root limited to the
+tailnet phase, invite consumed, the active host credential and ready provision pinned to
+cloud-delta-2 with no other target — returned a **PASS** verdict on the post-boot gate
+(observed 2026-10-28). Narrowly stated: the pilot's Verify question is answered for the
+checks as run by one operator and reported second-hand; big-body did not independently
+re-run them. Falsify: an independent re-run of those presence/mode/UID checks showing any
+different reading. The lane's own falsifier (a human step on the machine, or a
+`bound_elsewhere` in the week) was separately not observed in this run's record.
