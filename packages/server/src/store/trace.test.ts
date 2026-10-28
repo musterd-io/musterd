@@ -42,7 +42,7 @@ withDrivers('trace', (_o, kind) => {
       const tables = (
         await db.all<{ name: string }>(
           db.dialect === 'sqlite'
-            ? "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            ? "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_stat%' ORDER BY name"
             : "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 1",
         )
       ).map((r) => r.name);
