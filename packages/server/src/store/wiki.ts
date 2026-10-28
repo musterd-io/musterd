@@ -103,6 +103,7 @@ for (const [net, prefix] of [
   ['::1', 128],
   ['fc00::', 7],
   ['fe80::', 10],
+  ['fec0::', 10],
   ['ff00::', 8],
 ] as const)
   NOT_PUBLIC.addSubnet(net, prefix, 'ipv6');

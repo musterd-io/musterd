@@ -193,6 +193,7 @@ describe('wiki source host (lane 01M61P6WG3)', () => {
     '::',
     'fd7a:115c:a1e0::1',
     'fe80::1',
+    'fec0::1',
     '::ffff:127.0.0.1',
     '::ffff:a00:1',
   ])('counts %s as off the public internet', (a) => expect(isNonPublicAddress(a)).toBe(true));
