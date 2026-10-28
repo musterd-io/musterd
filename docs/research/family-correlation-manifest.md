@@ -63,11 +63,42 @@ a seat on revive can see who wrote the change (lazara). The in-team effect is a 
 and a later arm. The reviewer must answer in JSON: a list of `{file, line, summary}` findings, which
 may be empty.
 
+**The diff carries explicit line numbers.** Every added and context line is prefixed with its
+new-file line number, so no reviewer has to work numbers out from the hunk headers. How precisely a
+model does that is a model trait and probably a family trait, and it would put correlated misses
+into `D` where the defect was in fact found (lazara).
+
+**The prompt, fixed here:**
+
+> You are reviewing a code change before it is merged. Below are the task the change implements and
+> the diff. Each added or unchanged line is prefixed with its line number in the new file; use that
+> number. The change may contain no defect. Report only defects: behaviour that is wrong for the
+> task, not style. Answer with JSON only, in the form
+> `{"findings": [{"file": "<path>", "line": <new-file line>, "summary": "<one sentence>"}]}`. Return
+> `{"findings": []}` if you find no defect.
+>
+> TASK: {task text}
+>
+> DIFF: {numbered diff}
+
+**Sampling:** temperature 0 where the model's API accepts it, otherwise the provider default, with
+what each model ran at recorded in the finding. At most 2,000 output tokens. Reasoning or effort
+settings stay at the provider default, and are recorded. Nothing here changes after the pilot
+starts.
+
 ## Measures
 
-- **Hit:** a finding in the seeded file whose line is within 3 lines of the seeded hunk. Scored by
-  script, with no judge.
+- **Hit, primary:** a finding in the seeded file whose line is within 3 lines of the seeded hunk.
+  Scored by script, with no judge.
+- **Hit, coarse:** a finding in the seeded file whose line falls in the same function as the seeded
+  hunk, or in the same diff hunk when the site is outside any function. The verdict must hold under
+  both rules (see Verdict rules).
+- **Location of a deletion** (missed branch, dropped error return): the new-file line where the
+  removed lines were, which is the first line after them.
 - **Miss:** a seeded item with no hit.
+- **A reviewer with no variance:** phi is undefined for a reviewer who misses every seeded item or
+  none. That reviewer's pairs are dropped from `D` and reported, with no continuity correction. If
+  that leaves no within-family pair, the run is inconclusive.
 - **Primary statistic:** `D` = the mean phi coefficient of the miss indicators over within-family
   pairs, minus the mean over cross-family pairs. Phi is computed per reviewer pair across all seeded
   items. Item difficulty raises phi for every pair alike, so it cancels in the difference.
@@ -89,11 +120,17 @@ that excludes 0.
 | 0.26 | 54% | 75% | 88% | 96% |
 
 The **minimum effect worth acting on is `D = 0.15`**. Below that, a family proxy would buy so little
-independence that it should not drive routing. **N = 80 seeded items** gives about 80% power at that
-effect, and the 20 items in the first draft would not have. The miss rate matters as much as N: at
+independence that it should not drive routing. Simulated at that effect itself, **N = 80 seeded
+items gives 74% power and N = 100 gives 81%.** The 20 items in the first draft would not have come
+close. N = 80 is the pre-registered size, accepted at 74% to keep the spend inside the stop.
+N = 100 costs about $25–35 more, and is nick's choice at the spend approval. The choice is
+recorded here before the pilot. The miss rate matters as much as N: at
 a 10% or 90% miss rate, few pairs disagree and power collapses. The pilot sets the rate.
 
 ## Verdict rules, fixed before the run
+
+`D` is computed under both hit rules. A verdict is stated only when both rules give it. If they
+disagree, the run is inconclusive, and the finding reports both.
 
 - **Lower bound of `D` > 0: "same-family reviewers miss together more than cross-family ones."**
   ADR 314's presumption holds on seeded defects, and the finding states the size with its interval.
@@ -133,6 +170,11 @@ Each review is about 10k input and 1k output tokens: $0.225 at Opus-class list r
 figures price all six models at that rate. The lower figures assume the cheaper models bring the
 mean to about $0.15. **Hard stop: $160 of model spend**, retries included.
 **nick approves the spend** before the pilot starts.
+
+**Re-ask after the pilot.** The six models are not priced yet. After the pilot, the mean cost per
+review is multiplied by the main run's reviews (600 at N = 80) and added to the pilot's spend. If
+that exceeds $160, the run stops there and goes back to nick before any main-run item, so it is
+never found out at item 70 (lazara).
 
 ## Procedure
 
