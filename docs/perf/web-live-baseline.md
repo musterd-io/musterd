@@ -2416,6 +2416,14 @@ over its ceiling, so the ceiling moves by the bundle's own size and no more. No 
 animation loop (one custom property, set when the minutes change). Measured + 15% would loosen it (ADR 183). Folding
 the card's rules into `Broadcast.css` once that lane lands drops one stylesheet request; it does not change the bytes.
 
+## 2026-10-28 — members' faces from their rendered figures; Total JS RAISED 360,600 → 361,600 B (lane 01M6017Z38)
+
+The team panel, the Now card, the asks rail and the other `MemberFace` sites now show each member's head and
+shoulders as the rendered office draws them. The office paints the portraits from the figure sheets it already
+loads, so the painter lives in the office's lazy chunk. Only the small store `MemberFace` reads (`live/portraits.ts`)
+is eager. Initial JS on /live reads 147.5 KB of 148.0. Total JS reads 351.9 KB local against a 352.1 KB ceiling,
+and CI reads ~0.8 KB above local, so the ceiling moves 1,000 B. Measured + 15% would loosen (ADR 183).
+
 ## 2026-10-27 — allowance chips in the /live header; Total JS RAISED 358,000 → 360,600 B, Live CSS RAISED 27,950 → 28,200 B (lane 01M5ZFNPKA)
 
 ADR 744 moves each human's allowance off the member cards into the /live top bar: one chip per human and a card

@@ -4,6 +4,7 @@ import { CaptionPill } from './CaptionPill';
 import type { Caption } from './captions';
 import type { LiveConfig } from './client';
 import { acceptanceCapacity, initial, memberAvatar, memberColor } from './format';
+import { usePortrait } from './portraits';
 import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
 import { Experiments, ReadMark } from './Experiments';
@@ -143,12 +144,7 @@ export function TeamColumn({
                 onMouseEnter={() => onLink?.(c.name)}
                 onMouseLeave={() => onLink?.(null)}
               >
-                <span
-                  className="lc-team__pip-avatar"
-                  style={{ background: memberAvatar(c.name, c.kind, c.member.hue) }}
-                >
-                  {initial(c.name)}
-                </span>
+                <AvatarDisc className="lc-team__pip-avatar" name={c.name} fill={memberAvatar(c.name, c.kind, c.member.hue)} />
                 {showLogo && (
                   <span
                     className="lc-team__pip-logo"
@@ -242,13 +238,7 @@ function IdleStrip({ cards }: { cards: TeamCardModel[] }) {
             className={`lc-team__idle-seat${c.state === 'away' ? ' is-away' : ''}`}
             title={`${c.name} · ${c.stateLabel}`}
           >
-            <span
-              className="lc-team__idle-avatar"
-              aria-hidden="true"
-              style={{ background: memberAvatar(c.name, c.kind, c.member.hue) }}
-            >
-              {initial(c.name)}
-            </span>
+            <AvatarDisc className="lc-team__idle-avatar" name={c.name} fill={memberAvatar(c.name, c.kind, c.member.hue)} hidden />
             {c.name}
           </li>
         ))}
@@ -303,5 +293,24 @@ function TeamColumnNotes({
         </p>
       )}
     </>
+  );
+}
+
+/** A member's disc: their rendered portrait once the office has painted it (`portraits.ts`, lane
+ *  01M6017Z38), else their initial on their colour. */
+function AvatarDisc({ className, name, fill, hidden = false }: { className: string; name: string; fill: string; hidden?: boolean }) {
+  const portrait = usePortrait(name);
+  return (
+    <span
+      className={className}
+      aria-hidden={hidden || undefined}
+      style={
+        portrait
+          ? { background: `${fill} url(${portrait}) center / cover no-repeat`, color: 'transparent' }
+          : { background: fill }
+      }
+    >
+      {initial(name)}
+    </span>
   );
 }

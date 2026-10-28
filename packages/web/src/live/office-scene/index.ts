@@ -96,6 +96,7 @@ import {
   type Unit,
   type UnitHook,
 } from './damage';
+import { paintPortraits } from './portrait';
 import { compositeCapFor, type LayerId, wornLayers } from './rendered/figure';
 import { isRoomImage, roomImagesWanted } from './rendered/roomState';
 import { domImage, loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, syncImages, type RenderedAssets } from './rendered/assets';
@@ -1041,6 +1042,9 @@ export function mountOffice(
     bctx.clearRect(0, 0, width, height);
     if (!rendered) return; // the art is not in yet: nothing to paint, and the room is held invisible
     const nodes = actors.nodes();
+    // Members' faces for the rest of /live, painted from these same sheets (lane 01M6017Z38). Keyed per
+    // member, so a bake repaints only someone whose look changed or whose sheet just arrived.
+    if (rendered.figure) paintPortraits(rendered.figure, nodes.values());
     const poses = actors.poses();
     const anchors = renderScene(
       bctx,

@@ -2,6 +2,7 @@ import type { MemberSummary } from '@musterd/protocol';
 import { useId } from 'react';
 import { appearanceOf } from './office-scene/appearance';
 import { hueOf, kindOf, memberColor } from './format';
+import { usePortrait } from './portraits';
 
 /**
  * A member's face as the office draws them, small enough for a row (live-briefing spec, "The Now card,
@@ -13,6 +14,11 @@ import { hueOf, kindOf, memberColor } from './format';
  * The scene's agent/human tell survives (ADR 079): an agent wears the dark visor with two eyes in its
  * own colour, a human has eyes. A name the roster does not know gets a plain disc — never a face made
  * up for nobody. Static SVG: no canvas, no animation, nothing to pause.
+ *
+ * Once the office has painted the member from their rendered figure (`portraits.ts`, lane 01M6017Z38),
+ * that head and shoulders replaces the vector face in the same circle: the team panel, the Now card
+ * and the rail show the person the floor shows. The vector face stays as the fallback for a /live
+ * that never opened the office.
  */
 export function MemberFace({
   name,
@@ -24,6 +30,7 @@ export function MemberFace({
   size?: number;
 }) {
   const clip = useId();
+  const portrait = usePortrait(name);
   if (!roster.has(name)) {
     return (
       <svg className="mface" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
@@ -33,6 +40,21 @@ export function MemberFace({
   }
   const kind = kindOf(name, roster);
   const color = memberColor(name, kind, hueOf(name, roster));
+  if (portrait) {
+    return (
+      <svg className="mface" width={size} height={size} viewBox="0 0 32 32" role="img" aria-label={name}>
+        <title>{name}</title>
+        <clipPath id={clip}>
+          <circle cx="16" cy="16" r="15.5" />
+        </clipPath>
+        <g clipPath={`url(#${clip})`}>
+          <rect width="32" height="32" fill="var(--lc-surface-2)" />
+          <image href={portrait} x="0" y="0" width="32" height="32" preserveAspectRatio="xMidYMid slice" />
+        </g>
+        <circle cx="16" cy="16" r="15.5" fill="none" stroke="var(--lc-border-2)" />
+      </svg>
+    );
+  }
   const look = appearanceOf({ name, kind });
   const hair = look.hair !== 'bald';
   const long = look.hair === 'long' || look.hair === 'bob' || look.hair === 'ponytail';
