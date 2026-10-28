@@ -377,22 +377,31 @@ const previewSearch = () =>
  * the same. Without the flag the board hangs empty, as it always has here.
  */
 const BOARD_GOALS = ['security', 'live-delight', 'office-realism', 'cloud', 'launch', 'demo'];
-function fixtureBoard(): NonNullable<OfficeData['wallBoard']> {
+/** What the preview's board buttons have done to the fixture (ADR 751): lanes thrown away, and lanes
+ *  moved — each a new column and place, put there by a present member, so the room walks it. */
+interface BoardEdits {
+  tossed: number[];
+  moved: Record<number, { state: 'claimed' | 'active' | 'done'; x: number; y: number; at: number }>;
+}
+const NO_EDITS: BoardEdits = { tossed: [], moved: {} };
+
+function fixtureBoard(edits: BoardEdits = NO_EDITS): NonNullable<OfficeData['wallBoard']> {
   const states = ['open', 'claimed', 'active', 'blocked', 'awaiting_acceptance', 'done'] as const;
   const lanes = Array.from({ length: 80 }, (_, i) => {
     const goal = i % 9 === 8 ? null : BOARD_GOALS[(i * 7) % BOARD_GOALS.length]!;
     const state = states[(i * 5 + (i >> 2)) % states.length]!;
-    return {
-      id: `01FIXTURE${String(i).padStart(4, '0')}`,
-      state,
-      goal_id: goal,
-      updated_at: 1_700_000_000_000 + i * 60_000,
-    };
+    const id = `01FIXTURE${String(i).padStart(4, '0')}`;
+    if (edits.tossed.includes(i))
+      return { id, state: 'abandoned', goal_id: goal, owner_seat: 'Cy', created_by: 'Cy', updated_at: Date.now() };
+    const moved = edits.moved[i];
+    if (moved)
+      return { id, state: moved.state, goal_id: goal, updated_at: moved.at, card: { x: moved.x, y: moved.y, by: 'Bo', at: moved.at } };
+    return { id, state, goal_id: goal, updated_at: 1_700_000_000_000 + i * 60_000 };
   });
   return projectWallBoard(
     { lanes, warnings: [] } as unknown as Parameters<typeof projectWallBoard>[0],
     new Set(),
-    1_700_000_000_000 + 90 * 60_000,
+    Date.now(),
     ['due', 'waiting', 'overdue', 'read'],
     BOARD_GOALS,
   )!;
@@ -465,6 +474,8 @@ function OfficePreviewPage() {
   /* A role assigned while the room is open (lane 01M5FXZF49): the toolbar's 🪪 gives Dev a job and
      takes it away again, so the plate's job swipe can be judged without a daemon. */
   const [devRole, setDevRole] = useState('');
+  // `?board` (ADR 751): the board buttons' edits to the fixture — a move or a toss for the room to walk.
+  const [boardEdits, setBoardEdits] = useState<BoardEdits>(NO_EDITS);
 
   const buildData = useCallback(
     (): OfficeData => ({
@@ -541,9 +552,9 @@ function OfficePreviewPage() {
         }),
         ...newcomers,
       ],
-      ...(previewSearch().has('board') ? { wallBoard: fixtureBoard() } : {}),
+      ...(previewSearch().has('board') ? { wallBoard: fixtureBoard(boardEdits) } : {}),
     }),
-    [teamName, present, away, idle, stale, offlineSet, dndSet, dreamSet, newcomers, devRole],
+    [teamName, present, away, idle, stale, offlineSet, dndSet, dreamSet, newcomers, devRole, boardEdits],
   );
   const dataRef = useRef(buildData);
   // Synced in an effect, not during render — see OfficeScene: the mount effect subscribes once and
@@ -795,6 +806,30 @@ function OfficePreviewPage() {
         >
           ⇡
         </button>
+        {previewSearch().has('board') && (
+          <>
+            <button
+              className="lc__pbtn"
+              title="move a card on the wall board (Bo walks over and re-pins it)"
+              onClick={() =>
+                setBoardEdits((e) => {
+                  const i = Object.keys(e.moved).length * 3 + 1;
+                  const state = (['claimed', 'active', 'done'] as const)[i % 3]!;
+                  return { ...e, moved: { ...e.moved, [i]: { state, x: 0.3 + (i % 5) * 0.12, y: 0.5, at: Date.now() } } };
+                })
+              }
+            >
+              ⇄
+            </button>
+            <button
+              className="lc__pbtn"
+              title="abandon a lane (Cy crumples its card and throws it in the bin)"
+              onClick={() => setBoardEdits((e) => ({ ...e, tossed: [...e.tossed, e.tossed.length * 5 + 2] }))}
+            >
+              🗑
+            </button>
+          </>
+        )}
         <button
           className="lc__pbtn"
           title="roll call (the stream's wave across the folded plates)"

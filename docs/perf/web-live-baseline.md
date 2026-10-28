@@ -2532,3 +2532,18 @@ laptop hosts the team's seats (no local full builds for measurement). A re-basel
 + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports initial JS at or under 152,500 B and total JS at or under 384,000 B with both lanes in.
+
+## 2026-10-28 — the wall board's moves; Total JS RAISED 384,000 → 387,000 B (lane 01M61T09MQ)
+
+| Budget   | Before (main)    | This branch (laptop)  | Ceiling                    |
+| -------- | ---------------- | --------------------- | -------------------------- |
+| total JS | 375.0 KB ceiling | 376.6 KB (73 chunks)  | RAISED 384,000 → 387,000 B |
+
+ADR 751 increment 3: every recorded change of the wall board is walked by the member who made it.
+`boardMoves` / `withMoving` (`wallboard.ts`), the move and toss walks (`actors.ts`), the `toss` and
+`dust` cues and the crumpled paper ball (`render.ts`) and the scene wiring (`office-scene/index.ts`)
+all sit in the office's lazy chunk, so initial JS is untouched. The lane adds ≈2.3 KB gzip; the
+/office-preview `?board` move and abandon buttons are a few hundred bytes of it. CI reads ~0.8 KB
+above local on this tree. A re-baseline to measured + 15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 387,000 B with this lane in.

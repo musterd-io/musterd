@@ -698,6 +698,14 @@ export const WAGON_PICKUP = { lx: 240, ly: 772 };
  * footprint. Pinned walkable and reachable from every desk by `nav.test.ts`. */
 export const BOARD_STAND = { lx: 796, ly: 34 };
 
+/**
+ * The wall board's wastebasket (ADR 751, lane 01M61T09MQ): out on the café tile between the island and
+ * the couch's table, where the room can see it. The floor right under the board is behind the counter
+ * and the couch from the camera, and a bin there hid every ball thrown into it — so the throw is a lob
+ * from the board over the furniture, which is the better shot anyway.
+ */
+export const BIN = { lx: 812, ly: 150 };
+
 /** The printer/supply station against the back wall — moved out of the bench run (it stood at
  * lx 390, which is now mid-counter), into the band between the bench's end and the kitchenette. */
 export const PRINTER = { lx: 505, ly: 60, w: 46, d: 34, h: 32 };

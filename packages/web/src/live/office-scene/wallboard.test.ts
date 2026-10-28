@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard } from '@musterd/protocol';
-import { GOAL_ROWS, laneSeed, projectWallBoard, READ_PIN_CAP, readPins, seededPlace, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
+import { boardMoves, GOAL_ROWS, laneSeed, projectWallBoard, READ_PIN_CAP, readPins, seededPlace, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withMoving, withPinned, withTaken } from './wallboard';
 
 const lane = (over: Partial<Lane> = {}): Lane => ({
   id: 'L1',
@@ -299,3 +299,79 @@ describe('read pins (ADR 644 inc 3)', () => {
     expect(pins.at(-1)).toBe('more');
   });
 });
+
+describe('boardMoves — what the room walks between two boards (ADR 751)', () => {
+  const NOW = new Date(2026, 9, 28, 15).getTime();
+  const card = (x: number, y: number, by = 'ada') => ({ x, y, by, at: 1 });
+  const wb = (lanes: Lane[]) => projectWallBoard(board(lanes), new Set(), NOW)!;
+  const seed = laneSeed('L1');
+
+  it('nothing changed, nothing walks; no previous board, nothing walks', () => {
+    const b = wb([lane({ card: card(0.2, 0.2) })]);
+    expect(boardMoves(b, b)).toEqual([]);
+    expect(boardMoves(null, b)).toEqual([]);
+  });
+
+  it('a new card is pinned by its opener', () => {
+    expect(boardMoves(wb([]), wb([lane({ card: card(0.2, 0.2) })]))).toEqual([
+      { kind: 'pin', seed, by: 'ada', state: 'open' },
+    ]);
+  });
+
+  it('a column change or a nudge in place is a move, from where it hung', () => {
+    const before = wb([lane({ card: card(0.2, 0.2) })]);
+    const claimed = wb([lane({ state: 'claimed', card: card(0.6, 0.5, 'cy') })]);
+    expect(boardMoves(before, claimed)).toEqual([
+      { kind: 'move', seed, by: 'cy', state: 'claimed', from: { state: 'open', row: 0, x: 0.2, y: 0.2 } },
+    ]);
+    const nudged = wb([lane({ card: card(0.9, 0.2, 'bo') })]);
+    expect(boardMoves(before, nudged)[0]).toMatchObject({ kind: 'move', by: 'bo', state: 'open' });
+  });
+
+  it('an abandon today is a toss by whoever held it', () => {
+    const before = wb([lane({ owner_seat: 'cy', state: 'active', card: card(0.4, 0.4, 'cy') })]);
+    const after = wb([lane({ owner_seat: 'cy', state: 'abandoned', updated_at: NOW - 1000 })]);
+    expect(after.binned).toEqual([{ seed, by: 'cy' }]);
+    expect(boardMoves(before, after)).toEqual([
+      { kind: 'toss', seed, by: 'cy', from: { state: 'active', row: 0, x: 0.4, y: 0.4 } },
+    ]);
+  });
+
+  it('leaves a card to the walk already carrying it, and a card with no mover to just move', () => {
+    const before = wb([lane({ card: card(0.2, 0.2) })]);
+    const after = wb([lane({ state: 'claimed', card: card(0.6, 0.5) })]);
+    expect(boardMoves(before, after, new Set([seed]))).toEqual([]);
+    expect(boardMoves(wb([lane()]), wb([lane({ state: 'claimed' })]))).toEqual([]);
+  });
+});
+
+describe('withMoving — a card on its way (ADR 751)', () => {
+  const NOW = new Date(2026, 9, 28, 15).getTime();
+  const after = projectWallBoard(
+    board([
+      lane({ id: 'a', state: 'claimed', card: { x: 0.6, y: 0.5, by: 'cy', at: 2 } }),
+      lane({ id: 'b', state: 'abandoned', owner_seat: 'cy', updated_at: NOW - 1000 }),
+    ]),
+    new Set(),
+    NOW,
+  )!;
+  const a = laneSeed('a');
+  const b = laneSeed('b');
+
+  it('before the hand takes it, the card still hangs where it was', () => {
+    const w = withMoving(after, [{ seed: a, phase: 'before', from: { state: 'open', row: 0, x: 0.2, y: 0.2 } }])!;
+    expect(w[0]!.stickies).toMatchObject([{ seed: a, x: 0.2, y: 0.2 }]);
+    expect(w[1]!.stickies).toEqual([]);
+  });
+
+  it('in the hand, it hangs nowhere; once pinned, the board already has it', () => {
+    expect(withMoving(after, [{ seed: a, phase: 'hand' }])!.flatMap((c) => c.stickies)).toEqual([]);
+    expect(withMoving(after, [])).toBe(after);
+  });
+
+  it('a toss holds its ball out of the bin until it lands', () => {
+    expect(after.binned).toHaveLength(1);
+    expect(withMoving(after, [{ seed: b, phase: 'hand' }])!.binned).toEqual([]);
+  });
+});
+

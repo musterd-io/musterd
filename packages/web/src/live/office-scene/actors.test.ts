@@ -1587,6 +1587,75 @@ describe('what the Welcome Wagon asks the actors (lane 01M3F81DD9)', () => {
  * up and takes the card, carries it home and sets it down. The card leaves the wall at the reach —
  * `takenSeeds()` is what the board painter reads — and not before.
  */
+/**
+ * Recorded card moves (ADR 751): a move walks to the board, takes the card and pins it at its new
+ * place; a toss takes it, crumples it and throws it at the bin. `boardCards()` is what the board
+ * painter reads, phase by phase; `thrown()` is when the ball leaves the hand.
+ */
+describe('board walks for recorded card moves (ADR 751)', () => {
+  const SEED = 0xb0a7d;
+  const run = () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    return actors;
+  };
+  const phases = (actors: ReturnType<typeof run>, kind: string) => {
+    const seen: string[] = [];
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      const c = actors.boardCards().find((b) => b.seed === SEED && b.kind === kind);
+      if (c && seen.at(-1) !== c.phase) seen.push(c.phase);
+    }
+    return seen;
+  };
+
+  it('a move: on the cork, then in the hand, then pinned — and home again', () => {
+    const actors = run();
+    expect(actors.move('Ada', SEED, 'active')).toBe(true);
+    expect(phases(actors, 'move')).toEqual(['before', 'hand', 'done']);
+    seated(actors, 'Ada');
+  });
+
+  it('a moved card swings once pinned, like a pin walk', () => {
+    const actors = run();
+    actors.move('Ada', SEED, 'blocked');
+    let pinned = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      if (actors.pinnedSeeds().some((p) => p.seed === SEED && p.state === 'blocked')) pinned = true;
+    }
+    expect(pinned).toBe(true);
+  });
+
+  it('a toss: taken, crumpled, thrown at the bin once', () => {
+    const actors = run();
+    expect(actors.toss('Ada', SEED)).toBe(true);
+    const throws = new Set<number>();
+    let faced = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      for (const t of actors.thrown()) {
+        expect(t.who).toBe('Ada');
+        throws.add(t.seed);
+      }
+      const p = actors.poses().get('Ada')!;
+      if (Math.hypot(p.lx - BOARD_STAND.lx, p.ly - BOARD_STAND.ly) < 12 && p.gesture === GESTURE.reach) faced = true;
+    }
+    expect([...throws]).toEqual([SEED]);
+    expect(faced).toBe(true);
+  });
+
+  it('nobody in the room walks nothing', () => {
+    const actors = run();
+    expect(actors.move('Nobody', SEED, 'done')).toBe(false);
+    expect(actors.toss('Nobody', SEED)).toBe(false);
+  });
+});
+
 describe('claiming a lane at the board', () => {
   const SEED = 0xc1a1;
   const run = () => {

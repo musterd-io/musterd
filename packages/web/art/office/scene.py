@@ -1296,6 +1296,22 @@ def wall_board(asset_id: str, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, fx, fy, col)
 
 
+def wastebasket(asset_id: str, lx: float, ly: float, zs: float, col) -> bpy.types.Object:
+    """The wall board's wastebasket (ADR 751, lane 01M61T09MQ): a small powder-coated wire bin, slightly
+    flared, whose dark mouth is where an abandoned lane's crumpled card lands. The paper in it stays
+    painted (render.ts), so the pile can grow through the day without a re-render."""
+    wire = paint("bin-wire", srgb("#4f5a5e"), 0.55)
+    mouth = matte("bin-mouth", srgb("#23292b"), 0.95)
+    rim = paint("bin-rim", srgb("#6b777b"), 0.45)
+    parts = [
+        cyl(f"{asset_id}/body", lx, ly, 0, 6.0, 7.4, 15.0, wire, zs, 32),
+        cyl(f"{asset_id}/mouth", lx, ly, 14.6, 6.9, 6.9, 0.5, mouth, zs, 32),
+        cyl(f"{asset_id}/rim", lx, ly, 14.8, 7.7, 7.7, 0.8, rim, zs, 32),
+        shadow(f"{asset_id}/shadow", lx + 1.5, ly + 1.5, 9, 9, zs),
+    ]
+    return finish(asset_id, parts, lx, ly, col)
+
+
 def wall_hanger(asset_id: str, zs: float, col) -> bpy.types.Object:
     """The hanging planter between the left wall's windows: a bracket, three cords converging on it, a
     terracotta bowl and trailing vines."""
@@ -1732,6 +1748,7 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
         a[f"wall/art-{i}"] = wall_art(f"wall/art-{i}", i, zs, export)
     a["wall/clock"] = wall_clock("wall/clock", zs, export)
     a["wall/board"] = wall_board("wall/board", zs, export)
+    a["bin"] = wastebasket("bin", C, C, zs, export)
     a["wall/hanger"] = wall_hanger("wall/hanger", zs, export)
     for setup in MONITOR_SETUPS:
         for facing in ("N", "E", "S", "W"):
