@@ -135,7 +135,7 @@ Single mono size at `14 / 22`; bold for emphasis; never italic in terminal frame
   - **Before and after is allowed as story structure** (nick, 2026-10-13). A talk, a deck or a launch post may show how things are and then how they could be, the shape of Andy Raskin's strategic narrative and Nancy Duarte's "what is / what could be". Two conditions. The "before" is specific and true: the reader's own situation or our measured past (two agents on one repo undoing each other; 37% of our agents' code never reaching main), never an invented straw man. And it is shown as a scene, with the sentence-level ban above still holding inside every scene. The deck's slide 2 is the pattern: it describes the silo and its cost and never says what musterd is not.
 - **Copy a person says is in that person's voice.** A slide or a script line for nick reads as nick talking to the room — never as an assistant reporting to him ("measured on our own history").
 - **Provenance lives off the surface.** File paths, ADR numbers and how-we-measured go in speaker notes, docs and the wiki. A slide carries the claim; the person presenting carries the source.
-- The single allowed bit of personality: one mustard pun in the README, and warm-but-spare microcopy in the CLI (e.g. empty inbox: `inbox empty — nobody's mustered anything yet`).
+- The single allowed bit of personality: one mustard pun in the README, and warm-but-spare microcopy in the CLI (e.g. empty inbox: `Your inbox is empty.`; ADR 752).
 
 ---
 
