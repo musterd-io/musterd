@@ -137,6 +137,13 @@ A gesture is only ever seen facing a desk or a fixture, so it is rendered E and 
 and W (`dirs` in `figure.json`); in any other direction, or in the wrong posture, the base clip
 plays.
 
+**Heads that look** (lane 01M5XS5ZYP, 2026-10-27): four more seated env clips, `g-look45L/R` and
+`g-look90L/R` (`LOOKS` in `figure.py`, last in `CLIPS` so earlier cells stay put), turn the head and
+neck only. When an act lands on a desk, `index.ts` `lookOver` has the nearest seated members turn
+toward it in sequence (`actors.lookAt`). The rig's +z yaw ("L") reads on screen as clockwise in the
+floor's y-down frame — an east-facing head toward south — because the floor frame mirrors the rig's;
+a mirrored direction (S, W) therefore blits the other side's clip (`lookClip` in `character.ts`).
+
 ### Carried things and the seated overlay (plan Task 16)
 
 What a member carries is its own layer, `carry/<thing>` (laptop, box, plant, plate, card, mug,

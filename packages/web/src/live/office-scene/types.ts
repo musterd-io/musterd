@@ -353,6 +353,10 @@ export interface OfficeHandle {
    * ambient scheduler. Returns the member it played on, or null if none was eligible.
    * A design-preview / verification affordance (see office-preview); the live office uses the scheduler. */
   pokeGesture: (kind?: number) => string | null;
+  /** Heads that look (lane 01M5XS5ZYP): the desks nearest `who` (the first idle desk member when
+   *  absent) turn toward them now, as they would for a speech — the headless way to see it. Returns
+   *  who was looked at, or null when nobody could. */
+  pokeLook: (who?: string) => string | null;
   /** Fire an errand now on an idle desk member (bypassing the scheduler): the fridge meal, the water
    * refill, the coffee run, or a phone call. Same verification affordance as `pokeGesture`. */
   pokeErrand: (kind: 'fridge' | 'water' | 'coffee' | 'phone') => string | null;

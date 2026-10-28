@@ -722,6 +722,18 @@ GESTURES: dict = {
     # one clip for both legs of the card: `reach` plays it forward, `take` backward
     "reach": ("standing", "env", {"shoulderR": (_abduct("R", 6), swing(150), 0), "elbowR": (0, swing(12), 0), "head": (0, swing(12), 0)}),
 }
+# Heads that look (lane 01M5XS5ZYP): a seated member turns the head toward the desk an act landed on.
+# Head only — the body stays on the keyboard — split between head and neck the way `glance` is, so a
+# 90° look is a turned head on a turned neck, not an owl. +z yaw is the figure's own left (it faces +x,
+# z up). Rendered E and N like every seated gesture; the runtime mirrors S and W and flips the side.
+# Listed after every other clip (CLIPS below) so the earlier clips keep their cells.
+LOOKS: dict = {
+    "look45L": ("seated", "env", {"head": (0, 0, 34), "neck": (0, 0, 11)}),
+    "look45R": ("seated", "env", {"head": (0, 0, -34), "neck": (0, 0, -11)}),
+    "look90L": ("seated", "env", {"head": (0, 0, 64), "neck": (0, 0, 26)}),
+    "look90R": ("seated", "env", {"head": (0, 0, -64), "neck": (0, 0, -26)}),
+}
+GESTURES.update(LOOKS)
 
 
 def _seq(name: str, t: float) -> dict:
@@ -886,7 +898,7 @@ CLIPS = [  # name, frames, loop, dirs — "not smooth enough" (nick, 2026-10-20)
     ("sit-down", 4, False, None),
     ("stand-up", 4, False, None),
     # increment 3b — every beat the painter plays (figureSheet.ts ANIMS lists them in this order)
-    *[(f"g-{g}", 6, False, CARDINAL) for g in GESTURES],
+    *[(f"g-{g}", 6, False, CARDINAL) for g in GESTURES if g not in LOOKS],
     *[(f"g-{g}", n, False, CARDINAL) for g, n in (("scratch", 8), ("sip", 8), ("swivel", 8), ("shoulders", 8), ("eat", 10), ("wave", 10))],
     # plan Task 16 — the carrying walks and holds (appended, so every earlier clip keeps its cells)
     ("walk-hold2", 12, True, None),
@@ -902,6 +914,8 @@ CLIPS = [  # name, frames, loop, dirs — "not smooth enough" (nick, 2026-10-20)
     # office v3-6 — a casual seat (stool, couch, meeting chair): hands in the lap, the closed laptop
     # under the right arm — "hands should be down (macbook under 1 arm)" (nick, 2026-10-26)
     ("sit-lap", 8, True, None),
+    # heads that look (lane 01M5XS5ZYP) — figureSheet.ts LOOK_ANIMS, in this order
+    *[(f"g-{g}", 6, False, CARDINAL) for g in LOOKS],
 ]
 # A carrying clip changes only the arms, the sleeves and what is held (and the lanyard the arms can
 # cover): every other layer is the same pixels as the walk or the idle it is laid over, so it is not
