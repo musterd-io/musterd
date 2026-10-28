@@ -1,7 +1,9 @@
 /*
- * Cold-start bench for the CLI front door (ADR 491). Spawns the built CLI N times per probe and
- * prints the median and p90 wall time. Report the numbers; never assert them in CI — on
- * 2026-10-01 a machine at load average 44 measured `--version` at 1.4–2.4 s.
+ * Cold-start bench for the CLI front door (ADR 491) and the read/write paths
+ * (lane 01M61VTB701HJHPQMFGKP0T5P4). Spawns the built CLI N times per probe
+ * and prints the median and p90 wall time. Report the numbers; never assert them
+ * in CI — on 2026-10-01 a machine at load average 44 measured `--version` at
+ * 1.4–2.4 s.
  *
  *   pnpm bench:cli-start             # 15 runs per probe
  *   pnpm bench:cli-start --runs 30
@@ -25,6 +27,10 @@ export const PROBES: Probe[] = [
   { name: 'node -e 0 (floor)', argv: ['-e', '0'] },
   { name: 'musterd --version', argv: [BIN, '--version'] },
   { name: 'musterd help', argv: [BIN, 'help'] },
+  { name: 'musterd help <cmd>', argv: [BIN, 'help', 'lane'] },
+  { name: 'musterd whoami', argv: [BIN, 'whoami'] },
+  { name: 'musterd status', argv: [BIN, 'status'] },
+  { name: 'musterd next', argv: [BIN, 'next'] },
   { name: 'musterd (first paint)', argv: [BIN], env: { MUSTERD_PAINT_PROBE: '1' } },
 ];
 
