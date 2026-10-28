@@ -68,13 +68,71 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
     process.stdout.write(JSON.stringify(res.members) + '\n');
     return 0;
   }
-  // What's waiting for me (comeback path, ADR 024): the unanswered request_help / @me acts, read off
-  // the durable inbox cursor — best-effort. Skipped for an ambient/absent identity: an inbox is
-  // member-specific (and auth-gated). It rides *inside* the header now, where it outranks everything.
+  // Daily orientation (sloane/slippy design, lane 01M61VTTB6B): identity -> waiting -> your work -> up
+  // next -> team one-liner, ahead of the roster. Carried work and open lanes come from the brief.
   const pending =
     explicit && identity
       ? await pendingActionSummary(http, team, identity.name).catch(() => undefined)
       : undefined;
+  const mine = identity ? res.members.find((m) => m.name === identity.name) : undefined;
+  const brief = explicit && identity ? await http.next(team).catch(() => undefined) : undefined;
+  const daily: string[] = [];
+  if (identity) {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    daily.push(theme.meta(`musterd · ${team} · ${hh}:${mm}`));
+    daily.push(`you are ${theme.accent(identity.name)} · ${mine?.kind ?? 'agent'}`);
+  }
+  if (pending) {
+    daily.push('');
+    daily.push(theme.warn(`⚑ ${pending.count} waiting on you`));
+    for (const a of (pending.waiting ?? []).slice(0, 3)) {
+      const who = a.from ?? '?';
+      const kind = a.act ?? 'message';
+      const gist = (a.body ?? '').slice(0, 60).replace(/\n/g, ' ');
+      daily.push(`  ${theme.accent(who)} · ${kind} · ${gist}`);
+    }
+    if ((pending.waiting?.length ?? 0) > 3)
+      daily.push(theme.dim(`  +${(pending.waiting?.length ?? 0) - 3} more · musterd inbox`));
+    daily.push(theme.dim('  → musterd inbox'));
+  } else {
+    daily.push('');
+    daily.push(theme.dim('Nothing is waiting on you.'));
+  }
+  const inFlight = brief?.in_flight ?? [];
+  daily.push('');
+  if (inFlight.length === 0) {
+    daily.push(theme.dim('You hold no lanes.'));
+    if (brief?.up_next?.length)
+      daily.push(theme.dim(`pick one up  musterd lane claim ${brief.up_next[0]!.id}`));
+  } else {
+    daily.push(`◆ your work  ${inFlight.length}`);
+    for (const lane of inFlight.slice(0, 5)) {
+      daily.push(`  ${lane.state ?? 'active'} · ${lane.title}`);
+    }
+  }
+  const upNext = brief?.up_next ?? [];
+  const upLimit = (process.stdout.columns ?? 80) < 60 ? 1 : 2;
+  if (upNext.length > 0) {
+    daily.push('');
+    daily.push('○ up next');
+    for (const lane of upNext.slice(0, upLimit)) {
+      daily.push(`  ${lane.title} — ${lane.id}`);
+    }
+    if (upNext.length > upLimit)
+      daily.push(theme.dim(`  +${upNext.length - upLimit} more · musterd next`));
+    daily.push(theme.dim('  → musterd next'));
+  }
+  const hereCount = res.members.filter((m) => m.presence !== 'offline').length;
+  const onlineCount = res.members.filter((m) => m.presence === 'online').length;
+  daily.push('');
+  daily.push(`team ${hereCount} here · ${onlineCount} online`);
+  // All-quiet check.
+  if (inFlight.length === 0 && (pending?.count ?? 0) === 0 && upNext.length === 0) {
+    daily.push(theme.dim('All quiet. musterd next shows open work.'));
+  }
+  process.stdout.write(daily.join('\n') + '\n\n');
   // The continuity one-liner (ADR 093 §3): the envelope read — headline + age, never the body. Seat-
   // authed and best-effort: an ambient identity, a seat with nothing saved (not_found), or any read
   // failure all stay silent. Compact here — the header has five other things to say.
@@ -98,7 +156,6 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
     : undefined;
 
   // `Identity` carries no kind — the roster is the authority on it, so read it back from there.
-  const mine = identity ? res.members.find((m) => m.name === identity.name) : undefined;
   const me = identity ? { name: identity.name, kind: mine?.kind ?? 'agent' } : undefined;
   process.stdout.write(
     renderStatusHeader({
