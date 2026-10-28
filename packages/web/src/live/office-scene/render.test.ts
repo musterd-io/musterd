@@ -66,7 +66,9 @@ import {
   WIDEST_PANEL_HALF,
   furnishedBox,
   drawSunPools,
+  drawWeather,
 } from './render';
+import type { Weather } from './weather';
 import { assignSeats } from './seating';
 import type { RenderOpts } from './render';
 import type { OfficeNode, Pose, WelcomePaint } from './types';
@@ -1944,6 +1946,30 @@ describe('the sun pools (lane 01M5ZW21JH): painted into the shell from sunBeam, 
     const far = (ops: RecordedOp[]) => ops.filter((o) => o.name === 'lineTo')[1]!.args.join(',');
     expect(new Set([far(at(8)), far(at(12)), far(at(17))]).size).toBe(3);
     expect(at(23).filter((o) => o.name === 'fill')).toHaveLength(0);
+  });
+});
+
+describe('weather at the windows (lane 01M5XS6597)', () => {
+  const fit = fitFloor(1200, 900);
+  const edge = (t: number): [number, number] => [0, t * 900];
+  const ops = (w: Weather, t = 0) => {
+    const r = recordingCtx();
+    drawWeather(r.ctx, fit, edge, w, t);
+    return r.ops;
+  };
+  it('clear draws nothing; every other sky clips to each pane and tints it', () => {
+    expect(ops('clear')).toHaveLength(0);
+    for (const w of ['cloudy', 'rain', 'snow'] as const) {
+      expect(ops(w).filter((o) => o.name === 'clip')).toHaveLength(WINDOWS.length);
+      expect(ops(w).filter((o) => o.name === 'fill').length).toBeGreaterThanOrEqual(WINDOWS.length);
+    }
+  });
+  it('rain streaks and snow flakes move with the clock; cloud holds still', () => {
+    expect(fmtOps(ops('rain', 0))).not.toEqual(fmtOps(ops('rain', 0.25)));
+    expect(fmtOps(ops('snow', 0))).not.toEqual(fmtOps(ops('snow', 0.25)));
+    expect(fmtOps(ops('cloudy', 0))).toEqual(fmtOps(ops('cloudy', 0.25)));
+    expect(ops('rain').some((o) => o.name === 'stroke')).toBe(true);
+    expect(ops('snow').filter((o) => o.name === 'arc').length).toBe(WINDOWS.length * 10);
   });
 });
 
