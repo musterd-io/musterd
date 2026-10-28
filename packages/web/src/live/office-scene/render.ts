@@ -49,6 +49,7 @@ import {
 import type { ReadStatus } from '../experimentReads';
 import { READ_PIN_CAP, readPins, STICKY_CAP, stickySway, type WallBoard } from './wallboard';
 import { DAY_ENV, deskLampOn, sunBeam, type LightEnv } from './lighting';
+import type { Weather } from './weather';
 import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
 import { workingAtDesk, type Placement } from './seating';
@@ -1089,6 +1090,8 @@ export function drawWalls(
   run: (draw: () => void) => void = (draw) => draw(),
   /** The wall fixtures' assets: the prints' frames, the planter, the clock body and the board blit here. */
   art: RenderedAssets,
+  /** The sky at the windows (lane 01M5XS6597): clear draws nothing, the rest paint over the panes. */
+  weather: Weather = 'clear',
 ): void {
   /**
    * What each wall carries. The right wall gets the clock (it is the only one whose `+t` runs screen-right,
@@ -1128,10 +1131,91 @@ export function drawWalls(
   };
   // back-left wall (lx=0 edge): a print, the planter, and its strand. It carries no live fixture.
   dress(WALL_EDGES[0]!, 0);
+  run(() => drawWeather(ctx, fit, WALL_EDGES[0]!, weather, t));
   run(() => cableStrand(ctx, fit, WALL_EDGES[0]!));
   // back-right wall (ly=0 edge): the clock, sign and board, then its strand over them.
   dress(WALL_EDGES[1]!, 1);
+  run(() => drawWeather(ctx, fit, WALL_EDGES[1]!, weather, t));
   run(() => cableStrand(ctx, fit, WALL_EDGES[1]!));
+}
+
+/** A stable unit in [0, 1) per weather particle — rebakes reposition nothing. */
+function weatherRnd(n: number): number {
+  let h = Math.imul(n ^ 0x5bd1e995, 2246822507);
+  h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/**
+ * Weather at the windows (lane 01M5XS6597): the sky outside, drawn over each pane on one wall and
+ * nowhere else — a clip per window, so a looping overlay costs the window region alone. Clear draws
+ * nothing. Cloudy and snow grey the glass; rain darkens it. Rain is a dozen thin diagonal streaks per
+ * pane falling down the glass with the clock; snow is a few flakes drifting down and wobbling. Both are
+ * in wall (t, u) space through `wallPt`, so they lean with the wall like the mullions do.
+ */
+export function drawWeather(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  edge: (t: number) => [number, number],
+  weather: Weather,
+  t: number,
+): void {
+  if (weather === 'clear') return;
+  const tint =
+    weather === 'rain'
+      ? 'rgba(88, 100, 122, 0.34)'
+      : weather === 'snow'
+        ? 'rgba(196, 204, 216, 0.30)'
+        : 'rgba(128, 138, 156, 0.24)';
+  const u = fit.scale;
+  WINDOWS.forEach((w, wi) => {
+    const a = wallPt(edge, w.t0, w.u0, fit);
+    const b = wallPt(edge, w.t1, w.u0, fit);
+    const c = wallPt(edge, w.t1, w.u1, fit);
+    const d = wallPt(edge, w.t0, w.u1, fit);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(c.x, c.y);
+    ctx.lineTo(d.x, d.y);
+    ctx.closePath();
+    ctx.clip();
+    ctx.fillStyle = tint;
+    ctx.fill();
+    const span = w.t1 - w.t0;
+    const rise = w.u1 - w.u0;
+    if (weather === 'rain') {
+      ctx.strokeStyle = 'rgba(225, 236, 250, 0.42)';
+      ctx.lineWidth = Math.max(1, 0.9 * u);
+      ctx.beginPath();
+      for (let i = 0; i < 14; i++) {
+        const n = wi * 40 + i;
+        const tx = w.t0 + weatherRnd(n) * span;
+        // down the glass with the clock, each streak on its own phase; 1.4 pane-heights a second
+        const ph = (weatherRnd(n + 1) + t * 1.4) % 1;
+        const top = w.u1 - ph * (rise + 0.1);
+        const p0 = wallPt(edge, tx, top, fit);
+        const p1 = wallPt(edge, tx + 0.004, top - 0.07, fit);
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+      }
+      ctx.stroke();
+    } else if (weather === 'snow') {
+      ctx.fillStyle = 'rgba(250, 252, 255, 0.85)';
+      for (let i = 0; i < 10; i++) {
+        const n = wi * 40 + i;
+        const ph = (weatherRnd(n + 1) + t * 0.16) % 1; // a flake takes ~6 s to cross the pane
+        const wob = Math.sin(t * 1.3 + weatherRnd(n + 2) * 6.28) * 0.012;
+        const tx = w.t0 + 0.05 * span + weatherRnd(n) * 0.9 * span + wob;
+        const p = wallPt(edge, tx, w.u1 - ph * (rise + 0.05), fit);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, (1 + weatherRnd(n + 3)) * 1.1 * u, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  });
 }
 
 /**
@@ -1731,6 +1815,8 @@ export interface RenderOpts {
    * the ones a partial frame cannot touch. Absent → every unit runs, exactly as before.
    */
   units?: UnitHook | undefined;
+  /** The sky at the windows (weather.ts, lane 01M5XS6597). Absent → clear, which draws nothing. */
+  weather?: Weather | undefined;
   /**
    * The pre-rendered art (office realism, plan Task 2 onward): every static item, the room's light
    * states, the figure sheets and the dog. An asset that failed to load is simply not drawn.
@@ -4188,7 +4274,7 @@ export function renderScene(
       blitIf(c, fit, rendered, `room/ceiling-${ceiling}`, 0, 0, 1 - 0.8 * env.daylight);
       c.restore();
     }
-    if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, undefined, rendered);
+    if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, undefined, rendered, opts.weather);
     if (!cache) rugs(c);
   };
   /* Flat floor paint, drawn with the floor (before every solid and every actor) so a member standing
@@ -4204,7 +4290,7 @@ export function renderScene(
     run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
     // On the stage, in their existing order: the live fixtures over the blitted walls, then the
     // additive bulb strands (see `drawWalls`).
-    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered);
+    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather);
     // Source-over floor paint, so it caches cleanly on top of the shell.
     run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));
   } else {

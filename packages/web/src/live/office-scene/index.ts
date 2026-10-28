@@ -59,6 +59,7 @@ import {
   WAGON_PICKUP,
 } from './layout';
 import { computeLightEnv, deskLampOn, type LightEnv } from './lighting';
+import { fetchWeather, type Weather, type WeatherReading, weatherDue, weatherMoves, weatherOverride } from './weather';
 import { isWithinWorkingHours } from './workingHours';
 import { assignSeats, workingAtDesk, type Placement } from './seating';
 import {
@@ -862,6 +863,22 @@ export function mountOffice(
   }
   let teamName = 'revive';
   let teamWorkingHours: OfficeData['teamWorkingHours'] = null;
+  // Weather at the windows (lane 01M5XS6597): the sky over the office's city, asked of Open-Meteo once
+  // an hour by this browser; `?weather=` pins it. Clear until the first reading lands.
+  const weatherPinned = weatherOverride(typeof window === 'undefined' ? '' : window.location.search);
+  let weather: Weather = weatherPinned ?? 'clear';
+  let weatherRead: WeatherReading | null = null;
+  function pollWeather(): void {
+    if (weatherPinned !== null || typeof fetch === 'undefined') return;
+    if (!weatherDue(weatherRead, Date.now())) return;
+    weatherRead = { state: weather, at: Date.now() }; // one ask in flight per hour, whatever it returns
+    void fetchWeather().then((state) => {
+      if (disposed || state === null || state === weather) return;
+      weather = state;
+      if (weatherMoves(state)) ensureLoop();
+      else paintResting();
+    });
+  }
   let wallBoard: WallBoard | null = null; // the wall's agile board (bake-time data)
   // The signed-in viewer's own seat: their plate says "you". Only where the labels are interactive —
   // a stream's plates belong to nobody watching.
@@ -1112,7 +1129,7 @@ export function mountOffice(
       recep,
       wallBoardNow(),
       teamWorkingHours,
-      { welcome: welcomeRoom.paint, rendered },
+      { welcome: welcomeRoom.paint, rendered, weather },
     );
     heads = anchors.heads;
     // The receptionist's bubble anchor — synthetic head above her desk. syncLabels skips names
@@ -2276,7 +2293,7 @@ export function mountOffice(
       recep,
       f.board,
       teamWorkingHours,
-      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered },
+      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather },
     );
     if (units) units.run(() => drawCues(c));
     else drawCues(c);
@@ -2521,7 +2538,8 @@ export function mountOffice(
     const now = Date.now();
     for (const n of actors.nodes().values())
       if (workingAtDesk(n, poses.get(n.name)?.sit) && pulseLive(n.pulse, now)) return true;
-    return false;
+    // Rain or snow on the glass keeps the room awake: a still streak is a crack (lane 01M5XS6597).
+    return weatherMoves(weather);
   }
 
   /** Paint one resting frame with no loop running — the office holds a still frame instead of burning rAF. */
@@ -3590,6 +3608,10 @@ export function mountOffice(
       if (!raf) paintResting();
     }
   }, LIGHT_TICK_MS);
+  // The sky at the windows: ask on open, then check every five minutes whether the hour has turned
+  // (`weatherDue`) — one request an hour per viewer, none at all when `?weather=` pins it.
+  pollWeather();
+  const weatherTimer = setInterval(pollWeather, 5 * 60 * 1000);
 
   /** The art, for the gate renders below — they run only once the room has painted a frame. */
   function artNow(): RenderedAssets {
@@ -3976,6 +3998,7 @@ export function mountOffice(
       cancelAnimationFrame(raf);
       stopDrift(); // the heartbeat outlives nothing
       clearInterval(lightTimer); // stop the PST lighting clock
+      clearInterval(weatherTimer); // stop asking the sky
       if (rollTimer) clearInterval(rollTimer); // stop the stream's roll call
       for (const t of rollTimers) clearTimeout(t);
       if (spotlit) clearTimeout(spotlit.t);
