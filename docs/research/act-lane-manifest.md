@@ -7,7 +7,8 @@ measure it where idle time is real, but remember we dont have that much time to 
 19:35Z, before the first act-lane wake: nick enrolled `izzo` on the lane at once instead of after the
 baseline day — "we dont have that much time to wait around" — so the baseline is concurrent, not
 prior; see the amended Procedure and R7a. No act-lane wake had happened when this was written; the
-amendment is a design change, not a reading.)_ Nothing below changes once an act-lane wake has
+amendment is a design change, not a reading.)_ _(Amended 2026-10-28, after finding 029: the
+[re-read](#re-read-on-the-adr-753-build) on the ADR 753 build, pre-registered before its window opens.)_ Nothing below changes once an act-lane wake has
 happened; what the read teaches goes in the finding, not here. **Before this:** [finding
 028](./028-cooperbench-rider6-run.md), whose R6b said the wait call is the cost and the loop is the lever.
 
@@ -76,6 +77,39 @@ launch lanes never wake on), failed wakes, and the per-wake cost on the launch l
    boundary.
 5. **Read once**, write finding 029, and leave the seats on the lane or not as nick decides.
 
+## Re-read on the ADR 753 build
+
+_Amended 2026-10-28, after [finding 029](./029-act-lane-read.md) and before this window opens; lane
+`01M62BJWMQ`, asked by nick._ Finding 029 missed R7a, at a median of 175.5 min over 6 waits, but could
+not say what held the acts. [ADR 753](../decisions/753-wake-holds-on-the-report.md) (#3483) now records
+which daemon gate held each enrolled seat (`present`, `reclaimable`, `lease_live`, `snoozed`,
+`hourly_cap`, `cooldown`, or `passed`) and splits each wait by it on the report. The seats, their lane
+and the hourly cap are unchanged: izzo, miley and grokbot, `--lane act`, cap 2, on mac.lan.
+
+- **Window:** acts sent 2026-10-29T00:00Z → 2026-11-04T00:00Z (6 days). Read once between 2026-11-04
+  00:00Z and 2026-11-05 00:00Z, while the report's 7-day window still covers the whole window.
+- **Source:** one `musterd report residency --json`, read by
+  [`reread.py`](./act-lane/2026-10-29-reread/reread.py), written with this amendment. No host log.
+  An act counts when its ts is in the window and it got a wake lease. An act never leased is not in
+  the report, as in finding 029.
+
+| | Measure | Acted | Did not |
+| --- | --- | --- | --- |
+| **R8a** (primary) | median **free wait** on act-lane seats: the wait minus the time the seat was `present`, `snoozed`, `reclaimable` or `lease_live`, i.e. held by its own session or an in-flight wake, not by the lane | **≤ 2 min** | **≥ 15 min** |
+| R7a | median raw wait, act-lane seats vs every other seat | report | — |
+| R7b | act-lane $ per seat per UTC day; the $10 kill rule as above | report; kill rule | — |
+
+Between R8a's bounds: "part of it". **Fewer than 5 act-lane waits:** inconclusive. **Invalid:** if
+more than half of the act-lane seats' waited time is `unobserved` (no gate row in force), the gate
+record did not cover the window, and R8a is not read as a verdict. On the 7 days before this amendment,
+which predate ADR 753, the script returns exactly that (98.8% unobserved). Reported beside them: each
+act-lane seat's share of waited time per gate state.
+
+**What follows the read.** If R8a did not act, the finding recommends taking the three seats off the
+act lane and retiring it: the lane does not shorten a wait even when nothing else holds the seat. If it
+acted, the slowness in finding 029 was the seats' own sessions, and the lane stays. nick decides either
+way. The finding is 030.
+
 ## Spend
 
 Wakes are model spend on the seats' own keys: at the 14-day rates, two to three seats at the team's cap
@@ -91,3 +125,4 @@ CooperBench spend.
 | Seats on the lane and the hourly cap | nick, at the switch (step 3); this page proposes three |
 | Window: ~~24 h baseline +~~ 48 h on the lane with a concurrent launch-lane baseline | this manifest; amended at the switch 2026-10-26 on nick's enrolling izzo at once |
 | Finding number | 029 |
+| Re-read on the ADR 753 build: R8a free wait, 6 days, finding 030 | nick, 2026-10-28, in session ("go ahead with the manifest amendment") |
