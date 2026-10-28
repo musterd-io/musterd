@@ -1,6 +1,6 @@
 # 722 — Hosted `/live` sign-in: a console hand-back and a revocable browser session
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-23
 - Lane: `01M3Z458B261P8DW8VX4A7XCHG` (Cloud 4)
 - Relates to: [ADR 698](698-console-identity-statement.md) (the statement and `account_id`),
