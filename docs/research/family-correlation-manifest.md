@@ -29,17 +29,34 @@ An item is a CooperBench reference `feature.patch` with **one defect seeded by a
 if CooperBench's own evaluator then fails at least one of that feature's tests. The defect is then
 ground truth with a known location, so a miss and a shared miss need no judgment call.
 
+- **Dataset:** CooperBench at `63b9d44` (`COOPERBENCH_COMMIT` in `deploy/cooperbench/Dockerfile`),
+  `dataset/`. **Python features only**: 165 features in 9 repositories (outlines, dspy, datasets,
+  llama_index, tiktoken, click, jinja, Pillow, dirty-equals). go-chi, react-hook-form and typst are
+  out, because the operators below are written for Python. _Added 2026-10-27, before any item ran._
+- **Keep rule:** CooperBench's `run_patch_test` in the solo setting, one patch against the feature's
+  own tests (lazara). The unmutated reference must pass. The mutant is kept when it fails at least
+  one test **and passes at least one**, so a mutant that breaks import or collection is dropped as
+  too obvious. An evaluator error drops the mutant. _Added 2026-10-27._
+
 - **Why seeded, not harvested** (lazara): across the committed CooperBench runs, 2 of 10 eval records
   are a clean merge with a failed feature test. Merge conflicts and patches that failed to apply are
   not defects a reviewer can find, and the agents' patches were not committed.
 - **Who seeds:** nobody. A fixed-seed mutation script picks the site and applies the operator, so no
   model family authors a defect that its own family might be better at spotting.
-- **Defect classes**, one operator set each, drawn evenly: off-by-one (a comparison or range bound
-  moved by one), missed branch (an `else` or `elif` arm removed), wrong default (a default literal
-  changed), swallowed error (a `raise` replaced with `pass`, or an error return dropped).
+- **Defect classes**, one operator set each, drawn as evenly as the kept pool allows (an even
+  split is not possible: at `63b9d44`, wrong default has candidate sites in 23 features, missed
+  branch in 63; the finding reports N per class). _Amended 2026-10-27, before any item ran; the
+  first text said "drawn evenly"._ Each operator touches only lines the
+  feature adds, so the mutant still applies to the task's base commit. Off-by-one: a comparison
+  flipped, `<` with `<=` or `>` with `>=`. Missed branch: an added `elif` or `else` arm removed with
+  its body. Wrong default: a parameter default changed, `True` with `False` or an integer `n` to
+  `n + 1`. Swallowed error: an added one-line `raise` replaced with `pass`. _Narrowed 2026-10-27 to
+  the operators `scripts/research/family-correlation/mutate.py` implements; the first text also
+  named range bounds and dropped error returns._
 - **At most two items per feature**, in different classes. The analysis resamples by feature.
 - **Controls:** one clean reference patch for every four seeded items, mixed in, so a reviewer
-  cannot assume every item has a defect. Controls count only toward the false-alarm rate.
+  cannot assume every item has a defect. Drawn by the same seed from Python features that carry no
+  seeded item. Controls count only toward the false-alarm rate.
 
 ## Reviewers
 
@@ -90,8 +107,10 @@ starts.
 
 - **Hit, primary:** a finding in the seeded file whose line is within 3 lines of the seeded hunk.
   Scored by script, with no judge.
-- **Hit, coarse:** a finding in the seeded file whose line falls in the same function as the seeded
-  hunk, or in the same diff hunk when the site is outside any function. The verdict must hold under
+- **Hit, coarse:** a finding in the seeded file whose line falls inside the diff hunk that holds the
+  seeded site (its new-file range). _Amended 2026-10-27, before any item ran: the first text said
+  the same function, but a function's bounds cannot be read from the diff the scorer has, and
+  CooperBench's feature hunks mostly add whole functions anyway._ The verdict must hold under
   both rules (see Verdict rules).
 - **Location of a deletion** (missed branch, dropped error return): the new-file line where the
   removed lines were, which is the first line after them.
