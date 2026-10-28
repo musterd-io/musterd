@@ -100,6 +100,16 @@ def elevation(ky: float = KY_ISO) -> float:
     return math.asin(ky / KX)
 
 
+def effective_ky(ky: float = KY_ISO) -> float:
+    """The KY the cameras actually render through for a requested `ky` (ADR 746). `camera()`,
+    `figure.figure_camera` and `dog.dog_camera` place the camera at height `sin(elev) * zs`, so the
+    stretch meant for heights also tilts the camera: asked for 0.31, it renders at 0.33729. Kept
+    as is so every shipped asset stays pixel-identical; the manifest records this value and the
+    runtime projects through it."""
+    elev = elevation(ky)
+    return KX * math.sin(math.atan(math.tan(elev) * z_scale(ky)))
+
+
 def z_scale(ky: float = KY_ISO) -> float:
     """Heights are drawn 1:1 by the painters, so the scene stretches z by 1/cos(elev)."""
     return 1.0 / math.cos(elevation(ky))

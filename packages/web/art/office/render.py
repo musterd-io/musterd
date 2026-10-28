@@ -791,7 +791,8 @@ def main() -> None:
     assets = scene.build_scene(ky=a["ky"], px_per_unit=a["scale"])
     export = bpy.data.collections["export"]
     w, h = setup_render(a["scale"])
-    manifest = {"version": 1, "camera": {"kx": scene.KX, "ky": a["ky"]}, "assets": []}
+    # The camera the art really renders through (ADR 746), not the `--ky` asked for.
+    manifest = {"version": 1, "camera": {"kx": scene.KX, "ky": round(scene.effective_ky(a["ky"]), 5)}, "assets": []}
     # `--only id,id`: re-render those and keep every other entry of the manifest already on disk
     # (same camera and scale, or the kept entries would lie) — a desk's tweak is seconds, not minutes.
     only = a["only"]

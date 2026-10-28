@@ -21,11 +21,14 @@ export interface Camera {
 /**
  * The room's camera (office realism, spec §2.2): the Figma frames' corner, "a touch lower" than their
  * 2:1 iso (`KY`, elevation 30°) so figures stand up and faces face the viewer — elevation ≈ 26°. The
- * builder tuned `ky` against the render with nick's eye (spec §6.2); `art/office/render.py --ky` must
- * be rendered with the same number, and `manifest.json` records what it was. Every fit projects
- * through it (lane 01M5D8EJ40: the painted office and its iso camera are gone).
+ * builder tuned `ky` against the render with nick's eye (spec §6.2) and asked Blender for 0.31, but the
+ * Blender cameras lift by the height stretch too, so the art renders through 0.33729 — the value
+ * `scene.effective_ky(0.31)` computes and `manifest.json` records. Projecting at 0.31 put everything
+ * placed on the floor up to ~48 units off the baked floor toward the room's edges: the front door
+ * floated above the skirting, the café counter stood off its wall (ADR 746, lane 01M6017YB1). Every
+ * fit projects through it (lane 01M5D8EJ40: the painted office and its iso camera are gone).
  */
-export const CORNER_CAMERA: Camera = { kx: KX, ky: 0.31 };
+export const CORNER_CAMERA: Camera = { kx: KX, ky: 0.33729 };
 /** Logical floor extent (both axes). Desk/furniture anchors live in [0, FLOOR]. */
 export const FLOOR = 900;
 /** Floor slab thickness, in screen px at scale 1. */
