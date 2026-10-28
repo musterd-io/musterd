@@ -46,6 +46,14 @@ describe('visibleLen / padEndVisible', () => {
     expect(visibleLen('plain')).toBe(5);
   });
 
+  it('counts display cells, not code units, for wide and combining characters', () => {
+    // CJK ideograph is 2 cells; combining mark adds 0.
+    expect(visibleLen('a中b')).toBe(4); // 1 + 2 + 1
+    expect(visibleLen('e\u0301')).toBe(1); // e + combining acute
+    // ANSI escapes still stripped.
+    expect(visibleLen('\x1b[33ma中\x1b[39m')).toBe(3);
+  });
+
   it('pads to the target visible width with ≥1 trailing space', () => {
     expect(padEndVisible('ab', 5)).toBe('ab   ');
     // Already at/over width still gets one trailing space.
@@ -61,6 +69,12 @@ describe('wrapText', () => {
     const lines = wrapText('one two three four', 8);
     expect(lines.every((l) => l.length <= 8)).toBe(true);
     expect(lines.join(' ')).toBe('one two three four');
+  });
+
+  it('hard-breaks a token wider than the line', () => {
+    const lines = wrapText('abcdefghij', 4);
+    expect(lines).toEqual(['abcd', 'efgh', 'ij']);
+    expect(lines.every((l) => visibleLen(l) <= 4)).toBe(true);
   });
 
   it('returns [""] for empty input', () => {
@@ -83,6 +97,19 @@ describe('defList alignment', () => {
     expect(col0).toBe(col1);
     expect(col0).toBeGreaterThan('longername'.length); // padded past the widest term
     expect(descCol).toBeTruthy();
+  });
+
+  it('keeps the description usable at a 40-column width', () => {
+    const out = defRow(
+      { term: 'musterd very-long-command-name', desc: 'does something useful' },
+      26,
+      {
+        width: 40,
+      },
+    );
+    for (const line of out.split('\n')) {
+      expect(visibleLen(line)).toBeLessThanOrEqual(40);
+    }
   });
 
   it('wraps long descriptions with a hanging indent to the same column', () => {
