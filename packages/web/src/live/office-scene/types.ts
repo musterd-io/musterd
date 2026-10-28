@@ -253,6 +253,9 @@ export type OfficeEvent =
    *  acceptor's `accept` then plays the pin walk — the card goes up under done in their hand. */
   | { kind: 'walk-deliver'; from: string; to: string; lane: string; title: string }
   | { kind: 'megaphone'; from: string }
+  /** A goal shipped (`meta.goal_outcome`, the value layer): the shelf chimes roll the whole scale
+   *  (sound identity spec §2.2). Audio only; the board's own pulse carries the visual. */
+  | { kind: 'goal-done'; who: string; goal: string }
   /** `of`: whose work was accepted (the act's recipient) — the celebration lands on THEM, not the
    *  acceptor. Null/absent for team-addressed accepts, where there is no single celebrant. */
   | { kind: 'accept'; who: string; of?: string | null }

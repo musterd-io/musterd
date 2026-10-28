@@ -4,6 +4,7 @@ import { preloadCanvasFont } from '../canvasFont';
 import { pulseIntensity, pulseLive, type SeatPulse } from '../pulse';
 import { roomTone, screenPan, type LifeContext } from '../sound';
 import type { Moment } from '../soundLife';
+import { barForLane, gestureFor, voicesForChain } from '../soundVoice';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
@@ -938,6 +939,11 @@ export function mountOffice(
   }
   /** Who owns each lane the room has watched (lane 01M4V774MK): the deliver walk's carrier. */
   const laneOwners = createLaneOwners();
+  /** Lanes whose done already rang the chimes — `lane_resolve` and `lane_state` can both say done. */
+  const rangDone = new Set<string>();
+  let lastLaneDoneAt = -Infinity;
+  /** Where the shelf chimes hang: beside the work board (sound identity spec §2.2). */
+  const boardPan = (): number => screenPan(boardAnchor(fit).x + boardAnchor(fit).w / 2, width);
   let seededOwners: ReadonlyMap<string, string> | undefined; // the board map last handed to `laneOwners.seed`
   /** True while `drainReplay` emits: a replayed walk is older than the board, so it never notes an owner. */
   let replaying = false;
@@ -2134,13 +2140,8 @@ export function mountOffice(
         labelHost.appendChild(trace);
         s.cancels.push(() => trace.remove());
       }
-      // The whoosh deliberately follows the tether's own gate (E4 spec §2): a sweep describing
-      // motion that is not drawing would be a lie. Pan rides sender → addressee with the trace, and
-      // stays ONE sweep however many traces drew — four whooshes for one act is noise, not weight.
-      // Steer only since 2026-10-27 (sound re-evaluation, lane 01M6096TA7): on a busy stream the
-      // sweep was the most frequent moment after the door, and a plain directed message already has
-      // its cue; the interrupt-class redirect is the one whose motion earns a sound.
-      if (act === 'steer') roomTone.moment('whoosh', screenPan(head.x, width), screenPan(drawn[0]!.x, width));
+      // No sound rides the tether any more: the redirect gesture (sound identity spec §2.3) plays
+      // from `emit` at the desk the act is aimed at, where the old whoosh's sweep used to end.
     }
 
     // enter on the next frame so the hidden initial state paints first → the CSS transition actually runs
@@ -3154,6 +3155,7 @@ export function mountOffice(
       next.nodes.filter((n) => n.presence === 'online').map((n) => n.name),
     );
     const presenceLine = onlineNames.size > 0 ? captionForPresence(onlineNames, nextOnline) : null;
+    const wasOnline = onlineNames;
     onlineNames = nextOnline;
     teamName = next.teamName ?? 'revive';
     teamWorkingHours = next.teamWorkingHours ?? null;
@@ -3187,7 +3189,14 @@ export function mountOffice(
     // A newcomer's walk-in already rang the door in their colour (welcomeRoom) — the plain cue stands down.
     const welcomedAtDoor = arrivals.some((a) => a.online);
     if (actors.takeDoorPulses() > 0 && !welcomedAtDoor) {
-      roomTone.moment('door', screenPan(project(ENTRANCE.lx, ENTRANCE.ly, fit).x, width));
+      const doorPan = screenPan(project(ENTRANCE.lx, ENTRANCE.ly, fit).x, width);
+      roomTone.moment('door', doorPan);
+      // The door cousin (sound identity spec §2.3): two bars up for an arrival, the same two down
+      // for a departure, over the door's own foley. One per pulse set: the gate coalesces a burst.
+      const came = [...nextOnline].some((n) => !wasOnline.has(n));
+      const went = [...wasOnline].some((n) => !nextOnline.has(n));
+      if (came) roomTone.moment('arrive', doorPan);
+      else if (went) setTimeout(() => roomTone.moment('leave', doorPan), 420);
       if (!reduced) pushDoorCue(); // the entrance "opens" as someone comes/goes
     }
     // Someone just walked in: the dog goes to meet them at the door. Arrivals only — nobody, dog included,
@@ -3366,20 +3375,46 @@ export function mountOffice(
         converse(ev.who, ev.addressee?.names ?? [], hold);
         lookOver(ev.who);
       }
-      // An ask lands with acoustic weight in the room (E3 spec §2): one soft held tone, panned to
-      // the asked member's desk when directed, soft-centre for a team ask. Stateless by design.
-      if (ev.act === 'ask') {
-        // `ask` is deliberately not an ELIGIBLE_ACT (envelope.ts), so an ask's addressee is always
-        // the single routed member — the first name is the only name.
+      // The musterd voice (sound identity spec §2.3): a question rings the bell on the asked desk —
+      // two notes rising, the second held, unresolved; a redirect (steer / challenge / decline) is the
+      // same bell stopped short, at the desk it is aimed at. Soft-centre when it is for the team.
+      // Stateless by design; audio is not motion, so this sits above the reduced-motion gate.
+      const gesture = ev.act ? gestureFor(ev.act) : null;
+      if (gesture === 'question' || gesture === 'redirect') {
         const at = ev.addressee ? heads.get(ev.addressee.names[0]!) : undefined;
-        roomTone.moment('askbell', at ? screenPan(at.x, width) : 0);
+        roomTone.moment(gesture, at ? screenPan(at.x, width) : 0);
       }
       return;
     }
-    // The fanfare emits ABOVE the motion gate (E3 spec §2): the celebration sound plays under
-    // reduced-motion; the confetti and glances below stay gated with the rest of the choreography.
-    if (ev.kind === 'accept' && ev.of && ev.of !== ev.who && heads.has(ev.of)) {
-      roomTone.moment('fanfare', screenPan(heads.get(ev.of)!.x, width));
+    // The shelf chimes (sound identity spec §2.2) ring ABOVE the motion gate — audio is not motion.
+    // A lane reaching done by any route rings its own bar at the work board, once per lane; the
+    // chord is one bar per distinct seat the room can see in its chain (closer, owner). A goal
+    // shipping rolls the whole scale. Replays are older than the board and ring nothing.
+    if (ev.kind === 'walk-pin' && ev.state === 'done' && !replaying && !rangDone.has(ev.lane)) {
+      rangDone.add(ev.lane);
+      if (rangDone.size > 200) for (const oldest of rangDone) { rangDone.delete(oldest); break; }
+      lastLaneDoneAt = Date.now();
+      roomTone.moment('laneDone', boardPan(), undefined, {
+        bar: barForLane(ev.lane),
+        voices: voicesForChain([ev.who, laneOwners.carrier(ev.lane, ev.who)]),
+      });
+    }
+    if (ev.kind === 'goal-done' && !replaying) {
+      // The roll wins over a lane chord struck the same instant (§6.1): the moment gate drops, never
+      // queues, so the roll waits out the gap instead of being eaten by its own last lane.
+      const wait = Math.max(0, 420 - (Date.now() - lastLaneDoneAt));
+      const roll = () => roomTone.moment('goalDone', boardPan());
+      if (wait === 0) roll();
+      else setTimeout(roll, wait);
+    }
+    if (ev.kind === 'walk-handoff') {
+      // Passing hands (§2.3): one note at the sender's desk, the answer a third up at the receiver's.
+      // The second is emitted after the moment gate so it plays rather than coalescing into the first.
+      const from = heads.get(ev.from);
+      const to = heads.get(ev.to);
+      roomTone.moment('handoffSend', from ? screenPan(from.x, width) : 0);
+      const toPan = to ? screenPan(to.x, width) : 0;
+      setTimeout(() => roomTone.moment('handoffAnswer', toPan), 420);
     }
     if (reduced) return;
     switch (ev.kind) {

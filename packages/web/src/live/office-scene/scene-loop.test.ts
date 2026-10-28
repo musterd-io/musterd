@@ -423,3 +423,34 @@ describe('the companion gesture rides a beat that played (ADR 617)', () => {
     expect(fire).toContain("playAmbientBeat(c, slot, false, 'companion-beat')");
   });
 });
+
+describe('the musterd voice at its objects (sound identity spec §2.2–2.3, lane 01M61R4CBA)', () => {
+  const emitBody = index.slice(index.indexOf('function emit(ev: OfficeEvent)'), index.indexOf("    switch (ev.kind) {", index.indexOf('function emit(ev: OfficeEvent)')));
+  it('rings the chimes at the board for a lane done by any route, once per lane, never on replay', () => {
+    expect(emitBody).toContain("ev.kind === 'walk-pin' && ev.state === 'done' && !replaying && !rangDone.has(ev.lane)");
+    expect(emitBody).toContain("roomTone.moment('laneDone', boardPan()");
+    expect(emitBody).toContain('bar: barForLane(ev.lane)');
+    expect(emitBody).toContain('voices: voicesForChain([ev.who, laneOwners.carrier(ev.lane, ev.who)])');
+    expect(index).not.toContain("roomTone.moment('fanfare'");
+  });
+  it('rolls the scale for a goal shipped, waiting out the gate behind its last lane', () => {
+    expect(emitBody).toContain("ev.kind === 'goal-done' && !replaying");
+    expect(emitBody).toContain("roomTone.moment('goalDone', boardPan())");
+    expect(emitBody).toContain('420 - (Date.now() - lastLaneDoneAt)');
+  });
+  it('a question and a redirect ring the bell at the desk they are aimed at, above the motion gate', () => {
+    expect(emitBody).toContain("gesture === 'question' || gesture === 'redirect'");
+    expect(emitBody).toContain('roomTone.moment(gesture, at ? screenPan(at.x, width) : 0)');
+    expect(index).not.toContain("roomTone.moment('askbell'");
+    expect(index).not.toContain("roomTone.moment('whoosh'");
+  });
+  it('a handoff is a note here and the answer there', () => {
+    expect(emitBody).toContain("roomTone.moment('handoffSend'");
+    expect(emitBody).toContain("roomTone.moment('handoffAnswer', toPan)");
+  });
+  it('the door cousin plays up for an arrival and down for a departure, over the door foley', () => {
+    expect(index).toContain("roomTone.moment('door', doorPan)");
+    expect(index).toContain("if (came) roomTone.moment('arrive', doorPan)");
+    expect(index).toContain("roomTone.moment('leave', doorPan)");
+  });
+});

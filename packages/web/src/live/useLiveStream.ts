@@ -12,7 +12,7 @@ import { ensureBuildSync } from './buildSync';
 import { loadSnapshot, resumeSnapshot } from './liveCache';
 import type { SeatPulse } from './pulse';
 import { coalesce } from './coalesce';
-import { firehoseSound } from './sound';
+import { firehoseSound, roomTone } from './sound';
 import { replaceMember } from './statusLine';
 import type { DaemonInfo } from './VersionBadge';
 import { capNewest } from './window';
@@ -216,7 +216,10 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
         // façade drops cues while the tab is hidden (broadcast excepted) — see firehoseSound.chime.
         if (!chimedRef.current.has(e.id) && Date.now() - e.ts < 30_000) {
           chimedRef.current.add(e.id);
-          firehoseSound.chime(e.act);
+          // One sound per act (sound identity spec §6.1): when the room tone is on, the office places
+          // every gesture at its object (the chimes, a desk bell, the door), so the stream's centred
+          // cue stands down; it plays only when the cues are the one engine on.
+          if (!roomTone.enabled) firehoseSound.chime(e.act);
         }
         add([e]);
       },
