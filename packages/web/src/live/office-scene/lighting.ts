@@ -166,8 +166,8 @@ export const DAY_ENV: LightEnv = computeLightEnv(12, true);
  * Where the sun is, as the window light shafts see it (lane 01M4VR902N): how far a window's beam reaches
  * onto the floor and how far its far end leans sideways, in logical units. A low sun throws long and leans
  * hard; noon is shorter and straight; the lean flips sides across the day (positive in the morning). Pure
- * over the office hour, so the painted beams, the dust motes in them and the dog's sunbeam nap spots all read
- * the same sun. The beams were constants (150, 46) — 7 am and noon differed only in tint and strength.
+ * over the office hour, so the sun pools on the shell, the dust motes in them and the dog's sunbeam nap spots all
+ * read the same sun. The beams were constants (150, 46) — 7 am and noon differed only in tint and strength.
  */
 export function sunBeam(hours: number): { len: number; shear: number } {
   const height = Math.max(0, Math.sin((Math.PI * (hours - 6.5)) / 12.5)); // 0 at the horizon … 1 at noon

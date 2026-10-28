@@ -18,6 +18,7 @@ import {
   NOOK,
   PLANTS,
   WORKING_HOURS_CALENDAR,
+  WINDOWS,
 } from './layout';
 import { computeLightEnv } from './lighting';
 import type { PetMode, PetState } from './pet';
@@ -64,6 +65,7 @@ import {
   renderScene,
   WIDEST_PANEL_HALF,
   furnishedBox,
+  drawSunPools,
 } from './render';
 import { assignSeats } from './seating';
 import type { RenderOpts } from './render';
@@ -1896,12 +1898,17 @@ describe('background layer (sprite cache)', () => {
     expect(noFixtures.ops.length).toBeGreaterThan(0); // the clock always hangs
   });
 
-  it('backgroundKey follows the room state and its fade in 32 steps, the daylight, the fit and the dpr — not the hour (plan Task 8)', () => {
+  it('backgroundKey follows the room state and its fade in 32 steps, the daylight, the fit and the dpr — and the sun by the quarter hour (plan Task 8; lane 01M5ZW21JH)', () => {
     const k = backgroundKey(fit, env, 1);
     expect(backgroundKey(fit, env, 1)).toBe(k);
-    // the same day state at another hour is the same key…
-    expect(backgroundKey(fit, { ...env, hours: 10 }, 1)).toBe(backgroundKey(fit, { ...env, hours: 14 }, 1));
-    // …a fade step is not; and two instants 10 s apart inside a fade share a step
+    // the sun pools slide through the day: the same day state at another hour is a different key…
+    expect(backgroundKey(fit, { ...env, hours: 10 }, 1)).not.toBe(backgroundKey(fit, { ...env, hours: 14 }, 1));
+    // …in quarter-hour steps, so a minute later is the same shell…
+    expect(backgroundKey(fit, { ...env, hours: 10 + 1 / 60 }, 1)).toBe(backgroundKey(fit, { ...env, hours: 10 }, 1));
+    // …and at night, with no sun to pool, the hour drops out of the key again
+    const night = computeLightEnv(23, true);
+    expect(backgroundKey(fit, { ...night, hours: 23 }, 1)).toBe(backgroundKey(fit, { ...night, hours: 23.5 }, 1));
+    // a fade step is not; and two instants 10 s apart inside a fade share a step
     const a = backgroundKey(fit, { ...env, hours: 16.6 }, 1);
     expect(a).not.toBe(backgroundKey(fit, { ...env, hours: 14 }, 1));
     expect(backgroundKey(fit, { ...env, hours: 16.6 + 10 / 3600 }, 1)).toBe(a);
@@ -1917,6 +1924,26 @@ describe('background layer (sprite cache)', () => {
     const r = recordingCtx();
     drawWalls(r.ctx, fit, env, schedule, board(), 3, undefined, ART);
     expect(readsBeforeWrites(r.ops)).toEqual([]);
+  });
+});
+
+describe('the sun pools (lane 01M5ZW21JH): painted into the shell from sunBeam, not baked', () => {
+  const fit = fitFloor(1200, 900);
+  it('paints one additive quad per window per wall by day, leaning with the sun, and nothing at night', () => {
+    const at = (hours: number) => {
+      const r = recordingCtx();
+      drawSunPools(r.ctx, fit, computeLightEnv(hours, true));
+      return r.ops;
+    };
+    const noon = at(12);
+    const fills = noon.filter((o) => o.name === 'fill');
+    expect(fills).toHaveLength(WINDOWS.length * 2);
+    expect(noon.some((o) => o.name === 'set:globalCompositeOperation' && o.args[0] === 'lighter')).toBe(true);
+    // the pools move with the sun: the far corner of the first quad is somewhere else at 8, 12 and 17
+    // (long and leaning one way, short and straight, long and leaning the other — `sunBeam`'s business)
+    const far = (ops: RecordedOp[]) => ops.filter((o) => o.name === 'lineTo')[1]!.args.join(',');
+    expect(new Set([far(at(8)), far(at(12)), far(at(17))]).size).toBe(3);
+    expect(at(23).filter((o) => o.name === 'fill')).toHaveLength(0);
   });
 });
 

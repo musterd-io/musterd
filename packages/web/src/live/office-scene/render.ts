@@ -3955,11 +3955,78 @@ function blitSprite(
 }
 
 /**
+ * The sun pools on the planks (lane 01M5ZW21JH): each window throws a pool of daylight across the
+ * floor, long and leaning when the sun is low, short and straight at noon, the lean flipping sides
+ * across the day (`lighting.ts` `sunBeam`, shared with the dust motes and the dog's nap spots).
+ * Painted additively into the cached shell — the Blender shell is rendered WITHOUT its window spots
+ * (`scene.py` `lights(window_spots=False)`), because a pool baked at one sun angle under a painted
+ * one read as two suns. Additive paint cannot be its own sprite (canvas-sprite-caching.md), so this
+ * runs inside the shell's draw and the shell's key carries the quarter hour (`backgroundKey`).
+ */
+export function drawSunPools(ctx: CanvasRenderingContext2D, fit: Fit, env: LightEnv): void {
+  if (env.skyStrength < 0.02) return;
+  const { len, shear } = sunBeam(env.hours);
+  // Sunlight on wood is warm even under a pale noon sky: the pool is the sky tint pulled most of the
+  // way toward sun-yellow, and strong enough to read on a bright floor (0.5×sky was invisible on the
+  // rendered planks — the painted floor it was tuned for was darker; measured 2026-10-27).
+  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(env.skyTint);
+  const sky = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [255, 210, 150];
+  const sun = [255, 236, 190];
+  const [r, g, b] = sky.map((c, i) => Math.round(c * 0.35 + sun[i]! * 0.65));
+  const peak = 0.85 * env.skyStrength;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const pool = (
+    base: (t: number) => [number, number],
+    into: (l: [number, number], d: number) => [number, number],
+  ): void => {
+    for (const w of WINDOWS) {
+      const a = base(w.t0);
+      const bb = base(w.t1);
+      const pa = project(a[0], a[1], fit);
+      const pb = project(bb[0], bb[1], fit);
+      const f0 = into(a, len);
+      const f1 = into(bb, len);
+      const pf0 = project(f0[0], f0[1], fit);
+      const pf1 = project(f1[0], f1[1], fit);
+      // bright at the sill, gone at the far end; a window nearer the sun is brighter (`bright`)
+      const grad = ctx.createLinearGradient(
+        (pa.x + pb.x) / 2,
+        (pa.y + pb.y) / 2,
+        (pf0.x + pf1.x) / 2,
+        (pf0.y + pf1.y) / 2,
+      );
+      grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${(peak * w.bright).toFixed(3)})`);
+      grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.lineTo(pf1.x, pf1.y);
+      ctx.lineTo(pf0.x, pf0.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  };
+  // back-left wall (lx = 0): the pool throws into +lx, sheared along +ly
+  pool((t) => [0, t * FLOOR], (l, d) => [d, l[1] + (d / len) * shear]);
+  // back-right wall (ly = 0): the pool throws into +ly, sheared along +lx
+  pool((t) => [t * FLOOR, 0], (l, d) => [l[0] + (d / len) * shear, d]);
+  ctx.restore();
+}
+
+/** The quarter hour the sun pools are baked at — 0 while there is no sun to pool. */
+function sunBucket(env: LightEnv): number {
+  return env.skyStrength < 0.02 ? 0 : Math.floor(env.hours * 4);
+}
+
+/**
  * The room shell's sprite key. It carries what the shell actually READS off the lighting envelope —
  * the room's light state and its fade (`roomMixFor`), and the daylight the ceiling overlay fades with —
  * and not `veilAlpha` or `lampsOn`, which only `drawInteriorLight` reads and which is never cached.
- * `hours` is absent on purpose: the clock is the live fixture that reads it. The state follows the
- * clock quantised, so a 45-minute fade re-bakes in 32 steps, not every frame (plan Task 8).
+ * The quarter hour rides in it for the sun pools (`drawSunPools`, lane 01M5ZW21JH); the clock face
+ * itself is a live fixture. The state follows the clock quantised, so a 45-minute fade re-bakes in
+ * 32 steps and the sun in 15-minute steps, not every frame (plan Task 8).
  */
 export function backgroundKey(fit: Fit, env: LightEnv, dpr: number): string {
   const m = roomMixFor(env);
@@ -3967,6 +4034,7 @@ export function backgroundKey(fit: Fit, env: LightEnv, dpr: number): string {
     'bg',
     `${m.from}→${m.to}@${Math.round(m.mix * 32)}`,
     env.daylight.toFixed(3),
+    `sun${sunBucket(env)}`,
     fitKey(fit),
     dpr,
     paletteKey(),
@@ -4064,6 +4132,7 @@ export function renderScene(
     drawGroundShadow(c, fit);
     blitIf(c, fit, rendered, `room/light-${dayOf(mix.from)}`, 0, 0);
     if (mix.mix > 0) blitIf(c, fit, rendered, `room/light-${dayOf(mix.to)}`, 0, 0, mix.mix);
+    drawSunPools(c, fit, env); // the window pools, at this quarter hour's sun (lane 01M5ZW21JH)
     const ceiling = ceilingOf(mix.from);
     if (ceiling !== 'off') {
       // The overlay was measured at night (night-on minus night-off). By day the same light adds
