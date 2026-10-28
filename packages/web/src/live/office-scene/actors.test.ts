@@ -1873,6 +1873,16 @@ describe('heads that look (lane 01M5XS5ZYP): lookAt', () => {
     expect(actors.poses().get('Ada')!.gesture).toBe(0);
   });
 
+  it('a dnd member keeps typing — do-not-disturb is honoured by the look as by every other interruption', () => {
+    const { placements, byName } = world([{ ...node('Ada'), dnd: true }, node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    const h = actors.poses().get('Ada')!;
+    const at = { lx: h.lx + (h.dir === 'E' || h.dir === 'W' ? 0 : 100), ly: h.ly + (h.dir === 'E' || h.dir === 'W' ? 100 : 0) };
+    expect(actors.lookAt('Ada', at)).toBe(0);
+    expect(actors.active()).toBe(false);
+  });
+
   it('a delayed look stays at rest until its delay has passed, so a row of heads turns in sequence', () => {
     const { placements, byName } = world([node('Ada'), node('Bo')]);
     const actors = createActors();
