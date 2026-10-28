@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
-import { WAKE_AUDIT_SQL } from './insights.js';
+import { WAKE_AUDIT_SQL, WAKE_LEASED_SQL } from './insights.js';
 
 /**
  * The open-directed ledger's thread lookups must seek, not scan (lane 01M4S7GW7P). On the Air's 23k
@@ -30,6 +30,17 @@ withDrivers('report wake-metrics plan', (open, kind) => {
     const plan = await db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${WAKE_AUDIT_SQL}`, ['t', 0]);
     expect(plan.map((r) => r.detail).join(' | ')).toContain('idx_audit_team_action_ts');
   });
+  it.skipIf(kind !== 'sqlite')(
+    'the wake-lease read seeks (team, action, ts) (ADR 749)',
+    async () => {
+      const db = await open();
+      const plan = await db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${WAKE_LEASED_SQL}`, [
+        't',
+        0,
+      ]);
+      expect(plan.map((r) => r.detail).join(' | ')).toContain('idx_audit_team_action_ts');
+    },
+  );
 });
 
 withDrivers('lane history plan', (open, kind) => {

@@ -316,6 +316,12 @@ export const WakeSeatCostSchema = z.object({
   over_budget: z.boolean(),
   /** ADR 748. The priced total split by UTC day, oldest first. Optional for back-compat. */
   by_day: z.array(WakeSeatDaySchema).optional(),
+  /**
+   * ADR 749. How long each directed act waited for this seat's wake: the act's first
+   * `residency.wake_leased` row minus the act's ts, one per act, ascending. Message acts only.
+   * A list, not a median, so a reader can pool any set of seats exactly. Optional for back-compat.
+   */
+  waited_ms: z.array(z.number().int().nonnegative()).optional(),
 });
 export type WakeSeatCost = z.infer<typeof WakeSeatCostSchema>;
 

@@ -269,6 +269,14 @@ export function renderDisputes(d: NonNullable<Report['disputes']>, w: (s: string
   }
 }
 
+/** The median of an ascending, non-empty list (the two middles averaged when even). */
+function medianOf(sorted: readonly number[]): number {
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[mid] ?? 0)
+    : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
+}
+
 const SPEND_CAP_NOTE = 'measured wake cost, not payments';
 
 /** ADR 641. Both caps over: the measurement lines stay, and one notice names each cap. */
@@ -592,6 +600,12 @@ async function residencyReport(parsed: Parsed): Promise<number> {
       w(
         `  ${theme.memberName(s.seat, 'agent')} — ${s.wakes} wake${s.wakes === 1 ? '' : 's'} · ${cost} · ${budget}\n`,
       );
+      // ADR 749: how long the seat's directed acts waited for a wake; --json carries every value.
+      const waited = s.waited_ms ?? [];
+      if (waited.length > 0)
+        w(
+          `    ${theme.meta('waited')} median ${ago(medianOf(waited))} ${theme.meta(`· ${String(waited.length)} act${waited.length === 1 ? '' : 's'}`)}\n`,
+        );
       // ADR 748: the priced total by UTC day, so a per-day spend rule reads off the hub.
       for (const d of s.by_day ?? [])
         w(
