@@ -16,7 +16,7 @@ import {
 } from '../help/catalog.js';
 import { renderBanner } from './rows.js';
 import { theme } from './theme.js';
-import { defList, dim, heading, hint, rule, sym, termWidth, wrapText } from './ui.js';
+import { defList, dim, heading, hint, rule, sym, termWidth, visibleLen, wrapText } from './ui.js';
 
 function entry(name: string): CommandEntry | undefined {
   return CATALOG.find((c) => c.name === name);
@@ -42,7 +42,18 @@ export function renderHelp(opts: { full?: boolean; width?: number } = {}): strin
     const inGroup = CATALOG.filter((c) => c.group === group.id);
     const shown = opts.full ? inGroup : inGroup.filter((c) => c.primary);
     const rows = (shown.length ? shown : inGroup).map((c) => ({ term: c.name, desc: c.summary }));
-    out.push('', rule(28), `${heading(group.title)}  ${dim(group.blurb)}`);
+    // The blurb is long; on a narrow terminal wrap it instead of overflowing the line.
+    const title = heading(group.title);
+    const titleWidth = visibleLen(title);
+    const inlineBlurbWidth = Math.max(10, width - titleWidth - 2);
+    const blurbLines = wrapText(group.blurb, inlineBlurbWidth);
+    if (titleWidth + 2 + visibleLen(blurbLines[0] ?? '') <= width) {
+      out.push('', rule(28), title + '  ' + dim(blurbLines[0] ?? ''));
+      for (const bl of blurbLines.slice(1)) out.push(' '.repeat(titleWidth + 2) + dim(bl));
+    } else {
+      out.push('', rule(28), title);
+      for (const bl of blurbLines) out.push('  ' + dim(bl));
+    }
     out.push(defList(rows, { width }));
     const hidden = inGroup.length - rows.length;
     if (hidden > 0) {
@@ -54,61 +65,106 @@ export function renderHelp(opts: { full?: boolean; width?: number } = {}): strin
 
   // Footer.
   out.push('', rule(Math.min(width, 72)));
-  out.push(
-    theme.meta('global flags') +
-      '  ' +
-      GLOBAL_FLAGS.map((f) => theme.accent(f.flag)).join(theme.meta('  ')),
-  );
-  out.push(theme.meta('acts') + '  ' + ACTS.map((a) => theme.dim(a)).join(' '));
-  out.push(dim(`more   musterd help <command>  ${sym.dot}  musterd help --json`));
+  // Wrap the flag/act lists so a narrow terminal doesn't overflow.
+  const flagLine = theme.meta('global flags') + '  ';
+  const flags = GLOBAL_FLAGS.map((f) => theme.accent(f.flag)).join(theme.meta('  '));
+  for (const line of wrapText(flags, Math.max(20, width - visibleLen(flagLine)))) {
+    out.push(flagLine + line);
+  }
+  const actLine = theme.meta('acts') + '  ';
+  const acts = ACTS.map((a) => theme.dim(a)).join(' ');
+  for (const line of wrapText(acts, Math.max(20, width - visibleLen(actLine)))) {
+    out.push(actLine + line);
+  }
+  for (const line of wrapText(
+    `more   musterd help <command>  ${sym.dot}  musterd help --json`,
+    width,
+  )) {
+    out.push(dim(line));
+  }
   return out.join('\n');
 }
 
 /** One group's full command list (`musterd help <group-id>`), or null if the id is unknown. */
-export function renderGroupHelp(id: string): string | null {
+export function renderGroupHelp(id: string, opts: { width?: number } = {}): string | null {
   const group = GROUPS.find((g) => g.id === id);
   if (!group) return null;
-  const width = termWidth();
+  const width = opts.width ?? termWidth();
   const rows = CATALOG.filter((c) => c.group === group.id).map((c) => ({
     term: c.name,
     desc: c.summary,
   }));
-  return [
-    `${heading(group.title)}  ${dim(group.blurb)}`,
-    defList(rows, { width }),
-    '',
-    dim(`musterd help <command> for detail  ${sym.dot}  musterd help  for the full map`),
-  ].join('\n');
+  const title = heading(group.title);
+  const blurbLines = wrapText(group.blurb, Math.max(20, width - visibleLen(title) - 2));
+  const header =
+    visibleLen(title) + 2 + visibleLen(blurbLines[0] ?? '') <= width
+      ? title + '  ' + dim(blurbLines[0] ?? '')
+      : title;
+  const out: string[] = [header];
+  if (visibleLen(title) + 2 + visibleLen(blurbLines[0] ?? '') > width) {
+    for (const bl of blurbLines) out.push('  ' + dim(bl));
+  } else {
+    for (const bl of blurbLines.slice(1)) out.push(' '.repeat(visibleLen(title) + 2) + dim(bl));
+  }
+  out.push(defList(rows, { width }));
+  for (const line of wrapText(
+    `musterd help <command> for detail  ${sym.dot}  musterd help  for the full map`,
+    width,
+  )) {
+    out.push(dim(line));
+  }
+  return out.join('\n');
 }
 
 /** Detail for one command (`musterd help <name>`), or null if the name is unknown. */
-export function renderCommandHelp(name: string): string | null {
+export function renderCommandHelp(name: string, opts: { width?: number } = {}): string | null {
   const cmd = entry(name);
   if (!cmd) return null;
-  const width = termWidth();
+  const width = opts.width ?? termWidth();
   const out: string[] = [];
 
-  const sig = cmd.signature ? ` ${theme.meta(cmd.signature)}` : '';
-  out.push(`${theme.accent('musterd ' + cmd.name)}${sig}`);
+  const sig = cmd.signature ? cmd.signature : '';
+  const head = `${theme.accent('musterd ' + cmd.name)}`;
+  out.push(head);
+  if (sig) {
+    for (const line of wrapText(sig, width - 2)) {
+      out.push('  ' + theme.meta(line));
+    }
+  }
   out.push(rule(Math.min(28, width)));
-  out.push('  ' + cmd.summary);
+  for (const line of wrapText(cmd.summary, width - 2)) out.push('  ' + line);
 
   if (cmd.detail) {
     out.push('');
     for (const para of cmd.detail.split('\n')) {
       // Preserve the intentional indented sub-command blocks; wrap only free-flowing prose.
-      if (/^\s{2,}/.test(para)) out.push(theme.meta(para));
-      else for (const line of wrapText(para, width - 2)) out.push('  ' + line);
+      if (/^\s{2,}/.test(para)) {
+        if (visibleLen(para) <= width) out.push(theme.meta(para));
+        else for (const line of wrapText(para, width)) out.push(theme.meta(line));
+      } else for (const line of wrapText(para, width - 2)) out.push('  ' + line);
     }
   }
 
   if (cmd.examples?.length) {
     out.push('', heading('examples'));
-    for (const ex of cmd.examples) out.push(`  ${theme.meta('$')} ${ex}`);
+    for (const ex of cmd.examples) {
+      const exLine = `  ${theme.meta('$')} ${ex}`;
+      if (visibleLen(exLine) <= width) {
+        out.push(exLine);
+      } else {
+        out.push(`  ${theme.meta('$')}`);
+        for (const line of wrapText(ex, width - 2)) out.push('  ' + theme.meta(line));
+      }
+    }
   }
 
   const group = GROUPS.find((g) => g.id === cmd.group);
-  out.push('', dim(`in: ${group?.title ?? cmd.group}  ${sym.dot}  musterd help  for the full map`));
+  for (const line of wrapText(
+    `in: ${group?.title ?? cmd.group}  ${sym.dot}  musterd help  for the full map`,
+    width,
+  )) {
+    out.push(dim(line));
+  }
   return out.join('\n');
 }
 
