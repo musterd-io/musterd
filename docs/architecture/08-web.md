@@ -415,7 +415,7 @@ teammate's session. Consequences worth internalising:
   the page reloads once per build, and does not loop.
 - **Every nameplate is one chalk stock** (lane 01M5B31024, 2026-10-19, superseding 01M5AVZA7C's
   per-member tint the same day): `.lc-gl-label__plate` is #fffaf0 for every member, opaque, with the
-  member's hue only as a hint in the rim (55% into the paper rim). The paper-2 stock before it sat one
+  member's hue only as a hint in the rim (70% into the paper rim since 2026-10-28, lane 01M6017XWD; 55% before). The paper-2 stock before it sat one
   step from the mustard floor; chalk lifts the plates by lightness (never darkness, nick's standing
   line). nick picked it from five stocks shown side by side — a tinted plate per member read as
   twelve colours and drowned state. The stocks tried are recorded beside the rule.
