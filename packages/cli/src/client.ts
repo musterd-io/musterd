@@ -846,7 +846,12 @@ export class HttpClient {
    */
   mintSponsoredAgent(
     slug: string,
-    body: { name: string; role?: string | undefined; host?: string | undefined },
+    body: {
+      name: string;
+      role?: string | undefined;
+      host?: string | undefined;
+      approval?: AuthorityProof | undefined;
+    },
   ): Promise<{
     member: MemberSummary;
     hosting: 'sponsor_host' | 'connect_link';
@@ -857,6 +862,7 @@ export class HttpClient {
       name: body.name,
       ...(body.role !== undefined ? { role: body.role } : {}),
       ...(body.host !== undefined ? { host: body.host } : {}),
+      ...(body.approval !== undefined ? { approval: body.approval } : {}),
     });
   }
   /** ADR 374: set a member's hue on a DB-only team (a file-backed team edits the seat file). */

@@ -127,7 +127,12 @@ describe('musterd agent <name>', () => {
   // ADR 463 §2 / ADR 647: a hosted seat is minted through the sponsored path, the one that queues a
   // provision — never `POST /members`, which the 2026-10-19 cloud pilot used and which queued nothing.
   describe('--hosted mints the sponsored agent and provisions nothing here', () => {
-    const capture = async (argv: string[]) => {
+    const capture = async (
+      argv: string[],
+      deps: {
+        authorityApproval?: (act: string, target: string, payload: unknown) => Promise<never>;
+      } = {},
+    ) => {
       const chunks: string[] = [];
       const spy = vi.spyOn(process.stdout, 'write').mockImplementation((c: never) => {
         chunks.push(String(c));
@@ -135,13 +140,58 @@ describe('musterd agent <name>', () => {
       });
       try {
         return {
-          code: await agentCommand(parseArgs(argv), { infraGate: async () => null }),
+          code: await agentCommand(parseArgs(argv), {
+            infraGate: async () => null,
+            ...deps,
+          }),
           out: chunks.join(''),
         };
       } finally {
         spy.mockRestore();
       }
     };
+
+    it('collects the A2 approval and retries when the mint is refused no_signature (ADR 662)', async () => {
+      const proof = { key_id: 'k1', nonce: 'n1', signature: 'sig' };
+      const authorityApproval = vi.fn(async () => proof);
+      h.mintSponsoredAgent
+        .mockRejectedValueOnce(
+          new CliError(
+            'authority refused (no_signature): agent_create requires an A2 device signature',
+            3,
+          ),
+        )
+        .mockResolvedValueOnce({
+          member: { name: 'June' },
+          hosting: 'sponsor_host' as const,
+          host: 'cloud-June',
+          connect_url: 'http://localhost:4849/teams/ritual/connect/n0nce',
+        });
+      const { code } = await capture(['June', '--hosted', '--host', 'cloud-June'], {
+        authorityApproval: authorityApproval as never,
+      });
+      expect(code).toBe(0);
+      expect(authorityApproval).toHaveBeenCalledWith('agent_create', 'June', {
+        name: 'June',
+        role: null,
+      });
+      expect(h.mintSponsoredAgent).toHaveBeenCalledTimes(2);
+      expect(h.mintSponsoredAgent).toHaveBeenLastCalledWith('ritual', {
+        name: 'June',
+        host: 'cloud-June',
+        approval: proof,
+      });
+    });
+
+    it('does not collect an approval for any other refusal', async () => {
+      const authorityApproval = vi.fn(async () => ({ key_id: 'k1', nonce: 'n1', signature: 's' }));
+      h.mintSponsoredAgent.mockRejectedValueOnce(new CliError('cap of 3', 5, 'forbidden'));
+      await expect(
+        capture(['June', '--hosted'], { authorityApproval: authorityApproval as never }),
+      ).rejects.toThrow(/cap of 3/);
+      expect(authorityApproval).not.toHaveBeenCalled();
+      expect(h.mintSponsoredAgent).toHaveBeenCalledTimes(1);
+    });
 
     it('queued on a live sponsor host: exit 0, names the host, no workspace or wiring', async () => {
       const { code, out } = await capture(['June', '--hosted', '--role', 'infra']);
