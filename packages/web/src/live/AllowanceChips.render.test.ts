@@ -8,7 +8,7 @@ import { allowanceChips, readingAge } from './allowanceLine';
 /**
  * The header's allowance chips (ADR 744), rendered with `react-dom/server` as the other
  * `*.render.test.ts` files do. Claims: humans only, offline humans kept, the lowest account leads,
- * and the label and stale note read as comms wrote them (lane 01M5ZFNPKA).
+ * and the label names every account as percent used (ADR 745).
  */
 
 const NOW = 10_000_000;
@@ -57,8 +57,8 @@ describe('allowanceChips', () => {
       [member('nick', 'human', [account('Claude Max', 0.62), account('Codex Pro', 0.09)])],
       NOW,
     );
-    expect(chip?.lines[0]?.text).toBe('Codex Pro 9% left');
-    expect(chip?.label).toBe("nick's allowance: Codex Pro 9% left, the lowest of 2 accounts");
+    expect(chip?.lines.map((line) => line.text)).toEqual(['Codex Pro 91% used', 'Claude Max 38% used']);
+    expect(chip?.label).toBe("nick's allowance: Codex Pro 91% used, Claude Max 38% used");
     expect(chip?.note).toBeNull();
   });
 
@@ -67,7 +67,7 @@ describe('allowanceChips', () => {
       [member('swetha', 'human', [account('Claude Pro', 0.35, NOW - 3 * 60 * MIN)], 'offline')],
       NOW,
     );
-    expect(chip?.label).toBe("swetha's allowance: Claude Pro 35% left, offline, last read 3h ago");
+    expect(chip?.label).toBe("swetha's allowance: Claude Pro 65% used, offline, last read 3h ago");
     expect(chip?.note).toBe('offline · last read 3h ago');
   });
 
@@ -98,11 +98,21 @@ describe('AllowanceChips', () => {
   const render = (roster: MemberSummary[]) =>
     renderToStaticMarkup(createElement(AllowanceChips, { roster, now: NOW }));
 
-  it('renders a button per human with the lowest percent, warn ink under 15%', () => {
+  it('renders a button per human with the percent used, warn ink under 15% left', () => {
     const html = render([member('nick', 'human', [account('Codex Pro', 0.09)])]);
     expect(html).toContain('lc-allow__chip is-warn');
-    expect(html).toContain('>9%<');
+    expect(html).toContain('Codex Pro 91% used');
+    expect(html).toContain('width:91%');
     expect(html).toContain('aria-expanded="false"');
+  });
+
+  it('names every account on the chip, most used first', () => {
+    const html = render([
+      member('swetha', 'human', [account('Muse', 0.93), account('Claude Max', 0.27)]),
+    ]);
+    expect(html).toContain('Claude Max 73% used');
+    expect(html).toContain('Muse 7% used');
+    expect(html.indexOf('Claude Max 73% used')).toBeLessThan(html.indexOf('Muse 7% used'));
   });
 
   it('quiets a stale chip', () => {

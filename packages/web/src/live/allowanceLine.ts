@@ -1,6 +1,7 @@
 /**
- * The 28px what's-left line (ADR 723). One line per account. Local types only — this file does not
- * import the protocol barrel, so zod stays out of /live.
+ * One line per account (ADR 723, painted per ADR 744 and ADR 745). A percent window is shown as
+ * what has been used. Local types only — this file does not import the protocol barrel, so zod
+ * stays out of /live.
  */
 
 export const ALLOWANCE_QUIET_MS = 2 * 60 * 1000;
@@ -30,7 +31,10 @@ export interface AllowanceLine {
   text: string;
   suffixes: string[];
   title: string;
-  /** Percent of the window that is left, 0–100. The bar is this wide. */
+  /**
+   * How full the bar is, 0–100. A percent window fills with the share used; an amount window
+   * fills with the share left.
+   */
   bar: number;
   warn: boolean;
   quiet: boolean;
@@ -41,6 +45,11 @@ export interface AllowanceLine {
 
 function percent(left: number): number {
   return Math.max(0, Math.min(100, Math.round(left * 100)));
+}
+
+/** Share used, as a whole percent. The stored window stays `left`. */
+function usedPercent(left: number): number {
+  return Math.max(0, Math.min(100, Math.round((1 - left) * 100)));
 }
 
 function amount(n: number): string {
@@ -60,7 +69,7 @@ function amountLeft(window: AllowanceLineWindow): { left: string; unit: string }
 
 function sentence(account: AllowanceLineAccount, window: AllowanceLineWindow): string {
   if (window.kind === 'percent') {
-    return `${account.label} has ${percent(window.left)}% of the ${window.name} window left.`;
+    return `${account.label} has ${usedPercent(window.left)}% of the ${window.name} window used.`;
   }
   const count = amountLeft(window);
   if (!count) return `${account.label} ${window.name}.`;
@@ -75,24 +84,24 @@ function lineFor(account: AllowanceLineAccount, now: number): AllowanceLine | nu
   });
   const top = ordered[0];
   if (!top) return null;
-  const n = percent(top.left);
+  const used = usedPercent(top.left);
   const count = top.kind === 'amount' ? amountLeft(top) : null;
   return {
     text:
       top.kind === 'percent'
-        ? `${account.label} ${n}% left`
+        ? `${account.label} ${used}% used`
         : count
           ? `${account.label} ${count.left}${count.unit === '' ? '' : ` ${count.unit}`} left`
           : account.label,
     suffixes: ordered.slice(1).map((window) => {
-      if (window.kind === 'percent') return `${window.name} ${percent(window.left)}%`;
+      if (window.kind === 'percent') return `${window.name} ${usedPercent(window.left)}%`;
       const more = amountLeft(window);
       if (!more) return window.name;
       if (more.unit === '' || more.unit === window.name) return `${window.name} ${more.left}`;
       return `${window.name} ${more.left} ${more.unit}`;
     }),
     title: ordered.map((window) => sentence(account, window)).join(' '),
-    bar: n,
+    bar: top.kind === 'percent' ? used : percent(top.left),
     warn: top.left < 0.15,
     quiet: now - account.readAt > ALLOWANCE_QUIET_MS,
     left: top.left,
@@ -134,10 +143,10 @@ export interface AllowanceChipMember {
   allowance?: AllowanceLineView | null | undefined;
 }
 
-/** One human's chip in the /live header (ADR 744): the lowest account leads, the card lists all. */
+/** One human's chip in the /live header (ADR 744, ADR 745): every account is named, most used first. */
 export interface AllowanceChip {
   name: string;
-  /** Every account, lowest first. `lines[0]` is the one the chip shows. */
+  /** Every account, most used first. The chip names each of them. `lines[0]` sets the chip's tone. */
   lines: AllowanceLine[];
   offline: boolean;
   /** "last read 3h ago", with "offline · " in front for an offline human; null while fresh. */
@@ -147,8 +156,9 @@ export interface AllowanceChip {
 
 /**
  * The header's chips: humans only, one per human with a reading, offline humans included. An
- * agent's reading stays on the roster and is not painted (ADR 744). The signed-in viewer comes
- * first, then online humans, then offline ones, by name within each.
+ * agent's reading stays on the roster and is not painted (ADR 744). Every account is named on the
+ * chip, most used first (ADR 745). The signed-in viewer comes first, then online humans, then
+ * offline ones, by name within each.
  */
 export function allowanceChips(
   roster: readonly AllowanceChipMember[],
@@ -166,8 +176,7 @@ export function allowanceChips(
     const read = `last read ${readingAge(age)}`;
     const note = stale ? (offline ? `offline · ${read}` : read) : null;
     const label = [
-      `${member.name}'s allowance: ${top.text}`,
-      lines.length > 1 ? `the lowest of ${lines.length} accounts` : null,
+      `${member.name}'s allowance: ${lines.map((line) => line.text).join(', ')}`,
       stale && offline ? 'offline' : null,
       stale ? read : null,
     ]

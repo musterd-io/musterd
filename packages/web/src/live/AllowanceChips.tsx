@@ -8,10 +8,9 @@ const CARD_WIDTH = 280;
 const EDGE = 12;
 
 /**
- * What's left on each human's accounts, in the /live top bar (ADR 744, option C). One chip per
- * human with a reading: their face, the lowest window's percent, and a thin bar of what is left.
- * A click opens a card with every account, lowest first. Agents are not painted: their reading
- * is the human's subscription spent, and the human's chip already says it.
+ * Each human's accounts, in the /live top bar (ADR 744, option C; ADR 745). One chip per human
+ * with a reading: their face, their name, then every account by name with the percent used and a
+ * thin bar of that share. A click opens the same accounts as rows. Agents are not painted.
  */
 export function AllowanceChips({
   roster,
@@ -83,8 +82,12 @@ export function AllowanceChips({
               <MemberFace name={chip.name} roster={faces} size={22} />
             </span>
             <span className="lc-allow__name">{chip.name}</span>
-            <span className="lc-allow__pct">{top.bar}%</span>
-            <Track bar={top.bar} />
+            {chip.lines.map((line) => (
+              <span key={line.text} className={`lc-allow__acct${tone(line)}`}>
+                {line.text}
+                <Track bar={line.bar} />
+              </span>
+            ))}
           </button>
         );
       })}

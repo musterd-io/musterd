@@ -23,13 +23,13 @@ describe('allowanceLines', () => {
       NOW,
     );
     expect(lines).toHaveLength(1);
-    expect(lines[0]?.text).toBe('Claude Max 18% left');
-    expect(lines[0]?.suffixes).toEqual(['5h 38%']);
-    expect(lines[0]?.bar).toBe(18);
+    expect(lines[0]?.text).toBe('Claude Max 82% used');
+    expect(lines[0]?.suffixes).toEqual(['5h 62%']);
+    expect(lines[0]?.bar).toBe(82);
     expect(lines[0]?.warn).toBe(false);
     expect(lines[0]?.quiet).toBe(false);
-    expect(lines[0]?.title).toContain('18% of the week window left');
-    expect(lines[0]?.title).toContain('38% of the 5h window left');
+    expect(lines[0]?.title).toContain('82% of the week window used');
+    expect(lines[0]?.title).toContain('62% of the 5h window used');
   });
 
   it('uses warn ink under 15% left and quiets the type after two minutes', () => {
@@ -44,7 +44,7 @@ describe('allowanceLines', () => {
       NOW,
     );
     expect(low[0]?.warn).toBe(true);
-    expect(low[0]?.text).toBe('Claude Max 14% left');
+    expect(low[0]?.text).toBe('Claude Max 86% used');
     const quiet = allowanceLines(
       view([
         {
@@ -56,7 +56,7 @@ describe('allowanceLines', () => {
       NOW,
     );
     expect(quiet[0]?.quiet).toBe(true);
-    expect(quiet[0]?.title).toContain('14%');
+    expect(quiet[0]?.title).toContain('86%');
   });
 
   it('shows the amount left, and keeps a percent off that line', () => {
@@ -81,6 +81,7 @@ describe('allowanceLines', () => {
       NOW,
     );
     expect(lines[0]?.text).toBe('ElevenLabs 9,000 characters left');
+    expect(lines[0]?.bar).toBe(90);
     expect(lines[0]?.text).not.toContain('%');
     expect(lines[0]?.title).toContain('9,000');
     expect(lines[0]?.title).toContain('10,000');
@@ -108,7 +109,7 @@ describe('allowanceLines', () => {
       ]),
       NOW,
     );
-    expect(lines[0]?.text).toBe('Cursor 40% left');
+    expect(lines[0]?.text).toBe('Cursor 60% used');
     expect(lines[0]?.suffixes).toEqual(['on-demand 6.5 dollars']);
   });
 
@@ -128,7 +129,7 @@ describe('allowanceLines', () => {
       ]),
       NOW,
     );
-    expect(lines.map((line) => line.text)).toEqual(['Claude Max 38% left', 'Claude Pro 71% left']);
+    expect(lines.map((line) => line.text)).toEqual(['Claude Max 62% used', 'Claude Pro 29% used']);
   });
 
   it('is absent when there is no reading', () => {

@@ -110,13 +110,15 @@ access; roster handles and Presence remain visible.
   (never extrapolated). Counts of who is working on what are the Now card's, not the meter's
   (live-briefing spec, increment 4). The team log's door is a topbar button beside Seeds.
 - **Allowance chips** (`live/AllowanceChips.tsx`, from `live/allowanceLine.ts`;
-  [ADR 744](../decisions/744-allowance-in-the-live-header.md)) — in the /live top bar after the Now
+  [ADR 744](../decisions/744-allowance-in-the-live-header.md),
+  [ADR 745](../decisions/745-allowance-percent-used.md)) — in the /live top bar after the Now
   slot: one chip per human with a reading, offline humans included, agents never. A chip is the
-  human's face, the lowest window's percent and a 28px bar of what is left; warn ink under 15%,
-  muted type and a dimmed face once the reading is two minutes old. A click opens a card with every
-  account, lowest first, and "last read 3h ago" (or "offline · last read …") when stale; Escape or
-  an outside press closes it. Under 440px the name hides. The tour's entry button left this bar for
-  it, and the bar's wordmark is 20px (28 on /board and the site).
+  human's face and name, then every account by name with the percent used and a bar of that share
+  (an amount window stays a count left). Warn ink under 15% left, muted type and a dimmed face once
+  the reading is two minutes old. A click opens a card with every account, most used first, and
+  "last read 3h ago" (or "offline · last read …") when stale; Escape or an outside press closes it.
+  Under 440px the name hides. The tour's entry button left this bar for it, and the bar's wordmark
+  is 20px (28 on /board and the site).
 - **Who is here** (`live/WhoIsHere.tsx`, from `live/hereRow.ts`; [ADR 692](../decisions/692-live-who-is-here.md))
   — at the head of the topbar's tools: the faces of the members with /live open, others by arrival
   and the viewer last. A /live tab claims with `workspace: '/live'` (`LiveConfig.page`), and a member
