@@ -138,10 +138,10 @@ drops the swing; hidden tabs play nothing; the ADR 150 lane gate on `office-scen
 
 | # | Increment | Lane |
 | --- | --- | --- |
-| 1 | The bar voice, the chimes family and the five gestures in the synth; the folded acts go silent; inventory rewritten | tbd |
-| 2 | Emit sites: lane done (chain-sized), goal roll, question, redirect, arrive/leave, handoff pair | tbd |
-| 3 | The room re-level (§2.5) and the softer click, re-measured | tbd |
-| 4 | The shelf chimes prop baked beside the work board, and the swing overlay | tbd |
+| 1 | The bar voice, the chimes family and the five gestures in the synth; the folded acts go silent; inventory rewritten | `01M61R493R3PE8EMD2JTVBJWF4` |
+| 2 | Emit sites: lane done (chain-sized), goal roll, question, redirect, arrive/leave, handoff pair | `01M61R4CBAFSSR15NSYKEBNEWS` |
+| 3 | The room re-level (§2.5) and the softer click, re-measured | `01M61R4F1345Q7VRB959G2M559` |
+| 4 | The shelf chimes prop baked beside the work board, and the swing overlay | `01M61R4HQ31CNSCG6PSV1YNGCQ` |
 
 1–3 ship without 4 and are audible on the stream the same day; 4 makes the instrument visible.
 
