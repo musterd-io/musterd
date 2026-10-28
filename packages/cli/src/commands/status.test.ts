@@ -69,7 +69,7 @@ describe('musterd status — who is in a huddle', () => {
     return String((JSON.parse(res.out) as { id: string }).id);
   };
 
-  const status = async () => (await capture(() => statusCommand(parseArgs([])))).out;
+  const status = async () => (await capture(() => statusCommand(parseArgs(['--all'])))).out;
 
   it('marks the seat that opened a huddle, naming the topic', async () => {
     expect(await status()).not.toContain('huddle');
