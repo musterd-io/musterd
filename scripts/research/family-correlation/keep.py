@@ -8,7 +8,8 @@ row per candidate to <dir>/kept.jsonl. Resumable: a candidate already in kept.js
 
 The rule is the manifest's: CooperBench's own `run_patch_test` (solo, one patch against the
 feature's tests). The unmutated reference must pass, once per feature. A mutant is kept when it
-fails at least one test and passes at least one. An evaluator error drops it. No model is called.
+fails at least one test and passes at least one. An evaluator error drops it, and so does a mutant
+that hangs past the sandbox timeout. No model is called.
 """
 
 from __future__ import annotations
@@ -18,7 +19,35 @@ import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
+
+TIMEOUT = 600  # seconds per run_patch_test, CooperBench's own default
+HUNG = "Command timed out after"
+
+
+def _patch_docker_exec() -> None:
+    """Make CooperBench's DockerSandbox timeout fire (pinned 63b9d44).
+
+    Its exec waits on the call inside `with ThreadPoolExecutor(...)`, and leaving that block waits
+    for the hung call too, so a mutant that loops forever hangs the whole run (8 h on task2800,
+    2026-10-28). This exec returns on the timeout without waiting; run_patch_test's finally then
+    calls terminate(), which stops the container and ends the hung call.
+    """
+    from cooperbench.eval.backends import docker as backend
+
+    def exec_(self, *args: str):
+        ex = ThreadPoolExecutor(max_workers=1)
+        fut = ex.submit(self._container.exec_run, cmd=list(args), workdir=self._workdir, demux=False)
+        try:
+            code, out = fut.result(timeout=self._timeout)
+        except FuturesTimeoutError:
+            return backend.DockerExecResult(-1, f"{HUNG} {self._timeout} seconds".encode())
+        finally:
+            ex.shutdown(wait=False)
+        return backend.DockerExecResult(code, out or b"")
+
+    backend.DockerSandbox.exec = exec_
 
 
 def _test(dataset: Path, feature: str, patch: Path | None) -> dict:
@@ -32,13 +61,19 @@ def _test(dataset: Path, feature: str, patch: Path | None) -> dict:
         agent_patch=patch,
         backend="docker",
         dataset_dir=dataset,
+        timeout=TIMEOUT,
     )
-    return {k: r.get(k) for k in ("passed", "tests_passed", "tests_failed", "error")}
+    return {
+        **{k: r.get(k) for k in ("passed", "tests_passed", "tests_failed", "error")},
+        "hung": HUNG in (r.get("output") or ""),
+    }
 
 
 def verdict(ref: dict, mut: dict) -> tuple[bool, str]:
     if ref.get("error") or not ref.get("passed"):
         return False, "reference does not pass"
+    if mut.get("hung"):
+        return False, f"mutant hangs (over {TIMEOUT} s)"
     if mut.get("error"):
         return False, f"evaluator error: {str(mut['error'])[:120]}"
     if not mut.get("tests_failed"):
@@ -55,6 +90,7 @@ def main() -> None:
     ap.add_argument("-c", type=int, default=6)
     ap.add_argument("--task", help="only this <repo>/task<N> (keep_all.sh runs one task at a time)")
     a = ap.parse_args()
+    _patch_docker_exec()
 
     cands = [json.loads(l) for l in open(a.run / "candidates.jsonl") if l.strip()]
     out_path = a.run / "kept.jsonl"

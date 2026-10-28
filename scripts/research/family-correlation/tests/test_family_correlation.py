@@ -105,6 +105,7 @@ def test_keep_rule():
     assert not keep.verdict(ok_ref, {"passed": True, "tests_passed": 5, "tests_failed": 0, "error": None})[0]
     assert not keep.verdict(ok_ref, {"passed": False, "tests_passed": 0, "tests_failed": 3, "error": None})[0]
     assert not keep.verdict(ok_ref, {"error": "boom"})[0]
+    assert keep.verdict(ok_ref, {"tests_passed": 0, "tests_failed": 0, "hung": True})[1].startswith("mutant hangs")
     assert not keep.verdict({"passed": False}, {"tests_passed": 1, "tests_failed": 1})[0]
 
 
