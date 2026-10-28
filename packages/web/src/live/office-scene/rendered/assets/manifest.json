@@ -1064,11 +1064,11 @@
     {
       "id": "wall/board",
       "file": "office-art-wall-board.webp",
-      "w": 331,
-      "h": 419,
+      "w": 374,
+      "h": 533,
       "anchor": {
-        "x": 168.46,
-        "y": 518.28
+        "x": 190.21,
+        "y": 528.84
       },
       "scale": 3.0
     },

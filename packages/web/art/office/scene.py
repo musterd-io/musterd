@@ -1152,7 +1152,8 @@ ART_PIECES = [  # layout.ts ART: wall, tc, uc, w, h, frame
 ]
 CLOCK = (1, 0.52, 0.62, 25.0)  # wall, tc, uc, R
 HANGER = (0, 0.52, 0.76)  # wall, tc, uTop
-BOARD = (1, 0.885, 0.5628, 150, 88)  # layout.ts WALL_BOARD
+BOARD = (1, 0.8922, 0.4787, 170, 120)  # layout.ts WALL_BOARD
+BOARD_GUTTER = 26  # render.ts BOARD_GUTTER: the goal tabs hang left of the columns (ADR 751)
 BOARD_CAPS = ["#B4A88F", "#8FB0E6", "#3F74C4", "#D1503F", "#6A93D4", "#2F9E6A"]  # render.ts WALLBOARD_TONES
 
 
@@ -1285,9 +1286,9 @@ def wall_board(asset_id: str, zs: float, col) -> bpy.types.Object:
         parts.append(bar)
     # the column caps, each in its state's colour, under the top lip (render.ts wallLaneBoard)
     M = FR + 2
-    col_w = (W - 2 * M) / len(BOARD_CAPS)
+    col_w = (W - 2 * M - BOARD_GUTTER) / len(BOARD_CAPS)
     for k, hexc in enumerate(BOARD_CAPS):
-        a0 = -W / 2 + M + k * col_w
+        a0 = -W / 2 + M + BOARD_GUTTER + k * col_w
         mid_a = a0 + col_w / 2
         cap_u = uc + (H / 2 - M - 1.25) / WALL_H
         parts.append(wall_block(f"{asset_id}/cap{k}", which, tc + mid_a / FLOOR, cap_u, col_w - 4, 2.5, 1.6, 0.5, matte(f"board-cap{k}", srgb(hexc), 0.6), zs))

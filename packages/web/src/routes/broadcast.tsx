@@ -333,7 +333,7 @@ function BroadcastPage() {
           <>
             <div className="lc__canvas bc__canvas">
               <OfficeScene
-                {...officeRoom(team, stream, { entries, board, asks })}
+                {...officeRoom(team, stream, { entries, board, asks, goals: report?.goals })}
                 broadcast
                 captureFps={captureFps}
                 sprites={sprites}

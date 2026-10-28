@@ -797,7 +797,7 @@ function LivePage() {
             <div className="lc__office-wrap" inert={phone}>
               <OfficeScene
                 markContact={teamContact(team)}
-                {...officeRoom(team, stream, { entries, board, asks })}
+                {...officeRoom(team, stream, { entries, board, asks, goals: report?.goals })}
                 fit="furnished"
                 collapsed={collapsed.office}
                 onCollapse={() => toggleCollapse('office')}

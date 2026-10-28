@@ -15,35 +15,66 @@ import type { ReadStatus } from '../experimentReads';
  * into `awaiting_acceptance` (ADR 192) and `abandoned` has no column.
  */
 export interface WallSticky {
-  /** Stable per-lane hash — seeds the placement jitter so notes don't reshuffle on repaint. */
+  /** Stable per-lane hash — seeds the tilt and a place when the daemon recorded none. */
   seed: number;
   state: LaneState;
-  /** Someone is walking off with this card (a claim in flight): its slot stays, its paper does not. */
+  /** Which goal row the card hangs in: an index into `WallBoard.rows`. */
+  row: number;
+  /** Where in its cell (goal row × column), each `0..1` — the daemon's recorded place (ADR 751), or a
+   *  seeded one from an older daemon. A card keeps this until someone moves it. */
+  x: number;
+  y: number;
+  /** When it was put there — a cell paints its cards oldest first, so a pile reads newest on top. */
+  at: number;
+  /** Someone is walking off with this card (a claim in flight): its place stays, its paper does not. */
   taken?: true;
   /** Seconds since a pin walk landed this card (L5): it swings on its tape for a moment, then hangs still. */
   age?: number;
-  /** Part of a plan that stopped (lane 01M4V9YKMG): the paper is sun-faded, and it pins first in its
-   *  column so a stopped plan is among the cards the wall shows rather than hidden in the badge. */
+  /** Part of a plan that stopped (lane 01M4V9YKMG): the paper is sun-faded. */
   faded?: true;
+}
+
+/** A place on the cork where a card hung this week and no longer does (lane 01M50WEBTC). */
+export interface WallHole {
+  row: number;
+  x: number;
+  y: number;
 }
 
 export interface WallBoardColumn {
   key: LaneState;
-  /** True lane count — the badge shows this when it exceeds what the wall can pin. */
+  /** True lane count in this column, every row. */
   count: number;
-  /** At most STICKY_CAP notes, board order preserved. */
+  /** Every card in the column, every row, oldest first. */
   stickies: WallSticky[];
-  /** How many slots in this column have held a card lately (`projectWallBoard`, lane 01M50WEBTC): the
-   *  cork keeps a tack hole in each of those slots that is now empty. Absent = none. */
-  held?: number;
+  /** Tack holes: where a lane hung in this column this week before it moved on. Absent = none. */
+  holes?: WallHole[];
 }
 
 /**
- * The columns, plus the team's dated reads (ADR 644 increment 3): one pin each along the cork strip
- * under the columns, in the Experiments section's order. Status only, never titles: the section is
- * the pins' text equivalent. Absent = no reads.
+ * One goal row on the board (ADR 751 spec, "The board"): the team's in-flight goals in their own
+ * order, up to {@link GOAL_ROWS}, then one row for everything else. `label` is what its washi tab
+ * says; `tone` picks the tab's tape.
  */
-export type WallBoard = WallBoardColumn[] & { reads?: readonly ReadStatus[] };
+export interface WallRow {
+  /** Null for the everything-else row. */
+  goalId: string | null;
+  label: string;
+  tone: number;
+}
+
+/**
+ * The columns, plus the goal rows and the team's dated reads (ADR 644 increment 3): one pin each
+ * along the cork strip under the rows, in the Experiments section's order. Absent `reads` = none;
+ * absent `rows` = one unlabelled row (a board built without goals).
+ */
+export type WallBoard = WallBoardColumn[] & {
+  reads?: readonly ReadStatus[];
+  rows?: readonly WallRow[];
+};
+
+/** How many goals get a row of their own before the rest share the last one. */
+export const GOAL_ROWS = 4;
 
 /** How many read pins the strip holds. Past this, the last slot is a "+" card. */
 export const READ_PIN_CAP = 8;
@@ -54,9 +85,13 @@ export function readPins(reads: readonly ReadStatus[] | undefined): (ReadStatus 
   return reads.length <= READ_PIN_CAP ? [...reads] : [...reads.slice(0, READ_PIN_CAP - 1), 'more'];
 }
 
-/** A column-wise rewrite keeps the reads riding along with it. */
+/** A column-wise rewrite keeps the reads and the rows riding along with it. */
 function keepReads(from: WallBoard, cols: WallBoardColumn[]): WallBoard {
-  return from.reads ? Object.assign(cols, { reads: from.reads }) : cols;
+  return Object.assign(
+    cols,
+    from.reads ? { reads: from.reads } : {},
+    from.rows ? { rows: from.rows } : {},
+  );
 }
 
 /** Column order on the wall — one-to-one with Board.tsx COLUMNS. */
@@ -69,8 +104,12 @@ export const WALL_COLUMNS: readonly LaneState[] = [
   'done',
 ];
 
-/** How many stickies fit down one wall column before the count badge takes over. */
-export const STICKY_CAP = 4;
+/** The board column a lane's card hangs in, or null when it is off the board — protocol's
+ *  `laneCardColumn` (ADR 751), restated here because the protocol barrel is not browser-safe. */
+function cardColumn(state: LaneState): LaneState | null {
+  if (state === 'ready_for_review') return 'awaiting_acceptance';
+  return (WALL_COLUMNS as readonly string[]).includes(state) ? state : null;
+}
 
 /** Tiny stable string hash (FNV-1a, 32-bit) — placement jitter only, zero crypto pretensions. */
 export function laneSeed(id: string): number {
@@ -118,6 +157,11 @@ export function withPinned(board: WallBoard | null, pinned: readonly PinnedCard[
   if (!board || pinned.length === 0) return board;
   const moved = new Map(pinned.map((p) => [p.seed, p.state]));
   const ages = new Map(pinned.filter((p) => p.age !== undefined).map((p) => [p.seed, p.age!]));
+  // The card keeps its row and its place: the walk carries it across, and the daemon's own place for
+  // the new column arrives with the next board (ADR 751).
+  const was = new Map<number, WallSticky>();
+  for (const col of board) for (const s of col.stickies) was.set(s.seed, s);
+  const lastRow = Math.max(0, (board.rows?.length ?? 1) - 1);
   return keepReads(board, board.map((col) => {
     const stickies = [
       // A card the board already shows here still swings if it only just landed (`age`).
@@ -126,7 +170,18 @@ export function withPinned(board: WallBoard | null, pinned: readonly PinnedCard[
         .map((s) => (ages.has(s.seed) ? { ...s, age: ages.get(s.seed)! } : s)),
       ...pinned
         .filter((p) => p.state === col.key && !col.stickies.some((s) => s.seed === p.seed))
-        .map((p) => ({ seed: p.seed, state: p.state, ...(p.age !== undefined ? { age: p.age } : {}) })),
+        .map((p): WallSticky => {
+          const o = was.get(p.seed);
+          return {
+            seed: p.seed,
+            state: p.state,
+            row: o?.row ?? lastRow,
+            x: o?.x ?? 0.5,
+            y: o?.y ?? 0.5,
+            at: Number.MAX_SAFE_INTEGER, // just pinned: on top of its pile
+            ...(p.age !== undefined ? { age: p.age } : {}),
+          };
+        }),
     ];
     const same =
       stickies.length === col.stickies.length && stickies.every((s, i) => s === col.stickies[i]);
@@ -147,49 +202,70 @@ const RANK: Partial<Record<LaneState, number>> = {
   done: 4,
 };
 
+/** A place for a card the daemon has recorded none for (an older daemon), seeded per lane and column. */
+export function seededPlace(seed: number, salt = 0): { x: number; y: number } {
+  const h = Math.imul(seed ^ (salt * 0x9e3779b1), 0x85ebca6b) >>> 0;
+  return { x: 0.12 + ((h & 0xffff) / 0xffff) * 0.76, y: 0.15 + ((h >>> 16) / 0xffff) * 0.7 };
+}
+
+/** A goal's tab word: the first part of its id ("office-realism" → "office"), at most nine letters. */
+function tabLabel(goalId: string): string {
+  return (goalId.split(/[-_ ]/)[0] ?? goalId).slice(0, 9);
+}
+
 export function projectWallBoard(
   board: LaneBoard | null,
   stalled: ReadonlySet<string> = new Set(),
   now: number = Date.now(),
   /** The Experiments section's statuses, in its order (`experimentEntries`). */
   reads: readonly ReadStatus[] = [],
+  /** The team's goal ids in its own order (`report.goals`, wave-ordered). Empty: one row. */
+  goals: readonly string[] = [],
 ): WallBoard | null {
   if (!board) return null;
+  const onBoard = board.lanes.filter((l) => cardColumn(l.state) !== null);
+  // Rows (ADR 751 spec): the first GOAL_ROWS goals, in the team's order, that have a card up; then
+  // one row for the rest. Activity never reorders them, so a card never jumps rows on its own.
+  const withCards = new Set(onBoard.map((l) => l.goal_id).filter((g): g is string => g !== null));
+  const own = goals.filter((g) => withCards.has(g)).slice(0, GOAL_ROWS);
+  const rowOf = new Map(own.map((g, i) => [g, i]));
+  const rows: WallRow[] = own.map((g, i) => ({ goalId: g, label: tabLabel(g), tone: i }));
+  const restRow = rows.length;
+  if (onBoard.some((l) => l.goal_id === null || !rowOf.has(l.goal_id)))
+    rows.push({ goalId: null, label: rows.length ? 'other' : '', tone: GOAL_ROWS });
   const byState = new Map<LaneState, WallBoardColumn>(
     WALL_COLUMNS.map((key) => [key, { key, count: 0, stickies: [] }]),
   );
-  // Stopped plans pin first (lane 01M4V9YKMG): a column shows STICKY_CAP cards of possibly dozens,
-  // and the tell is pointless inside the "+N". Within each group, board order holds; placement is
-  // seeded per lane, so nothing reshuffles when a card changes group.
-  const lanes = stalled.size
-    ? [...board.lanes].sort((a, b) => Number(stalled.has(b.id)) - Number(stalled.has(a.id)))
-    : board.lanes;
-  // Pin holes (lane 01M50WEBTC): a lane updated this week has hung in every column before its own, so
-  // those slots keep a hole once it moves on. Derived from the board alone, so every viewer sees the
-  // same cork; a quiet team's cork starts clean and wears in.
-  const passed = new Map<LaneState, number>();
-  for (const lane of lanes) {
-    const key = lane.state === 'ready_for_review' ? 'awaiting_acceptance' : lane.state;
-    const col = byState.get(key);
-    if (!col) continue; // abandoned — no column
-    if (lane.updated_at >= now - HOLES_WINDOW_MS)
-      for (const k of WALL_COLUMNS)
-        if (k !== 'blocked' && RANK[k]! < RANK[key]!) passed.set(k, (passed.get(k) ?? 0) + 1);
+  for (const lane of onBoard) {
+    const key = cardColumn(lane.state)!;
+    const col = byState.get(key)!;
+    const seed = laneSeed(lane.id);
+    const row = lane.goal_id !== null ? (rowOf.get(lane.goal_id) ?? restRow) : restRow;
+    const place = lane.card ?? seededPlace(seed);
     col.count++;
-    if (col.stickies.length < STICKY_CAP) {
-      col.stickies.push({
-        seed: laneSeed(lane.id),
-        state: lane.state,
-        ...(stalled.has(lane.id) ? { faded: true as const } : {}),
-      });
-    }
+    col.stickies.push({
+      seed,
+      state: lane.state,
+      row,
+      x: place.x,
+      y: place.y,
+      at: lane.card?.at ?? lane.updated_at,
+      ...(stalled.has(lane.id) ? { faded: true as const } : {}),
+    });
+    // Pin holes (lane 01M50WEBTC): a lane updated this week hung in every column before its own, in
+    // its own row, so those cells keep a hole. Derived from the board alone, so every viewer sees the
+    // same cork; a quiet team's cork starts clean and wears in.
+    if (lane.updated_at >= now - HOLES_WINDOW_MS)
+      for (const [k, other] of byState)
+        if (k !== 'blocked' && RANK[k]! < RANK[key]!)
+          (other.holes ??= []).push({ row, ...seededPlace(seed, RANK[k]! + 1) });
   }
   const cols = WALL_COLUMNS.map((key) => {
     const col = byState.get(key)!;
-    const held = Math.min(STICKY_CAP, col.count + (passed.get(key) ?? 0));
-    return held > 0 ? { ...col, held } : col;
+    col.stickies.sort((a, b) => a.at - b.at);
+    return col;
   });
-  return reads.length ? Object.assign(cols, { reads }) : cols;
+  return Object.assign(cols, { rows }, reads.length ? { reads } : {});
 }
 
 /** How long a landed card swings before it hangs still, in seconds. */

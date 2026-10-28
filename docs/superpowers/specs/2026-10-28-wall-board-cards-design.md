@@ -40,7 +40,7 @@ Rows don't reshuffle as activity changes. Their order is the team's goal order (
 
 **The read strip** keeps its rail under the rows.
 
-**A bin** stands on the floor under the board's right end: a small wire wastebasket, baked as `bin`. It shows crumpled paper balls: one per lane abandoned **today** (drawn from the board's abandoned lanes with `updated_at` today), up to six, piled. It empties at the team's midnight.
+**A bin** (increment 3, with the toss that fills it) stands on the floor under the board's right end: a small wire wastebasket, baked as `bin`. It shows crumpled paper balls: one per lane abandoned **today** (drawn from the board's abandoned lanes with `updated_at` today), up to six, piled. It empties at the team's midnight.
 
 ## Moves
 
@@ -74,5 +74,5 @@ The daemon records every place (ADR 751). The scene compares each board with the
 ## Increments
 
 1. **Places on the daemon** — lane `01M61T04S9` (ADR 751): protocol `card`, the store and migration, the picker, and `lane_update` / CLI / HTTP. Tests: the picker is deterministic and spreads cards out, a state or goal change re-places the card, an explicit `card` wins, an abandon clears it, the backfill runs, and the audit rows are written.
-2. **The board** — lane `01M61T07DA`: the bigger bake, the goal rows with tabs, cards drawn at their places, and the bin prop. Checked at /live and /broadcast sizes in `/office-preview`, with a fixture team of about 20 goals and 80 lanes.
+2. **The board** — lane `01M61T07DA`: the bigger bake, the goal rows with tabs, and cards drawn at their places. _(2026-10-28: the bin moved to increment 3, which is the one that throws paper into it.)_ Checked at /live and /broadcast sizes in `/office-preview`, with a fixture team of about 20 goals and 80 lanes.
 3. **The moves** — lane `01M61T09MQ`: the board diff, the walk per row of the table above, the crumple and toss, and the balls in the bin.

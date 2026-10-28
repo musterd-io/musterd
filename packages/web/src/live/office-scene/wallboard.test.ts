@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard } from '@musterd/protocol';
-import { laneSeed, projectWallBoard, READ_PIN_CAP, readPins, STICKY_CAP, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
+import { GOAL_ROWS, laneSeed, projectWallBoard, READ_PIN_CAP, readPins, seededPlace, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
 
 const lane = (over: Partial<Lane> = {}): Lane => ({
   id: 'L1',
@@ -58,13 +58,11 @@ describe('projectWallBoard — the board squinted at from across the room', () =
     expect(wall.find((c) => c.key === 'open')!.count).toBe(1);
   });
 
-  it('caps stickies per column but keeps the true count for the badge', () => {
-    const many = Array.from({ length: STICKY_CAP + 3 }, (_, i) =>
-      lane({ id: `L${i}`, state: 'open' }),
-    );
+  it('pins every lane, however many: a pile, not a cap (ADR 751)', () => {
+    const many = Array.from({ length: 30 }, (_, i) => lane({ id: `L${i}`, state: 'open' }));
     const open = projectWallBoard(board(many))!.find((c) => c.key === 'open')!;
-    expect(open.stickies).toHaveLength(STICKY_CAP);
-    expect(open.count).toBe(STICKY_CAP + 3);
+    expect(open.stickies).toHaveLength(30);
+    expect(open.count).toBe(30);
   });
 
   it('ready_for_review folds into awaiting_acceptance (ADR 192), keeping its own state on the note', () => {
@@ -138,26 +136,15 @@ describe('withPinned — a card someone has just pinned back on the wall', () =>
 });
 
 describe('projectWallBoard — stopped goals (lane 01M4V9YKMG)', () => {
-  it('marks a stalled lane\'s sticky faded and pins faded cards first in their column', () => {
+  it("marks a stalled lane's sticky faded, in its place like any other", () => {
     const wb = projectWallBoard(
-      board([
-        lane({ id: 'fresh1' }),
-        lane({ id: 'fresh2' }),
-        lane({ id: 'stale1' }),
-        lane({ id: 'fresh3' }),
-        lane({ id: 'fresh4' }),
-        lane({ id: 'stale2' }),
-        lane({ id: 'done1', state: 'done' }),
-      ]),
-      new Set(['stale1', 'stale2']),
+      board([lane({ id: 'fresh1' }), lane({ id: 'stale1' }), lane({ id: 'done1', state: 'done' })]),
+      new Set(['stale1']),
     )!;
     const open = wb[0]!;
-    expect(open.count).toBe(6);
     expect(open.stickies.map((s) => [s.seed, s.faded ?? false])).toEqual([
-      [laneSeed('stale1'), true],
-      [laneSeed('stale2'), true],
       [laneSeed('fresh1'), false],
-      [laneSeed('fresh2'), false],
+      [laneSeed('stale1'), true],
     ]);
     expect(wb[5]!.stickies[0]!.faded).toBeUndefined();
   });
@@ -198,40 +185,91 @@ describe('stickySway — a landed card swings where a viewer can see it (L5 foll
 describe('pin holes, derived from the board (lane 01M50WEBTC)', () => {
   const NOW = 100 * 86_400_000;
   const DAY = 86_400_000;
-  const heldOf = (b: ReturnType<typeof projectWallBoard>, key: string) => b!.find((c) => c.key === key)!.held;
+  const holesOf = (b: ReturnType<typeof projectWallBoard>, key: string) => b!.find((c) => c.key === key)!.holes;
   const wb = (lanes: Lane[]) => projectWallBoard(board(lanes), new Set(), NOW);
 
-  it('holds a slot for every card hanging now, up to the sticky cap', () => {
-    const b = wb([lane({ id: 'A', state: 'active' }), lane({ id: 'B', state: 'active' })]);
-    expect(heldOf(b, 'active')).toBe(2);
-    const many = wb(Array.from({ length: STICKY_CAP + 3 }, (_, i) => lane({ id: `L${i}`, state: 'done' })));
-    expect(heldOf(many, 'done')).toBe(STICKY_CAP);
-  });
-
-  it('keeps a hole where a recent lane hung before it moved on', () => {
+  it('keeps a hole in every column a recent lane passed, in its own row', () => {
     // A finished this week, so it passed open, claimed, active and awaiting on its way to done.
     const b = wb([lane({ id: 'A', state: 'done', updated_at: NOW - 2 * DAY })]);
-    for (const key of ['open', 'claimed', 'active', 'awaiting_acceptance', 'done']) expect(heldOf(b, key)).toBe(1);
-    expect(heldOf(b, 'blocked')).toBeUndefined();
+    for (const key of ['open', 'claimed', 'active', 'awaiting_acceptance']) expect(holesOf(b, key)).toHaveLength(1);
+    expect(holesOf(b, 'done')).toBeUndefined(); // it hangs there now
+    expect(holesOf(b, 'blocked')).toBeUndefined();
+    expect(holesOf(b, 'open')![0]!.row).toBe(0);
   });
 
   it('forgets lanes that moved on more than seven days ago', () => {
-    const b = wb([lane({ id: 'A', state: 'done', updated_at: NOW - 8 * DAY })]);
-    expect(heldOf(b, 'active')).toBeUndefined();
-    expect(heldOf(b, 'done')).toBe(1); // it still hangs under done
+    expect(holesOf(wb([lane({ id: 'A', state: 'done', updated_at: NOW - 8 * DAY })]), 'active')).toBeUndefined();
   });
 
-  it('counts blocked only for lanes blocked now; a blocked lane passed open and claimed', () => {
+  it('a blocked lane passed open and claimed, never active', () => {
     const b = wb([lane({ id: 'A', state: 'blocked', updated_at: NOW })]);
-    expect(heldOf(b, 'blocked')).toBe(1);
-    expect(heldOf(b, 'claimed')).toBe(1);
-    expect(heldOf(b, 'active')).toBeUndefined();
+    expect(holesOf(b, 'claimed')).toHaveLength(1);
+    expect(holesOf(b, 'active')).toBeUndefined();
   });
 
   it('is the same cork for every viewer: a pure function of the board', () => {
     const lanes = [lane({ id: 'A', state: 'awaiting_acceptance', updated_at: NOW - DAY }), lane({ id: 'B', state: 'open' })];
     expect(wb(lanes)).toEqual(wb(lanes));
-    expect(heldOf(wb(lanes), 'open')).toBe(2);
+  });
+});
+
+describe('goal rows and places (ADR 751)', () => {
+  it('gives each goal with a card a row, in the team\'s order, then one row for the rest', () => {
+    const b = projectWallBoard(
+      board([
+        lane({ id: 'a', goal_id: 'cloud' }),
+        lane({ id: 'b', goal_id: 'security' }),
+        lane({ id: 'c', goal_id: null }),
+        lane({ id: 'd', goal_id: 'nobody-ordered-this' }),
+      ]),
+      new Set(),
+      1,
+      [],
+      ['security', 'launch', 'cloud'],
+    )!;
+    expect(b.rows!.map((r) => [r.goalId, r.label])).toEqual([
+      ['security', 'security'],
+      ['cloud', 'cloud'],
+      [null, 'other'],
+    ]);
+    const open = b[0]!.stickies;
+    const rowOf = (id: string) => open.find((s) => s.seed === laneSeed(id))!.row;
+    expect([rowOf('a'), rowOf('b'), rowOf('c'), rowOf('d')]).toEqual([1, 0, 2, 2]);
+  });
+
+  it('takes at most GOAL_ROWS goals; the rest share the last row', () => {
+    const goals = Array.from({ length: GOAL_ROWS + 2 }, (_, i) => `g${i}`);
+    const b = projectWallBoard(board(goals.map((g) => lane({ id: g, goal_id: g }))), new Set(), 1, [], goals)!;
+    expect(b.rows).toHaveLength(GOAL_ROWS + 1);
+    expect(b.rows!.at(-1)!.goalId).toBeNull();
+  });
+
+  it('a board with no goals is one unlabelled row', () => {
+    expect(projectWallBoard(board([lane()]))!.rows).toEqual([{ goalId: null, label: '', tone: GOAL_ROWS }]);
+  });
+
+  it("hangs a card at the daemon's recorded place, else a seeded one that never moves", () => {
+    const placed = projectWallBoard(board([lane({ card: { x: 0.25, y: 0.75, by: 'ada', at: 9 } })]))!;
+    expect(placed[0]!.stickies[0]).toMatchObject({ x: 0.25, y: 0.75, at: 9 });
+    const seeded = projectWallBoard(board([lane()]))!;
+    expect(seeded[0]!.stickies[0]).toMatchObject(seededPlace(laneSeed('L1')));
+  });
+
+  it('paints a cell oldest first, so the newest card is on top of its pile', () => {
+    const b = projectWallBoard(
+      board([
+        lane({ id: 'new', card: { x: 0.5, y: 0.5, by: 'a', at: 20 } }),
+        lane({ id: 'old', card: { x: 0.5, y: 0.5, by: 'a', at: 10 } }),
+      ]),
+    )!;
+    expect(b[0]!.stickies.map((s) => s.seed)).toEqual([laneSeed('old'), laneSeed('new')]);
+  });
+
+  it('a pinned card keeps its row and place as it moves column', () => {
+    const b = projectWallBoard(board([lane({ id: 'a', goal_id: 'g', card: { x: 0.2, y: 0.3, by: 'a', at: 1 } })]), new Set(), 1, [], ['g'])!;
+    const moved = withPinned(b, [{ seed: laneSeed('a'), state: 'awaiting_acceptance' }])!;
+    expect(moved[4]!.stickies[0]).toMatchObject({ row: 0, x: 0.2, y: 0.3 });
+    expect(moved.rows).toEqual(b.rows);
   });
 });
 

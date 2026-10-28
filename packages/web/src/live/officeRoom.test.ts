@@ -32,9 +32,25 @@ describe('officeRoom', () => {
       liveIds: stream.liveIds,
       entries,
       board,
+      goals: [],
       asks: [],
       status: stream.status,
+      pulses: undefined,
     });
+  });
+
+  it("gives the wall board the team's unshipped goals, in order (ADR 751)", () => {
+    const room = officeRoom('revive', { roster: [], envelopes: [] } as unknown as Parameters<typeof officeRoom>[1], {
+      entries: [],
+      board: null,
+      asks: [],
+      goals: [
+        { id: 'security', status: 'in-flight' },
+        { id: 'old', status: 'shipped' },
+        { id: 'cloud', status: 'planned' },
+      ],
+    });
+    expect(room.goals).toEqual(['security', 'cloud']);
   });
 });
 

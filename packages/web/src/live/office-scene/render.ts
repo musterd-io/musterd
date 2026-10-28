@@ -47,7 +47,7 @@ import {
   type DeskSlot,
 } from './layout';
 import type { ReadStatus } from '../experimentReads';
-import { READ_PIN_CAP, readPins, STICKY_CAP, stickySway, type WallBoard } from './wallboard';
+import { READ_PIN_CAP, readPins, stickySway, type WallBoard } from './wallboard';
 import { DAY_ENV, deskLampOn, sunBeam, type LightEnv } from './lighting';
 import type { Weather } from './weather';
 import { CANVAS_EASE } from './motion';
@@ -693,106 +693,100 @@ function wallLaneBoard(
   // The frame, cork and column caps are rendered art (`wall/board`, lane 01M5D8EJ40): only the notes paint.
   const FR = 3;
 
-  // Six columns inside the frame. No ruled dividers any more: cork has no lines on it, and the cap
-  // strips alone carry the column read.
+  // Six columns inside the frame, right of the gutter the goal tabs hang in (ADR 751). No ruled
+  // dividers: cork has no lines on it, and the baked cap strips alone carry the column read.
   const M = FR + 2;
-  const colW = (W - M * 2) / WALLBOARD_TONES.length;
+  const a0Cols = -W / 2 + M + BOARD_GUTTER;
+  const colW = (W - M * 2 - BOARD_GUTTER) / WALLBOARD_TONES.length;
+  const RAIL = -H / 2 + 14; // the read strip's rail: the goal rows fill the cork above it
+  const rowsTop = H / 2 - M - 5; // just under the caps
+  const rowsBottom = RAIL + 1.5;
+  const rows = data?.rows?.length ? data.rows : [{ goalId: null, label: '', tone: GOAL_TABS.length - 1 }];
+  const rowH = (rowsTop - rowsBottom) / rows.length;
+  const noteW = 11;
+  const noteH = 8;
+
+  // Each goal row: a twine line under it (not under the last), and its washi tab in the gutter.
+  rows.forEach((row, r) => {
+    const top = rowsTop - r * rowH;
+    if (r > 0)
+      stroke(
+        [
+          [-W / 2 + M, top + 0.6],
+          [W / 2 - M, top + 0.6],
+        ],
+        0.5,
+        PINBOARD.twine,
+      );
+    if (!row.label) return;
+    const tab = GOAL_TABS[row.tone % GOAL_TABS.length]!;
+    const tl = -W / 2 + FR - 1.5; // overhangs the frame, the way an index tab does
+    const tr = a0Cols - 2;
+    const mid = top - rowH / 2;
+    rect(tl, mid - 4.5, tr, mid + 4.5, tab.tape);
+    rect(tl, mid + 3.6, tr, mid + 4.5, PINBOARD.tapeSheen);
+    // The word fits its tab: a long one is set smaller rather than cut ("security" stays whole).
+    const size = Math.min(6.5, (tr - tl - 3.5) / (row.label.length * 0.6));
+    wallText(ctx, fit, edge, tc + (tl + 2) / FLOOR, uc + (mid - size * 0.4) / WALL_H, row.label, size, tab.ink);
+  });
 
   for (let i = 0; i < WALLBOARD_TONES.length; i++) {
     const tone = WALLBOARD_TONES[i]!;
-    const a0 = -W / 2 + M + i * colW;
-    const mid = a0 + colW / 2;
+    const a0 = a0Cols + i * colW;
     // The cap strip — each column announcing its state even when it holds nothing — is in the render.
-
     const col = data?.[i];
     if (!col) continue;
-    // Stickies hang from just under the cap, newest at the bottom (board order, same as /board).
-    const noteW = 17;
-    const noteH = 11;
-    for (let s = 0; s < col.stickies.length; s++) {
-      // A card in someone's hand (a claim in flight) leaves its slot empty — the cork shows through
-      // exactly where the paper was, which is the whole read of "taken".
-      const seed = col.stickies[s]!.seed;
-      // Seeded jitter, ±1.5 units across and ±0.8 up — pinned by a hand, stable across repaints.
-      const ja = (((seed >>> (s * 3)) % 7) - 3) * 0.5;
-      const jb = (((seed >>> (s * 5 + 2)) % 5) - 2) * 0.4;
-      const top = H / 2 - M - 6 - s * (noteH + 2.5) + jb;
-      const l = mid - noteW / 2 + ja;
-      const r = mid + noteW / 2 + ja;
-      if (col.stickies[s]!.taken) {
+    // Where a card at (x, y) in cell (row, this column) hangs: its tape's mid-point on the top edge.
+    const at = (row: number, x: number, y: number): [number, number] => [
+      a0 + 1 + noteW / 2 + x * (colW - 2 - noteW),
+      rowsTop - row * rowH - 2 - y * Math.max(0, rowH - noteH - 3),
+    ];
+    // Tack holes first: where a lane hung this week before it moved on, in its own row (lane 01M50WEBTC).
+    // At most three to a cell: more read as a scribble on the cork rather than as wear.
+    const perCell = new Map<number, number>();
+    for (const h of col.holes ?? []) {
+      if (h.row >= rows.length) continue;
+      const n = (perCell.get(h.row) ?? 0) + 1;
+      perCell.set(h.row, n);
+      if (n > 3) continue;
+      const [hx, hy] = at(h.row, h.x, h.y);
+      rect(hx - 0.8, hy - 1.2, hx + 0.8, hy + 0.4, PINBOARD.hole);
+    }
+    // Oldest first (`projectWallBoard` sorts them), so a pile reads newest on top.
+    for (const sticky of col.stickies) {
+      if (sticky.row >= rows.length) continue;
+      const [cx, top] = at(sticky.row, sticky.x, sticky.y);
+      if (sticky.taken) {
         // The tape took the paper with it, but the tack stays: one dark pin hole where the card hung.
-        rect(mid + ja - 0.9, top - 1.4, mid + ja + 0.9, top + 0.4, PINBOARD.hole);
+        rect(cx - 0.9, top - 1.4, cx + 0.9, top + 0.4, PINBOARD.hole);
         continue;
       }
+      // A hand's placement: a seeded tilt of up to ±3°, the same for every viewer.
+      const tilt = ((((sticky.seed >>> 7) % 13) - 6) / 6) * 0.052;
+      const cos = Math.cos(tilt);
+      const sin = Math.sin(tilt);
       // A card that just landed swings on its tape: the bottom edge sways, the top stays put (L5).
-      const age = col.stickies[s]!.age;
-      const sw = stickySway(age);
-      // Shadow first, offset down-right: paper held a hair off the cork rather than printed on it.
-      quad(
-        ctx,
-        [
-          p(l + 0.8, top - 0.8),
-          p(r + 0.8, top - 0.8),
-          p(r + 0.8 + sw, top - noteH - 0.8),
-          p(l + 0.8 + sw, top - noteH - 0.8),
-        ],
-        PINBOARD.noteCast,
-      );
-      // A stopped plan's card (lane 01M4V9YKMG) is the same paper sun-bleached: the wash pulled toward
-      // white, the tape half as present, and the bottom-right corner lifting off the cork — a wedge of
-      // shadow under a lighter wedge of the paper's back. It is a paint, not a motion.
-      const faded = col.stickies[s]!.faded === true;
-      quad(
-        ctx,
-        [p(l, top), p(r, top), p(r + sw, top - noteH), p(l + sw, top - noteH)],
-        faded ? tone.faded : tone.note,
-      );
+      const sw = stickySway(sticky.age) * (noteW / 17);
+      const pt = (a: number, b: number, d = 0): Pt => {
+        const da = a - cx;
+        const db = b - top;
+        return p(cx + da * cos - db * sin + d, top + da * sin + db * cos - d);
+      };
+      const l = cx - noteW / 2;
+      const r = cx + noteW / 2;
+      const bot = top - noteH;
+      quad(ctx, [pt(l, top, 0.6), pt(r, top, 0.6), pt(r + sw, bot, 0.6), pt(l + sw, bot, 0.6)], PINBOARD.noteCast);
+      const faded = sticky.faded === true;
+      quad(ctx, [pt(l, top), pt(r, top), pt(r + sw, bot), pt(l + sw, bot)], faded ? tone.faded : tone.note);
       if (faded) {
-        const cx = r + sw;
-        const cy = top - noteH;
-        quad(
-          ctx,
-          [p(cx - 4.5, cy), p(cx, cy), p(cx, cy + 3.5), p(cx - 4.5, cy)],
-          PINBOARD.curlCast,
-        );
-        quad(
-          ctx,
-          [p(cx - 4, cy + 0.4), p(cx - 0.6, cy + 3.2), p(cx - 0.6, cy + 0.4), p(cx - 4, cy + 0.4)],
-          PINBOARD.curlBack,
-        );
+        // A stopped plan's card (lane 01M4V9YKMG): sun-bleached, its bottom-right corner lifting.
+        quad(ctx, [pt(r + sw - 3.2, bot), pt(r + sw, bot), pt(r + sw, bot + 2.5)], PINBOARD.curlCast);
+        quad(ctx, [pt(r + sw - 2.8, bot + 0.3), pt(r + sw - 0.4, bot + 2.3), pt(r + sw - 0.4, bot + 0.3)], PINBOARD.curlBack);
       }
-      // The washi tab, straddling the note's top edge onto the cork — the tape is doing the holding,
-      // so it has to overlap both. Its own sheen line is what stops it reading as a painted stripe.
-      const tw = 8;
-      rect(
-        mid - tw / 2 + ja,
-        top - 1.6,
-        mid + tw / 2 + ja,
-        top + 1.6,
-        faded ? tone.fadedTape : tone.tape,
-      );
-      rect(mid - tw / 2 + ja, top + 1, mid + tw / 2 + ja, top + 1.6, PINBOARD.tapeSheen);
-    }
-    // The cork keeps its tack holes: every slot a card has held (`held`, this viewer's high-water mark)
-    // and that has no card on it now shows the small dark hole its card left — "pin holes stay" (L5).
-    for (let s = col.stickies.length; s < (col.held ?? 0); s++) {
-      const top = H / 2 - M - 6 - s * (noteH + 2.5);
-      rect(mid - 0.9, top - 1.4, mid + 0.9, top + 0.4, PINBOARD.hole);
-    }
-    // The overflow badge — the one piece of type, at the size that survives the downscale.
-    if (col.count > STICKY_CAP) {
-      const b = H / 2 - M - 6 - STICKY_CAP * 13.5 - 4;
-      wallText(
-        ctx,
-        fit,
-        edge,
-        tc + mid / FLOOR,
-        uc + b / WALL_H,
-        `+${col.count - STICKY_CAP}`,
-        9,
-        tone.cap,
-        'center',
-      );
+      // The washi tab, straddling the card's top edge onto the cork — the tape does the holding.
+      const tw = 5.5;
+      quad(ctx, [pt(cx - tw / 2, top + 1.2), pt(cx + tw / 2, top + 1.2), pt(cx + tw / 2, top - 1.2), pt(cx - tw / 2, top - 1.2)], faded ? tone.fadedTape : tone.tape);
+      quad(ctx, [pt(cx - tw / 2, top + 1.2), pt(cx + tw / 2, top + 1.2), pt(cx + tw / 2, top + 0.7), pt(cx - tw / 2, top + 0.7)], PINBOARD.tapeSheen);
     }
   }
 
@@ -800,7 +794,6 @@ function wallLaneBoard(
   // read, left to right in the Experiments section's order. Status only, and by paper and pin rather
   // than by words: an overdue tag is amber and has slipped on its pin, a read tag carries a tick, a
   // waiting one is the plainest paper on the board. The section beside the room says the rest.
-  const RAIL = H / 2 - 71; // where the old board's cork ended: the columns above are untouched
   rect(-W / 2 + FR, RAIL - 1.6, W / 2 - FR, RAIL, PINBOARD.oak);
   stroke(
     [
@@ -1009,7 +1002,24 @@ const PINBOARD = {
   /** A faded card's lifted corner: the shadow it throws on the cork, and the paper's lighter back. */
   curlCast: 'rgba(60, 35, 10, 0.22)',
   curlBack: '#FFFDF8',
+  /** The twine strung between goal rows (ADR 751): there, but quieter than any card. */
+  twine: 'rgba(110, 70, 30, 0.35)',
 } as const;
+
+/** The left gutter of the wall board where the goal tabs hang (ADR 751), in board units. */
+const BOARD_GUTTER = 26;
+
+/**
+ * The goal rows' washi tabs (ADR 751): one tape per row, then the everything-else row's plain kraft.
+ * Muted against the state colours of the cards, so a tab names a row without reading as a state.
+ */
+const GOAL_TABS: ReadonlyArray<{ tape: string; ink: string }> = [
+  { tape: '#E9C46A', ink: '#4A3A12' },
+  { tape: '#A8C5A0', ink: '#24401F' },
+  { tape: '#E5A9A0', ink: '#4D211B' },
+  { tape: '#B7B0D8', ink: '#2E2850' },
+  { tape: '#D9CBB0', ink: '#4A3A26' },
+];
 
 /**
  * Type lying ON a wall, sheared onto its plane rather than pasted over it in screen space.
