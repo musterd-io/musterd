@@ -1,0 +1,366 @@
+/* ─── wiki overlay — the book off the shelf (ADR 747) ──────────────────────────────────────────────
+   Opened from the left-wall bookshelf, so it is dressed as one of that shelf's books: a cloth-bound
+   cover with a gilt rule for the frame, cream pages inside, contents on the left page and the page
+   you are reading on the right, a soft spine between them. The scrim, motion and dismissal are the
+   board overlay's (`.lc-boardoverlay`); only the panel's size and dress differ. Wider than settings —
+   it is for reading — but it still stops short of full-bleed, so the room shows around it. */
+.lc-wiki {
+  --wk-cloth: #2f4a3e;
+  --wk-cloth-deep: #243a30;
+  --wk-gilt: #e3c98a; /* 6.4:1 on the cloth */
+  --wk-band-ink: #f3e7c6; /* 8.9:1 on the cloth */
+  --wk-band-dim: #c9d3c2; /* 6.6:1 on the cloth */
+  --wk-paper: #fbf5e6;
+  --wk-paper-left: #f4ead2;
+  --wk-ink: #2b2118; /* 14:1 on the paper */
+  --wk-ink-dim: #6a5640; /* 6.0:1 on the paper, 5.5:1 on the left page */
+  --wk-link: #1f5c45; /* 7.1:1 on the paper */
+  --wk-rule: rgba(110, 86, 50, 0.2);
+  --wk-code: #efe4c8;
+  --wk-on: #e6d6ad;
+}
+
+.lc-boardoverlay__panel.lc-wiki__panel {
+  width: min(95vw, 1120px);
+  min-width: 0;
+  height: min(88vh, 840px);
+  min-height: min(88vh, 380px);
+  background: var(--wk-paper);
+  border: 6px solid var(--wk-cloth);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 0 1.5px var(--wk-gilt),
+    0 8px 22px -8px color-mix(in srgb, var(--lc-ground) 70%, transparent),
+    0 32px 80px -24px color-mix(in srgb, var(--lc-ground) 85%, transparent);
+  overflow: hidden;
+}
+
+/* The band: the book's cover, title stamped in gilt. */
+.lc-wiki__band {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-4);
+  padding: var(--lc-4) var(--lc-4) var(--lc-4) var(--lc-5);
+  background: linear-gradient(var(--wk-cloth), var(--wk-cloth-deep));
+  border-bottom: 1.5px solid var(--wk-gilt);
+}
+.lc-wiki__title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--wk-gilt);
+  white-space: nowrap;
+}
+.lc-wiki__team {
+  font-weight: 400;
+  color: var(--wk-band-ink);
+}
+.lc-wiki__source {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 12px/1.2 var(--font-sans);
+  color: var(--wk-band-dim);
+}
+.lc-wiki__source code {
+  font-family: var(--font-mono);
+  color: var(--wk-band-ink);
+}
+.lc-wiki__source a {
+  color: var(--wk-gilt);
+}
+.lc-wiki__stale {
+  color: var(--wk-gilt);
+}
+.lc-wiki__close {
+  appearance: none;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--wk-gilt) 55%, transparent);
+  border-radius: var(--lc-r-sm);
+  background: transparent;
+  color: var(--wk-band-ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lc-wiki__close:focus-visible,
+.lc-wiki__source a:focus-visible {
+  outline: 2px solid var(--wk-gilt);
+  outline-offset: 2px;
+}
+
+/* The open book: contents | spine | page. */
+.lc-wiki__book {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 290px) 14px minmax(0, 1fr);
+}
+.lc-wiki__contents {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--wk-paper-left);
+  padding: var(--lc-4) var(--lc-3) var(--lc-4) var(--lc-4);
+}
+.lc-wiki__spine {
+  background: linear-gradient(
+    90deg,
+    var(--wk-paper-left),
+    color-mix(in srgb, var(--wk-cloth) 16%, var(--wk-paper-left)) 45%,
+    color-mix(in srgb, var(--wk-cloth) 10%, var(--wk-paper)) 60%,
+    var(--wk-paper)
+  );
+}
+.lc-wiki__find input {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--lc-3);
+  border: 1px solid var(--wk-rule);
+  border-radius: var(--lc-r-sm);
+  background: var(--wk-paper);
+  color: var(--wk-ink);
+  font: 400 13px/1 var(--font-sans);
+}
+.lc-wiki__find input::placeholder {
+  color: var(--wk-ink-dim);
+}
+.lc-wiki__find input:focus-visible,
+.lc-wiki__row:focus-visible,
+.lc-wiki__back:focus-visible,
+.lc-wiki__cta:focus-visible,
+.lc-wiki__prose a:focus-visible,
+.lc-wiki__foot a:focus-visible {
+  outline: 2px solid var(--wk-link);
+  outline-offset: 1px;
+}
+.lc-wiki__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: var(--lc-3) 0 0;
+  padding: 0 var(--lc-1) 0 0;
+}
+.lc-wiki__row {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 30px;
+  padding: 6px var(--lc-3);
+  border: 0;
+  border-radius: var(--lc-r-sm);
+  background: transparent;
+  color: var(--wk-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.lc-wiki__row:hover {
+  background: color-mix(in srgb, var(--wk-on) 55%, transparent);
+}
+.lc-wiki__row.is-on {
+  background: var(--wk-on);
+  box-shadow: inset 3px 0 0 var(--wk-cloth);
+}
+.lc-wiki__rowtitle {
+  font: 500 13px/1.3 var(--font-sans);
+}
+.lc-wiki__rowdir {
+  font: 400 11px/1.2 var(--font-mono);
+  color: var(--wk-ink-dim);
+}
+
+/* The page being read. */
+.lc-wiki__page {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--lc-6) clamp(16px, 4vw, 48px) var(--lc-7);
+  color: var(--wk-ink);
+}
+.lc-wiki__back {
+  display: none;
+}
+.lc-wiki__prose {
+  max-width: 70ch;
+  font: 400 15px/1.62 var(--font-sans);
+}
+.lc-wiki__prose h1,
+.lc-wiki__prose h2,
+.lc-wiki__prose h3,
+.lc-wiki__prose h4 {
+  line-height: 1.25;
+  color: var(--wk-ink);
+  scroll-margin-top: var(--lc-4);
+}
+.lc-wiki__prose h1 {
+  font-size: 26px;
+  margin: 0 0 var(--lc-5);
+  padding-bottom: var(--lc-3);
+  border-bottom: 1.5px solid var(--wk-gilt);
+}
+.lc-wiki__prose h2 {
+  font-size: 19px;
+  margin: var(--lc-7) 0 var(--lc-3);
+}
+.lc-wiki__prose h3 {
+  font-size: 16px;
+  margin: var(--lc-6) 0 var(--lc-2);
+}
+.lc-wiki__prose p,
+.lc-wiki__prose ul,
+.lc-wiki__prose ol,
+.lc-wiki__prose blockquote,
+.lc-wiki__prose pre,
+.lc-wiki__prose table {
+  margin: 0 0 var(--lc-4);
+}
+.lc-wiki__prose a,
+.lc-wiki__foot a,
+.lc-wiki__empty a {
+  color: var(--wk-link);
+  text-underline-offset: 2px;
+}
+.lc-wiki__prose code {
+  font: 400 0.88em/1.4 var(--font-mono);
+  background: var(--wk-code);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+}
+.lc-wiki__prose pre {
+  overflow-x: auto;
+  padding: var(--lc-4);
+  background: var(--wk-code);
+  border-radius: var(--lc-r-sm);
+}
+.lc-wiki__prose pre code {
+  padding: 0;
+  background: none;
+}
+.lc-wiki__prose blockquote {
+  padding: 0 var(--lc-4);
+  border-left: 3px solid var(--wk-gilt);
+  color: var(--wk-ink-dim);
+}
+.lc-wiki__prose table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.lc-wiki__prose th,
+.lc-wiki__prose td {
+  padding: 6px 10px;
+  border: 1px solid var(--wk-rule);
+  text-align: left;
+  vertical-align: top;
+}
+.lc-wiki__prose hr {
+  border: 0;
+  border-top: 1px solid var(--wk-rule);
+  margin: var(--lc-6) 0;
+}
+.lc-wiki__deadlink {
+  text-decoration: underline dotted;
+}
+.lc-wiki__foot {
+  max-width: 70ch;
+  margin-top: var(--lc-7);
+  padding-top: var(--lc-3);
+  border-top: 1px solid var(--wk-rule);
+  font: 400 13px/1.4 var(--font-sans);
+}
+
+/* Notes and the unlinked / failed states, set on the page paper. */
+.lc-wiki__note,
+.lc-wiki__empty {
+  padding: var(--lc-6) var(--lc-6);
+  color: var(--wk-ink);
+}
+.lc-wiki__empty {
+  max-width: 60ch;
+  margin: var(--lc-6) auto;
+  font: 400 15px/1.6 var(--font-sans);
+}
+.lc-wiki__empty h2,
+.lc-wiki__intro h2 {
+  font-size: 20px;
+  margin: 0 0 var(--lc-3);
+}
+.lc-wiki__intro {
+  max-width: 60ch;
+  font: 400 15px/1.6 var(--font-sans);
+}
+.lc-wiki__empty code,
+.lc-wiki__intro code {
+  font: 400 0.9em var(--font-mono);
+  background: var(--wk-code);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+}
+.lc-wiki__dim {
+  color: var(--wk-ink-dim);
+  font-size: 13px;
+}
+.lc-wiki__more {
+  padding: var(--lc-2) var(--lc-3);
+}
+.lc-wiki__cta {
+  appearance: none;
+  min-height: 36px;
+  padding: 0 var(--lc-5);
+  border: 0;
+  border-radius: var(--lc-r-sm);
+  background: var(--wk-cloth);
+  color: var(--wk-band-ink);
+  font: 600 14px/1 var(--font-sans);
+  cursor: pointer;
+}
+.lc-wiki__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A narrow screen holds one page of the book at a time. */
+@media (max-width: 760px) {
+  .lc-wiki__book {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lc-wiki__spine {
+    display: none;
+  }
+  .is-showing-page .lc-wiki__contents,
+  .is-showing-contents .lc-wiki__page {
+    display: none;
+  }
+  .lc-wiki__back {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    margin: 0 0 var(--lc-3);
+    padding: 0 var(--lc-3);
+    border: 1px solid var(--wk-rule);
+    border-radius: var(--lc-r-sm);
+    background: var(--wk-paper-left);
+    color: var(--wk-ink);
+    font: 500 13px/1 var(--font-sans);
+    cursor: pointer;
+  }
+  .lc-wiki__source {
+    display: none;
+  }
+  .lc-wiki__close {
+    margin-left: auto;
+  }
+}

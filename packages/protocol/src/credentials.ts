@@ -10,6 +10,7 @@ import { PullPolicySchema } from './pull.js';
 import { ResidencyPolicyOverrideSchema, ResidencyPolicySchema } from './residency.js';
 import { StylePolicyOverrideSchema, StylePolicySchema } from './style.js';
 import { TracePolicySchema } from './trace.js';
+import { WikiSourceSchema } from './wiki.js';
 
 /**
  * Credential + team-policy contracts (SPEC A.2/A.6, ADR 069 P3 / ADR 076). Secrets are minted with a
@@ -332,6 +333,12 @@ export const PolicySchema = z.object({
    * floor. Dense here (read); sparse on the wire and in the row (`PolicyOverrideSchema`, ADR 185).
    */
   style: StylePolicySchema.default({}),
+  /**
+   * ADR 747: where the Team's wiki lives — a folder of its repo's default branch, which /live reads
+   * through the daemon. Absent: no wiki linked. A source, not a rule: on its own it gives the stored
+   * doc no ADR 533 review date (`stampReviewBy` in the server's store/teams.ts).
+   */
+  wiki: WikiSourceSchema.optional(),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 

@@ -935,6 +935,14 @@ export const BOOKSHELVES: Bookshelf[] = [
   },
 ];
 
+/**
+ * The shelf the Team's wiki comes off (ADR 747, nick 2026-10-28: "the bookshelf that is on the left
+ * wall near the corner (the taller one)"). The left-wall standard unit: taller than the low-wide one
+ * beside pod 2, and the nearer the corner. On /live it is a button with an oak "wiki" sign hung on
+ * the wall above it; on /broadcast the sign hangs and nothing opens.
+ */
+export const WIKI_SHELF = 1;
+
 // ── Leisure spots ─────────────────────────────────────────────────────────────────────────────────────
 
 export interface LeisureSpot {

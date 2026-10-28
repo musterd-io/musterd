@@ -41,6 +41,7 @@ import {
   PRINTER,
   RECEPTION,
   WALL_BOARD,
+  WIKI_SHELF,
   WORKING_HOURS_CALENDAR,
   WINDOWS,
   type DeskSlot,
@@ -1366,6 +1367,51 @@ export function boardAnchor(fit: Fit): {
   const [l, r] = lo <= hi ? [corners[0]!, corners[1]!] : [corners[3]!, corners[2]!];
   const tiltDeg = (Math.atan2(r.y - l.y, r.x - l.x) * 180) / Math.PI;
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, topMidY, tiltDeg };
+}
+
+/**
+ * The wiki shelf's screen box (ADR 747), for the hotspot /live lays over it — the shelf's footprint
+ * and its top, projected, as `boardAnchor` does the board. `topMidY` is the middle of the shelf's
+ * back top edge, where it meets the wall: the sign hangs on the wall above it. `tiltDeg` is that
+ * edge's slope, so the sign skews into the wall's plane like the board's.
+ */
+export function shelfAnchor(fit: Fit): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  topMidY: number;
+  tiltDeg: number;
+} {
+  const s = BOOKSHELVES[WIKI_SHELF]!;
+  const alongY = s.dir === 'E' || s.dir === 'W';
+  const [hx, hy] = alongY ? [s.deep / 2, s.long / 2] : [s.long / 2, s.deep / 2];
+  const rise = s.high * fit.scale;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const dx of [-hx, hx]) {
+    for (const dy of [-hy, hy]) {
+      const p = project(s.lx + dx, s.ly + dy, fit);
+      xs.push(p.x);
+      ys.push(p.y, p.y - rise);
+    }
+  }
+  // The back edge sits on the wall: lx 0 for a shelf facing E, ly 0 for one facing S.
+  const back = (t: number) =>
+    alongY ? project(s.lx - hx, s.ly + t * hy, fit) : project(s.lx + t * hx, s.ly - hy, fit);
+  const l = back(-1);
+  const r = back(1);
+  const [a, b] = l.x <= r.x ? [l, r] : [r, l];
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return {
+    x,
+    y,
+    w: Math.max(...xs) - x,
+    h: Math.max(...ys) - y,
+    topMidY: back(0).y - rise,
+    tiltDeg: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI,
+  };
 }
 
 /**

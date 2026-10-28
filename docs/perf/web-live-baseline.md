@@ -2416,6 +2416,19 @@ over its ceiling, so the ceiling moves by the bundle's own size and no more. No 
 animation loop (one custom property, set when the minutes change). Measured + 15% would loosen it (ADR 183). Folding
 the card's rules into `Broadcast.css` once that lane lands drops one stylesheet request; it does not change the bytes.
 
+## 2026-10-28 — the team wiki off the bookshelf; Total JS RAISED 361,600 → 379,600 B, Live CSS RAISED 28,200 → 30,100 B (lane 01M6017ZEV)
+
+ADR 747 puts the Team's wiki on /live: the left-wall bookshelf opens an overlay that reads the pages the daemon
+fetches from the Team's repo. The overlay is one lazy chunk (`WikiOverlay`, 16.1 KB gzip), loaded on the shelf's
+first hover or on the click and never with the room, so initial JS on /live is unchanged at 147.8 KB of 148.0. About
+11 KB of the chunk is `marked`, already a `@musterd/web` dependency for the site's build-time content and now also
+in the client: a page's markdown is rendered in the browser, with raw HTML escaped and links vetted. The rest is the
+overlay, the link resolver, the shelf's hotspot and the settings field. Total JS reads 369.5 KB local (351.9 before,
+on the faces lane), and CI reads ~0.8 KB above local. The stylesheet is 1.8 KB gzip, classified `live`, which reads
+29.1 KB. Rendering on the daemon instead would move `marked` out of the client but add it to the server's runtime
+dependencies; the client keeps it because only a viewer who opens the shelf pays for it. Measured + 15% would loosen
+both (ADR 183).
+
 ## 2026-10-28 — members' faces from their rendered figures; Total JS RAISED 360,600 → 361,600 B (lane 01M6017Z38)
 
 The team panel, the Now card, the asks rail and the other `MemberFace` sites now show each member's head and

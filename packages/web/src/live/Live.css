@@ -3054,6 +3054,16 @@
 .lc-boardspot:focus-visible .lc-boardspot__tag {
   background: var(--lc-oak-lit);
 }
+/* The wiki shelf's hotspot (ADR 747): the board's build and sign, over the left-wall bookshelf. The
+   sign hangs on the wall above the shelf's back edge (`--lc-sign-drop` from `shelfAnchor`). On
+   /broadcast it is a plain span: the sign hangs as part of the room and nothing opens. */
+.lc-wikispot.is-static {
+  pointer-events: none;
+  cursor: default;
+}
+.lc-wikispot.is-static .lc-boardspot__tag {
+  pointer-events: none;
+}
 /* The working-hours calendar's hotspot — the settings door. It shares the board hotspot's build
    and hover (grouped above); its own: a settings tab under its frame (below), the house 24px tap floor whatever the fit, and a red
    pin in the corner when a pairing waits for this viewer. */

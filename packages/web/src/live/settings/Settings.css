@@ -382,6 +382,17 @@
 .lc-set__num input[aria-invalid='true'] {
   border-color: var(--lc-danger-ink);
 }
+/* The wiki's repo and folder (ADR 747): text, so a wider box read left to right, and a refusal on
+   its own line under it — a URL's reason does not fit beside the box the way "1–60" does. */
+.lc-set__num--text {
+  flex-direction: column;
+  align-items: stretch;
+  width: min(280px, 100%);
+}
+.lc-set__num--text input {
+  width: 100%;
+  text-align: left;
+}
 .lc-set__unit {
   min-width: 28px;
   font: 400 11px/1 var(--font-mono);

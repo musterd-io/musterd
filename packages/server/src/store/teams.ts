@@ -702,9 +702,11 @@ export async function applyPolicyChange(
  * dropping every knob is exactly how a review ends with "drop".
  */
 export function stampReviewBy(stored: PolicyOverride, now: number): PolicyOverride {
-  const { review_by, ...knobs } = stored;
-  if (Object.keys(knobs).length === 0) return knobs;
-  if (review_by === undefined) return { ...knobs, review_by: now + POLICY_REVIEW_DEFAULT_MS };
+  // ADR 747: `wiki` says where the Team's wiki lives; it governs nothing, so on its own it asks no
+  // admin to look again. A doc that also holds a rule is reviewed exactly as before.
+  const { review_by, wiki, ...knobs } = stored;
+  if (Object.keys(knobs).length === 0) return wiki ? { wiki } : {};
+  if (review_by === undefined) return { ...stored, review_by: now + POLICY_REVIEW_DEFAULT_MS };
   if (review_by <= now) throw new MusterdError('validation', 'review_by must be in the future');
   if (review_by > now + POLICY_REVIEW_MAX_MS)
     throw new MusterdError('validation', 'review_by may be at most 365 days out');

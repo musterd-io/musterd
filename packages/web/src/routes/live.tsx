@@ -122,6 +122,14 @@ const LazySettingsOverlay = lazy(() =>
 function preloadSettings(): void {
   void import('../live/settings/SettingsOverlay');
 }
+/** The Team's wiki (ADR 747): opened from the left-wall bookshelf; its chunk (and `marked`) loads on
+ *  the shelf's first hover or on the click — never with the room. */
+const LazyWikiOverlay = lazy(() =>
+  import('../live/wiki/WikiOverlay').then((m) => ({ default: m.WikiOverlay })),
+);
+function preloadWiki(): void {
+  void import('../live/wiki/WikiOverlay');
+}
 const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
 // The Now briefing is not needed to paint the room: it comes up a beat after first paint anyway, so
 // its code rides a lazy chunk and /live's eager graph (ADR 151/183) does not pay for it.
@@ -472,12 +480,34 @@ function LivePage() {
   }, []);
   // Settings, from the calendar under the wall clock — the board's open/close/focus pattern again.
   const [settingsOrigin, setSettingsOrigin] = useState<DOMRect | null>(null);
+  const [settingsTab, setSettingsTab] = useState<'you' | 'team'>('you');
   const settingsOpener = useRef<HTMLElement | null>(null);
   const openSettings = useCallback((rect: DOMRect) => {
     settingsOpener.current = (document.activeElement as HTMLElement | null) ?? null;
+    setSettingsTab('you');
     setSettingsOrigin(rect);
     roomTone.moment('boardOpen', 0);
   }, []);
+  // The wiki, from the left-wall bookshelf (ADR 747) — the same open/close/focus pattern.
+  const [wikiOrigin, setWikiOrigin] = useState<DOMRect | null>(null);
+  const wikiOpener = useRef<HTMLElement | null>(null);
+  const openWiki = useCallback((rect: DOMRect) => {
+    wikiOpener.current = (document.activeElement as HTMLElement | null) ?? null;
+    setWikiOrigin(rect);
+    roomTone.moment('boardOpen', 0);
+  }, []);
+  const closeWiki = useCallback(() => {
+    setWikiOrigin(null);
+    roomTone.moment('boardClose', 0);
+    window.setTimeout(() => wikiOpener.current?.focus?.({ preventScroll: true }), 0);
+  }, []);
+  // An unlinked shelf's "link the repo" goes straight to the Team sheet, from where the shelf was.
+  const linkWiki = useCallback(() => {
+    settingsOpener.current = wikiOpener.current;
+    setSettingsTab('team');
+    setSettingsOrigin(wikiOrigin);
+    setWikiOrigin(null);
+  }, [wikiOrigin]);
   const closeSettings = useCallback(() => {
     setSettingsOrigin(null);
     roomTone.moment('boardClose', 0);
@@ -753,7 +783,12 @@ function LivePage() {
             // A modal means it: while the board overlay is up, the room behind it takes no focus and
             // no clicks (the AsksStrip inert precedent, promoted to page scope).
             inert={
-              boardOpen || seedsOpen || logOpen || pickSeat !== null || settingsOrigin !== null
+              boardOpen ||
+              seedsOpen ||
+              logOpen ||
+              pickSeat !== null ||
+              settingsOrigin !== null ||
+              wikiOrigin !== null
             }
           >
             {/* On a phone the room is a window to watch, not a panel to work (goal live-delight):
@@ -772,6 +807,8 @@ function LivePage() {
                 onBoardHover={preloadBoardOverlay}
                 onSettingsOpen={openSettings}
                 onSettingsHover={preloadSettings}
+                onWikiOpen={openWiki}
+                onWikiHover={preloadWiki}
                 // ADR 618 §7: a staged pairing used to be a full-width panel above the room; now it
                 // is a dot on the calendar, and the You sheet holds the confirmation.
                 settingsSpot={{ enabled: settingsHuman, flagged: pairings.length > 0 }}
@@ -898,9 +935,21 @@ function LivePage() {
                 teamHours={stream.teamWorkingHours}
                 pairings={pairings}
                 origin={settingsOrigin}
+                initialTab={settingsAdmin ? settingsTab : 'you'}
                 onPairingsChanged={refreshPairings}
                 onHoldsChanged={refreshHolds}
                 onClose={closeSettings}
+              />
+            </Suspense>
+          )}
+          {wikiOrigin !== null && cfg && (
+            <Suspense fallback={null}>
+              <LazyWikiOverlay
+                cfg={cfg}
+                origin={wikiOrigin}
+                isAdmin={settingsAdmin}
+                onOpenSettings={linkWiki}
+                onClose={closeWiki}
               />
             </Suspense>
           )}

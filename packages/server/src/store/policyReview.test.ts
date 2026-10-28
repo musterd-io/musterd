@@ -51,6 +51,16 @@ withDrivers('policyReview', (o) => {
       expect(stampReviewBy({}, now)).toEqual({});
       expect(stampReviewBy({ review_by: now + DAY }, now)).toEqual({});
     });
+    it('a wiki source alone asks no review; beside a rule it rides along (ADR 747)', () => {
+      const wiki = { repo: 'https://github.com/acme/app', path: 'docs/wiki' };
+      expect(stampReviewBy({ wiki }, now)).toEqual({ wiki });
+      expect(stampReviewBy({ wiki, review_by: now + DAY }, now)).toEqual({ wiki });
+      expect(stampReviewBy({ wiki, ask_fallback_to_nonadmin: true }, now)).toEqual({
+        wiki,
+        ask_fallback_to_nonadmin: true,
+        review_by: now + POLICY_REVIEW_DEFAULT_MS,
+      });
+    });
     it('a named date is kept; a past one or one over 365d is refused', () => {
       const d = { ask_fallback_to_nonadmin: true, review_by: now + 10 * DAY };
       expect(stampReviewBy(d, now)).toEqual(d);
