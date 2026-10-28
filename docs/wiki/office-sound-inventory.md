@@ -19,7 +19,7 @@ Every sound the office can play on `/live` and `/broadcast` as of 2026-10-27, wh
 | Act cue | `accept` E5→G5 | accept | centre | 0.10 |
 | Act cue | `decline` G4→E4 falling | decline | centre | 0.09–0.10 |
 | Act cue | `wait` D5 sine 0.46 s | wait | centre | 0.07 |
-| Act cue | `ask` G5→C6 tri | ask | centre | 0.12–0.13 — the loudest cue |
+| Act cue | `ask` G5→C6 tri | ask | centre | ~~0.12–0.13 — the loudest cue~~ 0.10 since 2026-10-27 (step 2) |
 | Act cue | `steer` A4→E5→A5 tri, three notes | steer | centre | 0.11–0.13 |
 | Act cue | `challenge` D5→A5 | challenge | centre | 0.09–0.10 |
 | Act cue | `defer` G5→D5 | defer | centre | 0.08 |
@@ -38,7 +38,7 @@ Every sound the office can play on `/live` and `/broadcast` as of 2026-10-27, wh
 | Moment | `fanfare` | an accept lands on a celebrant | the celebrant | — |
 | Moment | `door` | a member walks in or out | the entrance | — |
 | Moment | `askbell` | an ask arrives (one held tone) | the asked desk | — |
-| Moment | `whoosh` | a directed act sweeps from sender to recipient | sender → recipient | — |
+| Moment | `whoosh` | ~~a directed act sweeps from sender to recipient~~ a steer's redirect sweeps from sender to recipient (steer only since 2026-10-27, step 2) | sender → recipient | — |
 | Moment | `plateOpen` / `plateClose` | the viewer opens or closes a nameplate | the plate | — viewer's own hand |
 | Moment | `boardOpen` / `boardClose` | the viewer opens or closes the board overlay | centre | — viewer's own hand |
 | Moment | `ring`, `ratchet`, `rattle`, `doorbell`, `pop` | the Welcome Wagon (phone, label maker, wagon wheels, front-door chime, confetti) | their props | — |
@@ -53,13 +53,13 @@ The verdicts below are design judgements from the synthesis, the gates and the s
 
 **Keep as is.** `keys`, `murmur`/`whisper`, `tap`, `stapler`, `drawer`, the dog set, `birds`, `nightair`, the bed. Gated on something the eye can see (a typing desk, a pair, the dog, the clock), placed where it happens, rare where it should be. They are the office being inhabited.
 
-**Keep, re-level.** `askbell` and the `ask` cue both fire on one ask, from the same desk, and `ask` is the loudest cue in the table. Listen for: an ask arriving as two sounds. Proposal: the cue carries the "for you" and the bell carries the "where"; drop the cue's gain to the `message` level, or play the bell alone on `/broadcast`.
+**Keep, re-level.** `askbell` and the `ask` cue both fire on one ask, from the same desk, and `ask` was the loudest cue in the table. Listen for: an ask arriving as two sounds. Proposal: the cue carries the "for you" and the bell carries the "where"; drop the cue's gain to the `message` level, or play the bell alone on `/broadcast`. DONE 2026-10-27 (step 2): the cue is at message level (0.10); the bell is unchanged.
 
 **Rework: tie to motion (lane 01M5XS6KAD).** `footsteps`, `sip`, `water`, `eating`, `blow` play from a random side on a timer, while the office now has real walks, sip beats, water errands and plates. A footstep nobody is taking is the thing the `creak` cut was about. Proposal: these leave the life roll and fire from the choreography — footsteps from a walker's stride (plank vs tile by the floor under them), the sip from the sip beat, the bottle from the water errand, eating from the nook plate, the chair creak from sit-down and stand-up (the creak returns as a *placed* sound, which is what distinguishes it from a cue), the coffee machine from the island pour. Then the roll keeps only what has no visible cause (keys, taps, murmur, the dog, the day pair).
 
-**Rework: the viewer's own hand.** `plateOpen`/`plateClose` and `boardOpen`/`boardClose` are UI feedback on the room-tone layer. On `/broadcast` nobody clicks, so they never play there; on `/live` they are the only sounds that are not the room. Listen for: a paper rustle when opening the board reading as something happening in the office. Proposal: keep them, but under the act-cue toggle (feedback for the viewer), not the room-tone one.
+**Rework: the viewer's own hand.** `plateOpen`/`plateClose` and `boardOpen`/`boardClose` are UI feedback on the room-tone layer. On `/broadcast` nobody clicks, so they never play there; on `/live` they are the only sounds that are not the room. Listen for: a paper rustle when opening the board reading as something happening in the office. Proposal: keep them, but under the act-cue toggle (feedback for the viewer), not the room-tone one. OPEN 2026-10-27: the ticks are synthesized by the room-tone engine, which only runs while that toggle is on, so moving them needs either a third synth home or a toggle redesign — nick's call before it is built.
 
-**Cut or demote.** `whoosh` on every directed act: on a busy stream it is the most frequent moment after the door, and a sweep gesture is the shape `creak` was cut for. Listen for: whooshes as noise during a burst. Proposal: keep it for steer (interrupt-class) only; a plain directed message gets the cue and nothing from the room.
+**Cut or demote.** `whoosh` on every directed act: on a busy stream it is the most frequent moment after the door, and a sweep gesture is the shape `creak` was cut for. Listen for: whooshes as noise during a burst. Proposal: keep it for steer (interrupt-class) only; a plain directed message gets the cue and nothing from the room. DONE 2026-10-27 (step 2): the whoosh plays only when the tethered act is a steer.
 
 **Open question for nick.** `/live` defaults both engines off, so a first-time viewer hears nothing; `/broadcast` plays everything. Is the stream mix (bed + cues + moments at ×4) the one to judge first, since that is the one strangers hear?
 

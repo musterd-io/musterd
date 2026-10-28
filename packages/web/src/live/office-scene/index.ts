@@ -2116,7 +2116,10 @@ export function mountOffice(
       // The whoosh deliberately follows the tether's own gate (E4 spec §2): a sweep describing
       // motion that is not drawing would be a lie. Pan rides sender → addressee with the trace, and
       // stays ONE sweep however many traces drew — four whooshes for one act is noise, not weight.
-      roomTone.moment('whoosh', screenPan(head.x, width), screenPan(drawn[0]!.x, width));
+      // Steer only since 2026-10-27 (sound re-evaluation, lane 01M6096TA7): on a busy stream the
+      // sweep was the most frequent moment after the door, and a plain directed message already has
+      // its cue; the interrupt-class redirect is the one whose motion earns a sound.
+      if (act === 'steer') roomTone.moment('whoosh', screenPan(head.x, width), screenPan(drawn[0]!.x, width));
     }
 
     // enter on the next frame so the hidden initial state paints first → the CSS transition actually runs

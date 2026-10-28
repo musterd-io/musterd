@@ -58,7 +58,8 @@ const sine: OscillatorType = 'sine';
  * satisfying major arpeggio that pairs with its on-screen "settle"; request_help rises to grab
  * attention; status is a near-subliminal tick; decline falls. `message` is the default fallback.
  */
-const CUES: Record<string, Note[]> = {
+/** Exported for the sound tests only — the engine is the one reader. */
+export const CUES: Record<string, Note[]> = {
   message: [{ freq: E5, t: 0, dur: 0.32, type: tri, gain: 0.1 }],
   status_update: [{ freq: A5, t: 0, dur: 0.18, type: sine, gain: 0.05 }],
   request_help: [
@@ -79,10 +80,13 @@ const CUES: Record<string, Note[]> = {
   ],
   wait: [{ freq: D5, t: 0, dur: 0.46, type: sine, gain: 0.07 }],
   // The to-human ask (ADR 147/149) — a doorbell: two clear rising strikes, brighter than
-  // request_help (this one is aimed at a person and carries a clock).
+  // request_help (this one is aimed at a person and carries a clock). Message-level gain since
+  // 2026-10-27 (sound re-evaluation, lane 01M6096TA7): an ask already lands with the room's
+  // `askbell` at the asked desk, so the cue carries "for you" and the bell carries the weight —
+  // at 0.12–0.13 it was the loudest cue in the table and the ask arrived as two loud sounds.
   ask: [
-    { freq: G5, t: 0, dur: 0.3, type: tri, gain: 0.12 },
-    { freq: C6, t: 0.14, dur: 0.5, type: tri, gain: 0.13 },
+    { freq: G5, t: 0, dur: 0.3, type: tri, gain: 0.1 },
+    { freq: C6, t: 0.14, dur: 0.5, type: tri, gain: 0.1 },
   ],
   // Steering trio (ADR 103). steer is the loudest — an assertive rising triad that grabs attention
   // (interrupt-class); challenge lifts like a spoken question; defer settles gently downward (set aside).
