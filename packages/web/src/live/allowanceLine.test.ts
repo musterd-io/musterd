@@ -23,7 +23,7 @@ describe('allowanceLines', () => {
       NOW,
     );
     expect(lines).toHaveLength(1);
-    expect(lines[0]?.text).toBe('Claude Max 82% used');
+    expect(lines[0]?.text).toBe('Claude Max week 82% used');
     expect(lines[0]?.suffixes).toEqual(['5h 62%']);
     expect(lines[0]?.bar).toBe(82);
     expect(lines[0]?.warn).toBe(false);
@@ -109,8 +109,27 @@ describe('allowanceLines', () => {
       ]),
       NOW,
     );
-    expect(lines[0]?.text).toBe('Cursor 60% used');
+    expect(lines[0]?.text).toBe('Cursor 5h 60% used');
     expect(lines[0]?.suffixes).toEqual(['on-demand 6.5 dollars']);
+  });
+
+  it('names the 5-hour, weekly, and model windows, tightest first', () => {
+    const lines = allowanceLines(
+      view([
+        {
+          label: 'Claude Max 20x',
+          readAt: NOW,
+          windows: [
+            { name: '5h', left: 0.88, resetsAt: 1, kind: 'percent' },
+            { name: 'week', left: 0.49, resetsAt: 2, kind: 'percent' },
+            { name: 'Fable', left: 0.22, resetsAt: 2, kind: 'percent' },
+          ],
+        },
+      ]),
+      NOW,
+    );
+    expect(lines[0]?.text).toBe('Claude Max 20x Fable 78% used');
+    expect(lines[0]?.suffixes).toEqual(['week 51%', '5h 12%']);
   });
 
   it('draws one line per account', () => {

@@ -85,6 +85,9 @@ export function AllowanceChips({
             {chip.lines.map((line) => (
               <span key={line.text} className={`lc-allow__acct${tone(line)}`}>
                 {line.text}
+                {line.suffixes.length > 0 && (
+                  <span className="lc-allow__more"> {line.suffixes.join(' · ')}</span>
+                )}
                 <Track bar={line.bar} />
               </span>
             ))}

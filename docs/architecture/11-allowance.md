@@ -39,7 +39,9 @@ A number is drawn only from a body the provider's own client reads:
   names: Claude Max, Claude Pro, Claude Team, or Claude Enterprise, and Claude Max 5x or Claude Max
   20x when the tier says so. An unknown tier is not printed. When the body has `limits`, those rows
   are the windows: `session` is the 5-hour window, `weekly_all` is the weekly window, and
-  `weekly_scoped` uses `scope.model.display_name` (Fable, on an account that sends it). They are the
+  `weekly_scoped` uses `scope.model.display_name` (Fable, on an account that sends it). The post
+  to `/live` shortens a plain weekly window to `week` and a 5-hour window to `5h`. A model weekly
+  window keeps the model name, so Fable stays Fable and is not folded into `week`. They are the
   same meters as `five_hour` and `seven_day`, so the page does not draw both. When `limits` is
   absent, `five_hour` and `seven_day` carry `utilization` and `resets_at`. `resets_at` may be unix
   seconds or an ISO timestamp. A key containing `overage` is not a window, and neither is any other
