@@ -13,7 +13,9 @@ import { musterdChipSvg } from '../../brand/chipMark';
 import { memberColor, memberInk } from '../format';
 import { platesOpenMode, stillMode } from '../stillMode';
 import { surfaceGlyph } from '../surfaceGlyph';
-import { createActors, type Actors } from './actors';
+import { createActors, type Actors,
+  conversationLooks,
+} from './actors';
 import { solidHit, walkable } from './nav';
 import {
   plateCoversBoard, layoutPlates, leaderFrom, type PlateBox, type PlateMemo } from './plateLayout';
@@ -3245,6 +3247,17 @@ export function mountOffice(
     }
   }
 
+  /**
+   * Two people talking (lane 01M5XS6GYM): a directed act's speaker turns toward the first person it
+   * is for, and everyone it is for turns toward the speaker, each for as long as the bubble reads
+   * (`hold`, seconds). Across the whole floor, not just the nearest desks — a 90° look is as far as a
+   * seated head goes, so a target behind simply gets that. The words themselves are the bubble's
+   * business, masked by the daemon for the stream (ADR 601); the room only adds the turning.
+   */
+  function converse(speaker: string, to: readonly string[], hold: number) {
+    for (const { who, at } of conversationLooks(speaker, to, actors.poses())) actors.lookAt(who, at, { hold });
+  }
+
   /** A broadcast sweep rolling out from the announcer. */
   function pushWave(name: string, color: string) {
     const at = heads.get(name);
@@ -3304,7 +3317,14 @@ export function mountOffice(
     // Speech is legible content, not motion — it plays even under reduced-motion (typewriter off there).
     if (ev.kind === 'speech') {
       showSpeech(ev.who, ev.text, ev.tone, ev.id, ev.act, ev.addressee, ev.marking, ev.lane);
-      if (!reduced) lookOver(ev.who); // the desks nearby look up at whoever just spoke (lane 01M5XS5ZYP)
+      if (!reduced) {
+        // The conversation (lane 01M5XS6GYM): a directed act is two people talking — the speaker turns
+        // to whoever it is for and they turn back, for as long as the bubble reads — and the desks
+        // nearby look up at whoever just spoke (lane 01M5XS5ZYP).
+        const hold = speechHoldMs(ev.text.length, ev.act, queued.get(ev.who)?.length ?? 0) / 1000;
+        converse(ev.who, ev.addressee?.names ?? [], hold);
+        lookOver(ev.who);
+      }
       // An ask lands with acoustic weight in the room (E3 spec §2): one soft held tone, panned to
       // the asked member's desk when directed, soft-centre for a team ask. Stateless by design.
       if (ev.act === 'ask') {

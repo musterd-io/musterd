@@ -6,6 +6,7 @@ import {
   deskNeighbourPairs,
   homePoses,
   travelDir,
+  conversationLooks,
 } from './actors';
 import { BOARD_STAND, COFFEE_STAND, DESK_SLOTS, ENTRANCE, insideCafe, STRIP_CAP } from './layout';
 import { GESTURE, IDLE_GESTURES } from './skeleton';
@@ -1829,6 +1830,24 @@ describe('meeting in the aisle', () => {
     let guard = 0;
     while (actors.active() && guard++ < 6000) actors.step(0.05);
     expect(actors.ambientOnly()).toBe(false);
+  });
+});
+
+describe('a conversation (lane 01M5XS6GYM): who turns to whom', () => {
+  it('everyone addressed turns to the speaker, the speaker turns to the first of them present, nobody to themself', () => {
+    const poses = new Map([
+      ['Ada', { lx: 100, ly: 100 }],
+      ['Bo', { lx: 300, ly: 100 }],
+      ['Cy', { lx: 100, ly: 300 }],
+    ]);
+    expect(conversationLooks('Ada', ['Bo', 'Cy'], poses)).toEqual([
+      { who: 'Bo', at: { lx: 100, ly: 100 } },
+      { who: 'Cy', at: { lx: 100, ly: 100 } },
+      { who: 'Ada', at: { lx: 300, ly: 100 } },
+    ]);
+    expect(conversationLooks('Ada', ['Ada', 'Zed'], poses)).toEqual([]); // self and the absent are skipped
+    expect(conversationLooks('Zed', ['Ada'], poses)).toEqual([]); // an absent speaker turns nobody
+    expect(conversationLooks('Ada', [], poses)).toEqual([]); // a team act is nobody's conversation
   });
 });
 
