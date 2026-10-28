@@ -24,7 +24,7 @@ import {
 import { filterLanes, UNOWNED } from '../live/boardWrite';
 import { goalFilter, resolveBoardView } from '../live/goalGrid';
 import { useBoardData } from '../live/useBoardData';
-import { initial, kindOf, memberColor, memberAvatar, hueOf } from '../live/format';
+import { initial, kindOf, memberColor, memberDisc, hueOf } from '../live/format';
 import { InsightRail } from '../live/InsightRail';
 import { StyleSheet } from '../live/StyleSheet';
 import { useLiveStream } from '../live/useLiveStream';
@@ -510,7 +510,7 @@ function IdentityFace({ me, roster }: { me: string; roster: MemberSummary[] }) {
     <>
       <span
         className="lc-card__avatar"
-        style={{ background: memberAvatar(me, kindOf(me, idx), hueOf(me, idx)) }}
+        style={memberDisc(me, kindOf(me, idx), hueOf(me, idx))}
         aria-hidden="true"
       >
         {initial(me)}

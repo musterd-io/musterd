@@ -47,7 +47,9 @@ function SparkPending({ entry }: { entry: ExperimentEntry }) {
 }
 
 /** An owner's avatar: the roster's colour for them and their initial. Null for a seat not on it. */
-export type AvatarOf = (seat: string) => { background: string; initial: string } | null;
+export type AvatarOf = (
+  seat: string,
+) => { background: string; color?: string; initial: string } | null;
 
 /**
  * The Experiments section at the foot of the team column (ADR 644, spec
@@ -229,7 +231,7 @@ function ExperimentRow({
         </span>
         <span className="lc-xp__meta">
           {av && (
-            <span className="lc-xp__avatar" style={{ background: av.background }} aria-hidden="true">
+            <span className="lc-xp__avatar" style={{ background: av.background, ...(av.color ? { color: av.color } : {}) }} aria-hidden="true">
               {av.initial}
             </span>
           )}

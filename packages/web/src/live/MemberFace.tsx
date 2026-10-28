@@ -1,7 +1,7 @@
 import type { MemberSummary } from '@musterd/protocol';
 import { useId } from 'react';
 import { appearanceOf } from './office-scene/appearance';
-import { hueOf, kindOf, memberColor } from './format';
+import { hueOf, kindOf, memberAvatarLight, memberColor } from './format';
 import { usePortrait } from './portraits';
 
 /**
@@ -40,6 +40,8 @@ export function MemberFace({
   }
   const kind = kindOf(name, roster);
   const color = memberColor(name, kind, hueOf(name, roster));
+  // A light tint of the member's own hue behind every face (nick, 2026-10-28: no dark discs).
+  const ground = memberAvatarLight(name, kind, hueOf(name, roster));
   if (portrait) {
     return (
       <svg className="mface" width={size} height={size} viewBox="0 0 32 32" role="img" aria-label={name}>
@@ -48,7 +50,7 @@ export function MemberFace({
           <circle cx="16" cy="16" r="15.5" />
         </clipPath>
         <g clipPath={`url(#${clip})`}>
-          <rect width="32" height="32" fill="var(--lc-surface-2)" />
+          <rect width="32" height="32" fill={ground} />
           <image href={portrait} x="0" y="0" width="32" height="32" preserveAspectRatio="xMidYMid slice" />
         </g>
         <circle cx="16" cy="16" r="15.5" fill="none" stroke="var(--lc-border-2)" />
@@ -72,7 +74,7 @@ export function MemberFace({
         <circle cx="16" cy="16" r="15.5" />
       </clipPath>
       <g clipPath={`url(#${clip})`}>
-        <rect width="32" height="32" fill="var(--lc-surface-2)" />
+        <rect width="32" height="32" fill={ground} />
         <ellipse cx="16" cy="33" rx="12.5" ry="9" fill={color} />
         {long && hair && <rect x="7" y="12" width="18" height="12" rx="4" fill={look.hairColor} />}
         <circle cx="16" cy="15.5" r="8.2" fill={look.skin} />

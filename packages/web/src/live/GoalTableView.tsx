@@ -1,7 +1,7 @@
 import type { Goal, GoalFlow, Lane, LaneWarning, MemberSummary } from '@musterd/protocol';
 import { useMemo } from 'react';
 import { buildGoalTable, type GoalRow } from './goalTable';
-import { initial, kindOf, memberAvatar, hueOf } from './format';
+import { initial, kindOf, memberDisc, hueOf } from './format';
 import { ago } from './GoalGridView';
 import './GoalGrid.css';
 import './GoalTable.css';
@@ -237,7 +237,7 @@ function Avatars({ seats, rosterIdx }: { seats: string[]; rosterIdx: Map<string,
         <span
           key={s}
           className="gt-av"
-          style={{ background: memberAvatar(s, kindOf(s, rosterIdx), hueOf(s, rosterIdx)) }}
+          style={memberDisc(s, kindOf(s, rosterIdx), hueOf(s, rosterIdx))}
         >
           {initial(s)}
         </span>

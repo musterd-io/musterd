@@ -1,7 +1,7 @@
 import type { Envelope, HuddleTrace, HuddleView, MemberSummary } from '@musterd/protocol';
 import { Fragment, useState } from 'react';
 import type { LiveConfig } from './client';
-import { clock, hueOf, initial, kindOf, memberAvatar } from './format';
+import { clock, hueOf, initial, kindOf, memberDisc } from './format';
 import { PATH_MAX_LINES, fetchHuddleTrace, seatPath } from './huddleTrace';
 import { huddleBudget, sinceOpen } from './huddles';
 import { MemberFace } from './MemberFace';
@@ -207,7 +207,7 @@ function Who({ name, idx }: { name: string; idx: Map<string, MemberSummary> }) {
       ) : (
         <span
           className="lc-chip__avatar"
-          style={{ background: memberAvatar(name, kindOf(name, idx), hueOf(name, idx)) }}
+          style={{ ...memberDisc(name, kindOf(name, idx), hueOf(name, idx)) }}
         >
           {initial(name)}
         </span>

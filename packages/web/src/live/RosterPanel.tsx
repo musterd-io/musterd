@@ -6,7 +6,7 @@ import {
   capabilityBadges,
   initial,
   isFeatureBehind,
-  memberAvatar,
+  memberDisc,
   rosterOrder,
   rosterPrimaryChip,
 } from './format';
@@ -177,8 +177,8 @@ function SeatRow({
               : 'offline'
         }
       />
-      {/* The monogram, restored (2026-08-13) — white on `memberAvatar` measures 4.86 at its worst
-          across 24 names, and the 3.42 that took it away in #781/#789 came from a different
+      {/* The monogram, restored (2026-08-13) — the member's ink on its light tint (`memberDisc`) clears 5.3 for
+          every hue (white on the old dark fill measured 4.86 at its worst), and the 3.42 that took it away in #781/#789 came from a different
           component's disc (the owner-filter chip, painted with the office FILL) that the sweep's
           class+ink key had silently merged with this one.
           The offline dim was the one real constraint here: at 0.55 a letter reads ~1.73 whatever
@@ -187,7 +187,7 @@ function SeatRow({
           disc. `aria-hidden` stays: the name is on the next line. */}
       <span
         className="lc-seat__avatar"
-        style={{ background: memberAvatar(m.name, kind, m.hue) }}
+        style={{ ...memberDisc(m.name, kind, m.hue) }}
         aria-hidden="true"
       >
         {initial(m.name)}
