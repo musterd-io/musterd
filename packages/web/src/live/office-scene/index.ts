@@ -3378,7 +3378,7 @@ export function mountOffice(
       // two notes rising, the second held, unresolved; a redirect (steer / challenge / decline) is the
       // same bell stopped short, at the desk it is aimed at. Soft-centre when it is for the team.
       // Stateless by design; audio is not motion, so this sits above the reduced-motion gate.
-      const gesture = gestureFor(ev.act);
+      const gesture = ev.act ? gestureFor(ev.act) : null;
       if (gesture === 'question' || gesture === 'redirect') {
         const at = ev.addressee ? heads.get(ev.addressee.names[0]!) : undefined;
         roomTone.moment(gesture, at ? screenPan(at.x, width) : 0);
