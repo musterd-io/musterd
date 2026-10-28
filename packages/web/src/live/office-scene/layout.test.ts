@@ -299,6 +299,22 @@ describe('the walls are not a matched set', () => {
     }
   });
 
+  it('stands no shelf taller than the sill in front of a window', () => {
+    // A low unit can sit under a window (the low-wide one does); one that rises past the sill covers
+    // the glass. The wiki shelf ran onto the left wall's near window this way until 2026-10-28.
+    for (const s of BOOKSHELVES) {
+      const st = (s.dir === 'E' ? s.ly : s.lx) / FLOOR;
+      const half = s.long / 2 / FLOOR;
+      for (const w of WINDOWS) {
+        if (s.high <= w.u0 * WALL_H) continue;
+        expect(
+          st + half <= w.t0 || st - half >= w.t1,
+          `the ${s.high}-tall shelf (t ${(st - half).toFixed(3)}–${(st + half).toFixed(3)}) covers a window`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it('hangs the agile board clear of every window, the clock, the art, and the wall ends', () => {
     // The board holds the whiteboard's old slot widened into the wall's free far end — these are the
     // guards that earn it a home in layout.ts (the same rules the art lives by). The clock's numbers

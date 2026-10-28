@@ -909,10 +909,12 @@ export const BOOKSHELVES: Bookshelf[] = [
   },
   // (The right-wall unit below the café, the one shelved backwards, went on 2026-10-27: it crowded
   // the couch — nick: "get rid of one of the book shelves".)
-  // left wall beside pod 0 — the standard unit, i.e. the constants above
+  // left wall beside pod 0 — the standard unit, i.e. the constants above. At ly 240 its far end ran
+  // 17 units onto the near window, which starts at t 0.28 (ly 252); nick, 2026-10-28: "move that
+  // bookcase where the wiki lives a little bit to the right so it does not overlap that window".
   {
     lx: SHELF_DEEP / 2,
-    ly: 240,
+    ly: 210,
     dir: 'E',
     long: SHELF_LONG,
     deep: SHELF_DEEP,
