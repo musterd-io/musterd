@@ -2548,3 +2548,19 @@ above local on this tree; 377.3 KB is after rebasing onto the shelf chimes (lane
 landed first. A re-baseline to measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 388,000 B with this lane in.
+
+## 2026-10-28 — the visiting dog; Total JS RAISED 388,000 → 391,000 B (lane 01M5XS6DP2)
+
+| Budget   | Before (main)    | This branch (laptop)  | Ceiling                    |
+| -------- | ---------------- | --------------------- | -------------------------- |
+| total JS | 378.9 KB ceiling | 379.4 KB (73 chunks)  | RAISED 388,000 → 391,000 B |
+
+`office-scene/visitor.ts` (when the neighbour's dog comes by — a minute of the team's working day in
+its own timezone — and the visit's script) and its wiring in `office-scene/index.ts` and `render.ts`
+sit in the office's lazy chunk, so initial JS is untouched; the visitor's sprite sheet (89 KB webp) is
+an image fetched only when a visit is due. The lane adds ≈1 KB gzip; main had grown past the last
+ceiling's headroom before it. The office chunk keeps growing a lane at a time (wall board, chimes,
+weather, sounds, this): a re-baseline to measured + 15% would loosen (ADR 183), so the next real
+lever is a trim of the office scene, not another raise.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 391,000 B with this lane in.

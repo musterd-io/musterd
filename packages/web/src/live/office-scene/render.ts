@@ -1980,6 +1980,8 @@ export interface DepthItem {
 
 /** Per-call rendering options — everything here is opt-in and absent on the baked path. */
 export interface RenderOpts {
+  /** The visiting dog, while one is in the room (lane 01M5XS6DP2). Drawn from its own sheet. */
+  visitor?: PetState | null | undefined;
   /** The per-item sprite cache. Absent → every item paints direct, exactly as before. */
   sprites?: SpriteCache | undefined;
   /** Device pixel ratio of `ctx`'s transform — sprite boxes are in device px. Default 1. */
@@ -4537,6 +4539,14 @@ export function renderScene(
   // The office dog sorts with everything else at its own floor position (behaviour lives in pet.ts).
   if (pet)
     items.push({ d: depth(pet.lx, pet.ly) + 0.08, fn: () => drawDog(ctx, fit, pet, t, rendered) });
+  // The visiting dog sorts the same way, from its own sheet (lane 01M5XS6DP2).
+  const visitor = opts.visitor;
+  const visitorSheet = rendered.visitorDog;
+  if (visitor && visitorSheet)
+    items.push({
+      d: depth(visitor.lx, visitor.ly) + 0.08,
+      fn: () => drawRenderedDog(ctx, fit, visitor, t, visitorSheet),
+    });
   // The welcome wagon (lane 01M3F81DD9) trails the dog on the floor and sorts at its own position.
   if (pet?.cargo === 'wagon') {
     const w = wagonTrail(pet);

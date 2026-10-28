@@ -37,6 +37,27 @@ COLLAR = "#e3a72b"
 TAG = "#f6d98a"
 NOSE = "#241d19"
 
+# The visiting dog (lane 01M5XS6DP2): a neighbour's golden mutt, a blue collar and a silver tag — a
+# different dog at a glance from across the room, the same rig and clips. `render.py --dog-coat visitor`
+# swaps these in before the build and writes `dog-visitor.json` / `office-art-dog-visitor.webp`.
+COATS = {
+    "visitor": dict(
+        COAT="#d39a5a",
+        PATCH="#7b4b26",
+        CREAM="#f6e6c8",
+        EAR_IN="#9a6a48",
+        COLLAR="#3f74c4",
+        TAG="#d9dee3",
+    ),
+}
+
+
+def set_coat(name: str) -> None:
+    """Swap the module's colours for coat `name` (see COATS) before `build_dog` reads them."""
+    if name not in COATS:
+        raise SystemExit(f"dog.py: unknown coat {name} (known: {', '.join(COATS)})")
+    globals().update(COATS[name])
+
 
 def coat_with_patches(name: str, patches: list[tuple[tuple[float, float, float], float]], space: bpy.types.Object) -> bpy.types.Material:
     """The coat, with dark patches where a point is inside one of `patches` (centre, radius) in the

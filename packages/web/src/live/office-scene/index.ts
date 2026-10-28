@@ -111,6 +111,7 @@ import { compositeCapFor, type LayerId, wornLayers } from './rendered/figure';
 import { isRoomImage, roomImagesWanted } from './rendered/roomState';
 import { domImage, loadFigureAssets, loadFigureLayers, loadRenderedAssets, parseFigureSpec, syncImages, type RenderedAssets } from './rendered/assets';
 import { parseDogSpec } from './rendered/dogSheet';
+import { startVisit, stepVisit, visitDue, type Visit } from './visitor';
 import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
@@ -496,11 +497,14 @@ export function mountOffice(
       if (!disposed && fig.sheets.size > before) bake();
     });
   }
+  /** The rendered assets' URLs, kept for the one asset fetched later, on demand: the visiting dog. */
+  let assetFiles: Record<string, string> = {};
   {
     const files = import.meta.glob('./rendered/assets/*', { query: '?url', import: 'default', eager: true }) as Record<
       string,
       string
     >;
+    assetFiles = files;
     const manifestUrl = files['./rendered/assets/manifest.json'];
     if (!manifestUrl) {
       console.warn('office: rendered/assets/manifest.json is not in this build — the room stays empty');
@@ -1251,7 +1255,7 @@ export function mountOffice(
       recep,
       wallBoardNow(),
       teamWorkingHours,
-      { welcome: welcomeRoom.paint, rendered, weather, chimes: chimeHits },
+      { welcome: welcomeRoom.paint, rendered, weather, chimes: chimeHits, visitor: visit?.dog ?? null },
     );
     heads = anchors.heads;
     // The receptionist's bubble anchor — synthetic head above her desk. syncLabels skips names
@@ -2410,7 +2414,7 @@ export function mountOffice(
       recep,
       f.board,
       teamWorkingHours,
-      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, chimes: chimeHits },
+      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, chimes: chimeHits, visitor: visit?.dog ?? null },
     );
     if (units) units.run(() => drawCues(c));
     else drawCues(c);
@@ -2748,7 +2752,10 @@ export function mountOffice(
     }
     if (tempo !== 1 && !actors.active()) tempo = 1;
     if (walking) noticePassersBy(); // a sleeping dog wakes to watch whoever is walking past it
-    const petActive = stepPet(pet, dt); // false once it's asleep — the pet never keeps the room awake
+    // false once it's asleep — the pet never keeps the room awake; a visiting dog does while it is here
+    // Both, every frame: an `||` here stopped stepping the visitor the moment the office dog woke up.
+    const residentActive = stepPet(pet, dt);
+    const petActive = stepVisitor(dt) || residentActive;
     // The receptionist wakes for a present member and looks up while any check-in beat holds. Like
     // the pet, she never keeps an empty room awake: asleep returns false and the room bakes still.
     const anyonePresent = [...actors.nodes().values()].some((n) => n.presence !== 'offline');
@@ -3475,6 +3482,62 @@ export function mountOffice(
   }
 
   /** The entrance glows as a member walks in or out. */
+  /* The visiting dog (lane 01M5XS6DP2): about once a working day, at a minute every viewer agrees on
+     (`visitor.ts`). Its sheet loads only when a visit is due — most viewers never pay for it — and
+     `?visitor` on the page brings it in at once. One visitor at a time. */
+  let visit: Visit | null = null;
+  let visitedDay: string | null = null;
+  let visitorLoad: Promise<boolean> | null = null;
+  function loadVisitorDog(): Promise<boolean> {
+    visitorLoad ??= (async () => {
+      const files = assetFiles;
+      const url = files['./rendered/assets/dog-visitor.json'];
+      if (!url || !rendered) return false;
+      try {
+        const spec = parseDogSpec(await (await fetch(url)).json());
+        rendered.visitorDog = { spec, sheet: await domImage(files[`./rendered/assets/${spec.file}`] ?? spec.file) };
+        return true;
+      } catch (e: unknown) {
+        console.warn('office: the visiting dog is unusable — no visit', e);
+        return false;
+      }
+    })();
+    return visitorLoad;
+  }
+  function checkVisit(force = false): void {
+    if (visit || reduced || disposed) return;
+    if (!rendered) {
+      // The room's art is still loading; a forced (`?visitor`) visit waits for it rather than being lost.
+      if (force) window.setTimeout(() => checkVisit(true), 2_000);
+      return;
+    }
+    const day = force ? 'preview' : visitDue(teamName, new Date(), teamWorkingHours ?? null);
+    if (!day || day === visitedDay) return;
+    visitedDay = day;
+    void loadVisitorDog().then((ok) => {
+      if (!ok || visit) return;
+      visit = startVisit(pet);
+      pushDoorCue();
+      ensureLoop();
+    });
+  }
+  function stepVisitor(dt: number): boolean {
+    if (!visit) return false;
+    const going = stepVisit(visit, pet, dt);
+    if (visit.stage === 'done') {
+      visit = null;
+      pushDoorCue();
+      return false;
+    }
+    return going;
+  }
+  const visitTimer =
+    typeof window === 'undefined'
+      ? null
+      : window.setInterval(() => checkVisit(), 20_000);
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('visitor'))
+    window.setTimeout(() => checkVisit(true), 4_000);
+
   function pushDoorCue(color = '#cfe7ee') {
     const p = project(ENTRANCE.lx, ENTRANCE.ly, fit);
     cues.push({ at: { x: p.x, y: p.y }, color, glyph: '', t: 0, urgent: false, kind: 'door' });
@@ -4188,6 +4251,7 @@ export function mountOffice(
     },
     dispose: () => {
       disposed = true;
+      if (visitTimer) clearInterval(visitTimer);
       sprites?.clear();
       cancelAnimationFrame(raf);
       stopDrift(); // the heartbeat outlives nothing
