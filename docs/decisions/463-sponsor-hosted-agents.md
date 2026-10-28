@@ -211,6 +211,8 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   `claimProvisions` skips rows pinned to another label. An unnamed mint keeps the original shape.
   `musterd agent --hosted --host <label>`; `create.sh` passes its own label. Decision unchanged.
 
+- 2026-10-28 (lane 01M625A71E): the provision sweep (§2) is the hub's decision, like the reaper's sweeps (ADR 361 §1, ADR 371 §2). An enrolled joiner skips the team (`sweepProvisionsPass`), and the hub's settlement replicates down. Before this, a joiner swept a provision for a hosted agent the hub had minted (delta-2). The settlement ran as seats bound to the hub, the hub refused that push `bound_elsewhere`, and every later push from the machine wedged behind it for hours.
+
 ## Observability & Evaluation
 
 - **Traces:** audit rows `bootstrap_credential.minted` / `grant.issued` / `residency.enrolled`

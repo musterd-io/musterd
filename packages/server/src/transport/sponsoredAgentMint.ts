@@ -17,6 +17,7 @@ import {
   issueAgentConnectNonce,
 } from '../store/sponsoredAgents.js';
 import { getPolicy, getTeamById } from '../store/teams.js';
+import { joinerEnrollment } from '../sync/claim.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 
 /**
@@ -301,7 +302,20 @@ export async function unhostFailedProvision(
  * issued in their name — nothing is stuck waiting on a host that never came or never reported.
  */
 export async function sweepProvisionsPass(ctx: Ctx, now = Date.now()): Promise<number> {
-  const swept = await sweepProvisions(ctx.db, now);
+  // Settling a provision is the hub's decision (ADR 361 §1, ADR 371 §2), as the reaper's sweeps are:
+  // a joiner holds only a replica, and what it settles it settles AS the sponsor and the hosted seat —
+  // seats bound to the hub — so the hub refuses the batch `bound_elsewhere` and every later push from
+  // the machine wedges behind it (revive, 2026-10-28: a hub-minted hosted agent, swept on a joiner
+  // laptop, stopped that laptop's sync for hours). An enrolled joiner skips the team; the hub sweeps it
+  // and the result replicates down.
+  const joinerTeams = new Set<string>();
+  for (const { team_id } of await ctx.db.all<{ team_id: string }>(
+    "SELECT DISTINCT team_id FROM host_provisions WHERE state IN ('pending','claimed')",
+  )) {
+    const team = await getTeamById(ctx.db, team_id);
+    if (team && (await joinerEnrollment(ctx.db, team.id, team.slug))) joinerTeams.add(team_id);
+  }
+  const swept = await sweepProvisions(ctx.db, now, joinerTeams);
   for (const { row, reason } of swept) {
     const team = await getTeamById(ctx.db, row.team_id);
     const agent = await getMemberById(ctx.db, row.member_id);

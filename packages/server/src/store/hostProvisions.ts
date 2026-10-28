@@ -277,8 +277,15 @@ export interface SweptProvision {
  * - `pending` past the TTL → `cancelled` (`unclaimed`);
  * - `claimed` past the TTL with no report → `failed` (`not_reported`).
  * The caller hands a sponsor still in standing the connect link instead.
+ *
+ * `except` names teams this daemon must not settle: the ones it is an enrolled joiner of, whose
+ * provisions are the hub's to decide (see `sweepProvisionsPass`).
  */
-export async function sweepProvisions(db: Driver, now = Date.now()): Promise<SweptProvision[]> {
+export async function sweepProvisions(
+  db: Driver,
+  now = Date.now(),
+  except: ReadonlySet<string> = new Set(),
+): Promise<SweptProvision[]> {
   return db.tx(async (t): Promise<SweptProvision[]> => {
     const open = await t.all<HostProvisionRow>(
       "SELECT * FROM host_provisions WHERE state IN ('pending','claimed') ORDER BY created_at ASC",
@@ -286,6 +293,7 @@ export async function sweepProvisions(db: Driver, now = Date.now()): Promise<Swe
     const cutoff = now - PROVISION_PENDING_TTL_MS;
     const out: SweptProvision[] = [];
     for (const row of open) {
+      if (except.has(row.team_id)) continue;
       const agent = await getMemberById(t, row.member_id);
       const sponsor = await getMemberById(t, row.sponsor_id);
       let reason: SweptProvision['reason'] | null = null;
