@@ -168,7 +168,8 @@ counts as a miss and is reported. A scored review is never re-run.
 Each review is about 10k input and 1k output tokens: $0.225 at Opus-class list rates. The upper
 figures price all six models at that rate. The lower figures assume the cheaper models bring the
 mean to about $0.15. **Hard stop: $200 of model spend**, retries included.
-**nick approves the spend** before the pilot starts.
+**nick approves the spend** before the pilot starts. _Approved 2026-10-27 by nick, in dolly's
+session, for N = 100 and up to the $200 stop._
 
 **Re-ask after the pilot.** The six models are not priced yet. After the pilot, the mean cost per
 review is multiplied by the main run's reviews (750 at N = 100) and added to the pilot's spend. If
