@@ -1,0 +1,28 @@
+[
+  {
+    "name": "claude-opus-5-5",
+    "family": "claude",
+    "openrouter": "anthropic/claude-opus-5.5",
+    "temperature_ok": false
+  },
+  {
+    "name": "claude-sonnet-5-5",
+    "family": "claude",
+    "openrouter": "anthropic/claude-sonnet-5.5",
+    "temperature_ok": false
+  },
+  {
+    "name": "gpt-6-sol",
+    "family": "gpt",
+    "openrouter": "openai/gpt-6-sol",
+    "temperature_ok": false
+  },
+  {
+    "name": "gpt-6.1-terra",
+    "family": "gpt",
+    "openrouter": "openai/gpt-6.1-terra",
+    "temperature_ok": false
+  },
+  { "name": "grok-4.7", "family": "grok", "openrouter": "x-ai/grok-4.7", "temperature_ok": true },
+  { "name": "grok-4.3", "family": "grok", "openrouter": "x-ai/grok-4.3", "temperature_ok": true }
+]
