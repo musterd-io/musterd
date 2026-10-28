@@ -1,10 +1,10 @@
 # Office sound inventory
 
-Every sound the office can play on `/live` and `/broadcast` as of 2026-10-28, where it comes from, what gates it, and the designer's keep / rework / cut verdict for the re-evaluation nick asked for (lane 01M6096TA7).
+Every sound the office can play on `/live` and `/broadcast` as of 2026-10-28 (sound identity inc 1 landed), where it comes from, what gates it, and the designer's keep / rework / cut verdict for the re-evaluation nick asked for (lane 01M6096TA7).
 
 ## How sound reaches a viewer
 
-- **Two engines, both opt-in and default OFF on `/live`** (`live/sound.ts`): the *act cues* (`firehoseSound`, one short figure per act) and the *room tone* (`roomTone`, a bed plus small life noises plus placed "moments"). Each has its own toggle and stored preference; a hidden tab never plays either.
+- **Two engines, both opt-in and default OFF on `/live`** (`live/sound.ts`): the *act cues* (`firehoseSound`, one of five gestures per act — `gestureFor`; the rest are silent) and the *room tone* (`roomTone`, a bed plus small life noises plus placed "moments"). Each has its own toggle and stored preference; a hidden tab never plays either.
 - **`/broadcast` turns both on** without persisting (`enableForBroadcast`, ADR 228) and runs the whole mix through a ×4 master (+12 dB) measured against the hosted pipeline so the bed sits near −30 LUFS: audible, still background. Act cues on the stream are throttled to one per 700 ms (`BROADCAST_CUE_GAP_MS`); moments to one per 400 ms.
 - **Everything is synthesized** in WebAudio. There are no audio files (ADR 151 bytes).
 
@@ -12,19 +12,12 @@ Every sound the office can play on `/live` and `/broadcast` as of 2026-10-28, wh
 
 | Layer | Sound | When | Where it pans | Loudness (linear gain, pre-master) |
 | --- | --- | --- | --- | --- |
-| Act cue | `message` E5 tri | any message act | centre | 0.10 |
-| Act cue | `status_update` A5 sine, 0.18 s | a status update | centre | 0.05 — near-subliminal by design |
-| Act cue | `request_help` E5→A5 rising | request_help | centre | 0.11–0.12 |
-| Act cue | `handoff` G5→C6 | handoff | centre | 0.10 |
-| Act cue | `accept` E5→G5 | accept | centre | 0.10 |
-| Act cue | `decline` G4→E4 falling | decline | centre | 0.09–0.10 |
-| Act cue | `wait` D5 sine 0.46 s | wait | centre | 0.07 |
-| Act cue | `ask` G5→C6 tri | ask | centre | ~~0.12–0.13 — the loudest cue~~ 0.10 since 2026-10-27 (step 2) |
-| Act cue | `steer` A4→E5→A5 tri, three notes | steer | centre | 0.11–0.13 |
-| Act cue | `challenge` D5→A5 | challenge | centre | 0.09–0.10 |
-| Act cue | `defer` G5→D5 | defer | centre | 0.08 |
-| Act cue | `resolve` C5→E5→G5 major arpeggio | resolve | centre | 0.11–0.12 |
-| Act cue | `end` C5→G4 | a lane/thread end | centre | 0.08–0.09 |
+| Gesture (stream cue) | `question` G4→C5 sine, second held | ask, request_help | centre | 0.09 — since 2026-10-28 (sound identity inc 1); replaces the `ask` and `request_help` cues |
+| Gesture (stream cue) | `redirect` C4 tri, 120 ms | steer, challenge, decline | centre | 0.09 — replaces the `steer`, `challenge`, `decline` cues |
+| Gesture (stream cue) | `handoff` E4 then G4, 300 ms apart | handoff | centre | 0.08 — replaces the `handoff` cue |
+| Gesture (stream cue) | `arrive` D4→E4 sine | (scene-only until inc 2; the welcome `doorbell` already plays it) | centre | 0.07 |
+| Gesture (stream cue) | `done` — one bar of the shelf chimes (the bar voice, C5) | accept | centre | 0.09 fundamental — replaces the `accept` cue |
+| Folded | ~~`message`, `status_update`, `wait`, `defer`, `resolve`, `end`~~ | ~~each act~~ SILENT since 2026-10-28 (inc 1, spec §2.4): the office shows them and the eye is enough | — | — |
 | Bed | air hum + slow swell | whenever room tone is on | centre | `ROOM_GAIN` 0.075 × air 0.34 |
 | Life | `keys` (per-desk keyboard, thock + click) | a desk in its *typing* phase; weight 0.39 | that desk | per key 0.017–0.026 / 0.010–0.015, on `LIFE_GAIN` 34 |
 | Life | `murmur` / `whisper` | only with two members actually near each other; 0.20 / 0.04 | the pair | lowpassed noise, 0.075–0.10 × level (whisper lower) — the quietest voice by 17 dB on the 2026-07-29 render; OK |
@@ -35,16 +28,20 @@ Every sound the office can play on `/live` and `/broadcast` as of 2026-10-28, wh
 | Life | `paws`, `jingle`, `yawn`, `bark` | dog on the floor (paws: walking); 0.025 / 0.01 / 0.01 / 0.005 | the dog | paws click 0.035 (≈ keys); jingle sine pings 0.006–0.010 (quiet, bright); yawn lowpassed 0.05; bark bandpassed 0.12 — loud, and meant to be at 0.005 weight; OK |
 | Life | `birds` | 05:00–11:00 office clock with daylight; 0.03 | random side | sine chirps 0.0055–0.0085 — a sine at this gain lands near a 0.03 noise click; quiet and outside; OK |
 | Life | `nightair` | dark room with someone in it; 0.02 | random side | sine pings 0.0035–0.0055 — the quietest thing the room plays; OK |
-| Moment | `fanfare` | an accept lands on a celebrant | the celebrant | sine pings 0.020–0.026 + sparkle clicks 0.012–0.020 — clearly above the bed, under the ask bell; OK (rare, earned) |
+| Moment | ~~`fanfare`~~ SUPERSEDED by `laneDone` 2026-10-28 (inc 1; the emit site moves in inc 2) | an accept lands on a celebrant | the celebrant | sine pings 0.020–0.026 + sparkle clicks 0.012–0.020 — clearly above the bed, under the ask bell; OK (rare, earned) |
 | Moment | `door` | a member walks in or out | the entrance | lowpassed noise 0.045 — ≈ 2× keys; the most frequent moment on a busy stream; **re-level down to 0.03 if the stream reads as a door slamming all day** |
-| Moment | `askbell` | an ask arrives (one held tone) | the asked desk | one sine 0.018, held — a pure tone carries far more than a 0.018 noise burst; with the `ask` cue now at 0.10 this is the right pair: cue says *for you*, bell says *where*; OK |
-| Moment | `whoosh` | ~~a directed act sweeps from sender to recipient~~ a steer's redirect sweeps from sender to recipient (steer only since 2026-10-27, step 2) | sender → recipient | noise sweep 0.026 over 0.6 s — ≈ keys, and now once per steer; OK |
+| Moment | ~~`askbell`~~ SUPERSEDED by `question` 2026-10-28 (inc 1; emit site in inc 2) | an ask arrives (one held tone) | the asked desk | one sine 0.018, held — a pure tone carries far more than a 0.018 noise burst; with the `ask` cue now at 0.10 this is the right pair: cue says *for you*, bell says *where*; OK |
+| Moment | ~~`whoosh`~~ SUPERSEDED by `redirect` 2026-10-28 (inc 1; emit site in inc 2) | ~~a directed act sweeps from sender to recipient~~ a steer's redirect sweeps from sender to recipient (steer only since 2026-10-27, step 2) | sender → recipient | noise sweep 0.026 over 0.6 s — ≈ keys, and now once per steer; OK |
 | Moment | `plateOpen` / `plateClose` | the viewer opens or closes a nameplate | the plate | click 0.035 (≈ keys) — viewer's own hand, `/live` only; OK at this level |
 | Moment | `boardOpen` / `boardClose` | the viewer opens or closes the board overlay | centre | paper noise 0.03 — viewer's own hand, `/live` only; OK at this level |
-| Moment | `ring`, `ratchet`, `rattle`, `doorbell`, `pop` | the Welcome Wagon (phone, label maker, wagon wheels, front-door chime, confetti) | their props | ring triangle 0.018 (quiet, across the room); ratchet clicks 0.03; rattle clicks 0.012; doorbell sine 0.04 — **the loudest pure tone in the room, 2× the ask bell: re-level to 0.02** so a new teammate's arrival does not out-ring a question for the viewer; pop 0.05 + 0.01 sparkle, once; OK |
+| Moment | `ring`, `ratchet`, `rattle`, `doorbell`, `pop` | the Welcome Wagon (phone, label maker, wagon wheels, front-door chime, confetti) | their props | ring triangle 0.018 (quiet, across the room); ratchet clicks 0.03; rattle clicks 0.012; doorbell RETUNED 2026-10-28 (inc 1) to the `arrive` gesture at 0.014 — the same object as every other arrival; pop 0.05 + 0.01 sparkle, once; OK |
 | Moment | `stepPlank` / `stepTile` | each foot plant of a walker covering ground (plank or café tile by the floor under them); own 110 ms gate | the walker | plank click 0.05 at 110–160 Hz, tile 0.035 at 1.3–1.8 kHz — plank ≈ 2× keys, tile ≈ keys; a walk is the right amount louder than typing; OK (since 2026-10-27, lane 01M5XS6KAD) |
 | Moment | `creak` | a chair taking or losing someone's weight (the sit blend crossing 0.9) | the chair | narrow bandpass (Q 7) 0.05, 0.4 s — a third of the old timer creak; placed on a visible sit; OK |
 | Moment | `sipAt`, `bottle`, `eatAt`, `machine` | the sip beat, the cooler fill, the couch plate, the island pour | the body / the fixture | sip bandpass 0.055 (bottle × 0.72 = 0.04); eat clicks 0.045–0.065; machine sawtooth hum 0.045 under a 180 Hz lowpass + hiss 0.018, a few seconds — each ≈ 1.5–2.5× keys, on a visible action; OK |
+| Moment | `laneDone` | a lane reaches done (emit site: inc 2) | the shelf chimes by the work board | bar voice, sine 0.03 + partial 0.0066 + mallet breath 0.009, 1.8 s decay — one bar per lane (`barForLane`), 1–3 bars by the chain (`voicesForChain`), rolled 15–40 ms apart; ≈ 3× keys, a struck bar across a room |
+| Moment | `goalDone` | a goal reaches done (emit site: inc 2) | the shelf chimes | all eight bars rolled 60–90 ms apart, 0.028 each, the top 0.034 held 2.6 s — the loudest thing the room plays, and the only time all eight sound |
+| Moment | `question` / `redirect` / `handoffSend` / `handoffAnswer` | the gestures, placed (emit sites: inc 2) | the asked desk / the redirected desk / each desk of a handoff | the gesture recipe at the room's scale: sine peaks 0.018 / 0.02 / 0.016 / 0.016 — the old askbell's level |
+| Moment | `arrive` / `leave` | a member walks in or out (emit site: inc 2; `door` stays as the foley under it) | the door cousin above the entrance | D4→E4 up, E4→D4 down, sine 0.014 |
 
 How to read the Life and Moment loudness column (filled 2026-10-28, step 3): every Life event and Moment rides the one `LIFE_GAIN` ×34 bus, so the numbers are envelope peaks *relative to each other*, and the calibrated reference is a keystroke at 0.017–0.026, measured on 2026-07-30 at the bed's level (+0.4 to +1.3 dB). A noise event at 2× keys is about +6 dB over the bed, which is where a foreground sound in a real room sits; at 4–5× it is +13 dB, the level the keystroke was cut from for being too loud. A pure tone (sine or triangle) at the same envelope value is far louder than a bandpassed noise burst, because the bandpass throws away most of the energy and the oscillator keeps all of it, so the sines (`askbell`, `doorbell`, `fanfare`, `birds`, `nightair`, `jingle`, `ring`) are judged on that scale, not the clicks'. Readings carry about ±3 dB; the column flags only differences larger than that.
 
@@ -55,6 +52,8 @@ Life events fire every 2.5–8 s in a quiet room, about twice as often under ful
 The verdicts below are design judgements from the synthesis, the gates and the stream's measured loudness. I cannot listen in this harness, so **which of these actually sounds wrong is nick's ear**; each verdict names what to listen for.
 
 ## Verdicts
+
+**Re-decided 2026-10-28 — the sound identity** (`docs/superpowers/specs/2026-10-28-office-sound-identity-design.md`): the room stays foley and is re-levelled (inc 3); the musterd layer becomes one voice — the shelf chimes for finished work, five gestures in all, everything else folded into the room. Inc 1 (this page's table) is the synth; inc 2 moves the emit sites; inc 4 draws the chimes. The verdicts below predate it and stand where they do not conflict.
 
 **Keep as is.** `keys`, `murmur`/`whisper`, `tap`, `stapler`, `drawer`, the dog set, `birds`, `nightair`, the bed. Gated on something the eye can see (a typing desk, a pair, the dog, the clock), placed where it happens, rare where it should be. They are the office being inhabited.
 
@@ -72,6 +71,6 @@ The verdicts below are design judgements from the synthesis, the gates and the s
 
 ## Falsifiers
 
-- The table lists every `case` in `soundEngine.ts`'s `moment` and `life` dispatch and every key of `CUES` as of `c4ffb6fa`; falsify: a `case '<name>'` in either dispatch, or a `CUES` key, not in the table.
+- The table lists every `case` in `soundEngine.ts`'s `moment` and `life` dispatch and every key of `CUES` as of inc 1 (2026-10-28); falsify: a `case '<name>'` in either dispatch, or a `CUES` key, not in the table. <!-- claim: other -->
 - ~~"`footsteps` is not tied to anyone walking" (2026-10-27)~~ FIXED 2026-10-27 by lane 01M5XS6KAD: `footsteps` is no longer in `LIFE_EVENTS`; falsify: a `footsteps` entry back in the table. <!-- claim: defect -->
 - "an ask plays two sounds" (2026-10-27): falsify: `emit` in `office-scene/index.ts` not calling `roomTone.moment('askbell', …)` while `Stream.tsx` chimes `ask`. <!-- claim: defect -->

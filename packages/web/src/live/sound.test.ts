@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_LIFE, firehoseSound, type LifeContext, roomTone, screenPan } from './sound';
 import { CUES } from './soundEngine';
 import {
+  gestureFor,
   deskPhase,
   keyboardFor,
   keypressPlan,
@@ -412,8 +413,12 @@ describe('milestone moments (E3 spec)', () => {
 });
 
 describe('the sound re-evaluation (lane 01M6096TA7)', () => {
-  it('the ask cue is no louder than a message — the askbell at the desk carries the weight', () => {
-    const peak = (act: string) => Math.max(...CUES[act]!.map((n) => n.gain));
-    expect(peak('ask')).toBeLessThanOrEqual(peak('message'));
+  it('the stream cue table is the five gestures and nothing else (sound identity spec §2.3–2.4)', () => {
+    expect(Object.keys(CUES).sort()).toEqual(['arrive', 'handoff', 'question', 'redirect']);
+    // `done` is the bar voice, not a recipe — and every folded act maps to no gesture at all.
+    expect(gestureFor('accept')).toBe('done');
+    expect(gestureFor('message')).toBeNull();
+    const peak = (g: string) => Math.max(...CUES[g]!.map((n) => n.gain));
+    for (const g of Object.keys(CUES)) expect(peak(g)).toBeLessThanOrEqual(0.09);
   });
 });

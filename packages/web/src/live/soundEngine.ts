@@ -16,10 +16,17 @@
 
 import { EMPTY_LIFE, type LifeContext } from './sound';
 import {
+  CHIME_BARS,
+  chordBars,
+  chordOffsets,
+  gestureFor,
+  jitterStrike,
   keyboardFor,
   keypressPlan,
   lifeGapFor,
   type Moment,
+  type MomentDetail,
+  rollOffsets,
   momentPan,
   panFor,
   pickLifeEvent,
@@ -41,78 +48,42 @@ interface Note {
   gain: number;
 }
 
-// A C-major pentatonic ladder — any mix of these rings consonant, so overlapping cues never clash.
+// The low end of the chimes' C-major pentatonic (`CHIME_BARS`) — the stream's gestures sit under the bars.
+const C4 = 261.63;
+const D4 = 293.66;
 const E4 = 329.63;
 const G4 = 392.0;
-const A4 = 440.0;
 const C5 = 523.25;
-const D5 = 587.33;
-const E5 = 659.25;
-const G5 = 783.99;
-const A5 = 880.0;
-const C6 = 1046.5;
 
 const tri: OscillatorType = 'triangle';
 const sine: OscillatorType = 'sine';
 
 /**
- * Per-act cue recipes. The shape mirrors the visual act tones (format.ts): resolve is the warm,
- * satisfying major arpeggio that pairs with its on-screen "settle"; request_help rises to grab
- * attention; status is a near-subliminal tick; decline falls. `message` is the default fallback.
+ * The five gestures (sound identity spec §2.3), as the stream's own cue table — one recipe per
+ * gesture, keyed by gesture not act; `gestureFor` maps an act onto one, and the acts it maps to
+ * null (message, status_update, wait, defer, resolve, end) are silent here by design: the office
+ * shows them and the eye is enough. All in the chimes' pentatonic scale, so a cue beside a chord
+ * is consonant. `done` is not in this table: a lane done is the shelf chimes (a bar voice), and
+ * `chime('accept')` strikes a bar below.
  */
 /** Exported for the sound tests only — the engine is the one reader. */
 export const CUES: Record<string, Note[]> = {
-  message: [{ freq: E5, t: 0, dur: 0.32, type: tri, gain: 0.1 }],
-  status_update: [{ freq: A5, t: 0, dur: 0.18, type: sine, gain: 0.05 }],
-  request_help: [
-    { freq: E5, t: 0, dur: 0.28, type: tri, gain: 0.11 },
-    { freq: A5, t: 0.11, dur: 0.36, type: tri, gain: 0.12 },
+  // A question: two notes rising a fourth, the second held, unresolved — the bell on the asked desk.
+  question: [
+    { freq: G4, t: 0, dur: 0.26, type: sine, gain: 0.09 },
+    { freq: C5, t: 0.13, dur: 0.7, type: sine, gain: 0.09 },
   ],
+  // A redirect: one low note damped short, the mallet's thud left in. The one allowed to be tense.
+  redirect: [{ freq: C4, t: 0, dur: 0.12, type: tri, gain: 0.09 }],
+  // Passing hands: one note here, the answer a third up over there, 300 ms later.
   handoff: [
-    { freq: G5, t: 0, dur: 0.26, type: sine, gain: 0.1 },
-    { freq: C6, t: 0.12, dur: 0.34, type: sine, gain: 0.1 },
+    { freq: E4, t: 0, dur: 0.34, type: sine, gain: 0.08 },
+    { freq: G4, t: 0.3, dur: 0.5, type: sine, gain: 0.08 },
   ],
-  accept: [
-    { freq: E5, t: 0, dur: 0.26, type: sine, gain: 0.1 },
-    { freq: G5, t: 0.12, dur: 0.34, type: sine, gain: 0.1 },
-  ],
-  decline: [
-    { freq: G4, t: 0, dur: 0.28, type: sine, gain: 0.1 },
-    { freq: E4, t: 0.12, dur: 0.4, type: sine, gain: 0.09 },
-  ],
-  wait: [{ freq: D5, t: 0, dur: 0.46, type: sine, gain: 0.07 }],
-  // The to-human ask (ADR 147/149) — a doorbell: two clear rising strikes, brighter than
-  // request_help (this one is aimed at a person and carries a clock). Message-level gain since
-  // 2026-10-27 (sound re-evaluation, lane 01M6096TA7): an ask already lands with the room's
-  // `askbell` at the asked desk, so the cue carries "for you" and the bell carries the weight —
-  // at 0.12–0.13 it was the loudest cue in the table and the ask arrived as two loud sounds.
-  ask: [
-    { freq: G5, t: 0, dur: 0.3, type: tri, gain: 0.1 },
-    { freq: C6, t: 0.14, dur: 0.5, type: tri, gain: 0.1 },
-  ],
-  // Steering trio (ADR 103). steer is the loudest — an assertive rising triad that grabs attention
-  // (interrupt-class); challenge lifts like a spoken question; defer settles gently downward (set aside).
-  steer: [
-    { freq: A4, t: 0, dur: 0.2, type: tri, gain: 0.11 },
-    { freq: E5, t: 0.09, dur: 0.24, type: tri, gain: 0.12 },
-    { freq: A5, t: 0.18, dur: 0.42, type: tri, gain: 0.13 },
-  ],
-  challenge: [
-    { freq: D5, t: 0, dur: 0.22, type: sine, gain: 0.09 },
-    { freq: A5, t: 0.12, dur: 0.34, type: sine, gain: 0.1 },
-  ],
-  defer: [
-    { freq: G5, t: 0, dur: 0.24, type: sine, gain: 0.08 },
-    { freq: D5, t: 0.12, dur: 0.42, type: sine, gain: 0.08 },
-  ],
-  resolve: [
-    { freq: C5, t: 0, dur: 0.34, type: sine, gain: 0.11 },
-    { freq: E5, t: 0.12, dur: 0.38, type: sine, gain: 0.11 },
-    { freq: G5, t: 0.24, dur: 0.6, type: sine, gain: 0.12 },
-  ],
-  end: [
-    { freq: C5, t: 0, dur: 0.28, type: sine, gain: 0.09 },
-    { freq: G4, t: 0.12, dur: 0.36, type: sine, gain: 0.08 },
+  // An arrival: two bars up on the door cousin. (Departure is the same two down, scene-only.)
+  arrive: [
+    { freq: D4, t: 0, dur: 0.5, type: sine, gain: 0.07 },
+    { freq: E4, t: 0.09, dur: 0.8, type: sine, gain: 0.07 },
   ],
 };
 /**
@@ -127,6 +98,47 @@ export const CUES: Record<string, Note[]> = {
  * the synths — the LIFE_GAIN lesson. /live is untouched: this applies only via enableForBroadcast.
  */
 const BROADCAST_MASTER_GAIN = 4;
+
+/**
+ * The bar voice — the one instrument of the musterd layer (sound identity spec §2.2). A struck bar:
+ * a sine fundamental, one inharmonic partial at ×2.76 (what makes it a bar and not a keyboard
+ * preset), a breath of lowpassed noise for the mallet, soft 8 ms attack, a 1.5–2.5 s decay. Every
+ * strike is jittered (±4 cents, ±8 % gain, ±15 % decay) so no two are bit-identical. Shared by both
+ * engines: the stream's `chime('accept')` and the room's `laneDone`/`goalDone` are the same bars.
+ */
+function strikeBar(ctx: AudioContext, out: AudioNode, at: number, freq: number, gain: number, decay: number): void {
+  const s = jitterStrike(freq, gain, decay);
+  const voice = (f: number, g: number, d: number, type: OscillatorType) => {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = f;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, at);
+    env.gain.exponentialRampToValueAtTime(g, at + 0.008);
+    env.gain.exponentialRampToValueAtTime(0.0001, at + d);
+    o.connect(env).connect(out);
+    o.start(at);
+    o.stop(at + d + 0.05);
+  };
+  voice(s.freq, s.gain, s.decay, 'sine');
+  voice(s.freq * 2.76, s.gain * 0.22, s.decay * 0.35, 'sine');
+  // the mallet: a 30 ms breath of low noise, well under the tone
+  const src = ctx.createBufferSource();
+  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.04), ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  src.buffer = buf;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 900;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(s.gain * 0.3, at + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + 0.03);
+  src.connect(lp).connect(g).connect(out);
+  src.start(at);
+  src.stop(at + 0.05);
+}
 
 export class FirehoseSound {
   enabled = false;
@@ -190,7 +202,13 @@ export class FirehoseSound {
     const ctx = this.ctx;
     const master = this.master;
     if (!ctx || !master || ctx.state !== 'running') return;
-    const notes = CUES[act] ?? CUES['message']!;
+    const gesture = gestureFor(act);
+    if (gesture === null) return; // folded into the room (§2.4): the office shows it
+    if (gesture === 'done') {
+      strikeBar(ctx, master, ctx.currentTime + 0.005, CHIME_BARS[5]!, 0.09, 1.8);
+      return;
+    }
+    const notes = CUES[gesture]!;
     const start = ctx.currentTime + 0.005;
     for (const n of notes) {
       const osc = ctx.createOscillator();
@@ -454,7 +472,7 @@ export class RoomTone {
    * once (dropped, never queued); the ×0.75 stereo squeeze happens HERE and nowhere else —
    * `pan` arrives raw [-1, 1] from `screenPan` at the emit site.
    */
-  moment(name: Moment, pan: number, panTo?: number): void {
+  moment(name: Moment, pan: number, panTo?: number, detail?: MomentDetail): void {
     const ctx = this.ctx;
     const bus = this.lifeBus;
     if (!ctx || !bus || ctx.state !== 'running' || this.isHidden()) return;
@@ -489,7 +507,7 @@ export class RoomTone {
       case 'ring': return this.ring(ctx, out);
       case 'ratchet': return this.ratchet(ctx, out);
       case 'rattle': return this.rattle(ctx, out);
-      case 'doorbell': return this.doorbell(ctx, out);
+      case 'doorbell': return this.cueNotes(ctx, out, CUES['arrive']!, 0.014); // retuned: the door cousin
       case 'pop': return this.pop(ctx, out);
       // sound tied to motion (lane 01M5XS6KAD)
       case 'stepPlank': return this.click(ctx, out, ctx.currentTime + 0.01, 110 + Math.random() * 50, 0.05, 0.07);
@@ -499,11 +517,61 @@ export class RoomTone {
       case 'bottle': return this.sip(ctx, out, 0.72);
       case 'eatAt': return this.eating(ctx, out);
       case 'machine': return this.machine(ctx, out);
+      // the musterd voice (sound identity spec §2.2–2.3)
+      case 'laneDone': return this.laneDone(ctx, out, detail);
+      case 'goalDone': return this.goalDone(ctx, out);
+      case 'question': return this.cueNotes(ctx, out, CUES['question']!, 0.018);
+      case 'redirect': return this.cueNotes(ctx, out, CUES['redirect']!, 0.02);
+      case 'handoffSend': return this.cueNotes(ctx, out, [CUES['handoff']![0]!], 0.016);
+      case 'handoffAnswer': return this.cueNotes(ctx, out, [CUES['handoff']![1]!], 0.016);
+      case 'arrive': return this.cueNotes(ctx, out, CUES['arrive']!, 0.014);
+      case 'leave': return this.cueNotes(ctx, out, [...CUES['arrive']!].reverse().map((n, i) => ({ ...n, t: i * 0.09 })), 0.014);
       default: {
         // Every Moment has a voice: a name added to the union without one fails to compile here.
         const unvoiced: never = name;
         return unvoiced;
       }
+    }
+  }
+
+  /** A lane done: one bar of the shelf chimes, or a small rolled chord sized by the lane's chain.
+   *  The bar is the lane's own (`barForLane` at the emit site); the chord climbs from it. ~3× a
+   *  keystroke: a struck bar across a room. */
+  private laneDone(ctx: AudioContext, out: AudioNode, detail?: MomentDetail): void {
+    const bar = detail?.bar ?? 5;
+    const voices = detail?.voices ?? 1;
+    const bars = chordBars(bar, voices);
+    const offsets = chordOffsets(voices);
+    const t0 = ctx.currentTime + 0.02;
+    bars.forEach((b, i) => strikeBar(ctx, out, t0 + offsets[i]!, CHIME_BARS[b]!, 0.03, 1.8));
+  }
+
+  /** A goal done: the whole scale rolled once, bottom to top, the top bar allowed to ring out. The
+   *  only time all eight sound, and the loudest thing the room ever plays. */
+  private goalDone(ctx: AudioContext, out: AudioNode): void {
+    const offsets = rollOffsets();
+    const t0 = ctx.currentTime + 0.02;
+    CHIME_BARS.forEach((f, i) => strikeBar(ctx, out, t0 + offsets[i]!, f, i === CHIME_BARS.length - 1 ? 0.034 : 0.028, i === CHIME_BARS.length - 1 ? 2.6 : 1.6));
+  }
+
+  /** A gesture's notes played as a placed desk bell on the LIFE bus: the recipe's shape at the
+   *  room's scale (`peak` is the sine's envelope on this bus — 0.018 is the old askbell's). */
+  private cueNotes(ctx: AudioContext, out: AudioNode, notes: readonly Note[], peak: number): void {
+    const top = Math.max(...notes.map((n) => n.gain));
+    const start = ctx.currentTime + 0.02;
+    for (const n of notes) {
+      const s = jitterStrike(n.freq, (n.gain / top) * peak, n.dur);
+      const osc = ctx.createOscillator();
+      osc.type = n.type;
+      osc.frequency.value = s.freq;
+      const g = ctx.createGain();
+      const t0 = start + n.t;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(s.gain, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + s.decay);
+      osc.connect(g).connect(out);
+      osc.start(t0);
+      osc.stop(t0 + s.decay + 0.03);
     }
   }
 
@@ -542,26 +610,6 @@ export class RoomTone {
     }
   }
 
-  /** The front door's chime: ding-dong, a falling major third with a soft tail. */
-  private doorbell(ctx: AudioContext, out: AudioNode): void {
-    const t0 = ctx.currentTime + 0.02;
-    for (const [freq, dt] of [
-      [659.25, 0],
-      [523.25, 0.32],
-    ] as const) {
-      const at = t0 + dt;
-      const o = ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(freq, at);
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(0.04, at + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.9);
-      o.connect(g).connect(out);
-      o.start(at);
-      o.stop(at + 0.95);
-    }
-  }
 
   /** A chair taking (or losing) somebody's weight (lane 01M5XS6KAD): a narrow noise band gliding
    *  down over 0.4 s, at a third of the gain the timer creak had — it lands on a visible sit, which is

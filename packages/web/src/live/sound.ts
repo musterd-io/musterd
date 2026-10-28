@@ -222,9 +222,14 @@ class RoomToneFacade {
    * squeeze. A moment that arrives before the engine chunk lands is DROPPED, never queued — the
    * same rule as the firehose cues, for the same reason (a queued burst lands as one chord).
    */
-  moment(name: import('./soundLife').Moment, pan: number, panTo?: number): void {
+  moment(
+    name: import('./soundLife').Moment,
+    pan: number,
+    panTo?: number,
+    detail?: import('./soundLife').MomentDetail,
+  ): void {
     if (!this.enabled) return;
-    this.engine?.moment(name, pan, panTo);
+    this.engine?.moment(name, pan, panTo, detail);
   }
 }
 
