@@ -167,6 +167,26 @@ describe('LEISURE_SPOTS', () => {
     }
   });
 
+  it('stands every away spot clear of every seat and every other spot (lane 01M5ZZ72D7)', () => {
+    // An away member stands small, but their name label is full size: two spots 18 and 28 px from the
+    // island stool put an away label on top of a seated one (2026-10-27).
+    const fit = { ox: 0, oy: 0, scale: 1 };
+    const spots = NOOK_SPOTS.map((s) => ({ lx: NOOK.lx + s.dx, ly: NOOK.ly + s.dy }));
+    const gap = (a: { lx: number; ly: number }, b: { lx: number; ly: number }) => {
+      const pa = project(a.lx, a.ly, fit);
+      const pb = project(b.lx, b.ly, fit);
+      return Math.hypot(pa.x - pb.x, pa.y - pb.y);
+    };
+    spots.forEach((a, i) => {
+      for (const seat of LEISURE_SPOTS) {
+        expect(gap(a, seat), `away[${i}] vs ${seat.zone} seat`).toBeGreaterThanOrEqual(MIN_SPOT_GAP);
+      }
+      spots.slice(i + 1).forEach((b, j) => {
+        expect(gap(a, b), `away[${i}] vs away[${i + j + 1}]`).toBeGreaterThanOrEqual(MIN_SPOT_GAP);
+      });
+    });
+  });
+
   it('offers every zone, so idle members spread instead of filling one corner', () => {
     for (const zone of ['lounge', 'waiting', 'meeting', 'reading']) {
       expect(LEISURE_SPOTS.some((s) => s.zone === zone)).toBe(true);
