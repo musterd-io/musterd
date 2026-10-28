@@ -90,21 +90,29 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
     daily.push(theme.meta(`musterd · ${team} · ${hh}:${mm}`));
     daily.push(`you are ${theme.accent(identity.name)} · ${mine?.kind ?? 'agent'}`);
   }
+  const ACT_WORD: Record<string, string> = {
+    ask: 'asks',
+    request_help: 'needs help',
+    handoff: 'hands you',
+    steer: 'redirects you',
+    challenge: 'questions',
+    message: 'wrote',
+  };
   if (pending) {
     daily.push('');
-    daily.push(theme.warn(`⚑ ${pending.count} waiting on you`));
+    daily.push(theme.warn(`\u2691 ${pending.count} waiting on you`));
     for (const a of (pending.waiting ?? []).slice(0, 3)) {
       const who = a.from ?? '?';
-      const kind = a.act ?? 'message';
-      const gist = (a.body ?? '').slice(0, 60).replace(/\n/g, ' ');
-      daily.push(`  ${theme.accent(who)} · ${kind} · ${gist}`);
+      const verb = ACT_WORD[a.act ?? 'message'] ?? a.act ?? 'wrote';
+      const gist = (a.body ?? '').slice(0, 40).replace(/\n/g, ' ');
+      daily.push(`  ${theme.accent(who)} · ${verb}: ${gist}`);
     }
     if ((pending.waiting?.length ?? 0) > 3)
       daily.push(theme.dim(`  +${(pending.waiting?.length ?? 0) - 3} more · musterd inbox`));
     daily.push(theme.dim('  → musterd inbox'));
   } else {
     daily.push('');
-    daily.push(theme.dim('Nothing is waiting on you.'));
+    daily.push(theme.dim('\u2691 nothing waiting on you'));
   }
   const inFlight = brief?.in_flight ?? [];
   daily.push('');
