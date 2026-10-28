@@ -61,19 +61,19 @@ def test_numbered_carries_new_file_lines():
 
 def test_sites_cover_all_four_classes_and_skip_tests():
     files = patchlib.parse(PATCH)
-    found = {(s.cls, s.detail) for s in mutate.sites(files)}
+    found = {(s.cls, s.detail) for s in mutate.sites(files, mutate.FIRST_CLASSES)}
     assert ("off_by_one", "< -> <=") in found
     assert ("off_by_one", "> -> >=") in found
     assert ("wrong_default", "default False -> True") in found
     assert any(c == "swallowed_error" for c, _ in found)
     assert any(c == "missed_branch" and "else" in d for c, d in found)
     assert any(c == "missed_branch" and "elif" in d for c, d in found)
-    assert all(files[s.file].path == "pkg/mod.py" for s in mutate.sites(files))
+    assert all(files[s.file].path == "pkg/mod.py" for s in mutate.sites(files, mutate.FIRST_CLASSES))
 
 
 def test_off_by_one_keeps_the_line_number():
     files = patchlib.parse(PATCH)
-    s = next(s for s in mutate.sites(files) if s.detail == "< -> <=")
+    s = next(s for s in mutate.sites(files, mutate.FIRST_CLASSES) if s.detail == "< -> <=")
     m = mutate.apply(files, s)
     assert "+        if n <= 3:" in m.patch
     assert (m.loc_start, m.loc_end) == (14, 14)
@@ -82,7 +82,7 @@ def test_off_by_one_keeps_the_line_number():
 
 def test_missed_branch_locates_the_first_line_after_and_renumbers_later_hunks():
     files = patchlib.parse(PATCH)
-    s = next(s for s in mutate.sites(files) if s.cls == "missed_branch" and "else" in s.detail and "elif" not in s.detail)
+    s = next(s for s in mutate.sites(files, mutate.FIRST_CLASSES) if s.cls == "missed_branch" and "else" in s.detail and "elif" not in s.detail)
     m = mutate.apply(files, s)
     assert '+            return "mid"' not in m.patch
     assert "@@ -10,3 +10,12 @@ class A:" in m.patch
@@ -94,9 +94,51 @@ def test_missed_branch_locates_the_first_line_after_and_renumbers_later_hunks():
 
 def test_swallowed_error_becomes_pass_at_the_same_indent():
     files = patchlib.parse(PATCH)
-    s = next(s for s in mutate.sites(files) if s.cls == "swallowed_error")
+    s = next(s for s in mutate.sites(files, mutate.FIRST_CLASSES) if s.cls == "swallowed_error")
     m = mutate.apply(files, s)
     assert "+            pass" in m.patch and "raise ValueError" not in m.patch
+
+
+ABSENT = """diff --git a/pkg/b.py b/pkg/b.py
+--- a/pkg/b.py
++++ b/pkg/b.py
+@@ -1,2 +1,15 @@
+ def run(x, y):
+     a = 1
++    if x is None:
++        raise ValueError("x")
++    total = x + y
++    log(total)
++    if x > 0 and y > 0:
++        return total
++    elif x < 0:
++        return -total
++    while x and y or a:
++        x -= 1
++    a = x * 2
++    only = 1
++    return 0
+"""
+
+
+def test_absence_operators():
+    files = patchlib.parse(ABSENT)
+    found = {(s.cls, s.detail) for s in mutate.sites(files)}
+    assert ("dropped_guard", "removed guard `if x is None:`") in found
+    assert ("dropped_statement", "removed `a = x * 2`") in found  # rebinds `a`
+    assert ("dropped_statement", "removed `total = x + y`") not in found  # would leave `total` unbound
+    assert ("dropped_statement", "removed `log(total)`") in found
+    assert ("dropped_clause", "dropped `and y > 0` from the condition") in found
+    assert ("dropped_elif", "removed `elif x < 0:` arm") in found
+    assert not any("while" in d for _, d in found)  # mixed and/or is skipped
+    assert not any(d == "removed `x -= 1`" for _, d in found)  # the only statement in its block
+    assert {c for c, _ in found} <= set(mutate.CLASSES)
+    clause = next(s for s in mutate.sites(files) if s.cls == "dropped_clause")
+    m = mutate.apply(files, clause)
+    assert "+    if x > 0:" in m.patch and m.loc_start == 7
+    guard = next(s for s in mutate.sites(files) if s.cls == "dropped_guard")
+    m = mutate.apply(files, guard)
+    assert "raise ValueError" not in m.patch and m.loc_start == 3  # the line after the removed guard
 
 
 def test_keep_rule():

@@ -25,7 +25,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import mutate  # noqa: E402
 import patchlib  # noqa: E402
 
-SEED = 20261027
+FIRST_SEED = 20261027  # the first operator set's seed (pilot 1); see mutate.FIRST_CLASSES
+SEED = 20261028  # the second set's, after the kill rule's one operator change
 PER_FEATURE_CLASS = 2
 DRAW_PER_FEATURE = 3
 DRAW_PER_FEATURE_CLASS = 2

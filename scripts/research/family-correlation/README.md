@@ -14,7 +14,7 @@ them. Change the manifest first.
 | 4. Review | `review.py --stage pilot`, then `--stage main` | anywhere, with `OPENROUTER_API_KEY` | yes |
 | 5. Score, gate, compute `D` | `analyze.py --stage pilot`, then `--stage main` | anywhere | none |
 
-`patchlib.py` parses and numbers diffs; `mutate.py` holds the four operators. `models.json`
+`patchlib.py` parses and numbers diffs; `mutate.py` holds the operators (the set in force and the first, for pilot 1). `models.json`
 lists the six reviewers (two per family) by OpenRouter id. Tests: `python3
 tests/test_family_correlation.py` (or pytest).
 

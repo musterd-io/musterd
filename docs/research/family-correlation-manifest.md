@@ -194,6 +194,30 @@ nothing is missed, plainer ones if almost everything is), with a dated note here
 re-run once on new items. **If the second pilot also fails, the study stops** and the finding says
 why.
 
+_Pilot 1, 2026-10-28: failed the miss-rate gate._ JSON shape passed (59 of 60 replies) and spend
+was $1.05, projecting $14 for the whole run. The pooled miss rate was 12.5% under the primary rule
+and 2% under the coarse one. Six of the eight seeded defects were found by all six reviewers, and
+one more by five. The only defect most reviewers missed was a removed `elif` arm (found by 1 of 6):
+the one item that left no odd token in the diff. **The one operator change, made the same day before
+any new item ran:** the four classes above are replaced by four absence defects, which leave nothing
+in the diff to point at. Each touches only added lines, as before.
+
+- **Dropped statement:** an added one-line assignment or call removed. An assignment to a bare name
+  counts only when the name already appears earlier in the hunk, so the removal leaves no unbound
+  name. The block must keep another statement.
+- **Dropped clause:** the last clause of an added `if`, `elif` or `while` condition joined by only
+  `and` or only `or`, removed.
+- **Dropped guard:** an added `if ...:` whose body is one `raise` or `return` line, removed whole.
+- **Dropped `elif`:** an added `elif` arm and its body removed.
+
+Everything else stands: the keep rule, the draw rule (at most three items per feature, two per
+class), the controls, the reviewers and prompt, both hit rules and the gate. The seed moves to
+`20261028`, so pilot 2 runs on new items; at that seed `items.py seed` gives 434 candidates
+(235, 87, 80 and 32 by class). The first set stays in
+`scripts/research/family-correlation/mutate.py` as `FIRST_CLASSES`, with its seed, so pilot 1 can be
+reproduced, and its replies are kept for the finding. Pilot 1 counts toward the $200 stop. **If
+pilot 2 fails the gate, the study stops.**
+
 ## Errors
 
 An API error or timeout is retried once, with the reason recorded. An answer that is not valid JSON

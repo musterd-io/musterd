@@ -1,4 +1,4 @@
-"""The four defect classes the family-correlation manifest pre-registers, as operators on a patch.
+"""The defect classes the family-correlation manifest pre-registers, as operators on a patch.
 
 Each operator finds candidate sites among a Python source file's added lines and returns a
 Mutant: the mutated patch plus where the defect sits in the new file. Only added (`+`) lines are
@@ -8,6 +8,17 @@ touched, so the mutant still applies to the task's base commit.
   missed_branch    an added `elif`/`else` arm and its body removed
   wrong_default    a parameter default changed: True <-> False, an integer n -> n + 1
   swallowed_error  an added `raise ...` statement replaced with `pass`
+
+Those four were the first set. The first pilot (2026-10-28) found reviewers caught them almost
+every time, so the kill rule's one operator change replaced them with absence defects, which leave
+no odd token behind:
+
+  dropped_statement  an added one-line assignment or call removed
+  dropped_clause     the last `and`/`or` clause of an added `if`/`elif`/`while` condition removed
+  dropped_guard      an added `if ...:` whose body is one `raise`/`return` removed whole
+  dropped_elif       an added `elif` arm and its body removed
+
+`CLASSES` is the set in force; `FIRST_CLASSES` keeps the first for reproducing pilot 1.
 """
 
 from __future__ import annotations
@@ -20,7 +31,14 @@ from dataclasses import dataclass
 
 from patchlib import FileDiff, Hunk, renumber, render
 
-CLASSES = ("off_by_one", "missed_branch", "wrong_default", "swallowed_error")
+FIRST_CLASSES = ("off_by_one", "missed_branch", "wrong_default", "swallowed_error")
+CLASSES = ("dropped_statement", "dropped_clause", "dropped_guard", "dropped_elif")
+NOT_A_PLAIN_STATEMENT = {
+    "return", "raise", "pass", "break", "continue", "import", "from", "def", "class", "if", "elif",
+    "else", "for", "while", "with", "try", "except", "finally", "assert", "global", "nonlocal",
+    "del", "yield", "async", "await", "lambda", "match", "case",
+}
+CONTINUES_BLOCK = ("elif ", "else:", "except", "finally:")
 FLIP = {"<": "<=", "<=": "<", ">": ">=", ">=": ">"}
 PARAM_DEFAULT_RE = re.compile(r"^(\s*\*{0,2}\w+\s*(?::\s*[^=]+?)?\s*=\s*)(True|False|-?\d+)(\s*,?\s*(?:#.*)?)$")
 DEF_DEFAULT_RE = re.compile(r"(\w+\s*(?::\s*[^=,()]+?)?\s*=\s*)(True|False|-?\d+)(?=\s*[,)])")
@@ -139,7 +157,107 @@ def _branch_end(h: Hunk, i: int) -> int | None:
     return end
 
 
-def sites(files: list[FileDiff]) -> list[Site]:
+def _has_sibling(h: Hunk, start: int, end: int) -> bool:
+    """Whether the block holding lines start..end keeps another statement once they are removed."""
+    indent = _indent(h.lines[start][1])
+    for rng in (range(start - 1, -1, -1), range(end + 1, len(h.lines))):
+        for j in rng:
+            tag, text = h.lines[j]
+            if tag == "-" or not text.strip() or text.strip().startswith("#"):
+                continue
+            ind = _indent(text)
+            if ind < indent:
+                break
+            if ind == indent and not text.strip().startswith(CONTINUES_BLOCK):
+                return True
+            if ind == indent:
+                break
+    return False
+
+
+def _plain_statement(h: Hunk, i: int, text: str) -> bool:
+    """A whole one-line assignment or call: removing it leaves no syntax and no unbound name behind.
+
+    An assignment to a bare name counts only when the name is already seen earlier in the hunk, so
+    the removal does not leave a later use of a name that nothing binds.
+    """
+    s = text.strip()
+    toks = _tokens(text)
+    if not toks or s.endswith((":", "\\", ",")) or s.startswith(("@", "'", '"')):
+        return False
+    first = toks[0]
+    if first.type != tokenize.NAME or first.string in NOT_A_PLAIN_STATEMENT:
+        return False
+    depth = 0
+    for t in toks:
+        if t.type == tokenize.OP:
+            if t.string in "([{":
+                depth += 1
+            elif t.string in ")]}":
+                depth -= 1
+            elif depth == 0 and (t.string == "=" or (t.string.endswith("=") and t.string not in ("==", "<=", ">=", "!="))):
+                target = s[: t.start[1]].strip()
+                if re.fullmatch(r"\w+", target):
+                    before = "\n".join(x for tag, x in h.lines[:i] if tag != "-")
+                    return re.search(rf"\b{target}\b", before) is not None
+                return not ("," in target and "[" not in target)  # no tuple unpacking
+    return s.endswith(")")
+
+
+def _dropped_clause(text: str) -> list[tuple[str, str]]:
+    s = text.strip()
+    if not s.startswith(("if ", "elif ", "while ")) or not s.endswith(":"):
+        return []
+    toks = _tokens(text)
+    if not toks:
+        return []
+    depth, ops = 0, []
+    for t in toks:
+        if t.type == tokenize.OP and t.string in "([{":
+            depth += 1
+        elif t.type == tokenize.OP and t.string in ")]}":
+            depth -= 1
+        elif depth == 0 and t.type == tokenize.NAME and t.string in ("and", "or") and t.start[0] == 1:
+            ops.append(t)
+    if not ops or len({t.string for t in ops}) > 1:
+        return []
+    last = ops[-1]
+    kept = s[: last.start[1]].rstrip()
+    gone = s[last.start[1] : -1].strip()
+    return [(text[: _indent(text)] + kept + ":", f"dropped `{gone[:60]}` from the condition")]
+
+
+def _guard_end(h: Hunk, i: int) -> int | None:
+    """The body line of an added `if ...:` whose body is one raise/return, or None."""
+    s = h.lines[i][1].strip()
+    if not s.startswith("if ") or not s.endswith(":") or _tokens(h.lines[i][1]) is None:
+        return None
+    if i + 1 >= len(h.lines) - 1:
+        return None
+    tag, body = h.lines[i + 1]
+    b = body.strip()
+    if tag != "+" or _indent(body) <= _indent(h.lines[i][1]) or not b.startswith(("raise", "return")):
+        return None
+    if _tokens(body) is None:
+        return None
+    for j in range(i + 2, len(h.lines)):
+        t2, nxt = h.lines[j]
+        if t2 == "-" or not nxt.strip():
+            continue
+        if _indent(nxt) > _indent(h.lines[i][1]):
+            return None  # the body is longer than one line
+        if nxt.strip().startswith(("elif ", "else:")):
+            return None
+        return i + 1
+    return None
+
+
+def sites(files: list[FileDiff], classes: tuple[str, ...] = CLASSES) -> list[Site]:
+    """Candidate sites for `classes` (the set in force by default) among added Python lines."""
+    return [s for s in _all_sites(files) if s.cls in classes]
+
+
+def _all_sites(files: list[FileDiff]) -> list[Site]:
     out: list[Site] = []
     for fi, f in enumerate(files):
         if not f.is_python_source:
@@ -159,6 +277,15 @@ def sites(files: list[FileDiff]) -> list[Site]:
                     end = _branch_end(h, li)
                     if end is not None:
                         out.append(Site("missed_branch", fi, hi, li, end, None, f"removed `{s[:60]}` arm"))
+                        if s.startswith("elif "):
+                            out.append(Site("dropped_elif", fi, hi, li, end, None, f"removed `{s[:60]}` arm"))
+                if _plain_statement(h, li, text) and _has_sibling(h, li, li):
+                    out.append(Site("dropped_statement", fi, hi, li, li, None, f"removed `{s[:60]}`"))
+                for new, detail in _dropped_clause(text):
+                    out.append(Site("dropped_clause", fi, hi, li, li, new, detail))
+                end = _guard_end(h, li)
+                if end is not None and _has_sibling(h, li, end):
+                    out.append(Site("dropped_guard", fi, hi, li, end, None, f"removed guard `{s[:60]}`"))
     return out
 
 
