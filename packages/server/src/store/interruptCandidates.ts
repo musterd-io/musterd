@@ -77,13 +77,13 @@ export async function listInterruptCandidates(
     ? `
             OR (to_member = ? AND act IN ('ask','request_help','handoff'))`
     : '';
-  // Bound the window only when the caller opts in (passes `now`); otherwise the read stays
-  // unbounded and identical to the unnarrowed read — the equality contract with
-  // interruptCandidates.test.ts relies on that.
-  const lookbackFloor =
-    opts.now !== undefined
-      ? Math.max(opts.cursorTs ?? 0, opts.now - (opts.maxLookbackMs ?? INTERRUPT_LOOKBACK_MS))
-      : (opts.cursorTs ?? 0);
+  // The window is always bounded to the recent past: a seat whose cursor has not moved in
+  // months must not re-scan its whole unread backlog on every poll (lane 01M61STFBF). `now`
+  // defaults to the wall clock, so a caller that forgets it still gets the bound; a caller that
+  // wants the unbounded read (the contract test) passes `now: 0`, which makes the floor the
+  // cursor itself. The equality contract with interruptCandidates.test.ts is preserved that way.
+  const now = opts.now ?? Date.now();
+  const lookbackFloor = Math.max(opts.cursorTs ?? 0, now - (opts.maxLookbackMs ?? INTERRUPT_LOOKBACK_MS));
   const windowRows = await db.all<MessageRow>(
     `SELECT * FROM messages
         WHERE team_id = ?

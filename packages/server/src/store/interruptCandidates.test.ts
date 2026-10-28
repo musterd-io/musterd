@@ -97,7 +97,7 @@ withDrivers('interruptCandidates', (o) => {
     member: MemberRow,
     obligations: boolean,
   ): string[] {
-    const rows = await listInterruptCandidates(db, member, { cursorTs: 0 });
+    const rows = await listInterruptCandidates(db, member, { cursorTs: 0, now: 0 });
     return pendingInterrupts(await rowsToEnvelopes(db, team.slug, rows), member.name, {
       obligations,
     }).map((e) => e.id);
@@ -199,11 +199,11 @@ withDrivers('interruptCandidates', (o) => {
           directed: true,
         }).map((e) => e.id);
       const narrowed = await fold(
-        await listInterruptCandidates(db, ada, { cursorTs: 0, directed: true }),
+        await listInterruptCandidates(db, ada, { cursorTs: 0, directed: true, now: 0 }),
       );
       // The whole window omits my own sends, so hand it my answer the way the narrowed read does.
       const whole = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0 });
-      const mine = await listInterruptCandidates(db, ada, { cursorTs: 0 });
+      const mine = await listInterruptCandidates(db, ada, { cursorTs: 0, now: 0 });
       expect(narrowed).toEqual(
         await fold([...whole, ...mine.filter((r) => r.from_member === ada.id)]),
       );
@@ -220,7 +220,7 @@ withDrivers('interruptCandidates', (o) => {
     it('reads only the shapes the fold can use, not the window', async () => {
       const { db, ada } = await corpus();
       const whole = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0 });
-      const candidates = await listInterruptCandidates(db, ada, { cursorTs: 0 });
+      const candidates = await listInterruptCandidates(db, ada, { cursorTs: 0, now: 0 });
       expect(whole.length).toBeGreaterThan(250);
       // The handful of acts above, not the 250 inert rows they are buried in.
       expect(candidates.length).toBeLessThan(20);
@@ -300,7 +300,7 @@ withDrivers('interruptCandidates', (o) => {
           await rowsToEnvelopes(
             db,
             team.slug,
-            await listInterruptCandidates(db, ada, { cursorTs: 0, directed: true }),
+            await listInterruptCandidates(db, ada, { cursorTs: 0, directed: true, now: 0 }),
           ),
           ada.name,
           { obligations: true, directed: true },
@@ -392,7 +392,7 @@ withDrivers('interruptCandidates', (o) => {
           await rowsToEnvelopes(
             db,
             team.slug,
-            await listInterruptCandidates(db, ada, { cursorTs: 0 }),
+            await listInterruptCandidates(db, ada, { cursorTs: 0, now: 0 }),
           ),
           ada.name,
           { huddles: true },
@@ -439,7 +439,7 @@ withDrivers('interruptCandidates', (o) => {
       };
       await say(db, team, bob, null, 'message', 'turn-early', { thread: 'h1', now: 100 });
       await say(db, team, nick, ada, 'message', 'h1', { meta: huddle, now: 300 });
-      const rows = await listInterruptCandidates(db, ada, { cursorTs: 200 });
+      const rows = await listInterruptCandidates(db, ada, { cursorTs: 200, now: 0 });
       const raised = pendingInterrupts(await rowsToEnvelopes(db, team.slug, rows), ada.name, {
         huddles: true,
       }).map((e) => e.id);
@@ -457,7 +457,7 @@ withDrivers('interruptCandidates', (o) => {
       };
       await say(db, team, bob, null, 'message', 'turn-early', { thread: 'h1', now: 100 });
       await say(db, team, nick, ada, 'message', 'h1', { meta: huddle, now: 300 });
-      const rows = await listInterruptCandidates(db, ada, { cursorTs: 300 });
+      const rows = await listInterruptCandidates(db, ada, { cursorTs: 300, now: 0 });
       expect((await rowsToEnvelopes(db, team.slug, rows)).map((e) => e.id)).not.toContain(
         'turn-early',
       );
