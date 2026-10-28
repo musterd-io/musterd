@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { Envelope, HuddleView, MemberSummary } from '@musterd/protocol';
 import { deriveHuddles } from '@musterd/protocol/wire';
 import { huddleBudget, openHuddles, type HuddleBudgetView } from './huddles';
-import { initial, kindOf, hueOf, memberAvatar } from './format';
+import { initial, kindOf, hueOf, memberAvatarLight, memberInk } from './format';
 import { MemberFace } from './MemberFace';
 
 /**
@@ -135,7 +135,8 @@ function Huddle({
                 title={name}
                 style={
                   {
-                    '--lc-huddle-hue': memberAvatar(name, kindOf(name, idx), hueOf(name, idx)),
+                    '--lc-huddle-hue': memberAvatarLight(name, kindOf(name, idx), hueOf(name, idx)),
+                    color: memberInk(name, kindOf(name, idx), hueOf(name, idx)),
                   } as CSSProperties
                 }
               >

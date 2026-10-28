@@ -450,28 +450,28 @@ function lightnessForLuminance(hue: number, target: number): number {
 }
 
 /**
- * The member's colour, deepened until WHITE initials on it clear WCAG AA — for an avatar circle,
- * which is a fill that has to carry a letter. Luminance 0.165 puts white at ~4.9:1 on every hue in
- * both bands.
- *
- * The floor's fill is deliberately NOT changed to match: a body carries no text, so it keeps the
- * lighter `memberColor` and the room is untouched. The hue — which is what actually says *who* —
- * is identical, so the roster avatar and the person on the floor still read as one identity.
- */
-export function memberAvatar(name: string, kind: Kind, stored?: number | null): string {
-  const hue = memberHue(name, kind, stored);
-  return `hsl(${hue}, 68%, ${lightnessForLuminance(hue, 0.165)}%)`;
-}
-
-/**
- * The member's colour as a LIGHT disc behind a face or an initial on the team panel (nick, 2026-10-28:
- * "all the avatar circles on the team panel should have light background colors"). Luminance 0.72 —
+ * The member's colour as a LIGHT disc behind a face or an initial, everywhere on /live (nick,
+ * 2026-10-28: "all the avatar circles … should have light background colors"; it replaced the dark
+ * `memberAvatar` fill that carried white initials). The floor's fill keeps `memberColor`; the hue is
+ * identical, so the disc and the person on the floor still read as one identity. Luminance 0.72 —
  * a pastel of the member's own hue, so each disc still says who it is. {@link memberInk} on it clears
  * 4.5:1 for every hue (0.77 / 0.145 ≈ 5.3).
  */
 export function memberAvatarLight(name: string, kind: Kind, stored?: number | null): string {
   const hue = memberHue(name, kind, stored);
   return `hsl(${hue}, 70%, ${lightnessForLuminance(hue, 0.72)}%)`;
+}
+
+/**
+ * An initial's disc anywhere on /live: the light tint with the member's ink on it (nick, 2026-10-28:
+ * no dark avatar discs). Spread into a `style`.
+ */
+export function memberDisc(
+  name: string,
+  kind: Kind,
+  stored?: number | null,
+): { background: string; color: string } {
+  return { background: memberAvatarLight(name, kind, stored), color: memberInk(name, kind, stored) };
 }
 
 /**

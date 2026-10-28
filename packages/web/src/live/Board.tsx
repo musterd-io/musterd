@@ -24,7 +24,7 @@ import {
   type LaneAction,
   type MovedLanes,
 } from './boardWrite';
-import { initial, kindOf, memberAvatar, hueOf, sourceRefHref } from './format';
+import { initial, kindOf, memberDisc, hueOf, sourceRefHref } from './format';
 import { GoalGrid } from './GoalGridView';
 import { GoalTable } from './GoalTableView';
 
@@ -524,13 +524,13 @@ function LaneCard({
                 never measured here: four components share `.lc-card__avatar` with white ink, the
                 sweep keyed rows by class+ink alone, and the single row it kept came from the
                 owner-filter chip — whose disc is painted with `memberColor`, the office FILL
-                (3.42), not `memberAvatar`, the identity ink (4.86 worst case across 24 names). The
+                (3.42), not the avatar disc (now `memberDisc`: the member's ink on a light tint, ≥5.3). The
                 key now carries the background too. `aria-hidden` stays: the seat name is written
                 immediately to its right, so the letter is decoration, not information. */}
             <span
               className="lc-card__avatar"
               style={{
-                background: memberAvatar(lane.owner_seat, ownerKind, hueOf(lane.owner_seat, rosterIdx)),
+                ...memberDisc(lane.owner_seat, ownerKind, hueOf(lane.owner_seat, rosterIdx)),
               }}
               aria-hidden="true"
             >
@@ -699,7 +699,7 @@ function SeatPicker({
           <span
             className="lc-card__avatar"
             style={{
-              background: memberAvatar(m.name, m.kind === 'human' ? 'human' : 'agent', m.hue),
+              ...memberDisc(m.name, m.kind === 'human' ? 'human' : 'agent', m.hue),
             }}
             aria-hidden="true"
           >

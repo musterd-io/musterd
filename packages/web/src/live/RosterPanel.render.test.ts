@@ -341,7 +341,7 @@ describe('the stored hue reaches the roster avatar (ADR 374)', () => {
         roster: [seat({ name: 'gptbot', presence: 'online', posture: 'working', hue: 212 })],
       }),
     );
-    expect(html).toMatch(/background:hsl\(212, 68%/);
+    expect(html).toMatch(/background:hsl\(212, 70%/);
   });
 });
 

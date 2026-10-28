@@ -3,7 +3,7 @@ import type { Envelope, MemberSummary } from '@musterd/protocol';
 import { askBanner } from './askPhrase';
 import { BellIcon } from './AsksStrip';
 import { applyTierClock, askIsLoud, clockFraction, deriveAsks, type AudienceContext } from './asks';
-import { hueOf, initial, kindOf, memberAvatar, memberColor } from './format';
+import { hueOf, initial, kindOf, memberDisc, memberColor } from './format';
 
 /**
  * The ask banner as stream chrome (ADR 464 follow-up): `/live`'s banner, same words and same
@@ -76,7 +76,7 @@ export function StreamAskBanner({
               className={`lc-chip__avatar lc-asks__who${frac === null ? '' : frac > 0 ? ' is-timed' : ' is-over'}`}
               style={
                 {
-                  background: memberAvatar(banner.lead.env.from, kindOf(banner.lead.env.from, idx), hueOf(banner.lead.env.from, idx)),
+                  ...memberDisc(banner.lead.env.from, kindOf(banner.lead.env.from, idx), hueOf(banner.lead.env.from, idx)),
                   '--lc-ask-frac': frac ?? 0,
                 } as CSSProperties
               }

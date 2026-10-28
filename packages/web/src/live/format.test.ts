@@ -12,7 +12,8 @@ import {
   initial,
   sourceRefHref,
   isFeatureBehind,
-  memberAvatar,
+  memberAvatarLight,
+  memberDisc,
   memberColor,
   memberHue,
   memberInk,
@@ -612,7 +613,7 @@ describe('memberColor — the identity FILL, deliberately unchanged', () => {
     expect(memberColor('miley', 'agent')).not.toBe(memberColor('izzo', 'agent'));
   });
 
-  it('cannot carry a hard-coded initial colour — which is why memberAvatar exists', () => {
+  it('cannot carry a hard-coded initial colour — which is why memberDisc exists', () => {
     // The premise of the split, asserted rather than left in a comment. For any ONE background at
     // least one pole clears AA (the two failure conditions are mutually exclusive), so the bug is
     // not "nothing works" — it is that the correct pole FLIPS across the band, and every avatar
@@ -624,29 +625,33 @@ describe('memberColor — the identity FILL, deliberately unchanged', () => {
   });
 });
 
-describe('memberAvatar — the fill that has to carry a letter', () => {
-  it('takes white initials at AA for every member, in both bands', () => {
+describe('memberDisc — a light tint that carries the member\'s ink', () => {
+  it('takes the member\'s ink at AA for every member, in both bands', () => {
     for (const name of NAMES) {
       for (const kind of KINDS) {
-        const ratio = contrast(WHITE, luminanceOfHsl(memberAvatar(name, kind)));
-        expect(ratio, `white on ${kind} avatar ${name} (${memberAvatar(name, kind)})`).toBeGreaterThanOrEqual(4.5);
+        const { background, color } = memberDisc(name, kind);
+        const ratio = contrast(luminanceOfHsl(background), luminanceOfHsl(color));
+        expect(ratio, `${kind} disc ${name} (${background} / ${color})`).toBeGreaterThanOrEqual(4.5);
       }
     }
   });
 
-  it('keeps the member’s hue, so the avatar and the body are one identity', () => {
+  it('keeps the member\'s hue, so the disc and the body are one identity', () => {
     for (const name of NAMES.slice(0, 40)) {
       for (const kind of KINDS) {
-        expect(memberAvatar(name, kind)).toContain(`hsl(${memberHue(name, kind)},`);
+        expect(memberAvatarLight(name, kind)).toContain(`hsl(${memberHue(name, kind)},`);
       }
     }
   });
 
-  it('holds luminance constant, which is what makes one pole correct for everyone', () => {
-    // The old palette spanned 4.6x in luminance at a constant LIGHTNESS. Evening that out is the
-    // mechanism, not a nicety: it is why the initials can be uniformly white.
-    const lums = NAMES.flatMap((n) => KINDS.map((k) => luminanceOfHsl(memberAvatar(n, k))));
-    expect(Math.max(...lums) / Math.min(...lums)).toBeLessThan(1.1);
+  it('is light: lighter than the floor fill for every member (nick, 2026-10-28)', () => {
+    for (const name of NAMES.slice(0, 40)) {
+      for (const kind of KINDS) {
+        expect(luminanceOfHsl(memberAvatarLight(name, kind))).toBeGreaterThan(
+          luminanceOfHsl(memberColor(name, kind)),
+        );
+      }
+    }
   });
 });
 
@@ -660,11 +665,11 @@ describe('memberInk — the identity colour as TEXT on paper', () => {
     }
   });
 
-  it('is darker than the avatar fill, which is darker than the floor fill', () => {
+  it('is darker than the floor fill', () => {
     for (const name of NAMES.slice(0, 40)) {
       for (const kind of KINDS) {
         expect(luminanceOfHsl(memberInk(name, kind))).toBeLessThan(
-          luminanceOfHsl(memberAvatar(name, kind)),
+          luminanceOfHsl(memberColor(name, kind)),
         );
       }
     }
@@ -743,7 +748,7 @@ describe('memberHue — a stored hue wins, and the fallback is the old hash to t
   it('paints the stored hue when the roster carries one', () => {
     expect(memberHue('miley', 'agent', 212)).toBe(212);
     expect(memberColor('miley', 'agent', 212)).toBe('hsl(212, 68%, 62%)');
-    expect(memberAvatar('miley', 'agent', 212)).toMatch(/^hsl\(212, 68%, /);
+    expect(memberAvatarLight('miley', 'agent', 212)).toMatch(/^hsl\(212, 70%, /);
     expect(memberInk('miley', 'agent', 212)).toMatch(/^hsl\(212, 68%, /);
   });
 

@@ -20,7 +20,7 @@ import {
 } from './asks';
 import { sendAct, sendActWithVerdict, type LiveConfig } from './client';
 import { asksOpenMode, stillMode } from './stillMode';
-import { initial, memberAvatar, memberColor, kindOf, hueOf } from './format';
+import { initial, memberDisc, memberColor, kindOf, hueOf } from './format';
 import { newRings, notifyBrowser, openRingsFor, ringNotice } from './doorbellNotify';
 import { scrollToMessage } from './reveal';
 import { AskChoices } from './AskChoices';
@@ -389,7 +389,7 @@ export function AsksStrip({
               }${idx.has(lead.env.from) ? ' has-face' : ''}`}
               style={
                 {
-                  background: memberAvatar(
+                  ...memberDisc(
                     lead.env.from,
                     kindOf(lead.env.from, idx),
                     hueOf(lead.env.from, idx),
@@ -680,7 +680,7 @@ export function AsksStrip({
                   <span
                     className="lc-chip__avatar"
                     style={{
-                      background: memberAvatar(
+                      ...memberDisc(
                         r.lane.owner_seat ?? '?',
                         kindOf(r.lane.owner_seat ?? '?', idx),
                         hueOf(r.lane.owner_seat ?? '?', idx),
@@ -746,7 +746,7 @@ function AskCard({
         <div className="lc-ask__head">
           <span
             className="lc-chip__avatar"
-            style={{ background: memberAvatar(from, kind, hueOf(from, idx)) }}
+            style={{ ...memberDisc(from, kind, hueOf(from, idx)) }}
           >
             {initial(from)}
           </span>

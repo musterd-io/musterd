@@ -22,7 +22,7 @@ import {
   laneEventDetail,
   type LaneEventDetail,
   memberColor,
-  memberAvatar,
+  memberDisc,
   proseSegments,
   recipientNames,
   recipientScope,
@@ -381,7 +381,7 @@ function Row({
           ) : (
             <span
               className="lc-chip__avatar"
-              style={{ background: memberAvatar(env.from, kind, hue) }}
+              style={{ ...memberDisc(env.from, kind, hue) }}
             >
               {initial(env.from)}
             </span>
