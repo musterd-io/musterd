@@ -464,6 +464,17 @@ export function memberAvatar(name: string, kind: Kind, stored?: number | null): 
 }
 
 /**
+ * The member's colour as a LIGHT disc behind a face or an initial on the team panel (nick, 2026-10-28:
+ * "all the avatar circles on the team panel should have light background colors"). Luminance 0.72 —
+ * a pastel of the member's own hue, so each disc still says who it is. {@link memberInk} on it clears
+ * 4.5:1 for every hue (0.77 / 0.145 ≈ 5.3).
+ */
+export function memberAvatarLight(name: string, kind: Kind, stored?: number | null): string {
+  const hue = memberHue(name, kind, stored);
+  return `hsl(${hue}, 70%, ${lightnessForLuminance(hue, 0.72)}%)`;
+}
+
+/**
  * The member's colour as TEXT on paper — deepened to luminance 0.095, which clears 4.5:1 against
  * the darkest paper in the family (--lc-surface-3). Amber is the binding constraint: it is the
  * lightest hue in either band and drags the target well below where the cool hues would need it.

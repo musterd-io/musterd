@@ -3,7 +3,7 @@ import type { AskView } from './asks';
 import { CaptionPill } from './CaptionPill';
 import type { Caption } from './captions';
 import type { LiveConfig } from './client';
-import { acceptanceCapacity, initial, memberAvatar, memberColor } from './format';
+import { acceptanceCapacity, initial, memberAvatarLight, memberColor, memberInk } from './format';
 import { usePortrait } from './portraits';
 import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
@@ -110,7 +110,11 @@ export function TeamColumn({
     const m = roster.find((r) => r.name === seat);
     if (!m) return null;
     const kind = m.kind === 'human' ? 'human' : 'agent';
-    return { background: memberAvatar(m.name, kind, m.hue), initial: initial(m.name) };
+    return {
+      background: memberAvatarLight(m.name, kind, m.hue),
+      color: memberInk(m.name, kind, m.hue),
+      initial: initial(m.name),
+    };
   };
   if (collapsed) {
     const overdue = reads.filter((e) => e.status === 'overdue').length;
@@ -144,7 +148,7 @@ export function TeamColumn({
                 onMouseEnter={() => onLink?.(c.name)}
                 onMouseLeave={() => onLink?.(null)}
               >
-                <AvatarDisc className="lc-team__pip-avatar" name={c.name} fill={memberAvatar(c.name, c.kind, c.member.hue)} />
+                <AvatarDisc className="lc-team__pip-avatar" name={c.name} fill={memberAvatarLight(c.name, c.kind, c.member.hue)} ink={memberInk(c.name, c.kind, c.member.hue)} />
                 {showLogo && (
                   <span
                     className="lc-team__pip-logo"
@@ -238,7 +242,7 @@ function IdleStrip({ cards }: { cards: TeamCardModel[] }) {
             className={`lc-team__idle-seat${c.state === 'away' ? ' is-away' : ''}`}
             title={`${c.name} · ${c.stateLabel}`}
           >
-            <AvatarDisc className="lc-team__idle-avatar" name={c.name} fill={memberAvatar(c.name, c.kind, c.member.hue)} hidden />
+            <AvatarDisc className="lc-team__idle-avatar" name={c.name} fill={memberAvatarLight(c.name, c.kind, c.member.hue)} ink={memberInk(c.name, c.kind, c.member.hue)} hidden />
             {c.name}
           </li>
         ))}
@@ -298,7 +302,7 @@ function TeamColumnNotes({
 
 /** A member's disc: their rendered portrait once the office has painted it (`portraits.ts`, lane
  *  01M6017Z38), else their initial on their colour. */
-function AvatarDisc({ className, name, fill, hidden = false }: { className: string; name: string; fill: string; hidden?: boolean }) {
+function AvatarDisc({ className, name, fill, ink, hidden = false }: { className: string; name: string; fill: string; ink: string; hidden?: boolean }) {
   const portrait = usePortrait(name);
   return (
     <span
@@ -307,7 +311,7 @@ function AvatarDisc({ className, name, fill, hidden = false }: { className: stri
       style={
         portrait
           ? { background: `${fill} url(${portrait}) center / cover no-repeat`, color: 'transparent' }
-          : { background: fill }
+          : { background: fill, color: ink }
       }
     >
       {initial(name)}
