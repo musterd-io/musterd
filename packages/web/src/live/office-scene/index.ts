@@ -3391,7 +3391,7 @@ export function mountOffice(
     // shipping rolls the whole scale. Replays are older than the board and ring nothing.
     if (ev.kind === 'walk-pin' && ev.state === 'done' && !replaying && !rangDone.has(ev.lane)) {
       rangDone.add(ev.lane);
-      if (rangDone.size > 200) rangDone.delete(rangDone.keys().next().value!);
+      if (rangDone.size > 200) for (const oldest of rangDone) { rangDone.delete(oldest); break; }
       lastLaneDoneAt = Date.now();
       roomTone.moment('laneDone', boardPan(), undefined, {
         bar: barForLane(ev.lane),
