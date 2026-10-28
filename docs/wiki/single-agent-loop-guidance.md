@@ -63,6 +63,22 @@ keeps them apart:
 
 Neither is a cross-family test.
 
+**musterd has its own data point, and it points the same way.** _Added 2026-10-27._ On CooperBench,
+with Claude Code on `claude-sonnet-4-5` in every arm, one agent doing both features has run against
+two musterd agents with one feature each:
+
+| Run | One agent | Two musterd agents | Cost, one agent / musterd |
+| --- | --- | --- | --- |
+| [Finding 018](../research/018-cooperbench-solo-reference.md), 10 `core` pairs | 5 / 10 | 4 / 10 | $6.12 / $24.59 |
+| [Finding 021](../research/021-cooperbench-claim-run.md), 20 pairs | 6 / 20 | 5 / 20 | $11.18 / $35.99 |
+
+Both pass verdicts are inconclusive, as pre-registered. One agent leads by one pair, and that one-pair
+gap is the manifests' "no claim" case. The cost gap is not in doubt: two agents cost about three to
+four times as much, and in finding 021 took about twice the wall time. This is the article's
+per-task claim, measured on our own harness. It is a test of copies of one model, so it does not
+bear on cross-family work. It does not answer the case for a team either (next section), because
+CooperBench scores a pair of features, not attribution or the record.
+
 *The Decoder* describes a coding example: context is lost between writing the feature, writing the
 tests and reviewing, so one agent writes the feature and its tests and a verifier only runs them.
 The original, as read on 2026-10-27, does not contain that example. *The Decoder* captions the
