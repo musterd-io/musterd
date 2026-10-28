@@ -64,6 +64,12 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
     claimSeatPerRequest: true,
   });
   const res = await http.roster(team);
+  const [health, timeline] = await Promise.all([
+    http.health().catch(() => undefined),
+    explicit && identity
+      ? http.messages(team, { limit: TIMELINE_WINDOW }).catch(() => undefined)
+      : undefined,
+  ]);
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(res.members) + '\n');
     return 0;
@@ -108,9 +114,11 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
       daily.push(theme.dim(`pick one up  musterd lane claim ${brief.up_next[0]!.id}`));
   } else {
     daily.push(`◆ your work  ${inFlight.length}`);
-    for (const lane of inFlight.slice(0, 5)) {
+    for (const lane of inFlight.slice(0, 3)) {
       daily.push(`  ${lane.state ?? 'active'} · ${lane.title}`);
     }
+    if (inFlight.length > 3)
+      daily.push(theme.dim(`  +${inFlight.length - 3} more · musterd lanes --mine`));
   }
   const upNext = brief?.up_next ?? [];
   const upLimit = (process.stdout.columns ?? 80) < 60 ? 1 : 2;
@@ -124,6 +132,9 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
       daily.push(theme.dim(`  +${upNext.length - upLimit} more · musterd next`));
     daily.push(theme.dim('  → musterd next'));
   }
+  // Partial: an older daemon that lacks a section says so (ADR 490 pattern).
+  if (!brief && explicit && identity) daily.push(theme.dim('lanes: not reported by this daemon'));
+  if (!health) daily.push(theme.dim('health: not reported by this daemon'));
   const hereCount = res.members.filter((m) => m.presence !== 'offline').length;
   const onlineCount = res.members.filter((m) => m.presence === 'online').length;
   daily.push('');
@@ -145,12 +156,6 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
   // deliberately, and only when it can be spent — that route is seat-authed and recipient-scoped, so
   // an ambient identity gets no huddles rather than a failed command, exactly like `pending` and
   // `memory` above.
-  const [health, timeline] = await Promise.all([
-    http.health().catch(() => undefined),
-    explicit && identity
-      ? http.messages(team, { limit: TIMELINE_WINDOW }).catch(() => undefined)
-      : undefined,
-  ]);
   const marks = timeline
     ? huddleMarks(deriveHuddles(timeline.messages, identity?.name ?? ''))
     : undefined;
