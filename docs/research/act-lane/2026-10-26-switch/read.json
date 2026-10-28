@@ -1,0 +1,577 @@
+{
+ "window": {
+  "since": "2026-10-26T19:33Z",
+  "until": "2026-10-28T19:35Z",
+  "fix_at": "2026-10-26T20:11:52Z",
+  "act_lane": [
+   "grokbot",
+   "izzo",
+   "miley"
+  ]
+ },
+ "R7a": {
+  "act_lane_wakes": 9,
+  "act_lane_median_waited_s": 10530.0,
+  "launch_lane_wakes": 38,
+  "launch_lane_median_waited_s": 4.5,
+  "rule": "<= 120 s acted; >= 900 s did not; between: part of it"
+ },
+ "R7b": {
+  "wakes_per_seat_day": {
+   "izzo": {
+    "2026-10-26": 4,
+    "2026-10-27": 3
+   },
+   "grokbot": {
+    "2026-10-27": 1,
+    "2026-10-28": 1
+   }
+  },
+  "usd_per_seat_day": {
+   "izzo": {
+    "2026-10-26": 0.05,
+    "2026-10-27": 0.02
+   },
+   "grokbot": {
+    "2026-10-27": 2.78,
+    "2026-10-28": 0.24
+   }
+  },
+  "kill_rule_breaches": [],
+  "act_lane_usd_per_wake_median": 0.0,
+  "act_lane_priced_wakes": 9
+ },
+ "beside": {
+  "backlog_wakes_before_fix": 2,
+  "backlog_detail": [
+   {
+    "seat": "grokbot",
+    "act": "message",
+    "sender": "stanley",
+    "waited_s": 3017100,
+    "usd": 0.5383
+   },
+   {
+    "seat": "grokbot",
+    "act": "message",
+    "sender": "stanley",
+    "waited_s": 3017160,
+    "usd": 0.3691
+   }
+  ],
+  "act_lane_wakes_on_plain_message": 1,
+  "act_lane_wakes_by_act": {
+   "ask": 5,
+   "message": 1,
+   "work_order": 3
+  },
+  "failed_wake_lines": {
+   "gptbot": 39,
+   "miley": 26,
+   "ryder": 10,
+   "compo": 1,
+   "izzo": 39,
+   "dolly": 32,
+   "sloane": 3,
+   "grokbot": 20,
+   "lazara": 1,
+   "big-body": 15,
+   "wanderer": 24,
+   "ghost": 16,
+   "alfie": 13
+  },
+  "launch_lane_usd_per_wake_median": 0.4
+ },
+ "wakes": [
+  {
+   "seat": "grokbot",
+   "lane": "batched",
+   "act": "message",
+   "sender": "stanley",
+   "waited_s": 3017100,
+   "ts": 1793043388101,
+   "usd": 0.5383,
+   "backlog": true
+  },
+  {
+   "seat": "grokbot",
+   "lane": "batched",
+   "act": "message",
+   "sender": "stanley",
+   "waited_s": 3017160,
+   "ts": 1793043546825,
+   "usd": 0.3691,
+   "backlog": true
+  },
+  {
+   "seat": "izzo",
+   "lane": "batched",
+   "act": "ask",
+   "sender": "alfie",
+   "waited_s": 11040,
+   "ts": 1793055307836,
+   "usd": 0.0139,
+   "backlog": false
+  },
+  {
+   "seat": "izzo",
+   "lane": "batched",
+   "act": "message",
+   "sender": "big-body",
+   "waited_s": 10560,
+   "ts": 1793055425094,
+   "usd": 0.0067,
+   "backlog": false
+  },
+  {
+   "seat": "ghost",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793057014003,
+   "usd": 0.0001,
+   "backlog": false
+  },
+  {
+   "seat": "izzo",
+   "lane": "batched",
+   "act": "ask",
+   "sender": "slippy",
+   "waited_s": 11940,
+   "ts": 1793058921732,
+   "usd": 0.0187,
+   "backlog": false
+  },
+  {
+   "seat": "izzo",
+   "lane": "batched",
+   "act": "ask",
+   "sender": "lazara",
+   "waited_s": 8160,
+   "ts": 1793059130376,
+   "usd": 0.0071,
+   "backlog": false
+  },
+  {
+   "seat": "izzo",
+   "lane": "batched",
+   "act": "ask",
+   "sender": "slippy",
+   "waited_s": 10500,
+   "ts": 1793062539688,
+   "usd": 0.0101,
+   "backlog": false
+  },
+  {
+   "seat": "izzo",
+   "lane": "batched",
+   "act": "ask",
+   "sender": "slippy",
+   "waited_s": 10020,
+   "ts": 1793062780380,
+   "usd": 0.0046,
+   "backlog": false
+  },
+  {
+   "seat": "lazara",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793064711325,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "dreamy",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793065622247,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "ghost",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079007554,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079007557,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "wanderer",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079007557,
+   "usd": 2.7466,
+   "backlog": false
+  },
+  {
+   "seat": "alfie",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079007557,
+   "usd": 0.5461,
+   "backlog": false
+  },
+  {
+   "seat": "izzo",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079007689,
+   "usd": 0.0099,
+   "backlog": false
+  },
+  {
+   "seat": "grokbot",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079007689,
+   "usd": 2.7778,
+   "backlog": false
+  },
+  {
+   "seat": "lazara",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079007691,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "gptbot",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079007692,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079312128,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793079920988,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793081131630,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "dreamy",
+   "lane": "batched",
+   "act": "ask",
+   "sender": "miley",
+   "waited_s": null,
+   "ts": 1793082364765,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793083538077,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793087141113,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793090750404,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793094355154,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793097972334,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793101577018,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793105180952,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793108791383,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793112401667,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "alfie",
+   "lane": "batched",
+   "act": "request_help",
+   "sender": "slippy",
+   "waited_s": 7,
+   "ts": 1793132548985,
+   "usd": 0.5644,
+   "backlog": false
+  },
+  {
+   "seat": "dolly",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793133025422,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "dolly",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793133333659,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "dolly",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793133939604,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "dolly",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793135152168,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "dolly",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793137559666,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "dolly",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793141170338,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "dolly",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793144773878,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "wanderer",
+   "lane": "batched",
+   "act": "request_help",
+   "sender": "dolly",
+   "waited_s": 2,
+   "ts": 1793148102551,
+   "usd": 1.1469,
+   "backlog": false
+  },
+  {
+   "seat": "dreamy",
+   "lane": "batched",
+   "act": "ask",
+   "sender": "miley",
+   "waited_s": null,
+   "ts": 1793164596049,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "ghost",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793165401997,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "big-body",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793165402000,
+   "usd": 0.0086,
+   "backlog": false
+  },
+  {
+   "seat": "wanderer",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793165402001,
+   "usd": 0.2498,
+   "backlog": false
+  },
+  {
+   "seat": "alfie",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793165402002,
+   "usd": 0.2243,
+   "backlog": false
+  },
+  {
+   "seat": "grokbot",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793165402102,
+   "usd": 0.2433,
+   "backlog": false
+  },
+  {
+   "seat": "gptbot",
+   "lane": "batched",
+   "act": "work_order",
+   "sender": "board",
+   "waited_s": null,
+   "ts": 1793165402103,
+   "usd": null,
+   "backlog": false
+  },
+  {
+   "seat": "dreamy",
+   "lane": "batched",
+   "act": "ask",
+   "sender": "ghost",
+   "waited_s": null,
+   "ts": 1793205775553,
+   "usd": null,
+   "backlog": false
+  }
+ ]
+}
