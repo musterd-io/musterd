@@ -113,7 +113,9 @@ legs, so it cannot sit over trousers. A skirt is a bottom.
   other thing that would make this a failure). Dresses, skirts, earrings, buns, long hair and beards are
   open to anyone. Style, grooming, hair, each accessory and skin are independent picks from the name.
 - **This retires `presents`** (`appearance.ts`), the femme/masc/neutral axis that coordinates hair length
-  with facial hair (nick, 2026-10-22: yes). It was added (2026-07-30) because the floor read as all male;
+  with facial hair (nick, 2026-10-22: yes). _(Done 2026-10-28, lane `01M62411D3D151HHX725TGN831`: style,
+  grooming and the eyes / ears / neck spots are independent picks; the wrist and the new pieces slot in as
+  their sheets land.)_ It was added (2026-07-30) because the floor read as all male;
   under nick's rule a long-haired member with a beard, or a bearded member in a dress, is a person, not a
   mismatch. The guard against the floor drifting back is **pick weights, never coupling**: long hair,
   dresses, skirts and earrings are weighted to stay common, each picked on its own.

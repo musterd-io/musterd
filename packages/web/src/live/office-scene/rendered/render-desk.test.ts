@@ -475,15 +475,16 @@ describe('the rendered figure (plan Task 13)', () => {
     const sheetBlits = ops.filter((o) => o.name === 'drawImage' && o.args.length === 9);
     // one composed frame each for ada and the receptionist: their layers were tinted and stacked off-screen
     expect(sheetBlits.length).toBe(2);
-    // …and the scratch read ada's five from the walk row for SE (row 8 + 1) of their sheets; the
-    // receptionist (seated, facing S) reads from a sit row
+    // …and the scratch read ada's layers from the walk row for SE (row 8 + 1) of their sheets; the
+    // receptionist (seated, facing S) reads from a sit row. Ada's count is her hashed look's layer
+    // count (three since the v2-5a reshuffle: bald-free hair, a top, trousers…), two reads per layer.
     const reads = scratch.ops.filter(
       (o) =>
         o.name === 'drawImage' &&
         o.args.length === 9 &&
         (o.args[0] as { id?: string }).id !== undefined,
     );
-    expect(reads.filter((b) => b.args[2] === 9 * 232).length).toBe(10); // two reads per tint pass (draw, then destination-in)
+    expect(reads.filter((b) => b.args[2] === 9 * 232).length).toBe(6); // two reads per tint pass (draw, then destination-in)
     expect(reads.filter((b) => b.args[2] === (24 + 2) * 232).length).toBeGreaterThanOrEqual(6); // sit-idle row for S
   });
 

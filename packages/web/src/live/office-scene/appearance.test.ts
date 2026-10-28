@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appearanceOf, type Appearance } from './appearance';
+import { appearanceOf, type Appearance, lookFor } from './appearance';
 
 /**
  * The wardrobe's contract. The point of the whole module is that a floor of members looks like a room of
@@ -127,58 +127,85 @@ describe('the identity read (load-bearing)', () => {
   });
 });
 
-describe('presentation', () => {
+describe('style, grooming and the spots (office figure v2-5a — presents retired)', () => {
   const names = Array.from({ length: 400 }, (_, i) => `person${i}`);
+  const looks = names.map((n) => appearanceOf({ name: n, kind: 'human' }));
 
-  it('never gives a femme character facial hair', () => {
-    for (const name of names) {
-      const look = appearanceOf({ name, kind: 'human' });
-      if (look.presents === 'femme') expect(look.facialHair).toBe('none');
+  it('puts long hair on the floor without coupling it to anything — about half, from both grooming pools', () => {
+    const LONG = new Set(['bob', 'long', 'ponytail', 'bun']);
+    const withLong = looks.filter((l) => LONG.has(l.hair));
+    expect(withLong.length).toBeGreaterThan(names.length * 0.3);
+    for (const g of ['polished', 'relaxed'] as const) {
+      const pool = looks.filter((l) => l.grooming === g);
+      expect(pool.filter((l) => LONG.has(l.hair)).length).toBeGreaterThan(pool.length * 0.25);
     }
   });
 
-  it('puts long hair on the floor — the whole point of the axis', () => {
+  it('deals beards to long hair as readily as to short — hair says nothing about facial hair', () => {
     const LONG = new Set(['bob', 'long', 'ponytail', 'bun']);
-    const withLong = names.filter((n) => LONG.has(appearanceOf({ name: n, kind: 'human' }).hair));
-    // Comfortably more than a rounding error: the complaint was that NOBODY had long hair.
-    expect(withLong.length).toBeGreaterThan(names.length * 0.25);
+    const share = (list: typeof looks) => list.filter((l) => l.facialHair !== 'none').length / list.length;
+    const long = looks.filter((l) => LONG.has(l.hair));
+    const short = looks.filter((l) => !LONG.has(l.hair));
+    expect(long.length).toBeGreaterThan(50);
+    expect(Math.abs(share(long) - share(short))).toBeLessThan(0.12);
+    expect(long.some((l) => l.facialHair === 'beard')).toBe(true);
   });
 
   it('draws every option from every palette — a weak hash silently halves the wardrobe', () => {
-    // This is a regression test for a measured bug, not a theoretical one: with FNV's single-shift
-    // finalizer the salt streams stayed correlated and `hoodie` came up ZERO times in 400 names.
-    const looks = names.map((n) => appearanceOf({ name: n, kind: 'human' }));
     expect(new Set(looks.map((l) => l.cut)).size).toBe(5);
     expect(new Set(looks.map((l) => l.hat)).size).toBe(4);
-    expect(new Set(looks.map((l) => l.accessory)).size).toBe(4);
+    expect(new Set(looks.map((l) => l.style))).toEqual(new Set(['formal', 'smart', 'casual', 'athletic']));
+    expect(new Set(looks.map((l) => l.grooming))).toEqual(new Set(['polished', 'relaxed']));
     expect(new Set(looks.map((l) => l.skin)).size).toBeGreaterThan(14);
     expect(new Set(looks.map((l) => l.hair)).size).toBeGreaterThan(6);
   });
 
-  it('offers all three presentations, so the floor is not two tidy camps', () => {
-    const seen = new Set(names.map((n) => appearanceOf({ name: n, kind: 'human' }).presents));
-    expect(seen).toEqual(new Set(['femme', 'masc', 'neutral']));
+  it('dresses by style — a formal dresser never wears a hoodie, an athlete never a shirt', () => {
+    for (const l of looks) {
+      if (l.style === 'formal') expect(l.cut).not.toBe('hoodie');
+      if (l.style === 'athletic') expect(['tee', 'hoodie']).toContain(l.cut);
+    }
   });
 
-  it('keeps beards on the floor for the members who can have them', () => {
-    const bearded = names.filter((n) => appearanceOf({ name: n, kind: 'human' }).facialHair !== 'none');
-    expect(bearded.length).toBeGreaterThan(20);
+  it('keeps style and grooming independent of each other and of the skin', () => {
+    const formal = looks.filter((l) => l.style === 'formal');
+    expect(formal.some((l) => l.grooming === 'relaxed')).toBe(true);
+    expect(formal.some((l) => l.grooming === 'polished')).toBe(true);
+    for (const st of ['formal', 'smart', 'casual', 'athletic'] as const) {
+      expect(new Set(looks.filter((l) => l.style === st).map((l) => l.skin)).size).toBeGreaterThan(8);
+    }
   });
 
-  it('leaves everything that is not gendered running free of the axis', () => {
-    // Skin, tops, trousers and hats must not sort by presentation — that would turn a wardrobe axis
-    // into a stereotype generator.
-    const femme = names.filter((n) => appearanceOf({ name: n, kind: 'human' }).presents === 'femme');
-    const masc = names.filter((n) => appearanceOf({ name: n, kind: 'human' }).presents === 'masc');
-    const skins = (list: string[]) => new Set(list.map((n) => appearanceOf({ name: n, kind: 'human' }).skin));
-    const cuts = (list: string[]) => new Set(list.map((n) => appearanceOf({ name: n, kind: 'human' }).cut));
-    expect(skins(femme).size).toBeGreaterThan(8);
-    expect(skins(masc).size).toBeGreaterThan(8);
-    expect(cuts(femme).size).toBe(5);
-    expect(cuts(masc).size).toBe(5);
+  it('picks each spot on its own, rare, so most wear none or one and a few wear two', () => {
+    const worn = (l: (typeof looks)[number]) => [l.eyes, l.ears, l.neck].filter((x) => x !== 'none').length;
+    expect(looks.filter((l) => worn(l) === 0).length).toBeGreaterThan(names.length * 0.4);
+    expect(looks.some((l) => worn(l) >= 2)).toBe(true);
+    expect(looks.filter((l) => worn(l) >= 2).length).toBeLessThan(names.length * 0.15);
+    // the legacy summary names the most visible worn spot
+    for (const l of looks) {
+      if (l.ears !== 'none') expect(l.accessory).toBe('headphones');
+      else if (l.eyes !== 'none') expect(l.accessory).toBe('glasses');
+      else if (l.neck !== 'none') expect(l.accessory).toBe('scarf');
+      else expect(l.accessory).toBe('none');
+    }
   });
 
-  it('still gives agents no facial hair whatever they present as', () => {
-    for (const name of names) expect(appearanceOf({ name, kind: 'agent' }).facialHair).toBe('none');
+  it('puts headphones on the ears while dnd, whatever that spot held, and takes them off after', () => {
+    const on = lookFor({ name: 'person7', kind: 'human', dnd: true });
+    expect(on.ears).toBe('headphones');
+    expect(on.accessory).toBe('headphones');
+    expect(lookFor({ name: 'person7', kind: 'human', dnd: false })).toEqual(appearanceOf({ name: 'person7', kind: 'human' }));
+  });
+
+  it('keeps beards on the floor', () => {
+    expect(looks.filter((l) => l.facialHair !== 'none').length).toBeGreaterThan(20);
+  });
+
+  it('still gives agents no facial hair and no glasses, whatever their style', () => {
+    for (const name of names) {
+      const a = appearanceOf({ name, kind: 'agent' });
+      expect(a.facialHair).toBe('none');
+      expect(a.eyes).toBe('none');
+    }
   });
 });
