@@ -60,7 +60,11 @@ export function TeamPanel({
     setBusy(true);
     setNote(null);
     try {
-      setRead(await setTeamPolicy(cfg, stored));
+      // ADR 662: a policy write is an admin act an enrolled human signs with their passkey. Null
+      // when this admin has none enrolled — the daemon passes those unsigned.
+      const { authorityProofForPolicy } = await import('../authorityProof');
+      const proof = await authorityProofForPolicy(cfg, stored);
+      setRead(await setTeamPolicy(cfg, stored, proof));
       setNote({ tone: 'ok', text: `${done} — seats pick it up at their next check` });
     } catch (e) {
       setNote({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
@@ -219,6 +223,12 @@ function KnobRow({
  * Where the team's wiki lives (ADR 747): a repo and the folder its pages sit in. musterd reads it from
  * the default branch from then on — this is the whole of the upkeep. Clearing the repo unlinks it.
  */
+/** The folder as the daemon's schema stores it (`WikiSourceSchema`), so the doc signed is the doc kept. */
+function wikiFolder(text: string): string {
+  const v = text.trim().replace(/^\.\/+/, '').replace(/\/+$/, '');
+  return v === '' ? WIKI_DEFAULT_PATH : v;
+}
+
 function WikiSource({
   read,
   busy,
@@ -253,7 +263,7 @@ function WikiSource({
           disabled={busy}
           check={(text) => (text.trim() === '' ? null : wikiRepoProblem(text))}
           onSave={(text) =>
-            onSet(text.trim() === '' ? undefined : { repo: text.trim(), path })
+            onSet(text.trim() === '' ? undefined : { repo: text.trim(), path: wikiFolder(path) })
           }
         />
         {repo && !busy && (
@@ -279,7 +289,7 @@ function WikiSource({
           placeholder={WIKI_DEFAULT_PATH}
           disabled={busy || !repo}
           check={(text) => wikiPathProblem(text.trim())}
-          onSave={(text) => onSet({ repo, path: text.trim() || WIKI_DEFAULT_PATH })}
+          onSave={(text) => onSet({ repo, path: wikiFolder(text) })}
         />
       </Row>
     </section>
