@@ -4,6 +4,13 @@ import { isHuddleTurnAct, listRenderedActs } from './audit.js';
 import { handoffNamedLaneOutOfPlay } from './delivery.js';
 import type { MessageRow } from './rows.js';
 
+/** ADR 750 follow-up (lane 01M61STFBF): a seat whose cursor has not moved in months still scans
+ *  its whole unread window on every poll. Interrupts older than this are not worth a wake — the
+ *  seat will catch up when it reads. Bounding the window keeps the scan to recent rows. Applied
+ *  only when the caller passes `now` (and `maxLookbackMs`); callers that omit them keep the
+ *  unbounded read, so the equality contract with the unnarrowed read still holds. */
+export const INTERRUPT_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+
 /**
  * The unread rows `pendingInterrupts` can actually use — everything else in the window is inert.
  *
@@ -58,12 +65,25 @@ export async function listInterruptCandidates(
      *  `pendingInterrupts`' `directed` flag adds. Off, the query text and parameters are
      *  byte-identical to the boundary seam's. */
     directed?: boolean;
+    /** Wall-clock now (ms). When set, together with `maxLookbackMs`, the unread window is bounded
+     *  to recent rows so a stale cursor does not scan the whole table (lane 01M61STFBF). Omitted,
+     *  the read stays unbounded and byte-identical to the unnarrowed read. */
+    now?: number;
+    /** Lookback bound (ms) paired with `now`. Defaults to `INTERRUPT_LOOKBACK_MS`. */
+    maxLookbackMs?: number;
   } = {},
 ): Promise<MessageRow[]> {
   const directed = opts.directed
     ? `
             OR (to_member = ? AND act IN ('ask','request_help','handoff'))`
     : '';
+  // Bound the window only when the caller opts in (passes `now`); otherwise the read stays
+  // unbounded and identical to the unnarrowed read — the equality contract with
+  // interruptCandidates.test.ts relies on that.
+  const lookbackFloor =
+    opts.now !== undefined
+      ? Math.max(opts.cursorTs ?? 0, opts.now - (opts.maxLookbackMs ?? INTERRUPT_LOOKBACK_MS))
+      : (opts.cursorTs ?? 0);
   const windowRows = await db.all<MessageRow>(
     `SELECT * FROM messages
         WHERE team_id = ?
@@ -100,16 +120,8 @@ export async function listInterruptCandidates(
           )
         ORDER BY created_at ASC, id ASC`,
     opts.directed
-      ? [
-          member.team_id,
-          member.id,
-          member.id,
-          opts.cursorTs ?? 0,
-          member.id,
-          member.id,
-          member.team_id,
-        ]
-      : [member.team_id, member.id, member.id, opts.cursorTs ?? 0, member.team_id],
+      ? [member.team_id, member.id, member.id, lookbackFloor, member.id, member.id, member.team_id]
+      : [member.team_id, member.id, member.id, lookbackFloor, member.team_id],
   );
 
   // Doorbell contract clause 7 (docs/design/daemon-doorbell-contract.md): six clauses governed
