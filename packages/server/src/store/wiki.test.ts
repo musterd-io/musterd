@@ -1,10 +1,19 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WikiSourceSchema } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createWikiReader, wikiTitle, type GitRunner, WIKI_CHECK_INTERVAL_MS } from './wiki.js';
+import {
+  createWikiReader,
+  isNonPublicAddress,
+  wikiFailure,
+  wikiRepoHost,
+  wikiTitle,
+  type GitRunner,
+  type HostResolver,
+  WIKI_CHECK_INTERVAL_MS,
+} from './wiki.js';
 
 /**
  * ADR 747, against real git. The "remote" is a local repo; the runner rewrites the https URL to it
@@ -71,7 +80,15 @@ beforeEach(() => {
 afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
 const source = WikiSourceSchema.parse({ repo: REPO });
-const reader = () => createWikiReader({ root: join(tmp, 'cache'), git: testGit, now: () => clock });
+/** example.test resolves nowhere; the reader is told it is a public address. */
+const publicHost: HostResolver = async () => ['93.184.216.34'];
+const reader = () =>
+  createWikiReader({
+    root: join(tmp, 'cache'),
+    git: testGit,
+    now: () => clock,
+    resolve: publicHost,
+  });
 
 describe('wiki reader (ADR 747)', () => {
   it('lists only the markdown in the wiki folder, titled by first heading', async () => {
@@ -123,10 +140,13 @@ describe('wiki reader (ADR 747)', () => {
     expect(page?.markdown ?? '').not.toMatch(/localhost/);
   });
 
-  it('says what git said when the repo cannot be read, with no cache to fall back on', async () => {
+  it('says a fixed line, not what git said, when the repo cannot be read', async () => {
     const bad = WikiSourceSchema.parse({ repo: 'https://example.test/nobody/nothing' });
     const idx = await reader().index('t1', bad);
     expect(idx.state).toBe('failed');
+    if (idx.state !== 'failed') return;
+    expect(idx.detail).toBe('the repo could not be reached');
+    expect(idx.detail).not.toMatch(/fatal|example\.test/);
   });
 
   it('marks a read stale when the check fails after a good read', async () => {
@@ -135,7 +155,12 @@ describe('wiki reader (ADR 747)', () => {
       if (offline) throw Object.assign(new Error('x'), { stderr: 'fatal: unable to access' });
       return testGit(args, cwd);
     };
-    const r = createWikiReader({ root: join(tmp, 'cache'), git: flaky, now: () => clock });
+    const r = createWikiReader({
+      root: join(tmp, 'cache'),
+      git: flaky,
+      now: () => clock,
+      resolve: publicHost,
+    });
     await r.index('t1', source);
     offline = true;
     clock += WIKI_CHECK_INTERVAL_MS;
@@ -143,6 +168,104 @@ describe('wiki reader (ADR 747)', () => {
     await new Promise((res) => setTimeout(res, 20));
     const idx = await r.index('t1', source);
     expect(idx.state === 'ready' && idx.stale).toBe(true);
+  });
+});
+
+describe('wiki source host (lane 01M61P6WG3)', () => {
+  const PRIVATE = /private or local address/;
+
+  it('reads the host from https, ssh and scp-form URLs', () => {
+    expect(wikiRepoHost('https://GitHub.com./acme/app')).toBe('github.com');
+    expect(wikiRepoHost('https://[::1]:4849/x')).toBe('::1');
+    expect(wikiRepoHost('ssh://git@Gitlab.com:22/acme/app')).toBe('gitlab.com');
+    expect(wikiRepoHost('git@codeberg.org:acme/app.git')).toBe('codeberg.org');
+  });
+
+  it.each([
+    '127.0.0.1',
+    '10.1.2.3',
+    '172.20.0.1',
+    '192.168.1.1',
+    '100.100.246.14',
+    '169.254.169.254',
+    '0.0.0.0',
+    '::1',
+    '::',
+    'fd7a:115c:a1e0::1',
+    'fe80::1',
+    '::ffff:127.0.0.1',
+    '::ffff:a00:1',
+  ])('counts %s as off the public internet', (a) => expect(isNonPublicAddress(a)).toBe(true));
+
+  it.each(['93.184.216.34', '140.82.112.3', '2606:50c0:8000::153'])('counts %s as public', (a) =>
+    expect(isNonPublicAddress(a)).toBe(false),
+  );
+
+  const refused = async (repo: string, resolve: HostResolver, opts = {}) => {
+    let ran = false;
+    const git: GitRunner = async () => {
+      ran = true;
+      return '';
+    };
+    const r = createWikiReader({
+      root: join(tmp, 'cache'),
+      git,
+      now: () => clock,
+      resolve,
+      ...opts,
+    });
+    const idx = await r.index('t1', WikiSourceSchema.parse({ repo }));
+    return { idx, ran };
+  };
+
+  it('refuses an IP-literal host without running git', async () => {
+    for (const repo of [
+      'https://127.0.0.1:4849/acme/app',
+      'https://[::1]/acme/app',
+      'ssh://git@10.0.0.5/acme/app',
+      'git@192.168.0.2:acme/app',
+    ]) {
+      const { idx, ran } = await refused(repo, publicHost);
+      expect(ran, repo).toBe(false);
+      expect(idx.state === 'failed' && idx.detail, repo).toMatch(PRIVATE);
+    }
+  });
+
+  it('refuses a name when any one of its addresses is private', async () => {
+    const { idx, ran } = await refused('https://sneaky.example/acme/app', async () => [
+      '93.184.216.34',
+      '10.0.0.1',
+    ]);
+    expect(ran).toBe(false);
+    expect(idx.state === 'failed' && idx.detail).toMatch(PRIVATE);
+  });
+
+  it('lets an operator allow a private forge', async () => {
+    const { ran } = await refused('https://git.internal/acme/app', async () => ['10.0.0.1'], {
+      allowPrivateHosts: true,
+    });
+    expect(ran).toBe(true);
+  });
+
+  it('maps git failures to fixed lines that carry nothing git said', () => {
+    const e = (stderr: string) => Object.assign(new Error('Command failed'), { stderr });
+    expect(
+      wikiFailure(e("remote: Repository not found.\nfatal: repository 'https://x/' not found")),
+    ).toBe('the repo was not found, or it is private');
+    expect(
+      wikiFailure(e('fatal: could not read Username for https://x: terminal prompts disabled')),
+    ).toBe('the repo was not found, or it is private');
+    expect(wikiFailure(e('fatal: unable to update url base from redirection'))).toMatch(
+      /redirects/,
+    );
+    expect(
+      wikiFailure(
+        e(
+          'fatal: unable to access https://x/: Failed to connect to x port 4849: Connection refused',
+        ),
+      ),
+    ).toBe('the repo could not be reached');
+    expect(wikiFailure(Object.assign(new Error('x'), { killed: true }))).toMatch(/timed out/);
   });
 });
 
@@ -158,6 +281,11 @@ describe('wikiTitle', () => {
 });
 
 describe('boxedGit', () => {
+  it('follows no redirects', async () => {
+    const src = readFileSync(new URL('./wiki.ts', import.meta.url), 'utf8');
+    expect(src).toContain("'http.followRedirects=false'");
+  });
+
   it('refuses file://', async () => {
     const { boxedGit } = await import('./wiki.js');
     await expect(boxedGit(['ls-remote', '--', `file://${tmp}`, 'HEAD'])).rejects.toThrow();

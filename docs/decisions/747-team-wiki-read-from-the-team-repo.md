@@ -68,12 +68,13 @@ The daemon serves /live but does not know where a Team's repo is. It has no repo
 
 - One source of truth: whatever is merged to the folder on the default branch is the wiki, within 5 minutes of the next read. Nothing is copied by hand, and no new store, table or token is added.
 - `PolicySchema` changes, so this is a protocol change. The knob is optional and absent by default, so every existing Team parses unchanged.
-- A private-repo Team sees the error git returns, in plain words, until per-Team read access lands.
+- A private-repo Team sees "the repo was not found, or it is private" until per-Team read access lands. _(Amended 2026-10-28: was git's own error line; see the note below.)_
   Follows-up: per-Team read access to a private wiki repo (a deploy key the Team gives the daemon), lane to be opened when a private-repo Team asks.
 - Each daemon that serves /live keeps its own cache. A joiner node fetches from the repo host, not from the hub.
+- 2026-10-28 (lane 01M61P6WG3, from miley's review of #3420): the URL shape check let a Team point the daemon at its own network — `https://127.0.0.1:4849/…`, an RFC1918 or tailnet host, the cloud metadata address — and git's first error line came back in `detail`, so the read worked as a port probe. Now, before each check, the repo's host is resolved and the read is refused if any address is loopback, private (RFC1918, CGNAT 100.64/10, ULA), link-local, unspecified, multicast or reserved, IPv4-mapped IPv6 included. git runs with `http.followRedirects=false`, so a public host cannot redirect it inward; a moved repo says so and the Team sets the new address. `detail` is one fixed line per kind (refused host, not found or private, redirects, unreachable, timed out); git's own line stays in the daemon log. An operator whose forge is on a private network sets `MUSTERD_WIKI_PRIVATE_HOSTS=allow` — the daemon's operator decides, never a Team. Residual: the host is resolved again by git, so DNS rebinding between the check and the fetch is not closed; pinning the address would mean git's `http.curloptResolve`, and an allowlist of public forges is the stricter option should a hosted daemon need it.
 
 ## Observability & Evaluation
 
-- **Traces:** each fetch logs its Team, outcome (`fetched`, `current`, `failed`) and duration through the daemon log, as `rosterRefresh` does. A failed fetch records git's first line of error. A read served from a stale cache because the check failed says so in the response (`stale: true`), so the overlay can show it.
+- **Traces:** each fetch logs its Team, outcome (`fetched`, `current`, `failed`) and duration through the daemon log, as `rosterRefresh` does. A failed fetch records git's first line of error. _(Amended 2026-10-28: in the log only; the response carries a fixed line.)_ A read served from a stale cache because the check failed says so in the response (`stale: true`), so the overlay can show it.
 - **Eval:** n/a. No agent-facing behaviour changes. Agents keep writing the wiki in the repo as they do today.
 - **Experiment:** n/a. A viewing surface for existing pages has no rate to compare against.
