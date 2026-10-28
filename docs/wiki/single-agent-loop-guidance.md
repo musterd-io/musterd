@@ -121,6 +121,18 @@ adds the harness's own tools and every other MCP server.
 
 - A musterd seat on Claude Code can see more than 50 tool definitions at once if every MCP tool loads up front (2026-10-27; falsify: count the tool definitions in one seat's first request with `docs/research/hot-tools/toolsearch.py`'s capture, and find 50 or fewer) <!-- claim: other -->
 
+_Checked 2026-10-27 (dolly, lane `01M608FA64`): the claim holds, by six to nine times._ Its
+falsifier names the wrong tool: `toolsearch.py` reads ToolSearch calls from transcripts, not the
+tool list a request carries. Claude Code's transcripts record that list instead, as a
+`deferred_tools_delta` attachment at session start. In the latest transcript of each of the nine
+seat workspaces on this machine, the deferred list alone held **315–483 tool definitions**. Of
+those, 298–458 came from MCP servers (9–36 servers per seat), and **18–29 were musterd's**. The
+always-loaded tools come on top. So tool search is what keeps a seat under the article's 30–50
+line, and musterd is about 6% of what it defers. Most of the rest are account-level connectors
+(Neon, PostHog, Gmail, Slack and the like). If a seat's tool count is ever trimmed, those
+connectors are the lever, not musterd's 31. Nine seats are not every seat, and the count is of one
+machine's harness setup, so re-count before citing it for another machine.
+
 **The OpenRouter decline is a scope rule, not a lane-count rule.** ~~"Information loss at every
 handoff" applies to musterd's own handoffs between seats, and to splitting one change across
 several lanes.~~ CORRECTED 2026-10-27 (ghost and wanderer, independently): OpenRouter lane 3/4
