@@ -232,9 +232,16 @@ export function defRow(row: DefRow, gap: number, opts: { width?: number } = {}):
   // When the term is wider than its column, render it on its own line(s) first so the
   // description never overflows the width (the 40-column case in the brief).
   if (visibleLen(row.term) > effectiveGap) {
+    // The term is wider than its column: drop onto its own line(s). Strip ANSI for the width
+    // math and re-apply any leading style escape so color survives the wrap.
+    const styleMatch = row.term.match(/^(\x1b\[[0-9;]*m)+/); // eslint-disable-line no-control-regex
+    const style = styleMatch ? styleMatch[0] : '';
+    const reset = style ? '\x1b[0m' : '';
+    const plain = row.term.replace(ANSI, '');
+    const termLines = wrapText(plain, width).map((l) => (style ? style + l + reset : l));
     const indent = ' '.repeat(Math.min(effectiveGap, width));
     const descLines = wrapped.map((l) => indent + theme.meta(l));
-    return [row.term, ...descLines].join('\n');
+    return [...termLines, ...descLines].join('\n');
   }
   const first = padEndVisible(row.term, effectiveGap) + theme.meta(wrapped[0] ?? '');
   if (wrapped.length === 1) return first;
