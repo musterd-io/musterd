@@ -1603,6 +1603,7 @@ async function dueCandidates(
    * correct here is exactly one poll transaction, and a parameter cannot outlive it or go stale.
    */
   ledger: () => Promise<ActDelivery[]>,
+  now?: number,
 ): Promise<WakeCandidate[]> {
   const immediate: WakeCandidate[] = [];
   const batched: WakeCandidate[] = [];
@@ -1624,7 +1625,13 @@ async function dueCandidates(
     const cursor = await getCursor(db, member.id);
     // Only the shapes `pendingInterrupts` can use — the seat's unread depth is not this poll's
     // business, and it is the last term that still grew with it.
-    const rows = await listInterruptCandidates(db, member, { cursorTs: cursor.last_read_ts });
+    const rows = await listInterruptCandidates(
+      db,
+      member,
+      now !== undefined
+        ? { cursorTs: cursor.last_read_ts, now }
+        : { cursorTs: cursor.last_read_ts },
+    );
     const envelopes = await Promise.all(
       rows.map(async (r) =>
         rowToEnvelope(
@@ -2391,6 +2398,7 @@ async function deriveSeatPasses(
         wakeOnIncidentResolve,
       },
       teamLedger,
+      now,
     );
     // ADR 199: dispatch work-orders (continuation then handoff — handoff unshifted last so it
     // leads). ADR 191: review work-orders prefer ahead of both + inbox.
