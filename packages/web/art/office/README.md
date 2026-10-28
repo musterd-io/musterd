@@ -26,6 +26,11 @@ Install Blender (the art machine, never CI): `brew install --cask blender`. Rend
   --out packages/web/src/live/office-scene/rendered/assets --scale 3
 ```
 
+`--ky` is the tilt asked for, and every command here passes `0.31`. The cameras lift by the height
+stretch too, so the art really renders through `scene.effective_ky(0.31)` = **0.33729**. That is the
+number `manifest.json` records and `iso.ts` `CORNER_CAMERA` projects through (ADR 746). Keep passing
+`0.31`: changing it, or fixing the camera line, re-renders everything.
+
 `--scale` is px per floor unit at 2× (spec §5: sharp for the 1080p broadcast at DPR 1 and `/live`
 at DPR 2; the canvas downsamples smaller fits). `--ky` sets the camera's vertical ratio (today's
 isometric `0.35355339`; increment 2's corner camera passes its own, and `iso.ts` must carry the
