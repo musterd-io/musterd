@@ -34,4 +34,22 @@ export const TRACE_LADDER: PortableMigration[] = [
       );
     },
   },
+  {
+    // Lane 01M61STEXM: the trace-coverage sweep's aggregate (`findLowCoverageSessions`) filters on
+    // `received_at >= ?` but had no index on it, so it scanned the whole trace_events table (259 MB
+    // on the hub) for a 2-day window — ~1.3 s per hourly pass, on the event loop. Adding the index
+    // takes the pass to ~60 ms (measured on a copy of the live trace.db).
+    version: 5,
+    sqlite: (db) => {
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_trace_events_received_at ON trace_events (received_at)',
+      );
+      db.exec('ANALYZE trace_events');
+    },
+    postgres: async (d) => {
+      await d.exec(
+        'CREATE INDEX IF NOT EXISTS idx_trace_events_received_at ON trace_events (received_at)',
+      );
+    },
+  },
 ];
