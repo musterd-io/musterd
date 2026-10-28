@@ -257,6 +257,55 @@ describe('inbox command', () => {
     expect(await unreadCount()).toBe(5); // still all unread
   });
 
+  it('JSON reads advance the cursor after showing all unread messages', async () => {
+    await seed(20);
+    const res = await capture(() => inboxCommand(parseArgs(['--json'])));
+    expect(JSON.parse(res.out) as unknown[]).toHaveLength(20);
+    expect(await unreadCount()).toBe(0);
+  });
+
+  it('JSON unread reads advance, while JSON peek and filtered views do not', async () => {
+    await seed(5);
+    await capture(() => inboxCommand(parseArgs(['--unread', '--peek', '--json'])));
+    await capture(() => inboxCommand(parseArgs(['--from', 'Ada', '--json'])));
+    expect(await unreadCount()).toBe(5);
+    const res = await capture(() => inboxCommand(parseArgs(['--unread', '--json'])));
+    expect(JSON.parse(res.out) as unknown[]).toHaveLength(5);
+    expect(await unreadCount()).toBe(0);
+  });
+
+  it('JSON by-id and whole-team views do not consume the personal inbox', async () => {
+    await seed(3);
+    const peek = await capture(() => inboxCommand(parseArgs(['--peek', '--json'])));
+    const id = (JSON.parse(peek.out) as Array<{ id: string }>)[0]!.id;
+    await capture(() => inboxCommand(parseArgs(['--id', id, '--json'])));
+    await capture(() => inboxCommand(parseArgs(['--all', '--json'])));
+    expect(await unreadCount()).toBe(3);
+  });
+
+  it('JSON reading reaches and consumes a backlog larger than the daemon page', async () => {
+    await seed(205, 200);
+    const res = await capture(() => inboxCommand(parseArgs(['--unread', '--json'])));
+    expect(JSON.parse(res.out) as unknown[]).toHaveLength(205);
+    expect(await unreadCount()).toBe(0);
+  });
+
+  it('names an empty unread or filtered view without claiming nobody communicated', async () => {
+    await seed(1);
+    await capture(() => inboxCommand(parseArgs([])));
+    const unread = await capture(() => inboxCommand(parseArgs(['--unread'])));
+    expect(unread.out).toContain('No unread messages.');
+    const filtered = await capture(() => inboxCommand(parseArgs(['--from', 'Nobody'])));
+    expect(filtered.out).toContain('No messages match these filters.');
+    const empty = await capture(() => inboxCommand(parseArgs(['--from', 'Nobody', '--unread'])));
+    expect(empty.out).toContain('No messages match these filters.');
+  });
+
+  it('describes an empty personal inbox without speaking for the team', async () => {
+    const res = await capture(() => inboxCommand(parseArgs([])));
+    expect(res.out).toContain('Your inbox is empty.');
+  });
+
   it('groups the rendered messages under a day header', async () => {
     await seed(3);
     const res = await capture(() => inboxCommand(parseArgs(['--peek'])));

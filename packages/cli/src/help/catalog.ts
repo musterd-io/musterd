@@ -950,6 +950,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'day headers (Today / Yesterday / Monday · Jul 7), and always includes every unread — reading ' +
       'advances the cursor only past what it showed. `--limit <n>` resizes the window; `--limit 0` ' +
       'shows the full history; `--peek` reads without marking anything read; `--unread` shows only new. ' +
+      'A normal or unread JSON inbox read advances the cursor too; add `--peek` to leave it unread (ADR 752). ' +
       '`--watch` streams live; `--wait` blocks until the next directed act then exits (pairs with /loop); ' +
       '`--waiting` prints the waiting-acts banner and the directed acts behind it, read-only and silent when nothing waits (the ADR 053 approval-prompt Notification hook target; `musterd nudge` until 2026-09-03). ' +
       '`--waiting --limit <n>` resizes the rendered acts (default 5); `--waiting --limit 0` shows all. ' +

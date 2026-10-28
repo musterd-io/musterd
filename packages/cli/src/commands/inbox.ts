@@ -251,8 +251,16 @@ export async function inboxCommand(parsed: Parsed): Promise<number> {
   }
   const messages = rows.filter((m) => matchesFilter(m, filter));
 
+  // Both output formats are reads. Lenses and explicit peeks must never consume the window.
+  const markShownRead = async () => {
+    if (parsed.flags['peek'] || filtering) return;
+    const newestUnread = [...messages].reverse().find((m) => envelopePosition(m) > cursorTs);
+    if (newestUnread) await http.markRead(team, newestUnread.id).catch(() => undefined);
+  };
+
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(messages) + '\n');
+    await markShownRead();
     return 0;
   }
 
@@ -263,7 +271,12 @@ export async function inboxCommand(parsed: Parsed): Promise<number> {
     `${theme.accent('inbox')} — ${team} ${theme.meta(`· ${unreadCount} unread`)}${ofTotal}\n`,
   );
   if (messages.length === 0) {
-    process.stdout.write(theme.meta("inbox empty — nobody's mustered anything yet") + '\n');
+    const empty = filtering
+      ? 'No messages match these filters.'
+      : unread
+        ? 'No unread messages.'
+        : 'Your inbox is empty.';
+    process.stdout.write(theme.meta(empty) + '\n');
     return 0;
   }
   // ADR 254: the stand-down trace, so an eligible-set act someone else already answered says so
@@ -278,10 +291,7 @@ export async function inboxCommand(parsed: Parsed): Promise<number> {
 
   // Advance the read cursor to the NEWEST UNREAD we actually displayed — never past an unshown unread
   // (the bounded-inbox invariant), and never at all when peeking or filtering (a lens must not consume).
-  if (!parsed.flags['peek'] && !filtering) {
-    const newestUnread = [...messages].reverse().find((m) => envelopePosition(m) > cursorTs);
-    if (newestUnread) await http.markRead(team, newestUnread.id).catch(() => undefined);
-  }
+  await markShownRead();
   // ADR 211 §5: ADR 117 requires the default view to include every unread, and a deferred act is
   // still unread. It is demoted to an honest footer line rather than hidden — the count is never
   // silently reduced, and a raised deferral says so, because that is the one a reader should act on.

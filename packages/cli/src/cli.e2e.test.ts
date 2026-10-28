@@ -274,7 +274,7 @@ describe('CLI end-to-end (Scenario A: two humans on one team)', () => {
     const tok = JSON.parse(added.out).human_credential as string;
     actAs('solo', 'pat2', tok);
     const inbox = await run(inboxCommand, []);
-    expect(inbox.out).toContain("inbox empty — nobody's mustered anything yet");
+    expect(inbox.out).toContain('Your inbox is empty.');
   });
 });
 

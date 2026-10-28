@@ -58,7 +58,7 @@ in `bin.ts`: `--no-color` is now authoritative for every command that renders th
 `paint` proxy carries the toggle to the `init` wizard's out-of-palette colors). Colour is only ever
 forced _off_ — enabling stays with picocolors' auto-detection, so pipes and `--json` never gain ANSI.
 
-**3. Warmth via form, not hue or hype.** The grouped help reads like a floor plan: a short "start
+**3. Warmth via form, not hue or hype.** _(Amended 2026-10-28: ADR 752 replaces the inbox empty-state example.)_ The grouped help reads like a floor plan: a short "start
 here", then commands grouped into labelled rooms, with flags/examples one `musterd help <command>`
 away — which is what kills the flat wall. Identity colour is carried everywhere (agent = cyan, human =
 magenta, the 16-color degrade of the web's jade/rose), delight is reserved for moments (a `✓` settle,
@@ -66,6 +66,8 @@ an incoming `⚑`), and empty-states are cozy, plain, and reuse the web's own st
 nobody's mustered anything yet`). An unknown command or help topic gets a Levenshtein "did you mean".
 
 ## Consequences
+
+- 2026-10-28: ADR 752 replaces the empty-inbox example with view-specific copy; the warm, plain voice remains.
 
 - One catalog to edit when a command changes; the help views and the guidance invariant follow.
   `guidance:check` reads the catalog leaf, not the rendered string — one less coupling.

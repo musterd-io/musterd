@@ -550,7 +550,7 @@ so a box is never wider than the screen.
 
 ## Page: States (empty + error)
 
-1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)
+1. `state/empty-inbox` — `Your inbox is empty.` (dim). An empty unread view says `No unread messages.`; an empty filtered view says `No messages match these filters.` (ADR 752). These strings are exact.
 2. `state/no-team` — running a team command with no team configured: red `✗ no team — run: musterd team create <name>`.
 3. `state/unknown-member` — `✗ no member "Bob" in dawn` (red) + dim hint `musterd status to list members`.
 4. `state/server-down` — `✗ can't reach team server at ws://localhost:4849 — is the daemon running?` (red).
