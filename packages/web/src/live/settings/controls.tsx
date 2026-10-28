@@ -97,6 +97,7 @@ export function Segmented({
 /**
  * A number that saves on Enter or blur, never per keystroke — each save is a whole-doc write the
  * daemon answers. `check` turns the text into a value or an error shown in place of the unit.
+ * `inputMode: 'url'` makes it the wiki's repo field (ADR 747): the same save rule, a wider box.
  */
 export function NumberField({
   saved,
@@ -104,6 +105,7 @@ export function NumberField({
   label,
   placeholder,
   disabled,
+  inputMode = 'decimal',
   check,
   onSave,
 }: {
@@ -112,6 +114,7 @@ export function NumberField({
   label: string;
   placeholder?: string | undefined;
   disabled?: boolean | undefined;
+  inputMode?: 'decimal' | 'url' | 'text';
   check: (text: string) => string | null;
   onSave: (text: string) => void;
 }) {
@@ -123,10 +126,11 @@ export function NumberField({
     if (draft !== saved && problem === null) onSave(draft);
   };
   return (
-    <span className="lc-set__num">
+    <span className={`lc-set__num${inputMode === 'decimal' ? '' : ' lc-set__num--text'}`}>
       <input
         id={id}
-        inputMode="decimal"
+        inputMode={inputMode}
+        spellCheck={inputMode === 'decimal' ? undefined : false}
         aria-label={label}
         aria-invalid={problem !== null}
         aria-describedby={problem ? `${id}-err` : undefined}

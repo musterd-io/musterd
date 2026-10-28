@@ -1,4 +1,5 @@
 import type { WorkingHours } from '@musterd/protocol';
+import { WIKI_DEFAULT_PATH, wikiPathProblem, wikiRepoProblem } from '@musterd/protocol/wire';
 import { useEffect, useState } from 'react';
 import {
   getTeamPolicy,
@@ -98,6 +99,8 @@ export function TeamPanel({
           <HoldsPause cfg={cfg} onChanged={onHoldsChanged} />
         </Row>
       </section>
+
+      {read && <WikiSource read={read} busy={busy} onSet={(v) => void write(withKnob(read.stored, ['wiki'], v), 'the wiki')} />}
 
       {refused && <p className="lc-set__note lc-set__note--err">{refused}</p>}
       {!read && !refused && <p className="lc-set__quiet">Reading the team’s policy…</p>}
@@ -209,5 +212,76 @@ function KnobRow({
       {control}
       {reset}
     </Row>
+  );
+}
+
+/**
+ * Where the team's wiki lives (ADR 747): a repo and the folder its pages sit in. musterd reads it from
+ * the default branch from then on — this is the whole of the upkeep. Clearing the repo unlinks it.
+ */
+function WikiSource({
+  read,
+  busy,
+  onSet,
+}: {
+  read: TeamPolicyRead;
+  busy: boolean;
+  onSet: (value: { repo: string; path: string } | undefined) => void;
+}) {
+  const stored = (read.stored as { wiki?: { repo?: string; path?: string } }).wiki;
+  const repo = stored?.repo ?? '';
+  const path = stored?.path ?? WIKI_DEFAULT_PATH;
+  return (
+    <section className="lc-set__group" aria-labelledby="lc-set-wiki">
+      <h3 id="lc-set-wiki" className="lc-set__h">
+        Wiki
+      </h3>
+      <p className="lc-set__lede">
+        The pages your team already keeps in its repo. The bookshelf on the office’s left wall reads
+        them from the main branch — nothing is copied, so there is nothing to keep in step.
+      </p>
+      <Row
+        label="Repo"
+        hint="Its https:// address. Public repos for now."
+        tag={repo ? 'set for the team' : 'not set'}
+      >
+        <NumberField
+          label="Wiki repo"
+          inputMode="url"
+          saved={repo}
+          placeholder="https://github.com/acme/app"
+          disabled={busy}
+          check={(text) => (text.trim() === '' ? null : wikiRepoProblem(text))}
+          onSave={(text) =>
+            onSet(text.trim() === '' ? undefined : { repo: text.trim(), path })
+          }
+        />
+        {repo && !busy && (
+          <button
+            type="button"
+            className="lc-set__reset"
+            title="Unlink the wiki"
+            onClick={() => onSet(undefined)}
+          >
+            clear
+          </button>
+        )}
+      </Row>
+      <Row
+        label="Folder"
+        hint="Where the pages sit in the repo."
+        tag={stored?.path && stored.path !== WIKI_DEFAULT_PATH ? 'set for the team' : 'default'}
+      >
+        <NumberField
+          label="Wiki folder"
+          inputMode="text"
+          saved={path}
+          placeholder={WIKI_DEFAULT_PATH}
+          disabled={busy || !repo}
+          check={(text) => wikiPathProblem(text.trim())}
+          onSave={(text) => onSet({ repo, path: text.trim() || WIKI_DEFAULT_PATH })}
+        />
+      </Row>
+    </section>
   );
 }

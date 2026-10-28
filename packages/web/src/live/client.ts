@@ -22,6 +22,8 @@ import type {
   Request,
   SeatPulseFrame,
   UpdateLane,
+  WikiIndex,
+  WikiPage,
   WorkingHours,
 } from '@musterd/protocol';
 import type {
@@ -861,6 +863,19 @@ export function setTeamPolicy(
   stored: TeamPolicyRead['stored'],
 ): Promise<TeamPolicyRead> {
   return postAsWeb(cfg, `/teams/${encodeURIComponent(cfg.team)}/policy`, stored);
+}
+
+/** ADR 747: the Team's wiki index, read from its repo by the daemon. */
+export function getWiki(cfg: LiveConfig): Promise<WikiIndex> {
+  return apiGet(cfg, `/teams/${encodeURIComponent(cfg.team)}/wiki`);
+}
+
+/** ADR 747: one wiki page's markdown, by its path in the wiki folder. */
+export function getWikiPage(cfg: LiveConfig, path: string): Promise<WikiPage> {
+  return apiGet(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/wiki/page?path=${encodeURIComponent(path)}`,
+  );
 }
 
 /** ADR 501: lift a halt — `POST /teams/:slug/members/:name/resume`. */

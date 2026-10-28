@@ -609,6 +609,7 @@ import {
   pruneTraceContent,
 } from '../store/trace.js';
 import { deriveTraceReport } from '../store/traceReport.js';
+import { sharedWikiReader } from '../store/wiki.js';
 import { authorityAtHub, handleAuthorityRelay } from '../sync/authorityRelay.js';
 import {
   applyTrust,
@@ -4852,6 +4853,26 @@ export async function handleHttp(
       // ADR 519 — the Team's calendar. Team data like Seeds: any active Member reads it and writes
       // it (an agent that learns of a demo adds it; a human corrects it), and the store audits each
       // write. An observer seat watches and never writes. Bodies parse at the boundary (hard rule 4).
+      // ADR 747: the Team's wiki, read from its repo's default branch (store/wiki.ts). The source is
+      // the policy's `wiki` knob; no knob is `unlinked`, and the overlay says how to link one.
+      if (method === 'GET' && (rest === '/wiki' || rest === '/wiki/page')) {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        const source = (await getPolicy(ctx.db, team.id)).wiki;
+        const reader = sharedWikiReader(ctx.config.dbPath);
+        if (rest === '/wiki') {
+          return sendJson(
+            res,
+            200,
+            source ? await reader.index(team.id, source) : { state: 'unlinked' },
+          );
+        }
+        const path = url.searchParams.get('path') ?? '';
+        const page = source ? await reader.page(team.id, source, path) : null;
+        if (!page) throw new MusterdError('not_found', `no wiki page "${path}"`);
+        return sendJson(res, 200, page);
+      }
+
       if (rest === '/calendar' || rest.startsWith('/calendar/')) {
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);

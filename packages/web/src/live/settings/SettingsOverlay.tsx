@@ -29,6 +29,7 @@ export function SettingsOverlay({
   teamHours,
   pairings,
   origin,
+  initialTab = 'you',
   onPairingsChanged,
   onHoldsChanged,
   onClose,
@@ -40,11 +41,13 @@ export function SettingsOverlay({
   pairings: ChannelPairing[];
   /** The calendar's viewport rect — where the panel comes from and goes back to. */
   origin: DOMRect | null;
+  /** The sheet to open on — `team` when the wiki shelf sends an admin to link its repo. */
+  initialTab?: Tab;
   onPairingsChanged: () => void;
   onHoldsChanged: () => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>('you');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [closing, setClosing] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);

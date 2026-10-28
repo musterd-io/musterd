@@ -200,6 +200,8 @@ export function OfficeScene({
   onBoardHover,
   onSettingsOpen,
   onSettingsHover,
+  onWikiOpen,
+  onWikiHover,
   settingsSpot = null,
   broadcast = false,
   captureFps,
@@ -239,6 +241,11 @@ export function OfficeScene({
   onSettingsOpen?: (rect: DOMRect) => void;
   /** First hover/focus on the calendar — preload the settings overlay's chunk. */
   onSettingsHover?: () => void;
+  /** The wiki shelf clicked (ADR 747) — hands back its rect, the wiki overlay's zoom origin. `/live`
+   * only; on /broadcast the shelf's sign hangs and nothing opens. */
+  onWikiOpen?: (rect: DOMRect) => void;
+  /** First hover/focus on the shelf — preload the wiki overlay's chunk. */
+  onWikiHover?: () => void;
   /** Whether the calendar opens settings for this viewer, and whether something there waits for
    * them. Null (the default) leaves the calendar as paint. */
   settingsSpot?: { enabled: boolean; flagged: boolean } | null;
@@ -335,6 +342,8 @@ export function OfficeScene({
   const onBoardHoverRef = useRef(onBoardHover);
   const onSettingsOpenRef = useRef(onSettingsOpen);
   const onSettingsHoverRef = useRef(onSettingsHover);
+  const onWikiOpenRef = useRef(onWikiOpen);
+  const onWikiHoverRef = useRef(onWikiHover);
   const settingsSpotRef = useRef(settingsSpot);
   const onReadyRef = useRef(onReady);
   const onCaptionRef = useRef(onCaption);
@@ -348,6 +357,8 @@ export function OfficeScene({
     onBoardHoverRef.current = onBoardHover;
     onSettingsOpenRef.current = onSettingsOpen;
     onSettingsHoverRef.current = onSettingsHover;
+    onWikiOpenRef.current = onWikiOpen;
+    onWikiHoverRef.current = onWikiHover;
     settingsSpotRef.current = settingsSpot;
     onReadyRef.current = onReady;
     onCaptionRef.current = onCaption;
@@ -393,6 +404,12 @@ export function OfficeScene({
             ? {
                 onSettingsClick: (rect: DOMRect) => onSettingsOpenRef.current?.(rect),
                 onSettingsHover: () => onSettingsHoverRef.current?.(),
+              }
+            : {}),
+          ...(onWikiOpenRef.current
+            ? {
+                onWikiClick: (rect: DOMRect) => onWikiOpenRef.current?.(rect),
+                onWikiHover: () => onWikiHoverRef.current?.(),
               }
             : {}),
           broadcast,

@@ -73,6 +73,7 @@ import {
   animatedDeskAnchors,
   boardAnchor,
   hoursAnchor,
+  shelfAnchor,
   furnishedBox,
   coffeeAnchor,
   DARK_PALETTE,
@@ -345,6 +346,12 @@ export interface OfficeOptions {
   onSettingsClick?: (rect: DOMRect) => void;
   /** First hover/focus on the calendar — preload the settings overlay's chunk. */
   onSettingsHover?: () => void;
+  /** `/live` only: the wiki shelf (ADR 747) opens the Team's wiki, handing back its viewport rect the
+   * way the board does. Requires `interactiveLabels`; without it the shelf's sign still hangs (the
+   * room on /broadcast names its wiki too) but nothing opens. */
+  onWikiClick?: (rect: DOMRect) => void;
+  /** First hover/focus on the shelf — preload the wiki overlay's chunk. */
+  onWikiHover?: () => void;
   /** Broadcast mode (ADR 157): this office is a *stream source*, not a viewer's panel. The loop keeps
    * running while the tab is hidden or headless, DPR is pinned to 1 for a deterministic capture size,
    * and suspend requests are ignored. Only `/broadcast` passes it — see ./broadcast.ts. */
@@ -629,6 +636,49 @@ export function mountOffice(
           return el;
         })()
       : null;
+
+  // The wiki shelf (ADR 747): the third wall door, built like the board's — a button over the paint
+  // with an oak sign hung on the wall above it. On /broadcast there is nothing to click, but the sign
+  // still hangs as part of the room, so the element is a plain span there.
+  const wikiSpot = (() => {
+    const clickable = interactiveLabels && options.onWikiClick;
+    const el = document.createElement(clickable ? 'button' : 'span');
+    el.className = `lc-boardspot lc-wikispot${clickable ? '' : ' is-static'}`;
+    const tag = document.createElement('span');
+    tag.className = 'lc-boardspot__tag';
+    tag.textContent = 'wiki';
+    if (clickable) {
+      (el as HTMLButtonElement).type = 'button';
+      el.setAttribute('aria-label', "Open the team's wiki");
+      const caret = document.createElement('span');
+      caret.className = 'lc-boardspot__caret';
+      caret.setAttribute('aria-hidden', 'true');
+      caret.textContent = '›';
+      tag.appendChild(caret);
+      el.addEventListener('click', () => options.onWikiClick!(el.getBoundingClientRect()));
+      if (options.onWikiHover) {
+        const warm = () => options.onWikiHover!();
+        el.addEventListener('pointerenter', warm, { once: true });
+        el.addEventListener('focus', warm, { once: true });
+      }
+    } else {
+      el.setAttribute('aria-hidden', 'true');
+    }
+    el.appendChild(tag);
+    labelHost.appendChild(el);
+    return el;
+  })();
+
+  function positionWikiSpot(): void {
+    const a = shelfAnchor(fit);
+    wikiSpot.style.left = `${a.x}px`;
+    wikiSpot.style.top = `${a.y}px`;
+    wikiSpot.style.width = `${a.w}px`;
+    wikiSpot.style.height = `${a.h}px`;
+    wikiSpot.style.setProperty('--lc-sign-drop', `${a.topMidY - a.y}px`);
+    wikiSpot.style.setProperty('--lc-sign-tilt', `${a.tiltDeg.toFixed(2)}deg`);
+    wikiSpot.style.setProperty('--lc-sign-scale', fit.scale.toFixed(3));
+  }
 
   function positionHoursSpot(): void {
     if (!hoursSpot) return;
@@ -1071,6 +1121,7 @@ export function mountOffice(
     repositionSpeeches(anchors.heads);
     positionBoardSpot();
     positionHoursSpot();
+    positionWikiSpot();
     if (!reduced) {
       positionSteam();
       syncDeskProps();
@@ -3930,6 +3981,7 @@ export function mountOffice(
       ambientHost.remove(); // removes the day-cycle wash, steam, and the animated desk props
       boardSpot?.remove();
       hoursSpot?.remove();
+      wikiSpot.remove();
       canvas.remove();
     },
   };
