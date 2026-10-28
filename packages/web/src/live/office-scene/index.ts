@@ -3,6 +3,7 @@ import type { Posture } from '@musterd/protocol';
 import { preloadCanvasFont } from '../canvasFont';
 import { pulseIntensity, pulseLive, type SeatPulse } from '../pulse';
 import { roomTone, screenPan, type LifeContext } from '../sound';
+import type { Moment } from '../soundLife';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
@@ -57,6 +58,7 @@ import {
   RECEPTIONIST,
   SEAT_BACK,
   WAGON_PICKUP,
+  insideCafe,
 } from './layout';
 import { computeLightEnv, deskLampOn, type LightEnv } from './lighting';
 import { fetchWeather, type Weather, type WeatherReading, weatherDue, weatherMoves, weatherOverride } from './weather';
@@ -2609,6 +2611,24 @@ export function mountOffice(
     drainReplay();
     const walking = actors.step(dt * tempo);
     flourishFreshPins();
+    // Sound tied to motion (lane 01M5XS6KAD): what the floor just earned, panned to the body.
+    for (const m of actors.takeMotionSounds()) {
+      const name: Moment =
+        m.kind === 'step'
+          ? insideCafe(m.lx, m.ly)
+            ? 'stepTile'
+            : 'stepPlank'
+          : m.kind === 'sat' || m.kind === 'rose'
+            ? 'creak'
+            : m.kind === 'sip'
+              ? 'sipAt'
+              : m.kind === 'fill'
+                ? 'bottle'
+                : m.kind === 'eat'
+                  ? 'eatAt'
+                  : 'machine';
+      roomTone.moment(name, screenPan(project(m.lx, m.ly, fit).x, width));
+    }
     if (tempo !== 1 && !actors.active()) tempo = 1;
     if (walking) noticePassersBy(); // a sleeping dog wakes to watch whoever is walking past it
     const petActive = stepPet(pet, dt); // false once it's asleep — the pet never keeps the room awake

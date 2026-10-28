@@ -132,6 +132,20 @@ export function travelDir(fx: number, fy: number, tx: number, ty: number): Dir {
   return dy >= 0 ? 'S' : 'N';
 }
 
+/**
+ * A sound the choreography just earned (lane 01M5XS6KAD): a foot planting (`step`, each half stride of a
+ * walker actually covering ground), a chair taking or losing someone's weight (`sat` / `rose`, the sit
+ * blend crossing 0.9), a sip beat starting (`sip`), and an errand reaching its fixture (`eat` at the
+ * couch plate, `fill` at the cooler, `pour` at the machine). Where it happened is on it, so the room
+ * pans the sound to the body that made it — never a footstep nobody is taking.
+ */
+export interface MotionSound {
+  kind: 'step' | 'sat' | 'rose' | 'sip' | 'eat' | 'fill' | 'pour';
+  who: string;
+  lx: number;
+  ly: number;
+}
+
 /** How long a look is held before the head drifts back (lane 01M5XS5ZYP) — about a bubble's first beat. */
 export const LOOK_HOLD_S = 1.8;
 
@@ -640,6 +654,8 @@ export interface Actors {
   nodes(): Map<string, OfficeNode>;
   /** How many members entered or left since the last call (clears) — drives the door-open glow. */
   takeDoorPulses(): number;
+  /** The sounds the floor earned since the last call (clears) — see `MotionSound` (lane 01M5XS6KAD). */
+  takeMotionSounds(): MotionSound[];
   /** How many members *arrived* since the last call (clears) — departures don't count. The office dog
    * greets an arrival at the door; nobody, dog included, gets up to see you leave. */
   takeArrivals(): number;
@@ -692,6 +708,7 @@ export function createActors(): Actors {
    *  question `deskNeighbourPairs` answers, rather than re-deriving the rule from poses. */
   let lastPlacements: Map<string, Placement> = new Map();
   let doorPulses = 0; // members that entered/left since the last takeDoorPulses()
+  let motionSounds: MotionSound[] = []; // what the floor earned since the last takeMotionSounds()
   let arrivals = 0; // members that entered since the last takeArrivals() — the dog's cue to go and greet
 
   function entrancePose(ref: Pose): Pose {
@@ -941,13 +958,20 @@ export function createActors(): Actors {
       const a = animOf(name);
       const b = before.get(name);
       const dist = b ? Math.hypot(p.lx - b.lx, p.ly - b.ly) : 0;
+      const wasPhase = a.phase;
       a.phase = (a.phase + dist / STRIDE) % 1;
       // Express the walk cycle only while actually covering ground — a walker paused on a hold leg stands.
       const speed = dt > 0 ? dist / dt : 0;
       a.stride = toward(a.stride, p.moving && speed > 2 ? 1 : 0, dt / STRIDE_EASE);
+      // A foot plants twice a stride (phase 0 and 0.5) — a sound only while the legs are really cycling.
+      if (a.stride > 0.5 && dist > 0 && (a.phase < wasPhase || (wasPhase < 0.5 && a.phase >= 0.5)))
+        motionSounds.push({ kind: 'step', who: name, lx: p.lx, ly: p.ly });
       // Sit whenever the member is home at a seat and not walking — or parked on an errand's sit leg
       // (the couch meal). Rising and settling back are just this blend running in each direction.
+      const wasSit = a.sit;
       a.sit = toward(a.sit, sitTargetOf(name), dt / SIT_EASE);
+      if (wasSit < 0.9 && a.sit >= 0.9) motionSounds.push({ kind: 'sat', who: name, lx: p.lx, ly: p.ly });
+      else if (wasSit > 0.9 && a.sit <= 0.9) motionSounds.push({ kind: 'rose', who: name, lx: p.lx, ly: p.ly });
       // Swivel the continuous facing toward wherever this member should be looking, shortest way round.
       const want = headingTarget(name);
       if (want !== null) {
@@ -1726,6 +1750,10 @@ export function createActors(): Actors {
     gestureBeat(from, kind) {
       if (!canGesture(from)) return false;
       gestures.set(from, { kind, t: 0, dur: GESTURE_DUR[kind] }); // one full beat window, then clear
+      if (kind === GESTURE.sip) {
+        const h = homes.get(from)!;
+        motionSounds.push({ kind: 'sip', who: from, lx: h.lx, ly: h.ly });
+      }
       return true;
     },
     expectFirstArrival(name, carry) {
@@ -1815,6 +1843,20 @@ export function createActors(): Actors {
             w.t = 0;
             w.i++;
             if (w.i >= w.legs.length) done = true;
+            else {
+              // An errand reaching its fixture: the plate at the couch, the bottle at the cooler, the
+              // cup at the machine — the beat's own sound, where the beat is (lane 01M5XS6KAD).
+              const next = w.legs[w.i]!;
+              const kind =
+                next.overlay === GESTURE.eat
+                  ? 'eat'
+                  : next.overlay === GESTURE.fill
+                    ? 'fill'
+                    : next.overlay === GESTURE.pour
+                      ? 'pour'
+                      : null;
+              if (kind) motionSounds.push({ kind, who: name, lx: next.tx, ly: next.ty });
+            }
           }
         }
         if (done) {
@@ -1870,6 +1912,11 @@ export function createActors(): Actors {
       const n = doorPulses;
       doorPulses = 0;
       return n;
+    },
+    takeMotionSounds() {
+      const out = motionSounds;
+      motionSounds = [];
+      return out;
     },
     active() {
       return walks.size > 0 || gestures.size > 0;

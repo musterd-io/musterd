@@ -26,6 +26,8 @@ import {
   pickWorkDesk,
   shouldChime,
   shouldPlayMoment,
+  isStep,
+  shouldPlayStep,
 } from './soundLife';
 
 /** One scheduled note: a frequency, a start offset (s), a length (s), a waveform, and a peak gain. */
@@ -289,6 +291,7 @@ export class RoomTone {
   private occupancy: LifeContext = EMPTY_LIFE;
   /** When the last milestone moment played — the E3 burst throttle's clock. */
   private lastMomentAt = -Infinity;
+  private lastStepAt = -Infinity;
 
 
   /** Toggle the bed. The façade owns the preference and its persistence; this is the audio half. */
@@ -456,8 +459,13 @@ export class RoomTone {
     const bus = this.lifeBus;
     if (!ctx || !bus || ctx.state !== 'running' || this.isHidden()) return;
     const now = Date.now();
-    if (!shouldPlayMoment(now, this.lastMomentAt)) return;
-    this.lastMomentAt = now;
+    if (isStep(name)) {
+      if (!shouldPlayStep(now, this.lastStepAt)) return;
+      this.lastStepAt = now;
+    } else {
+      if (!shouldPlayMoment(now, this.lastMomentAt)) return;
+      this.lastMomentAt = now;
+    }
     const panNode = ctx.createStereoPanner?.();
     const out = panNode ?? ctx.createGain();
     if (panNode) panNode.pan.value = momentPan(pan);
@@ -483,6 +491,14 @@ export class RoomTone {
       case 'rattle': return this.rattle(ctx, out);
       case 'doorbell': return this.doorbell(ctx, out);
       case 'pop': return this.pop(ctx, out);
+      // sound tied to motion (lane 01M5XS6KAD)
+      case 'stepPlank': return this.click(ctx, out, ctx.currentTime + 0.01, 110 + Math.random() * 50, 0.05, 0.07);
+      case 'stepTile': return this.click(ctx, out, ctx.currentTime + 0.01, 1300 + Math.random() * 500, 0.035, 0.04);
+      case 'creak': return this.creak(ctx, out);
+      case 'sipAt': return this.sip(ctx, out, 1);
+      case 'bottle': return this.sip(ctx, out, 0.72);
+      case 'eatAt': return this.eating(ctx, out);
+      case 'machine': return this.machine(ctx, out);
       default: {
         // Every Moment has a voice: a name added to the union without one fails to compile here.
         const unvoiced: never = name;
@@ -545,6 +561,63 @@ export class RoomTone {
       o.start(at);
       o.stop(at + 0.95);
     }
+  }
+
+  /** A chair taking (or losing) somebody's weight (lane 01M5XS6KAD): a narrow noise band gliding
+   *  down over 0.4 s, at a third of the gain the timer creak had — it lands on a visible sit, which is
+   *  what keeps it from reading as a cue (see LIFE_EVENTS' removal note). */
+  private creak(ctx: AudioContext, out: AudioNode): void {
+    const t0 = ctx.currentTime + 0.02;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer(ctx);
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 7;
+    bp.frequency.setValueAtTime(520, t0);
+    bp.frequency.exponentialRampToValueAtTime(300, t0 + 0.42);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.05, t0 + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+    src.connect(bp).connect(g).connect(out);
+    src.start(t0);
+    src.stop(t0 + 0.45);
+  }
+
+  /** The espresso machine at the island (lane 01M5XS6KAD): a pump hum with a hiss over it, held for
+   *  the pour's beat, then the hiss falling away. */
+  private machine(ctx: AudioContext, out: AudioNode): void {
+    const t0 = ctx.currentTime + 0.02;
+    const dur = 1.6;
+    const hum = ctx.createOscillator();
+    hum.type = 'sawtooth';
+    hum.frequency.value = 58;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 180;
+    const hg = ctx.createGain();
+    hg.gain.setValueAtTime(0.0001, t0);
+    hg.gain.exponentialRampToValueAtTime(0.045, t0 + 0.15);
+    hg.gain.setValueAtTime(0.045, t0 + dur - 0.2);
+    hg.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    hum.connect(lp).connect(hg).connect(out);
+    hum.start(t0);
+    hum.stop(t0 + dur + 0.05);
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer(ctx);
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 0.8;
+    bp.frequency.value = 2400;
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.0001, t0 + 0.3);
+    sg.gain.exponentialRampToValueAtTime(0.018, t0 + 0.6);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(bp).connect(sg).connect(out);
+    src.start(t0 + 0.3);
+    src.stop(t0 + dur + 0.05);
   }
 
   /** The confetti pop: one bright click, then a sparkle of three high ticks. */
@@ -682,6 +755,7 @@ export class RoomTone {
     // else's desk, and a sound in the middle of your head is a sound you made.
     const now = Date.now();
     const name = pickLifeEvent(Math.random(), this.occupancy, now);
+    if (name === null) return; // nothing the room could honestly make a sound of
     const pan = ctx.createStereoPanner?.();
     const out = pan ?? ctx.createGain();
     // Positioned events pan to where they are on screen: work sounds to the working desk that makes
