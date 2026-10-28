@@ -145,6 +145,33 @@ drops the swing; hidden tabs play nothing; the ADR 150 lane gate on `office-scen
 
 1–3 ship without 4 and are audible on the stream the same day; 4 makes the instrument visible.
 
+## 6.1 Settled after the builder check (2026-10-28)
+
+nick's answers:
+
+- **Every done rings.** The chimes strike on a lane's state reaching `done` by any route (accept,
+  self-close, exempt close, admin close); `abandoned` is silent. Keyed on the state change, once per
+  lane, never on the accept act itself, so an accept and the state change cannot ring twice.
+- **Sound ships before the prop.** Increments 1–3 are audible before increment 4 draws the chimes;
+  the board column moving on a done is the visible thing until then.
+
+miley's calls:
+
+- A lane whose chain the client cannot see rings one voice. Adding the chain to the client payload
+  is increment 2's choice if cheap, else a follow-up; never a server change inside this design.
+- The chimes are panned to the board, not the celebrant, and play whether or not the celebrant is
+  in the room; the confetti still needs them present.
+- A goal roll arriving in the same instant as its last lane's chord **replaces** the chord (the roll
+  wins; the lane note is its first bar). The throttle is per kind for these two only. Goals already
+  done on page load or replay stay silent.
+- Redirect covers the `steer`, `challenge` and `decline` acts (reply acts), not lane-level closes.
+- Departure is the existing walk-out door event, not presence loss. Arrival and departure count
+  against the 400 ms moment throttle.
+- A question plays once, from the scene; the stream's own `ask` chime goes silent when the room
+  tone is on, and plays the same gesture centred when it is the only engine on. A team ask with no
+  addressee is centred.
+- Per-strike jitter satisfies "never bit-identical"; the same lane twice keeps its note.
+
 ## 7 Left to the builder
 
 The exact partial ratios and filter shapes of the bar voice; the hash from lane id to bar; where
