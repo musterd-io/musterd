@@ -1738,6 +1738,8 @@ export function magicAnchors(fit: Fit, hours = 12.75): { motes: Pt[]; bulbs: Pt[
  */
 const RECEPTIONIST_LOOK: Appearance = {
   skin: '#e8b07d',
+  style: 'smart',
+  grooming: 'polished',
   // A ponytail rather than the full fall: she is seen from the chest up behind a counter, and a long
   // mass in that framing has nothing to hang against, so it silhouettes into the head.
   hair: 'ponytail',
@@ -1754,10 +1756,12 @@ const RECEPTIONIST_LOOK: Appearance = {
   bareArms: false,
   bottom: '#3f5570',
   shoes: '#22262b',
+  eyes: 'none',
+  ears: 'none',
+  neck: 'none',
   accessory: 'none',
   accessoryColor: '#2f7f6a',
   smile: 'soft',
-  presents: 'femme',
   build: 1,
 };
 const RECEPTIONIST_NODE: OfficeNode = {

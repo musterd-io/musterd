@@ -100,7 +100,10 @@ export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: str
   if (a.hair !== 'bald') out.push({ id: `hair/${a.hair}`, color: a.hairColor });
   if (a.facialHair !== 'none') out.push({ id: `facial/${a.facialHair}`, color: a.hairColor });
   if (a.hat !== 'none') out.push({ id: `hat/${a.hat}`, color: a.hatColor });
-  if (a.accessory !== 'none') out.push({ id: `acc/${a.accessory}`, color: a.accessoryColor });
+  // every worn spot, in its own colour (v2-5a): glasses on the eyes, headphones on the ears, a scarf
+  if (a.eyes !== 'none') out.push({ id: `acc/${a.eyes}`, color: a.accessoryColor });
+  if (a.ears !== 'none') out.push({ id: `acc/${a.ears}`, color: a.accessoryColor });
+  if (a.neck !== 'none') out.push({ id: `acc/${a.neck}`, color: a.accessoryColor });
   return out;
 }
 

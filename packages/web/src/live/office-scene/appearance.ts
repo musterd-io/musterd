@@ -120,35 +120,39 @@ const HAIR_COLORS = [
 
 /** Hair silhouettes. These must read at ~30px, so they differ by *shape*, not by strand detail. */
 export type HairStyle = 'bald' | 'buzz' | 'short' | 'side' | 'bob' | 'long' | 'ponytail' | 'afro' | 'bun';
-const HAIR_STYLES: readonly HairStyle[] = ['bald', 'buzz', 'short', 'side', 'bob', 'long', 'ponytail', 'afro', 'bun'];
 
 export type FacialHair = 'none' | 'stubble' | 'moustache' | 'goatee' | 'beard';
-/** Weighted toward `none` — a floor where everyone has a beard is as uniform as one where nobody does. */
-const FACIAL_HAIR: readonly FacialHair[] = ['none', 'none', 'none', 'none', 'stubble', 'moustache', 'goatee', 'beard'];
 
 /**
- * How a member presents. This exists for one reason: the floor read as entirely male (nick,
- * 2026-07-30, "none of our characters or members have long hair/look like a woman"), and the two
- * things that fix that pull in opposite directions unless something coordinates them — hair long
- * enough to read as long, and **no facial hair on a femme character**.
+ * Style, grooming and the spots (office figure v2, spec §2.4–2.5, lane 01M62411D3).
  *
- * Picking hair and beard from independent hashes (which is what the rest of this file does, on
- * purpose) cannot express that constraint: it will cheerfully deal a beard to a ponytail. So this is
- * the one axis the wardrobe coordinates around, and it stays deliberately coarse — presentation is
- * hair and facial hair, nothing else. Skin, top, trousers, shoes, hats, glasses and headphones all
- * keep running free off their own salts, because none of those belong to a gender.
+ * People dress in a **style**, not a random mix, so the top, the trousers and the shoes are picked
+ * from the style's pools. **Grooming** is one dial per member that chooses whether hair and facial
+ * hair come from the polished pool or the relaxed one — picked separately from style, so a formal
+ * dresser can have messy hair. Accessories are **one pick per spot** (eyes, ears, head, neck; the
+ * wrist arrives with its first piece), each rare on its own, so most people wear none or one and a
+ * few wear two.
  *
- * `neutral` is a real third option rather than a rounding error: those members draw from the whole
- * hair pool and can wear stubble, which is what stops the floor sorting into two tidy camps.
+ * This retired `presents`, the femme/masc/neutral axis that coordinated hair length with facial hair
+ * (added 2026-07-30 because the floor read as all male). Under nick's rule (2026-10-22) nothing is
+ * tied to gender or race: a long-haired member with a beard, or a bearded member in a dress, is a
+ * person, not a mismatch. The guard against the floor drifting back to one look is **pick weights,
+ * never coupling** — long hair is weighted to stay common in both grooming pools, and every pick is
+ * its own salt of the name.
  */
-export type Presents = 'femme' | 'masc' | 'neutral';
-const PRESENTS: readonly Presents[] = ['femme', 'femme', 'femme', 'masc', 'masc', 'masc', 'neutral'];
+export type Style = 'formal' | 'smart' | 'casual' | 'athletic';
+const STYLES: readonly Style[] = ['formal', 'formal', 'smart', 'smart', 'casual', 'casual', 'casual', 'athletic'];
+export type Grooming = 'polished' | 'relaxed';
+const GROOMING: readonly Grooming[] = ['polished', 'polished', 'relaxed', 'relaxed', 'relaxed'];
 
-/** Long silhouettes. A femme character draws from these, so "looks like a woman" is legible at 30px
- *  — where the ONLY thing that reads is the shape of the head against the shoulders. */
-const FEMME_HAIR: readonly HairStyle[] = ['bob', 'long', 'ponytail', 'bun', 'long', 'bob', 'afro'];
-/** Short and mid silhouettes. `side` and `short` carry most of this, with a bald/buzz minority. */
-const MASC_HAIR: readonly HairStyle[] = ['buzz', 'short', 'side', 'bald', 'short', 'side', 'afro'];
+/** Hair by grooming. Long shapes (bob, long, ponytail, bun) sit in BOTH pools, weighted so that about
+ *  half the floor wears one — the thing the retired axis existed to guarantee. */
+const POLISHED_HAIR: readonly HairStyle[] = ['side', 'bun', 'bob', 'buzz', 'short', 'ponytail', 'side', 'bun', 'bald'];
+const RELAXED_HAIR: readonly HairStyle[] = ['long', 'afro', 'short', 'ponytail', 'bob', 'long', 'buzz', 'afro', 'long'];
+/** Facial hair by grooming. Weighted toward `none` either way — a floor where everyone has a beard is
+ *  as uniform as one where nobody does. The untrimmed beard joins the relaxed pool with v2-3a. */
+const POLISHED_FACIAL: readonly FacialHair[] = ['none', 'none', 'none', 'none', 'none', 'moustache', 'goatee', 'beard'];
+const RELAXED_FACIAL: readonly FacialHair[] = ['none', 'none', 'none', 'none', 'stubble', 'stubble', 'beard', 'goatee'];
 
 export type Hat = 'none' | 'cap' | 'beanie' | 'band';
 /** Hats are the rarest thing on the floor, so they stay a small delight rather than a uniform. */
@@ -156,42 +160,72 @@ const HATS: readonly Hat[] = ['none', 'none', 'none', 'none', 'none', 'cap', 'be
 const HAT_COLORS = ['#d1503f', '#2f7f6a', '#3f6fa8', '#e1ad01', '#2f8fa3', '#2a2118', '#e8dcc8', '#e07a3f'] as const;
 
 /**
- * The cut of the top. `sleeves` is the one that does real visual work: a short sleeve leaves the forearm
- * **bare skin**, which — on a 90px character — is a bigger, clearer difference than any pattern.
+ * The cut of the top, by style. `sleeves` is the one that does real visual work: a short sleeve leaves
+ * the forearm **bare skin**, which — on a 90px character — is a bigger, clearer difference than any
+ * pattern. Today's five cuts stand in for the spec's catalogue until the new pieces land (v2-5b…):
+ * `long` is the shirt, `vest` the sleeveless knit, `tee` doubles as the sport tee.
  */
 export type TopCut = 'tee' | 'long' | 'stripe' | 'hoodie' | 'vest';
-const TOP_CUTS: readonly TopCut[] = ['tee', 'long', 'stripe', 'hoodie', 'vest'];
+const CUTS_BY_STYLE: Record<Style, readonly TopCut[]> = {
+  formal: ['long', 'vest', 'long', 'stripe'],
+  smart: ['long', 'stripe', 'vest', 'stripe'],
+  casual: ['tee', 'hoodie', 'stripe', 'tee', 'hoodie'],
+  athletic: ['tee', 'hoodie', 'tee'],
+};
 
-const BOTTOMS = [
-  '#3f5570', // denim
-  '#2b3038', // charcoal
-  '#7a6a4f', // khaki
-  '#4a5a3a', // olive
-  '#6b3f52', // plum
-  '#5a5f66', // grey
-  '#8a4a32', // rust
-  '#2f4a4a', // teal
-  '#7d6b8f', // mauve
-] as const;
+const BOTTOMS = {
+  denim: '#3f5570',
+  charcoal: '#2b3038',
+  khaki: '#7a6a4f',
+  olive: '#4a5a3a',
+  plum: '#6b3f52',
+  grey: '#5a5f66',
+  rust: '#8a4a32',
+  teal: '#2f4a4a',
+  mauve: '#7d6b8f',
+  black: '#1f2226',
+} as const;
+const BOTTOMS_BY_STYLE: Record<Style, readonly string[]> = {
+  formal: [BOTTOMS.charcoal, BOTTOMS.khaki, BOTTOMS.grey, BOTTOMS.plum, BOTTOMS.black],
+  smart: [BOTTOMS.denim, BOTTOMS.olive, BOTTOMS.khaki, BOTTOMS.charcoal, BOTTOMS.mauve],
+  casual: [BOTTOMS.denim, BOTTOMS.olive, BOTTOMS.rust, BOTTOMS.mauve, BOTTOMS.denim],
+  athletic: [BOTTOMS.charcoal, BOTTOMS.grey, BOTTOMS.teal, BOTTOMS.black],
+};
 
-const SHOES = ['#f2eee6', '#22262b', '#d1503f', '#2f4a70', '#a9683a', '#2f8f7a', '#e1ad01'] as const;
+const SHOES = {
+  white: '#f2eee6',
+  black: '#22262b',
+  red: '#d1503f',
+  navy: '#2f4a70',
+  tan: '#a9683a',
+  green: '#2f8f7a',
+  yellow: '#e1ad01',
+} as const;
+const SHOES_BY_STYLE: Record<Style, readonly string[]> = {
+  formal: [SHOES.black, SHOES.tan, SHOES.navy, SHOES.black],
+  smart: [SHOES.white, SHOES.tan, SHOES.navy, SHOES.black, SHOES.green],
+  casual: [SHOES.white, SHOES.red, SHOES.green, SHOES.yellow, SHOES.navy],
+  athletic: [SHOES.white, SHOES.red, SHOES.yellow, SHOES.white],
+};
 
 /**
- * A small personal accessory — the per-person "quirk" that turns a dressed body into a *character*. Kept
- * rare (weighted toward `none`) so it stays a delight, not a uniform, and drawn in its own cosy colour so
- * it never competes with the identity hue on the top. Glasses need a face, so agents (who wear a visor
- * across theirs) never get them — they can still wear headphones or a scarf.
+ * The spots (spec §2.4): one pick each, each rare, so most people wear none or one. Glasses need a
+ * face, so agents never get them. On-ear headphones are the do-not-disturb signal (`lookFor`): they
+ * take the ears spot. Today's pieces are the three the sheets carry; earrings (v2-4b), the watch
+ * (v2-4c) and headphones around the neck (v2-4d) slot into their spots as they land.
  */
+export type Eyes = 'none' | 'glasses';
+export type Ears = 'none' | 'headphones';
+export type Neck = 'none' | 'scarf';
+const EYES: readonly Eyes[] = ['none', 'none', 'none', 'none', 'none', 'glasses', 'glasses'];
+const EARS: readonly Ears[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'headphones'];
+const NECK: readonly Neck[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'scarf'];
+/** The one legacy summary the painters still read (`character.ts`, the portrait): the most visible
+ *  of the worn spots. The rendered figure draws every spot (`layersFor`). */
 export type Accessory = 'none' | 'glasses' | 'headphones' | 'scarf';
-const ACCESSORIES: readonly Accessory[] = ['none', 'none', 'none', 'none', 'none', 'glasses', 'glasses', 'headphones', 'scarf'];
-const AGENT_ACCESSORIES: readonly Accessory[] = ['none', 'none', 'none', 'none', 'none', 'headphones', 'headphones', 'scarf'];
 /** Cosy, saturated accessory tones (scarf wool / headphone shells) — a warm set, deliberately off the
  * identity hue so the accessory reads as *a thing they own*, not part of their colour signature. */
 const ACCESSORY_COLORS = ['#d1503f', '#e08a43', '#e1ad01', '#2f8f7a', '#3f6fa8', '#2f8fa3', '#c86a3a', '#4f8a3a'] as const;
-
-/** Neutral presentation stops at stubble — a full beard reads as a definite choice, and `neutral`
- *  is deliberately the option that does not make one. */
-const NEUTRAL_FACIAL_HAIR: readonly FacialHair[] = ['none', 'none', 'none', 'stubble'];
 
 /** A gentle per-person smile for humans — some beam wide, some just turn the corners up. */
 export type Smile = 'soft' | 'wide';
@@ -206,6 +240,10 @@ const BUILDS = [0.96, 0.98, 1.0, 1.02, 1.04] as const;
 
 export interface Appearance {
   skin: string;
+  /** How they dress — picks the top, trousers and shoes pools. */
+  style: Style;
+  /** One dial for hair and facial hair: the polished pool or the relaxed one. */
+  grooming: Grooming;
   hair: HairStyle;
   hairColor: string;
   facialHair: FacialHair;
@@ -217,65 +255,75 @@ export interface Appearance {
   bareArms: boolean;
   bottom: string;
   shoes: string;
-  /** The per-person quirk (glasses/headphones/scarf) — see `Accessory`. */
+  /** The spots, one pick each. */
+  eyes: Eyes;
+  ears: Ears;
+  neck: Neck;
+  /** The most visible worn spot, for the painters that draw one thing — see `Accessory`. */
   accessory: Accessory;
-  /** The accessory's own cosy colour — never the identity hue. */
+  /** The accessories' own cosy colour — never the identity hue. */
   accessoryColor: string;
-  /** How a human smiles (agents smile through their visor instead). */
+  /** How a human smiles. */
   smile: Smile;
-  /** Presentation — coordinates hair length with facial hair. See {@link Presents}. */
-  presents: Presents;
   /** Horizontal draw scale of the rendered figure, 0.96–1.04 — see `BUILDS`. */
   build: number;
 }
 
+function summaryOf(eyes: Eyes, ears: Ears, neck: Neck): Accessory {
+  if (ears !== 'none') return ears;
+  if (eyes !== 'none') return eyes;
+  if (neck !== 'none') return neck;
+  return 'none';
+}
+
 /**
- * A member's complete look. Every field is an independent salted hash of the name, so hair colour doesn't
- * correlate with skin, hats don't correlate with beards, and so on — the floor looks like a room of people
- * rather than a row of palette swatches.
+ * A member's complete look. Every field is an independent salted hash of the name — style, grooming,
+ * hair, each spot, skin — so hair colour doesn't correlate with skin, hats don't correlate with beards,
+ * and nothing about the hair says anything about the beard. The floor looks like a room of people
+ * rather than a row of palette swatches, and nothing in it reads a gender off a name.
  */
 export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearance {
   const { name, kind } = node;
-  const presents = pick(PRESENTS, name, 14);
-  const hair =
-    presents === 'femme' ? pick(FEMME_HAIR, name, 3)
-    : presents === 'masc' ? pick(MASC_HAIR, name, 3)
-    : pick(HAIR_STYLES, name, 3);
-  const cut = pick(TOP_CUTS, name, 8);
+  const style = pick(STYLES, name, 16);
+  const grooming = pick(GROOMING, name, 17);
+  const hair = pick(grooming === 'polished' ? POLISHED_HAIR : RELAXED_HAIR, name, 3);
+  const cut = pick(CUTS_BY_STYLE[style], name, 8);
   const skin = pick(SKINS, name, 1);
+  // Agents never wear glasses — the eye glow is their tell, and frames would sit on it.
+  const eyes = kind === 'agent' ? 'none' : pick(EYES, name, 18);
+  const ears = pick(EARS, name, 19);
+  const neck = pick(NECK, name, 20);
   return {
     skin,
+    style,
+    grooming,
     hair,
     // Both hair and hats are picked to *contrast with the skin*. With a full-rainbow skin palette an
     // independent pick eventually lands teal hair (or a teal beanie) on a teal head — which at 30px is not
     // a person, it is a blob. Both shipped once; the character sheet caught them.
     hairColor: pickContrasting(HAIR_COLORS, name, 4, skin),
-    // Agents wear a visor across the face, so facial hair would have nowhere to read — and a bearded robot
-    // muddies the one tell the office cannot afford to lose.
-    // Agents wear a visor, so facial hair has nowhere to read; a femme character never has any. The
-    // second rule is why `presents` exists at all — independent hashes deal beards to ponytails.
-    facialHair:
-      kind === 'agent' || presents === 'femme' ? 'none'
-      : presents === 'neutral' ? pick(NEUTRAL_FACIAL_HAIR, name, 5)
-      : pick(FACIAL_HAIR, name, 5),
+    // Agents have no facial hair (the glow tell wants a clear face); humans draw from their grooming pool,
+    // whatever their hair — a beard under a bun is a person.
+    facialHair: kind === 'agent' ? 'none' : pick(grooming === 'polished' ? POLISHED_FACIAL : RELAXED_FACIAL, name, 5),
     hat: pick(HATS, name, 6),
     hatColor: pickContrasting(HAT_COLORS, name, 7, skin),
     cut,
     bareArms: cut === 'tee' || cut === 'vest',
-    bottom: pick(BOTTOMS, name, 9),
-    shoes: pick(SHOES, name, 10),
-    // Agents can't wear glasses over a visor — same reason they get no facial hair.
-    accessory: pick(kind === 'agent' ? AGENT_ACCESSORIES : ACCESSORIES, name, 11),
+    bottom: pick(BOTTOMS_BY_STYLE[style], name, 9),
+    shoes: pick(SHOES_BY_STYLE[style], name, 10),
+    eyes,
+    ears,
+    neck,
+    accessory: summaryOf(eyes, ears, neck),
     accessoryColor: pick(ACCESSORY_COLORS, name, 12),
     smile: pick(SMILES, name, 13),
-    presents,
     build: pick(BUILDS, name, 15),
   };
 }
 
-/** The look a member wears this frame: their hashed one, and the headphones whatever their hashed
- *  accessory is while they are dnd — the room-readable signal (§4). */
+/** The look a member wears this frame: their hashed one, with headphones on the ears while they are
+ *  dnd — the room-readable signal (§4) — whatever that spot held. */
 export function lookFor(node: Pick<OfficeNode, 'name' | 'kind' | 'dnd'>): Appearance {
   const a = appearanceOf(node);
-  return node.dnd ? { ...a, accessory: 'headphones' } : a;
+  return node.dnd ? { ...a, ears: 'headphones', accessory: 'headphones' } : a;
 }

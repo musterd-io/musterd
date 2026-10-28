@@ -28,6 +28,9 @@ const femme: Appearance = {
   facialHair: 'none',
   hat: 'none',
   cut: 'hoodie',
+  eyes: 'glasses',
+  ears: 'none',
+  neck: 'none',
   accessory: 'glasses',
 };
 
@@ -48,7 +51,7 @@ describe('layersFor (office realism Task 11)', () => {
   });
 
   it('an agent wears no visor: its eyes and a collar light glow in its identity colour (figure v2)', () => {
-    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', accessory: 'none', cut: 'tee' };
+    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', eyes: 'none', ears: 'none', neck: 'none', accessory: 'none', cut: 'tee' };
     const layers = layersFor(agent, 'agent', '#5b8def');
     expect(layers.map((l) => l.id)).toEqual(['skin', 'eyes', 'tell/eyes', `mouth/${agent.smile}`, 'shoes', 'bottom', 'top/tee', 'tell/collar', 'hair/short']);
     expect(layers.find((l) => l.id === 'tell/eyes')?.color).toBe('#5b8def');
@@ -88,7 +91,7 @@ describe('layersFor (office realism Task 11)', () => {
   });
 
   it('bald, clean-shaven, hatless, no accessory: only the base layers', () => {
-    const plain: Appearance = { ...femme, hair: 'bald', accessory: 'none' };
+    const plain: Appearance = { ...femme, hair: 'bald', eyes: 'none', ears: 'none', neck: 'none', accessory: 'none' };
     expect(layersFor(plain, 'human').map((l) => l.id)).toEqual(['skin', 'eyes', 'mouth/soft', 'shoes', 'bottom', 'top/hoodie']);
   });
 });
@@ -235,7 +238,7 @@ describe('drawFigureFrame', () => {
     const draw = (build: number, dir: 'SE' | 'S') => {
       const { ctx, ops } = recordingCtx();
       const { create, made } = fakeCanvasFactory();
-      const look: Appearance = { ...femme, hair: 'bald', accessory: 'none', build };
+      const look: Appearance = { ...femme, hair: 'bald', eyes: 'none', ears: 'none', neck: 'none', accessory: 'none', build };
       const ids = layersFor(look, 'human').map((l) => l.id);
       // packed 64×64 cells at offset 0 (mirroring applies to packed cells only)
       const cells = Array.from({ length: 64 * 8 * 8 * 6 }, (_, i) => (i % 6 < 4 ? 64 : 0));
