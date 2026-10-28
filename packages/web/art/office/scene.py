@@ -81,7 +81,7 @@ PRINTER = dict(lx=505, ly=60, w=46, d=34, h=32)
 SHELF_LONG, SHELF_DEEP, SHELF_H, DEEP_WIDE = 58, 20, 66, 22
 BOOKSHELVES = [  # lx, ly, dir, long, deep, high, rows, tone
     (130, SHELF_DEEP / 2, "S", 44, SHELF_DEEP, 88, 4, 1.0),
-    (SHELF_DEEP / 2, 240, "E", SHELF_LONG, SHELF_DEEP, SHELF_H, 3, 1.05),
+    (SHELF_DEEP / 2, 210, "E", SHELF_LONG, SHELF_DEEP, SHELF_H, 3, 1.05),
     (DEEP_WIDE / 2, 560, "E", 70, DEEP_WIDE, 48, 2, 0.97),
 ]
 WINDOWS = [  # t0, t1, u0, u1, mullions — on both back walls (render.ts drawWalls)
