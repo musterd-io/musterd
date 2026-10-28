@@ -244,6 +244,29 @@ withDrivers('fold', (_o, kind) => {
       await db.close();
     });
 
+    it('mints the daemon service seats (board, policy) a folded envelope names, mid-stream', async () => {
+      const { db, team, ada } = await seed();
+      // `board` and `policy` are minted db-only on the origin (ADR 232) and never ride the
+      // roster, so a joiner meets their first act with no seat to resolve — the delta-2 wedge
+      // at hub_seq 305458 (2026-10-28). The fold must mint them like the host seat, not stop.
+      const res = await foldBatch(db, team.id, [
+        await foreign('f-1', 1, 1),
+        await foreign('f-2', 2, 2, { from: 'board', to: { kind: 'member', name: 'ada' } }),
+        await foreign('f-3', 3, 3, { from: 'policy' }),
+        await foreign('f-4', 4, 4),
+      ]);
+      expect(res).toMatchObject({ applied: 4, skipped: 0, last_hub_seq: 4, stop: null });
+      expect(await getMemberByName(db, team.id, 'board')).toMatchObject({ kind: 'service' });
+      expect(await getMemberByName(db, team.id, 'policy')).toMatchObject({ kind: 'service' });
+      const board = (await getMemberByName(db, team.id, 'board'))!;
+      const row = await db.get('SELECT from_member, to_member FROM messages WHERE id = ?', [
+        'f-2',
+      ])!;
+      expect(row).toEqual({ from_member: board.id, to_member: ada.id });
+      expect(await readPullCursor(db, team.id)).toBe(4);
+      await db.close();
+    });
+
     it('advances the cursor in the same transaction as the applied rows', async () => {
       const { db, team } = await seed();
       // An act this build's CHECK refuses on the second event: a classified STOP, not a throw, so
