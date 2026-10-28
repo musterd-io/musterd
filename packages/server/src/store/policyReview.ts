@@ -44,7 +44,7 @@ export async function policyReviewDue(
   return asked ? null : { stored, review_by: stored.review_by };
 }
 
-async function reviewSeat(db: Driver, team: TeamRow): Promise<MemberRow | null> {
+export async function policyReviewSeat(db: Driver, team: TeamRow): Promise<MemberRow | null> {
   const existing = await getMemberByName(db, team.id, POLICY_REVIEW_SEAT);
   if (existing) return existing.kind === 'service' && existing.left_at === null ? existing : null;
   return (await addMember(db, team, { name: POLICY_REVIEW_SEAT, kind: 'service' })).row;
@@ -67,7 +67,7 @@ export async function raisePolicyReview(
 ): Promise<string | null> {
   const due = await policyReviewDue(db, team.id, now);
   if (!due) return null;
-  const from = await reviewSeat(db, team);
+  const from = await policyReviewSeat(db, team);
   if (!from) {
     log.warn({ msg: 'policy_review_seat_taken', team: team.slug, seat: POLICY_REVIEW_SEAT });
     return null;

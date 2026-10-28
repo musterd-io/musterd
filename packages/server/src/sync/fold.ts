@@ -17,6 +17,7 @@ import {
 import { z } from 'zod';
 import type { Driver } from '../db/driver.js';
 import { appendAudit, REPLICATED_LEDGER_VERBS } from '../store/audit.js';
+import { BOARD_SEAT, boardSeat } from '../store/boardSeat.js';
 import { applyHaltLocally, applyResumeLocally } from '../store/halt.js';
 import { projectHoldEvent } from '../store/holds.js';
 import { deleteSample, upsertSample } from '../store/laneSamples.js';
@@ -24,6 +25,7 @@ import { getMemberByName, hostServiceSeat, hostServiceSeatName } from '../store/
 import { parseWriter } from '../store/memory.js';
 import { upsertForeignNode } from '../store/nodes.js';
 import { stripPolicyRedactionMarkers } from '../store/policyRedaction.js';
+import { POLICY_REVIEW_SEAT, policyReviewSeat } from '../store/policyReview.js';
 import {
   applyFoldedEnrollment,
   isLiveHostLabel,
@@ -216,6 +218,26 @@ async function hostSeatFromEnvelope(
   if (typeof host !== 'string' || hostServiceSeatName(host) !== env.from) return null;
   const team = await db.get<TeamRow>('SELECT * FROM teams WHERE id = ?', [teamId]);
   return team ? hostServiceSeat(db, team, host) : null;
+}
+
+/**
+ * The daemon's own service seats (`board`, ADR 646/649; `policy`, ADR 533) are minted db-only on
+ * first use where they speak (ADR 232) and never ride the roster git carries, so a joiner meets
+ * their first folded act with no seat to resolve. That wedged delta-2 at hub_seq 305458 on a
+ * `board` dispatch nudge (2026-10-28): the stop is retried each tick, so every later event —
+ * credentials included — waited behind a git file that will never exist. Mint the same row the
+ * origin made, as the host seat above; any other unknown name is git lag and still stops.
+ * Null when the name is already held by a non-service seat: the daemon never speaks as a person.
+ */
+async function daemonServiceSeatFromName(
+  db: Driver,
+  teamId: string,
+  name: string,
+): Promise<MemberRow | null> {
+  if (name !== BOARD_SEAT && name !== POLICY_REVIEW_SEAT) return null;
+  const team = await db.get<TeamRow>('SELECT * FROM teams WHERE id = ?', [teamId]);
+  if (!team) return null;
+  return name === BOARD_SEAT ? boardSeat(db, team) : policyReviewSeat(db, team);
 }
 
 /**
@@ -1874,14 +1896,17 @@ export async function foldBatch(
       // silently turn a directed act into a broadcast.
       const from =
         (await getMemberByName(t, teamId, env.from)) ??
-        (await hostSeatFromEnvelope(t, teamId, env));
+        (await hostSeatFromEnvelope(t, teamId, env)) ??
+        (await daemonServiceSeatFromName(t, teamId, env.from));
       if (!from) {
         stop = { kind: 'unresolved_seat', seat: env.from, hub_seq: event.hub_seq };
         return await finish();
       }
       let toMember: string | null = null;
       if (env.to.kind === 'member') {
-        const to = await getMemberByName(t, teamId, env.to.name);
+        const to =
+          (await getMemberByName(t, teamId, env.to.name)) ??
+          (await daemonServiceSeatFromName(t, teamId, env.to.name));
         if (!to) {
           stop = { kind: 'unresolved_seat', seat: env.to.name, hub_seq: event.hub_seq };
           return await finish();
