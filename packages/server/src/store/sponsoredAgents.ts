@@ -140,7 +140,7 @@ export async function createSponsoredAgent(
   sponsor: MemberRow,
   input: { name: string; role?: string | null | undefined },
   now = Date.now(),
-  opts: { cap?: number } = {},
+  opts: { cap?: number; adoptDeclared?: boolean } = {},
 ): Promise<{ member: MemberRow } & AgentConnectNonce> {
   if (sponsor.kind !== 'human' || sponsor.observer === 1)
     throw new MusterdError('forbidden', 'only a human member can create agents (ADR 449 §3)');
@@ -156,26 +156,59 @@ export async function createSponsoredAgent(
     // `addMember` would *revive* a tombstoned name — row, history and all. A sponsored mint must
     // never inherit someone else's past, so a removed name is refused here, not revived.
     const existing = await getMemberByName(t, team.id, input.name);
-    if (existing && existing.left_at !== null)
+    // The hub race (2026-10-28): on a file-backed hub the caller writes the seat file first
+    // (ADR 700), and roster reconcile can create the member from that very file while the
+    // sponsor's approval ceremony runs — the approved mint then conflicts, the CLI drops the
+    // file, and reconcile tombstones the name for good. When the transport has verified the
+    // declared file names this sponsor (`adoptDeclared`), that row IS this mint's seat: adopt
+    // it (live) or revive it (tombstoned by the same race), never a stranger's. A human seat
+    // is never adoptable.
+    const adoptable = opts.adoptDeclared === true && existing?.kind === 'agent';
+    if (existing && existing.left_at !== null && !adoptable)
       throw new MusterdError(
         'conflict',
         `"${input.name}" was used by a removed member of "${team.slug}" — pick another name`,
       );
     const live = await liveSponsoredAgents(t, team.id, sponsor.id);
-    if (live.length >= cap)
+    const alreadyCounted =
+      adoptable && existing.left_at === null && existing.sponsored_by === sponsor.id;
+    if (!alreadyCounted && live.length >= cap)
       throw new MusterdError(
         'forbidden',
         `you already have ${live.length} live agents (the cap of ${cap} per member) — ` +
           `remove one first: ${live.map((m) => m.name).join(', ')}`,
       );
+    if (adoptable && existing.left_at === null) {
+      if (existing.sponsored_by !== sponsor.id)
+        await t.run('UPDATE members SET sponsored_by = ?, updated_at = ? WHERE id = ?', [
+          sponsor.id,
+          now,
+          existing.id,
+        ]);
+      const row = (await getMemberByName(t, team.id, input.name))!;
+      return {
+        member: row,
+        ...(await issueAgentConnectNonce(t, team.id, row.id, sponsor.id, now)),
+      };
+    }
     const expiring = sponsor.lifecycle === 'until' && sponsor.lifecycle_until !== null;
-    const { row } = await addMember(t, team, {
+    const { row: added } = await addMember(t, team, {
       name: input.name,
       kind: 'agent',
       role: input.role ?? '',
       sponsoredBy: sponsor.id,
       ...(expiring ? { lifecycle: 'until' as const, lifecycleUntil: sponsor.lifecycle_until } : {}),
     });
+    // `reviveMember` does not stamp the sponsor; an adopted tombstone records it here.
+    let row = added;
+    if (adoptable && row.sponsored_by !== sponsor.id) {
+      await t.run('UPDATE members SET sponsored_by = ?, updated_at = ? WHERE id = ?', [
+        sponsor.id,
+        now,
+        row.id,
+      ]);
+      row = (await getMemberByName(t, team.id, input.name))!;
+    }
     return { member: row, ...(await issueAgentConnectNonce(t, team.id, row.id, sponsor.id, now)) };
   });
 }

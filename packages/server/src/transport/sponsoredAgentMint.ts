@@ -93,6 +93,9 @@ export async function mintSponsoredAgent(
     Date.now(),
     {
       cap: (await getPolicy(ctx.db, team.id)).sponsored_agent_cap,
+      // A verified declared file (above) means a member reconcile already made from it is
+      // this mint's own seat, not a stranger's — the store may adopt it (the 2026-10-28 race).
+      adoptDeclared: spec !== null && spec !== undefined,
     },
   );
   await appendAudit(ctx.db, team.id, {
