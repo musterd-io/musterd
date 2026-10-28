@@ -2,6 +2,7 @@ import type { Lane } from '@musterd/protocol';
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
+import { collectApproval } from './authority.js';
 import { resolve } from './helpers.js';
 import { followsUpFlag, readVerdictFlags, renderSubmitReport } from './lane.js';
 
@@ -106,9 +107,10 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
   );
   const { team, identity, http } = resolve(parsed.flags);
 
-  const board = await http.laneBoard(team, {});
   let id = parsed.positionals[0];
+  let target: Lane | undefined;
   if (!id) {
+    const board = await http.laneBoard(team, {});
     // Auto-target: the caller's single live lane. Zero → nothing to close; many → ask which.
     const live = board.lanes.filter((l) => l.owner_seat === identity.name && LIVE.has(l.state));
     if (live.length === 0) {
@@ -125,9 +127,13 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
       );
     }
     id = live[0]!.id;
+    target = live[0];
+  } else {
+    // Resolve the named lane directly, including short IDs, without reading unrelated lanes.
+    target = (await http.laneShow(team, id)).lane;
+    id = target.id;
   }
 
-  const target = board.lanes.find((l) => l.id === id);
   if (target?.state === 'awaiting_acceptance') {
     throw new CliError(
       `lane ${id} is already awaiting acceptance — leave it with the acceptor. ` +
@@ -154,7 +160,31 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
   };
   const submitting = Object.keys(merged).length > 0;
 
+  let approval;
+  if (authorizedBy !== undefined) {
+    if (authorizedBy !== identity.name) {
+      throw new CliError(
+        `A2 approval must be collected by the named human; run this command from ${authorizedBy}'s workspace`,
+        1,
+      );
+    }
+    approval = await collectApproval(
+      http,
+      team,
+      'set_authorized_by',
+      id,
+      {
+        lane: id,
+        authorized_by: authorizedBy,
+        pr: pr ?? null,
+        sha: sha ?? null,
+      },
+      authorizedBy,
+    );
+  }
+
   const res = await http.updateLane(team, id, {
+    ...(approval ? { approval } : {}),
     ...(submitting
       ? { state: 'awaiting_acceptance' as const, merged }
       : { state: 'done' as const }),
@@ -182,7 +212,13 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
   }
 
   // Chain into orientation: what's next now that this landed (the pair's whole point).
-  const brief = await http.next(team);
+  const brief = await http.next(team).catch(() => null);
+  if (!brief) {
+    process.stdout.write(
+      theme.meta('Could not load what is next — run `musterd next` to try again.') + '\n',
+    );
+    return 0;
+  }
   if (brief.up_next.length > 0) {
     process.stdout.write(`\n${theme.accent('up next')} — \`musterd next\` for the full brief:\n`);
     for (const l of brief.up_next.slice(0, 3)) process.stdout.write(laneLine(l) + '\n');
