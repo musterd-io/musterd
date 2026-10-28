@@ -199,6 +199,21 @@ withDrivers('hostProvisions', (o) => {
       expect(await sweepProvisions(db, now)).toEqual([]);
     });
 
+    it('sweepProvisions leaves a team it is told to skip untouched', async () => {
+      const { db, team, dana } = await teamWithHumans();
+      const now = Date.now();
+      const { member } = await createSponsoredAgent(db, team, dana, { name: 'remote' }, now);
+      const row = await insertProvision(
+        db,
+        team.id,
+        member.id,
+        dana.id,
+        now - PROVISION_PENDING_TTL_MS - 5,
+      );
+      expect(await sweepProvisions(db, now, new Set([team.id]))).toEqual([]);
+      expect((await sweepProvisions(db, now)).map((x) => x.row.id)).toEqual([row.id]);
+    });
+
     it('an unclaimed row past the TTL is cancelled unclaimed', async () => {
       const { db, team, dana } = await teamWithHumans();
       const now = Date.now();
