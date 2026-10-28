@@ -832,6 +832,22 @@ function OfficePreviewPage() {
         )}
         <button
           className="lc__pbtn"
+          title="a lane done (Ada pins the card; the shelf chimes ring and swing)"
+          onClick={() =>
+            fire({ kind: 'walk-pin', who: 'Ada', lane: `preview-done-${Date.now()}`, title: 'Ship the tour', state: 'done' })
+          }
+        >
+          ♪
+        </button>
+        <button
+          className="lc__pbtn"
+          title="a goal shipped (the chimes roll the whole scale)"
+          onClick={() => fire({ kind: 'goal-done', who: 'Cy', goal: 'preview-goal' })}
+        >
+          ♫
+        </button>
+        <button
+          className="lc__pbtn"
           title="roll call (the stream's wave across the folded plates)"
           onClick={() => handleRef.current?.rollCall()}
         >

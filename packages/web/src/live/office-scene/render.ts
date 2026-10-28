@@ -1260,7 +1260,9 @@ export const CHIME_SWING_S = 1.8;
  *  starts at the hit and dies with the note. Pure, so the test can hold its shape. */
 export function chimeSwing(dt: number): number {
   if (!(dt >= 0) || dt >= CHIME_SWING_S) return 0;
-  return 0.26 * Math.sin(2 * Math.PI * 1.7 * dt) * Math.exp(-dt / 0.6);
+  // 0.26 → 0.42 rad and a slower die-off (2026-10-28): at the panel's scale a bar is ~18 px long, and a
+  // quarter-radian swing was 4 px of travel — real, but not a thing a viewer catches. Twice that reads.
+  return 0.42 * Math.sin(2 * Math.PI * 1.5 * dt) * Math.exp(-dt / 0.75);
 }
 
 /**
