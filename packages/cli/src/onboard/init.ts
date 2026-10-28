@@ -523,6 +523,7 @@ export async function runInit(): Promise<number> {
   // 2) Team -----------------------------------------------------------------
   let team: string;
   let creatorToken: string;
+  let repointApproved = false;
   // The folder's OWN team outranks the globally-cached one (ADR 161). `config.current` is just the
   // last team this machine touched — in a bound worktree it is routinely something else entirely
   // (a finished experiment's team), and treating it as the primary is what let init offer to CREATE
@@ -598,6 +599,7 @@ export async function runInit(): Promise<number> {
       p.outro(pc.yellow('No changes made.'));
       return 0;
     }
+    repointApproved = true;
     ({ team, creatorToken } = await createTeam(config, server));
   } else if (liveTeams.length > 0) {
     p.log.info(
@@ -676,13 +678,44 @@ export async function runInit(): Promise<number> {
   }
 
   if (intent === 'watch') {
-    // Supervising posture: the human is already a member (joined at team create); nothing to mint.
+    // A saved human credential alone is not an identity for this folder (ADR 442).
+    // Never repoint an existing member's workspace just to watch as the human.
+    const human = credentialFor(config, team);
+    if (!human || !human.key.startsWith('mscr_')) {
+      p.log.error('No human credential for this team is available on this machine.');
+      return 1;
+    }
+    const binding = findBinding(process.cwd());
+    const sameHuman =
+      binding?.team === team && binding.claim?.mode === 'seat' && binding.claim.name === human.name;
+    if (binding && !sameHuman && !repointApproved) {
+      p.log.error(
+        `This folder is already bound to another member. Run musterd inbox --watch from ${human.name}'s own workspace.`,
+      );
+      return 1;
+    }
+    if (sameHuman && (binding.server !== server || binding.agent_key !== human.key)) {
+      p.log.error(
+        `This folder's saved connection for ${human.name} differs from the working credential or server. Reconnect with musterd claim ${human.name} --team ${team} --server ${server} --key <human credential>.`,
+      );
+      return 1;
+    }
+    if (!sameHuman) {
+      const bindingPath = saveBinding(process.cwd(), {
+        version: 2,
+        server,
+        team,
+        agent_key: human.key,
+        claim: { mode: 'seat', name: human.name },
+      });
+      await warnSecretConfig(bindingPath, 'your');
+    }
     p.note(
       `${pc.yellow('musterd inbox --watch')}   be present and watch the team live\n` +
         `${pc.yellow('musterd status')}         see who's online`,
-      'You are present',
+      'Ready to watch',
     );
-    p.outro(pc.yellow(`Watching ${team}. Run ${pc.bold('musterd inbox --watch')} when ready.`));
+    p.outro(pc.yellow(`Run ${pc.bold('musterd inbox --watch')} to join ${team} and watch live.`));
     return 0;
   }
 
@@ -1364,12 +1397,12 @@ async function confirmNameReuse(name: string, team: string, config: Config): Pro
  * Warn, and if there's a `.gitignore` here that doesn't already cover it, offer to add the line —
  * so the token isn't committed. Best-effort: never throws, only nudges.
  */
-async function warnSecretConfig(secretPath: string): Promise<void> {
+async function warnSecretConfig(secretPath: string, owner = "this agent's"): Promise<void> {
   const rel = relative(process.cwd(), secretPath);
   // Only manage .gitignore for files that actually live under this folder.
   const inTree = rel && !rel.startsWith('..');
   p.log.warn(
-    `${pc.yellow(rel || secretPath)} now holds ${pc.bold(`${pc.cyan('this agent')}'s access token`)} in plaintext — don't commit it.`,
+    `${pc.yellow(rel || secretPath)} now holds ${pc.bold(`${pc.cyan(owner)} access token`)} in plaintext — don't commit it.`,
   );
   if (!inTree) return;
   const gitignore = join(process.cwd(), '.gitignore');
