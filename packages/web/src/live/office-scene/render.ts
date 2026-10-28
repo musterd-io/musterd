@@ -1,5 +1,5 @@
 import { canvasFont } from '../canvasFont';
-import type { WorkingHours } from '@musterd/protocol';
+import type { LaneState, WorkingHours } from '@musterd/protocol';
 import type { Appearance } from './appearance';
 import { animFor, drawCharacter } from './character';
 import {
@@ -36,6 +36,7 @@ import {
   LOUNGE,
   MEETING,
   NOOK,
+  BIN,
   PLANTS,
   PODS,
   PRINTER,
@@ -48,7 +49,7 @@ import {
   type DeskSlot,
 } from './layout';
 import type { ReadStatus } from '../experimentReads';
-import { READ_PIN_CAP, readPins, stickySway, type WallBoard } from './wallboard';
+import { READ_PIN_CAP, readPins, stickySway, WALL_COLUMNS, type WallBoard } from './wallboard';
 import { DAY_ENV, deskLampOn, sunBeam, type LightEnv } from './lighting';
 import type { Weather } from './weather';
 import { CANVAS_EASE } from './motion';
@@ -696,16 +697,10 @@ function wallLaneBoard(
 
   // Six columns inside the frame, right of the gutter the goal tabs hang in (ADR 751). No ruled
   // dividers: cork has no lines on it, and the baked cap strips alone carry the column read.
-  const M = FR + 2;
-  const a0Cols = -W / 2 + M + BOARD_GUTTER;
-  const colW = (W - M * 2 - BOARD_GUTTER) / WALLBOARD_TONES.length;
-  const RAIL = -H / 2 + 14; // the read strip's rail: the goal rows fill the cork above it
-  const rowsTop = H / 2 - M - 5; // just under the caps
-  const rowsBottom = RAIL + 1.5;
   const rows = data?.rows?.length ? data.rows : [{ goalId: null, label: '', tone: GOAL_TABS.length - 1 }];
-  const rowH = (rowsTop - rowsBottom) / rows.length;
-  const noteW = 11;
-  const noteH = 8;
+  const { M, a0Cols, rail: RAIL, rowsTop, rowH, cardAt } = boardGrid(rows.length);
+  const noteW = BOARD_NOTE.w;
+  const noteH = BOARD_NOTE.h;
 
   // Each goal row: a twine line under it (not under the last), and its washi tab in the gutter.
   rows.forEach((row, r) => {
@@ -733,15 +728,11 @@ function wallLaneBoard(
 
   for (let i = 0; i < WALLBOARD_TONES.length; i++) {
     const tone = WALLBOARD_TONES[i]!;
-    const a0 = a0Cols + i * colW;
     // The cap strip — each column announcing its state even when it holds nothing — is in the render.
     const col = data?.[i];
     if (!col) continue;
     // Where a card at (x, y) in cell (row, this column) hangs: its tape's mid-point on the top edge.
-    const at = (row: number, x: number, y: number): [number, number] => [
-      a0 + 1 + noteW / 2 + x * (colW - 2 - noteW),
-      rowsTop - row * rowH - 2 - y * Math.max(0, rowH - noteH - 3),
-    ];
+    const at = (row: number, x: number, y: number): [number, number] => cardAt(i, row, x, y);
     // Tack holes first: where a lane hung this week before it moved on, in its own row (lane 01M50WEBTC).
     // At most three to a cell: more read as a scribble on the cork rather than as wear.
     const perCell = new Map<number, number>();
@@ -1006,6 +997,99 @@ const PINBOARD = {
   /** The twine strung between goal rows (ADR 751): there, but quieter than any card. */
   twine: 'rgba(110, 70, 30, 0.35)',
 } as const;
+
+/** The wall board's inner layout in board units (ADR 751): the column band right of the tab gutter,
+ *  and the goal rows between the caps and the read strip's rail. One home for the painter and for
+ *  anything that needs to find a card on the board from outside it. */
+function boardGrid(rowCount: number) {
+  const { w: W, h: H } = WALL_BOARD;
+  const M = 3 + 2;
+  const a0Cols = -W / 2 + M + BOARD_GUTTER;
+  const colW = (W - M * 2 - BOARD_GUTTER) / WALL_COLUMNS.length;
+  const rail = -H / 2 + 14;
+  const rowsTop = H / 2 - M - 5;
+  const rowH = (rowsTop - (rail + 1.5)) / Math.max(1, rowCount);
+  /** A card at (x, y) in cell (row, column): where its tape's mid-point sits on the board. */
+  const cardAt = (col: number, row: number, x: number, y: number): [number, number] => [
+    a0Cols + col * colW + 1 + BOARD_NOTE.w / 2 + x * (colW - 2 - BOARD_NOTE.w),
+    rowsTop - row * rowH - 2 - y * Math.max(0, rowH - BOARD_NOTE.h - 3),
+  ];
+  return { M, a0Cols, colW, rail, rowsTop, rowH, cardAt };
+}
+
+/** A card on the wall board, in board units. */
+const BOARD_NOTE = { w: 11, h: 8 } as const;
+
+/** Where a card's spot on the wall board is on screen — for the puff when a card moves with nobody
+ *  in the room to move it (ADR 751). */
+export function boardSpotPoint(
+  fit: Fit,
+  rowCount: number,
+  spot: { state: LaneState; row: number; x: number; y: number },
+): Pt {
+  const g = boardGrid(rowCount);
+  const [a, b] = g.cardAt(Math.max(0, WALL_COLUMNS.indexOf(spot.state)), spot.row, spot.x, spot.y);
+  const { tc, uc, wall } = WALL_BOARD;
+  return wallPt(WALL_EDGES[wall]!, tc + a / FLOOR, uc + (b - BOARD_NOTE.h / 2) / WALL_H, fit);
+}
+
+/** Where the wastebasket's mouth is on screen: the end of a thrown ball's flight. */
+export function binMouthPoint(fit: Fit): Pt {
+  const p = project(BIN.lx, BIN.ly, fit);
+  return { x: p.x, y: p.y - 15 * fit.scale };
+}
+
+/** How many paper balls the wastebasket shows before it reads as full. */
+const BIN_BALLS = 6;
+/** Where each ball sits in the bin's mouth (floor units from its centre, and how far above the rim):
+ *  the first three in the mouth, the rest piled on them and peeking over the rim. */
+const BALL_SPOTS: ReadonlyArray<[number, number, number]> = [
+  [-2.2, 1.0, 0],
+  [2.0, -1.4, 0],
+  [0.4, 2.4, 0],
+  [-0.6, -0.4, 2.6],
+  [2.4, 1.8, 2.2],
+  [-2.6, -2.0, 2.0],
+];
+
+/** A crumpled ball of a lane's card: off-white paper, a shaded side and two crease lines. */
+export function drawPaperBall(c: CanvasRenderingContext2D, x: number, y: number, r: number, spin = 0): void {
+  c.save();
+  c.translate(x, y);
+  c.rotate(spin);
+  c.fillStyle = '#F4EFE3';
+  c.beginPath();
+  // Not a circle: seven knuckles of folded paper.
+  for (let k = 0; k < 7; k++) {
+    const a = (k / 7) * Math.PI * 2;
+    const rr = r * (0.84 + ((k * 37) % 5) * 0.05);
+    if (k === 0) c.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    else c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  c.closePath();
+  c.fill();
+  c.fillStyle = 'rgba(120, 100, 70, 0.28)';
+  c.beginPath();
+  c.arc(r * 0.25, r * 0.25, r * 0.7, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = 'rgba(110, 90, 60, 0.55)';
+  c.lineWidth = Math.max(0.5, r * 0.18);
+  c.beginPath();
+  c.moveTo(-r * 0.5, -r * 0.2);
+  c.lineTo(r * 0.1, r * 0.15);
+  c.lineTo(r * 0.45, -r * 0.35);
+  c.stroke();
+  c.restore();
+}
+
+function paperBalls(c: CanvasRenderingContext2D, fit: Fit, n: number): void {
+  const r = 3 * fit.scale;
+  for (let i = 0; i < n; i++) {
+    const [dx, dy, up] = BALL_SPOTS[i]!;
+    const p = project(BIN.lx + dx, BIN.ly + dy, fit);
+    drawPaperBall(c, p.x, p.y - (14.5 + up) * fit.scale, r, i * 1.7);
+  }
+}
 
 /** The left gutter of the wall board where the goal tabs hang (ADR 751), in board units. */
 const BOARD_GUTTER = 26;
@@ -4345,6 +4429,21 @@ export function renderScene(
       parts: [{ kind: 'sprite', key: `shelf·${si}·${statKey}`, draw }],
     });
   });
+  {
+    // The wall board's wastebasket (ADR 751): one crumpled ball per lane abandoned today, up to six,
+    // piled in its mouth — the count is in the sprite key, so the cached bin changes only when it does.
+    const balls = Math.min(BIN_BALLS, wallBoard?.binned?.length ?? 0);
+    const bin = ro('bin', BIN.lx, BIN.ly);
+    const draw = (c: CanvasRenderingContext2D) => {
+      bin(c);
+      paperBalls(c, fit, balls);
+    };
+    items.push({
+      d: depth(BIN.lx, BIN.ly),
+      fn: () => draw(ctx),
+      parts: [{ kind: 'sprite', key: `bin·${balls}·${statKey}`, draw }],
+    });
+  }
   const nook = nookItems(ctx, fit, fx?.fridgeOpen ?? false, statKey, rendered);
   items.push(...nook.items);
 
@@ -4955,7 +5054,7 @@ export interface Cue {
   glyph: '' | '?' | '!' | '📣' | '✓' | '↦' | '↪';
   t: number;
   urgent: boolean;
-  kind?: 'ring' | 'wave' | 'door' | 'thread' | 'confetti';
+  kind?: 'ring' | 'wave' | 'door' | 'thread' | 'confetti' | 'toss' | 'dust';
   /** Confetti only: a newcomer's colour (lane 01M3F81DD9) — alternated with mustard, replacing the
    *  celebration palette, so the burst is theirs and the brand's. */
   tint?: string;
@@ -5010,6 +5109,36 @@ export function drawCue(ctx: CanvasRenderingContext2D, cue: Cue, scale: number):
     ctx.quadraticCurveTo(control.x, control.y, cue.to.x, cue.to.y);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  if (cue.kind === 'toss' && cue.to) {
+    // An abandoned lane's crumpled card (ADR 751), thrown from the hand into the wastebasket: a high
+    // arc that drops into the bin's mouth over the first two thirds of the cue, spinning as it goes.
+    const f = Math.min(1, t * 1.5);
+    if (f >= 1) return;
+    const dx = cue.to.x - at.x;
+    const dy = cue.to.y - at.y;
+    const lift = (26 + Math.abs(dx) * 0.25) * scale;
+    const x = at.x + dx * f;
+    const y = at.y + dy * f - lift * 4 * f * (1 - f);
+    drawPaperBall(ctx, x, y, 2.6 * scale, f * 9);
+    return;
+  }
+
+  if (cue.kind === 'dust') {
+    // A card moved with nobody in the room to carry it (ADR 751): a small puff of cork dust where it
+    // hung, so the change is seen rather than a card silently jumping.
+    const grow = 1 - Math.pow(1 - t, 2);
+    ctx.fillStyle = color;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.4;
+      ctx.globalAlpha = (1 - t) * 0.45;
+      ctx.beginPath();
+      ctx.arc(at.x + Math.cos(a) * grow * 7 * scale, at.y + Math.sin(a) * grow * 4 * scale - grow * 3 * scale, (1.6 + grow * 2) * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.globalAlpha = 1;
     return;
   }

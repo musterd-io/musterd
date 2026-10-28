@@ -2,6 +2,7 @@ import {
   CHECK_IN_MARKS,
   CHECK_IN_S,
   COFFEE_STAND,
+  BIN,
   BOARD_STAND,
   COOLER_STAND,
   DESK_SLOTS,
@@ -22,6 +23,7 @@ import { CANVAS_EASE } from './motion';
 import { findPath, walkable, type P, nearestWalkable } from './nav';
 import { carriesLaptop, workingAtDesk, type Placement } from './seating';
 import { chairShift, chairYaw, GESTURE, type IdleGesture, STRIDE } from './skeleton';
+import type { LaneState } from '@musterd/protocol';
 import type { Bubble, CarryKind, Dir, OfficeNode, Pose } from './types';
 
 /** A leisure-spot shape (couch cushion / armchair) an errand can sit at — see `layout.LEISURE_SPOTS`. */
@@ -405,14 +407,22 @@ interface Walk {
   /** A submitted lane's trip to the acceptor's desk: which card, and the leg at which it leaves the hand —
    *  until then the board paints its slot empty, like a claim. */
   deliver?: { seed: number; handLeg: number };
+  /** A recorded card move (ADR 751): which card, the leg it leaves the cork and the leg it is pinned
+   *  back at its new place — between the two it is in the hand. */
+  move?: { seed: number; state: PinState; takeLeg: number; pinLeg: number };
+  /** An abandoned lane's card (ADR 751): taken off the cork, crumpled, and thrown into the bin at
+   *  `throwLeg`. */
+  toss?: { seed: number; takeLeg: number; throwLeg: number };
 }
-type PinState = 'done' | 'awaiting_acceptance';
+type PinState = LaneState;
 type WalkReq = { kind: 'help' | 'handoff'; to: string; urgent: boolean };
 type Req =
   | WalkReq
   | { kind: 'claim'; seed: number }
   | { kind: 'pin'; seed: number; state: PinState }
-  | { kind: 'deliver'; to: string; seed: number };
+  | { kind: 'deliver'; to: string; seed: number }
+  | { kind: 'move'; seed: number; state: PinState }
+  | { kind: 'toss'; seed: number };
 
 /** How fast an errand ambles — slower than an act-walk; nobody hurries to the fridge. */
 const ERRAND_SPEED = 68;
@@ -579,6 +589,17 @@ export interface Actors {
    *  way out (the daemon emits the board note a beat before the acceptance ask). False when either member
    *  is not in the room — then the pin walk stands. */
   deliver(from: string, to: string, seed: number): boolean;
+  /** A recorded card move (ADR 751): `from` walks to the board, takes the card from where it hung and
+   *  pins it at its new place. False when they are not in the room — the card just moves. */
+  move(from: string, seed: number, state: PinState): boolean;
+  /** An abandoned lane (ADR 751): `from` walks to the board, takes the card, crumples it and throws it
+   *  into the bin. False when they are not in the room. */
+  toss(from: string, seed: number): boolean;
+  /** Every card a board walk has in play, and how far along: still on the cork (`before`), in a hand
+   *  (`hand`), or put where it is going (`done`). */
+  boardCards(): { seed: number; kind: 'pin' | 'move' | 'toss'; phase: 'before' | 'hand' | 'done' }[];
+  /** The tosses that have left the hand: who threw which card, so the scene can fly the ball. */
+  thrown(): { seed: number; who: string }[];
   /** The cards on the cork that the board data does not know about yet (pin walks past their pin leg). */
   pinnedSeeds(): { seed: number; state: PinState }[];
   /** The cards in someone's hand right now (claim walks past their take leg), as `laneSeed`s. */
@@ -1113,6 +1134,97 @@ export function createActors(): Actors {
   }
 
   /**
+   * A recorded card move (ADR 751): out empty-handed, a look at the board, reach and take the card from
+   * where it hangs, a step along with it in hand, reach and pin it at its new place, a beat looking at
+   * it, home. ~6–8s, like the claim.
+   */
+  function buildMove(from: string, seed: number, state: PinState, origin?: { lx: number; ly: number }): Walk | null {
+    const home = homes.get(from);
+    if (!home) return null;
+    const start = origin ?? home;
+    const avoid = othersAt(from);
+    const out = legsAlong(findPath({ lx: start.lx, ly: start.ly }, BOARD_STAND, avoid), 100, 1.2, 4.5, null);
+    const stand = out.length ? endOf(out) : { lx: start.lx, ly: start.ly };
+    const face = travelDir(stand.lx, stand.ly, stand.lx, 0);
+    const back = legsAlong(findPath(stand, { lx: home.lx, ly: home.ly }, avoid), 100, 1.2, 4.5, null);
+    const legs: Leg[] = [
+      ...out,
+      hold(stand, face, 0.4, { overlay: GESTURE.chin }),
+      hold(stand, face, 0.35, { overlay: GESTURE.reach }),
+      hold(stand, face, 0.35, { carry: 'card', overlay: GESTURE.take }),
+      hold(stand, face, 0.45, { carry: 'card' }),
+      hold(stand, face, 0.35, { carry: 'card', overlay: GESTURE.reach }),
+      hold(stand, face, 0.4, { overlay: GESTURE.take }),
+      hold(stand, face, 0.6, { overlay: GESTURE.chin }),
+      ...back,
+    ];
+    return {
+      legs,
+      i: 0,
+      t: 0,
+      small: home.small,
+      act: true,
+      move: { seed, state, takeLeg: out.length + 2, pinLeg: out.length + 5 },
+    };
+  }
+
+  /**
+   * An abandoned lane's card (ADR 751): out to the board, take the card, crumple it in both hands,
+   * turn to the bin and throw — the ball's flight is the scene's (`thrown`) — then watch it land, home.
+   */
+  function buildToss(from: string, seed: number, origin?: { lx: number; ly: number }): Walk | null {
+    const home = homes.get(from);
+    if (!home) return null;
+    const start = origin ?? home;
+    const avoid = othersAt(from);
+    const out = legsAlong(findPath({ lx: start.lx, ly: start.ly }, BOARD_STAND, avoid), 100, 1.2, 4.5, null);
+    const stand = out.length ? endOf(out) : { lx: start.lx, ly: start.ly };
+    const face = travelDir(stand.lx, stand.ly, stand.lx, 0);
+    const toBin = travelDir(stand.lx, stand.ly, BIN.lx, BIN.ly);
+    const back = legsAlong(findPath(stand, { lx: home.lx, ly: home.ly }, avoid), 100, 1.2, 4.5, null);
+    const legs: Leg[] = [
+      ...out,
+      hold(stand, face, 0.3, { overlay: GESTURE.chin }),
+      hold(stand, face, 0.35, { overlay: GESTURE.reach }),
+      hold(stand, face, 0.35, { carry: 'card', overlay: GESTURE.take }),
+      hold(stand, toBin, 0.5, { carry: 'card', overlay: GESTURE.take }),
+      hold(stand, toBin, 0.4, { overlay: GESTURE.reach }),
+      hold(stand, toBin, 0.7, {}),
+      ...back,
+    ];
+    return {
+      legs,
+      i: 0,
+      t: 0,
+      small: home.small,
+      act: true,
+      toss: { seed, takeLeg: out.length + 2, throwLeg: out.length + 4 },
+    };
+  }
+
+  /** Queue a board walk (move, toss) with the claim's and pin's preemption rules: it cuts in on a
+   *  stroll, waits behind a real act, and is dropped past three queued. */
+  function enqueueBoard(from: string, req: Req): boolean {
+    if (!homes.has(from) || exiting.has(from)) return false;
+    const inflight = walks.get(from);
+    if (inflight && (inflight.ambient || inflight.yield)) {
+      const w = build(from, req, posesNow().get(from));
+      pending.delete(from);
+      if (w) {
+        walks.set(from, w);
+        return true;
+      }
+      walks.delete(from);
+    }
+    const q = pending.get(from) ?? [];
+    if (q.length >= 3) return false;
+    q.push(req);
+    pending.set(from, q);
+    if (!walks.has(from)) startNext(from);
+    return true;
+  }
+
+  /**
    * The deliver trip: pick the card up at the desk, carry it over to the acceptor, hold it out (reach)
    * and let go (take, empty-handed), a short beat facing them, home. The acceptor's own pin walk later
    * takes the card from their desk to the board.
@@ -1142,6 +1254,8 @@ export function createActors(): Actors {
     if (req.kind === 'claim') return buildClaim(from, req.seed, origin);
     if (req.kind === 'pin') return buildPin(from, req.seed, req.state, origin);
     if (req.kind === 'deliver') return buildDeliver(from, req.to, req.seed, origin);
+    if (req.kind === 'move') return buildMove(from, req.seed, req.state, origin);
+    if (req.kind === 'toss') return buildToss(from, req.seed, origin);
     const home = homes.get(from);
     const target = homes.get(req.to);
     if (!home || !target) return null;
@@ -1345,10 +1459,43 @@ export function createActors(): Actors {
       if (!walks.has(from)) startNext(from);
       return true;
     },
+    move(from, seed, state) {
+      return enqueueBoard(from, { kind: 'move', seed, state });
+    },
+    toss(from, seed) {
+      return enqueueBoard(from, { kind: 'toss', seed });
+    },
+    boardCards() {
+      const out: { seed: number; kind: 'pin' | 'move' | 'toss'; phase: 'before' | 'hand' | 'done' }[] = [];
+      for (const w of walks.values()) {
+        if (w.pin) out.push({ seed: w.pin.seed, kind: 'pin', phase: w.i < w.pin.pinLeg ? 'hand' : 'done' });
+        if (w.move)
+          out.push({
+            seed: w.move.seed,
+            kind: 'move',
+            phase: w.i < w.move.takeLeg ? 'before' : w.i < w.move.pinLeg ? 'hand' : 'done',
+          });
+        if (w.toss)
+          out.push({
+            seed: w.toss.seed,
+            kind: 'toss',
+            phase: w.i < w.toss.takeLeg ? 'before' : w.i < w.toss.throwLeg ? 'hand' : 'done',
+          });
+      }
+      return out;
+    },
+    thrown() {
+      const out: { seed: number; who: string }[] = [];
+      for (const [who, w] of walks) if (w.toss && w.i >= w.toss.throwLeg) out.push({ seed: w.toss.seed, who });
+      return out;
+    },
     pinnedSeeds() {
       const out: { seed: number; state: PinState }[] = [];
-      for (const w of walks.values())
+      for (const w of walks.values()) {
         if (w.pin && w.i >= w.pin.pinLeg) out.push({ seed: w.pin.seed, state: w.pin.state });
+        // A recorded move's card, once re-pinned, swings like any other that just landed (ADR 751).
+        if (w.move && w.i >= w.move.pinLeg) out.push({ seed: w.move.seed, state: w.move.state });
+      }
       return out;
     },
     takenSeeds() {

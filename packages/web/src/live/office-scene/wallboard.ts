@@ -26,6 +26,8 @@ export interface WallSticky {
   y: number;
   /** When it was put there — a cell paints its cards oldest first, so a pile reads newest on top. */
   at: number;
+  /** Who put it there (ADR 751 `card.by`): the member the room shows moving it. */
+  by?: string;
   /** Someone is walking off with this card (a claim in flight): its place stays, its paper does not. */
   taken?: true;
   /** Seconds since a pin walk landed this card (L5): it swings on its tape for a moment, then hangs still. */
@@ -71,6 +73,8 @@ export interface WallRow {
 export type WallBoard = WallBoardColumn[] & {
   reads?: readonly ReadStatus[];
   rows?: readonly WallRow[];
+  /** Lanes abandoned today (local midnight on), oldest first: their cards are crumpled in the bin. */
+  binned?: readonly { seed: number; by: string }[];
 };
 
 /** How many goals get a row of their own before the rest share the last one. */
@@ -91,6 +95,7 @@ function keepReads(from: WallBoard, cols: WallBoardColumn[]): WallBoard {
     cols,
     from.reads ? { reads: from.reads } : {},
     from.rows ? { rows: from.rows } : {},
+    from.binned ? { binned: from.binned } : {},
   );
 }
 
@@ -250,6 +255,7 @@ export function projectWallBoard(
       x: place.x,
       y: place.y,
       at: lane.card?.at ?? lane.updated_at,
+      ...(lane.card ? { by: lane.card.by } : {}),
       ...(stalled.has(lane.id) ? { faded: true as const } : {}),
     });
     // Pin holes (lane 01M50WEBTC): a lane updated this week hung in every column before its own, in
@@ -265,7 +271,15 @@ export function projectWallBoard(
     col.stickies.sort((a, b) => a.at - b.at);
     return col;
   });
-  return Object.assign(cols, { rows }, reads.length ? { reads } : {});
+  // The bin (ADR 751): today's abandoned lanes, crumpled. An abandon clears the card, so who threw
+  // it away is the lane's last owner, else its opener.
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const binned = board.lanes
+    .filter((l) => l.state === 'abandoned' && l.updated_at >= midnight.getTime())
+    .sort((a, b) => a.updated_at - b.updated_at)
+    .map((l) => ({ seed: laneSeed(l.id), by: l.owner_seat ?? l.created_by }));
+  return Object.assign(cols, { rows }, reads.length ? { reads } : {}, binned.length ? { binned } : {});
 }
 
 /** How long a landed card swings before it hangs still, in seconds. */
@@ -280,5 +294,95 @@ export const STICKY_SWAY_S = 1.1;
 export function stickySway(age: number | undefined): number {
   if (age === undefined || age < 0 || age >= STICKY_SWAY_S) return 0;
   return Math.sin(age * 14) * Math.exp(-age * 2.8) * 5.5;
+}
+
+/** Where a card hung on the previous board: its column, row and place. */
+export interface CardSpot {
+  state: LaneState;
+  row: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * One recorded change of the board for the room to act out (ADR 751 spec, "Moves"): a card that
+ * appeared, a card that moved (column, row or place), or a card thrown away. `by` is who did it.
+ */
+export type BoardMove =
+  | { kind: 'pin'; seed: number; by: string; state: LaneState }
+  | { kind: 'move'; seed: number; by: string; state: LaneState; from: CardSpot }
+  | { kind: 'toss'; seed: number; by: string; from: CardSpot };
+
+const spotOf = ({ state, row, x, y }: CardSpot): CardSpot => ({ state, row, x, y });
+
+function spots(board: WallBoard): Map<number, CardSpot & { by?: string }> {
+  const out = new Map<number, CardSpot & { by?: string }>();
+  for (const col of board)
+    for (const s of col.stickies)
+      out.set(s.seed, { state: col.key, row: s.row, x: s.x, y: s.y, ...(s.by ? { by: s.by } : {}) });
+  return out;
+}
+
+/**
+ * What changed between two boards, for the room to walk. Pure. A card a walk is already carrying
+ * (`skip`: the claim, pin and deliver walks the acts start) is left to that walk. A card with no
+ * recorded mover (an older daemon) moves without anyone walking it.
+ */
+export function boardMoves(
+  prev: WallBoard | null,
+  next: WallBoard | null,
+  skip: ReadonlySet<number> = new Set(),
+): BoardMove[] {
+  if (!prev || !next) return [];
+  const was = spots(prev);
+  const now = spots(next);
+  const out: BoardMove[] = [];
+  for (const [seed, n] of now) {
+    if (skip.has(seed) || !n.by) continue;
+    const o = was.get(seed);
+    if (!o) out.push({ kind: 'pin', seed, by: n.by, state: n.state });
+    else if (o.state !== n.state || o.row !== n.row || o.x !== n.x || o.y !== n.y)
+      out.push({ kind: 'move', seed, by: n.by, state: n.state, from: spotOf(o) });
+  }
+  const tossed = new Map((next.binned ?? []).map((b) => [b.seed, b.by]));
+  for (const [seed, o] of was) {
+    if (now.has(seed) || skip.has(seed)) continue;
+    const by = tossed.get(seed);
+    if (by) out.push({ kind: 'toss', seed, by, from: spotOf(o) });
+  }
+  return out;
+}
+
+/** A card the room is moving right now, and how far the walk has got. */
+export interface CardInFlight {
+  seed: number;
+  /** Where it hung before; absent for a card arriving for the first time. */
+  from?: CardSpot;
+  /** `before`: still on the cork at `from`; `hand`: off the board; `gone`: thrown away. */
+  phase: 'before' | 'hand';
+}
+
+/**
+ * The board as it reads while a move or a toss walk is under way: until the hand takes it, the card
+ * still hangs where it was; while it is in the hand, it hangs nowhere. The landing needs nothing —
+ * the board already shows the card at its new place. A tossed card's ball joins the bin only once
+ * thrown, so a toss in flight also holds its ball back. Pure.
+ */
+export function withMoving(board: WallBoard | null, moving: readonly CardInFlight[]): WallBoard | null {
+  if (!board || moving.length === 0) return board;
+  const bySeed = new Map(moving.map((m) => [m.seed, m]));
+  const cols = board.map((col) => {
+    const kept = col.stickies.filter((s) => !bySeed.has(s.seed));
+    const back = moving
+      .filter((m) => m.phase === 'before' && m.from?.state === col.key)
+      .map((m): WallSticky => ({ seed: m.seed, state: col.key, row: m.from!.row, x: m.from!.x, y: m.from!.y, at: 0 }));
+    return kept.length === col.stickies.length && back.length === 0
+      ? col
+      : { ...col, stickies: [...back, ...kept] };
+  });
+  const out = keepReads(board, cols);
+  if (board.binned?.some((b) => bySeed.has(b.seed)))
+    out.binned = board.binned.filter((b) => !bySeed.has(b.seed));
+  return out;
 }
 

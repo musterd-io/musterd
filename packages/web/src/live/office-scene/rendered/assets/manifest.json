@@ -17,6 +17,17 @@
       "scale": 3.0
     },
     {
+      "id": "bin",
+      "file": "office-art-bin.webp",
+      "w": 60,
+      "h": 80,
+      "anchor": {
+        "x": 30.0,
+        "y": 60.0
+      },
+      "scale": 3.0
+    },
+    {
       "id": "chair/exec/E/back",
       "file": "office-art-chair-exec-E-back.webp",
       "w": 118,

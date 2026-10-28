@@ -13,6 +13,7 @@ import {
   LOUNGE,
   MEETING,
   NOOK,
+  BIN,
   PLANTS,
   PRINTER,
   RECEPTION,
@@ -163,6 +164,7 @@ function solidRects(): Rect[] {
     rect(FRONT_DESK.lx, FRONT_DESK.ly, FRONT_DESK.long, FRONT_DESK.deep, BODY_R, 'front-desk'),
   );
   for (const p of PLANTS) out.push(rect(p.lx, p.ly, 26, 26, BODY_R, 'plant'));
+  out.push(rect(BIN.lx, BIN.ly, 16, 16, 4, 'bin'));
   for (const s of BOOKSHELVES) {
     const sn = s.dir === 'S' || s.dir === 'N';
     // Per-shelf footprint — the units are no longer one repeated box, and a blocker sized off the

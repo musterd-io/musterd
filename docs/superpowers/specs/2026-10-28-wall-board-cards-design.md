@@ -40,7 +40,7 @@ Rows don't reshuffle as activity changes. Their order is the team's goal order (
 
 **The read strip** keeps its rail under the rows.
 
-**A bin** (increment 3, with the toss that fills it) stands on the floor under the board's right end: a small wire wastebasket, baked as `bin`. It shows crumpled paper balls: one per lane abandoned **today** (drawn from the board's abandoned lanes with `updated_at` today), up to six, piled. It empties at the team's midnight.
+**A bin** (increment 3, with the toss that fills it) stands on the floor under the board's right end: a small wire wastebasket, baked as `bin`. _(2026-10-28, lane 01M61T09MQ: it stands out on the café tile between the island and the couch's table instead — the floor under the board is behind the counter and the couch from the camera, and a bin there hid every ball. The throw is a lob from the board over the furniture.)_ It shows crumpled paper balls: one per lane abandoned **today** (drawn from the board's abandoned lanes with `updated_at` today), up to six, piled. It empties at the team's midnight.
 
 ## Moves
 
@@ -51,7 +51,7 @@ The daemon records every place (ADR 751). The scene compares each board with the
 | A new card (lane opened) | The opener walks to the board and pins it at its place. |
 | A card changes cell (claim, active, blocked, submit, done, goal change) | The `by` member walks to the board, takes the card from the old place, and pins it at the new one. The claim, pin and deliver walks that exist today stay as they are; the diff skips any card one of them is already carrying. |
 | A card moves within its cell (an agent tidied it) | The `by` member walks over and re-pins it. It's a short stand at the board, with no carry home. |
-| A card disappears because the lane was abandoned | The `by` member walks to the board, takes the card, crumples it (a two-beat squash of the paper sprite), and tosses it in an arc into the bin. A new ball joins the pile. |
+| A card disappears because the lane was abandoned | The lane's last owner (else its opener — an abandon clears the card, so `card.by` is gone) walks to the board, takes the card, crumples it, turns to the bin and lobs it in an arc. The ball joins the pile when it lands. |
 
 - If the `by` member isn't in the room, the card is still drawn in its new place, and a puff of dust at the old place marks the move. Nothing invisible animates.
 - Replays don't walk: when the page loads with history, it draws the board as it stands.

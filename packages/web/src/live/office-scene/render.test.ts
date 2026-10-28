@@ -531,6 +531,21 @@ describe('the wall agile board', () => {
     expect(paints.filter((c) => c === 'rgba(60, 35, 10, 0.26)')).toHaveLength(80);
   });
 
+  /** The wastebasket (ADR 751): one crumpled ball per lane thrown away today, and never more than six. */
+  it('fills the bin with a ball per lane abandoned today, up to six', () => {
+    const balls = (n: number) => {
+      const paints: string[] = [];
+      const wall = Object.assign(wallData(), {
+        binned: Array.from({ length: n }, (_, i) => ({ seed: i, by: 'ada' })),
+      });
+      boardScene(textCtx(paints, []), wall);
+      return paints.filter((c) => c === '#F4EFE3').length;
+    };
+    expect(balls(0)).toBe(0);
+    expect(balls(3)).toBe(3);
+    expect(balls(9)).toBe(6);
+  });
+
   // A stopped plan's cards (lane 01M4V9YKMG): sun-bleached paper, paler tape, a curled corner.
   it("paints a stalled lane's sticky sun-faded, and a fresh one at full wash", () => {
     const fresh: string[] = [];

@@ -77,8 +77,10 @@ import { createWelcome, stepWelcome } from './welcome';
 import { createWelcomeRoom, type WelcomeSoundAt } from './welcomeRoom';
 import {
   animatedDeskAnchors,
+  binMouthPoint,
   CHIME_SWING_S,
   boardAnchor,
+  boardSpotPoint,
   hoursAnchor,
   shelfAnchor,
   furnishedBox,
@@ -113,7 +115,19 @@ import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
 import { createLaneOwners } from './laneOwners';
-import { laneSeed, WALL_COLUMNS, withPinned, withTaken, type PinnedCard, type WallBoard } from './wallboard';
+import {
+  boardMoves,
+  laneSeed,
+  WALL_COLUMNS,
+  withMoving,
+  withPinned,
+  withTaken,
+  type BoardMove,
+  type CardInFlight,
+  type CardSpot,
+  type PinnedCard,
+  type WallBoard,
+} from './wallboard';
 import {
   enqueueSpeech,
   shapeSpeech,
@@ -896,6 +910,20 @@ export function mountOffice(
   const pinnedUntil = new Map<number, { state: PinnedCard['state']; until: number }>();
   /** When (scene clock, seconds) each pinned card landed — it swings on its tape for the first second (L5). */
   const pinLanded = new Map<number, number>();
+  /** Recorded card moves (ADR 751) waiting for the next frame — dispatched there, once the roster the
+   *  same update brought has its homes, so the mover can be found in the room. */
+  const boardQueue: BoardMove[] = [];
+  /** Where each card a move or toss walk is carrying hung before — the cork shows it there until the
+   *  hand takes it. */
+  const moveFrom = new Map<number, CardSpot>();
+  /** New cards a pin walk is carrying from a desk: hidden until pinned, since the board already shows them. */
+  const diffPins = new Set<number>();
+  /** Cards an act's own walk (claim, pin, deliver) has in hand, and for a while after: the board diff
+   *  leaves them to it rather than walking them twice. `laneSeed` → expiry (ms). */
+  const actSeeds = new Map<number, number>();
+  /** Thrown balls still in the air: the bin shows them only once landed. `laneSeed` → landing (ms). */
+  const tossLanding = new Map<number, number>();
+  let prevThrown = new Set<number>();
   function wallBoardNow(): WallBoard | null {
     const now = performance.now();
     for (const seed of actors.takenSeeds()) takenUntil.set(seed, now + 12_000);
@@ -911,7 +939,80 @@ export function mountOffice(
           return landed === undefined ? { seed, state: p.state } : { seed, state: p.state, age: clock - landed };
         }),
       );
-    return wb;
+    // ADR 751: a card a move or toss walk is carrying hangs where it was until the hand takes it, then
+    // nowhere until it is pinned or thrown; a new card stays in its opener's hand until pinned.
+    const inFlight: CardInFlight[] = [];
+    for (const c of actors.boardCards()) {
+      if (c.kind === 'pin') {
+        if (diffPins.has(c.seed) && c.phase === 'hand') inFlight.push({ seed: c.seed, phase: 'hand' });
+        continue;
+      }
+      const from = moveFrom.get(c.seed);
+      if (c.phase === 'before' && from) inFlight.push({ seed: c.seed, from, phase: 'before' });
+      else if (c.phase === 'hand' || c.kind === 'toss') inFlight.push({ seed: c.seed, phase: 'hand' });
+    }
+    for (const [seed, until] of tossLanding) {
+      if (until < now) tossLanding.delete(seed);
+      else if (!inFlight.some((m) => m.seed === seed)) inFlight.push({ seed, phase: 'hand' });
+    }
+    return inFlight.length ? withMoving(wb, inFlight) : wb;
+  }
+
+  /** Play the queued board moves (ADR 751): the mover walks it, or — out of the room — the card just
+   *  moves, with a puff of cork dust where it hung. */
+  function playBoardMoves(): void {
+    if (replaying) {
+      boardQueue.length = 0;
+      return;
+    }
+    while (boardQueue.length) {
+      const m = boardQueue.shift()!;
+      if (m.kind === 'pin') {
+        if (actors.pin(m.by, m.seed, m.state)) diffPins.add(m.seed);
+        continue;
+      }
+      const walked = m.kind === 'move' ? actors.move(m.by, m.seed, m.state) : actors.toss(m.by, m.seed);
+      if (walked) moveFrom.set(m.seed, m.from);
+      else if (tempo === 1) pushBoardDust(m.from);
+    }
+    // Forget the cards no walk is carrying any more.
+    const live = new Set(actors.boardCards().map((c) => c.seed));
+    for (const seed of moveFrom.keys()) if (!live.has(seed) && !tossLanding.has(seed)) moveFrom.delete(seed);
+    for (const seed of diffPins) if (!live.has(seed)) diffPins.delete(seed);
+  }
+
+  /** A ball leaves the hand (ADR 751): fly it from the thrower to the wastebasket's mouth. */
+  function flyTosses(): void {
+    const now = new Set<number>();
+    for (const t of actors.thrown()) {
+      now.add(t.seed);
+      if (prevThrown.has(t.seed)) continue;
+      const from = liveHead(t.who);
+      if (from && tempo === 1) {
+        cues.push({
+          at: { x: from.x, y: from.y + 22 * fit.scale },
+          to: binMouthPoint(fit),
+          color: '#F4EFE3',
+          glyph: '',
+          t: 0,
+          urgent: false,
+          kind: 'toss',
+        });
+      }
+      tossLanding.set(t.seed, performance.now() + (CUE_SECS / 1.5) * 1000);
+    }
+    prevThrown = now;
+  }
+
+  function pushBoardDust(at: CardSpot): void {
+    cues.push({
+      at: boardSpotPoint(fit, wallBoard?.rows?.length ?? 1, at),
+      color: 'rgba(140, 100, 60, 1)',
+      glyph: '',
+      t: 0,
+      urgent: false,
+      kind: 'dust',
+    });
   }
   let heads = new Map<string, Pt>(); // home head anchors — where in-place cues sit
   let occupied = false; // any online member on the floor → overhead lights on
@@ -2625,6 +2726,8 @@ export function mountOffice(
     drainReplay();
     const walking = actors.step(dt * tempo);
     flourishFreshPins();
+    playBoardMoves();
+    flyTosses();
     // Sound tied to motion (lane 01M5XS6KAD): what the floor just earned, panned to the body.
     for (const m of actors.takeMotionSounds()) {
       const name: Moment =
@@ -3174,7 +3277,21 @@ export function mountOffice(
     teamWorkingHours = next.teamWorkingHours ?? null;
     you = interactiveLabels ? (next.you ?? null) : null;
     // The wall's tack holes come with the board (`projectWallBoard`, lane 01M50WEBTC): one cork for everyone.
-    wallBoard = next.wallBoard ?? null;
+    // ADR 751: what changed on the board since the last one, for the room to walk — never on a replay,
+    // never on the first board, and never a card an act's own walk is already carrying.
+    const nextBoard = next.wallBoard ?? null;
+    if (wallBoard && nextBoard && !replaying) {
+      const nowMs = performance.now();
+      for (const [seed, until] of actSeeds) if (until < nowMs) actSeeds.delete(seed);
+      const skip = new Set<number>([
+        ...actSeeds.keys(),
+        ...takenUntil.keys(),
+        ...pinnedUntil.keys(),
+        ...actors.boardCards().map((c) => c.seed),
+      ]);
+      boardQueue.push(...boardMoves(wallBoard, nextBoard, skip));
+    }
+    wallBoard = nextBoard;
     // The board's owners are the base layer under what the room watches (lane 01M50TZDDM).
     if (next.laneOwners && next.laneOwners !== seededOwners) {
       seededOwners = next.laneOwners;
@@ -3483,6 +3600,7 @@ export function mountOffice(
       case 'walk-claim':
         // Claiming a lane (nick, 2026-10-09): to the wall board, think, take the card, carry it home.
         if (!replaying) laneOwners.note(ev.lane, ev.who);
+        actSeeds.set(laneSeed(ev.lane), performance.now() + 20_000);
         if (actors.claim(ev.who, laneSeed(ev.lane))) {
           const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
           setWalkTag(ev.who, walkTag('claim', t || null));
@@ -3501,6 +3619,7 @@ export function mountOffice(
           const accepted = ev.state === 'done' && laneOwners.closedByOther(ev.lane, ev.who);
           if (ev.state === 'awaiting_acceptance' && !replaying) laneOwners.note(ev.lane, ev.who);
           const seed = laneSeed(ev.lane);
+          actSeeds.set(seed, performance.now() + 20_000);
           if (actors.pin(ev.who, seed, ev.state)) {
             if (accepted) acceptedPins.add(seed); // the flourish waits for the card to land (`flourishFreshPins`)
             const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
@@ -3520,6 +3639,7 @@ export function mountOffice(
         // whoever re-routed it (lane 01M4V774MK).
         const carrier = laneOwners.carrier(ev.lane, ev.from);
         pushThread(carrier, ev.to, toneColor('handoff'));
+        actSeeds.set(laneSeed(ev.lane), performance.now() + 20_000);
         if (actors.deliver(carrier, ev.to, laneSeed(ev.lane))) {
           setWalkTag(carrier, walkTag('deliver', ev.to));
         }
