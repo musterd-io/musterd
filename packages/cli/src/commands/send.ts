@@ -320,7 +320,7 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
       )
         throw err;
       const authority = humanAskAnswerApproval(askId, act);
-      process.stdout.write('This answer needs your passkey.\n');
+      process.stderr.write('This answer needs your passkey.\n');
       const { collectApproval } = await import('./authority.js');
       const approval = await collectApproval(
         http,
@@ -348,7 +348,7 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
       );
     }
 
-    process.stdout.write('This answer needs your passkey.\n');
+    process.stderr.write('This answer needs your passkey.\n');
     const { collectApproval, laneReviewApproval } = await import('./authority.js');
     const authority = laneReviewApproval(refused.lane, act);
     const approval = await collectApproval(
