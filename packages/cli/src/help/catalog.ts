@@ -919,8 +919,9 @@ export const CATALOG: readonly CommandEntry[] = [
       'A device key binds your human authority to a passkey only you can use. `enroll` runs the ' +
       'passkey ceremony on the daemon’s own origin; with no standing key of yours, once the team ' +
       'has keys, a human admin countersigns (`--confirmed-by`). Once enrolled, high-authority acts ' +
-      '— human accepts, policy, grants, minting — need that key’s signature. `revoke` retires a key ' +
-      'by a standing key’s signature.',
+      '— human accepts, policy, grants, minting — need that key’s signature. On a terminal, the ' +
+      'approve and enroll pages open in Google Chrome; the URL is still printed, and a pipe does ' +
+      'not open a browser. `revoke` retires a key by a standing key’s signature.',
     examples: ['musterd authority enroll', 'musterd authority keys'],
   },
   {

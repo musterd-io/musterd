@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Parsed } from '../args.js';
 import { CliError } from '../errors.js';
-import { authorityCommand, browserOrigin, setPolicySigned } from './authority.js';
+import {
+  authorityCommand,
+  browserOrigin,
+  ceremonyLaunch,
+  openCeremony,
+  setPolicySigned,
+} from './authority.js';
 
 const h = vi.hoisted(() => ({
   server: 'http://localhost:4849',
@@ -212,6 +218,65 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
     });
     expect(out.join('')).toContain('device key key-1 revoked');
     vi.restoreAllMocks();
+  });
+});
+
+describe('ceremony browser', () => {
+  const url = 'http://localhost:4849/authority/approve?team=revive&nonce=abc';
+
+  it('opens Google Chrome from a terminal and stays quiet on a pipe', () => {
+    expect(ceremonyLaunch(url, 'darwin', true)).toEqual({
+      command: 'open',
+      args: ['-a', 'Google Chrome', url],
+    });
+    expect(ceremonyLaunch(url, 'linux', true)).toEqual({
+      command: 'google-chrome',
+      args: [url],
+    });
+    expect(ceremonyLaunch(url, 'win32', true)?.command).toBe('cmd');
+    expect(ceremonyLaunch(url, 'darwin', false)).toBeNull();
+  });
+
+  it('reports whether Chrome actually started', async () => {
+    const started = vi.fn(
+      (
+        _command: string,
+        _args: readonly string[],
+        _options: { stdio: 'ignore'; detached: true },
+      ) => {
+        const listeners = new Map<string, (code?: number | null) => void>();
+        return {
+          unref() {},
+          on(event: 'error' | 'exit', listener: (code?: number | null) => void) {
+            listeners.set(event, listener);
+            if (event === 'exit') listener(0);
+          },
+        };
+      },
+    );
+    await expect(
+      openCeremony(url, { platform: 'darwin', tty: true, spawn: started }),
+    ).resolves.toBe(true);
+    expect(started).toHaveBeenCalledWith('open', ['-a', 'Google Chrome', url], {
+      stdio: 'ignore',
+      detached: true,
+    });
+    const missing = vi.fn(() => {
+      const listeners = new Map<string, () => void>();
+      return {
+        unref() {},
+        on(event: 'error' | 'exit', listener: () => void) {
+          listeners.set(event, listener);
+          if (event === 'error') listener();
+        },
+      };
+    });
+    await expect(
+      openCeremony(url, { platform: 'darwin', tty: true, spawn: missing }),
+    ).resolves.toBe(false);
+    await expect(
+      openCeremony(url, { platform: 'darwin', tty: false, spawn: started }),
+    ).resolves.toBe(false);
   });
 });
 
