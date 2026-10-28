@@ -247,8 +247,11 @@ the build against the 8.42 MB budget.
 
 `dog.py` builds the office dog the way `figure.py` builds a member: rigid parts on joint Empties, an
 action is a function of the clip's phase. It is the painter's terrier: a warm-white coat with the three
-dark patches (a material mask in the body joint's space, so a patch follows the surface), black ears and
-one eye patch, a cream muzzle, bib, paws and tail tip, and the mustard collar. It is drawn at `SIZE` 1.6
+dark patches (a material mask in the body joint's space, so a patch follows the surface), black ears,
+a ski mask painted the same way on the skull (the top of the head dark, a ring round each eye), big
+white-rimmed eyes with a catch-light and pink cheeks (`FACE`, nick 2026-10-28: "very cute and
+expressive"; the eyes close in the `curl` sleep), a cream muzzle, bib, paws and tail tip, and the
+mustard collar. It is drawn at `SIZE` 1.6
 (nick, 2026-10-23: "small, but not this small"; the painter's 1.25 read too small rendered). Four
 clips map onto `pet.ts` modes: `walk` (a trot, frame from the gait phase), `sit`, `curl` (sleep and curl;
 flopped on its side, since rigid legs could not tuck under a curl without reading as a leap) and
