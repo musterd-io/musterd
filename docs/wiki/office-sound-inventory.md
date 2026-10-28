@@ -86,10 +86,10 @@ Rendered through an `OfflineAudioContext` on the dev server (mono, 44.1 kHz, six
 
 The harness resolves about 3 dB, so everything in the room sits where its role puts it; the chimes are the only voices deliberately above the foreground band.
 
-- Falsify: a re-render putting any room foley more than 3 dB outside this table. <!-- claim: other -->
 
 ## Falsifiers
 
+- "the room foley sits within 3 dB of the inc 3 render table" (2026-10-28): falsify: a re-render putting any room foley more than 3 dB outside that table. <!-- claim: other -->
 - The table lists every `case` in `soundEngine.ts`'s `moment` and `life` dispatch and every key of `CUES` as of inc 1 (2026-10-28); falsify: a `case '<name>'` in either dispatch, or a `CUES` key, not in the table. <!-- claim: other -->
 - ~~"`footsteps` is not tied to anyone walking" (2026-10-27)~~ FIXED 2026-10-27 by lane 01M5XS6KAD: `footsteps` is no longer in `LIFE_EVENTS`; falsify: a `footsteps` entry back in the table. <!-- claim: defect -->
 - "an ask plays two sounds" (2026-10-27): falsify: `emit` in `office-scene/index.ts` not calling `roomTone.moment('askbell', …)` while `Stream.tsx` chimes `ask`. <!-- claim: defect -->
