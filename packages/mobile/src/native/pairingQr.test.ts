@@ -121,7 +121,7 @@ describe('pairRequest', () => {
       qr: parsed,
       signing,
       receive,
-      keyId: 'K'.repeat(43),
+      keyId: b64(32, 5),
       attestation: 'attest',
       push: { token, environment: 'production' },
     });
@@ -134,12 +134,25 @@ describe('pairRequest', () => {
     expect(request).not.toHaveProperty('device_name');
   });
 
+  it('normalizes the standard Base64 key id Apple returns to base64url', () => {
+    const appleKeyId = 'AcP/pnpoNVPIJYZOvmIvWzDvmxkFoQCE4Uu7Nk6WiAA=';
+    const request = pairRequest({
+      qr: parsed,
+      signing,
+      receive,
+      keyId: appleKeyId,
+      attestation: 'attest',
+    });
+    expect(request?.attest_key_id).toBe(Buffer.from(appleKeyId, 'base64').toString('base64url'));
+    expect(AppPairRequestSchema.parse(request).attest_key_id).toHaveLength(43);
+  });
+
   it('omits a push token that is not hex, and still builds the request', () => {
     const request = pairRequest({
       qr: parsed,
       signing,
       receive,
-      keyId: 'K'.repeat(43),
+      keyId: b64(32, 5),
       attestation: 'attest',
       push: { token: 'nope', environment: 'production' },
     });

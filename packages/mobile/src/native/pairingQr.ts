@@ -114,6 +114,18 @@ export function callbackUrl(relay: string, team: string): string | null {
 const PUSH_TOKEN = /^[0-9a-f]{64,200}$/;
 
 /**
+ * Apple's key id is the SHA-256 key digest in standard Base64 (padding and `+`/`/` included);
+ * the pairing wire carries the same 32 bytes as canonical base64url. Decode strictly and
+ * re-encode, so only a real 32-byte digest in either alphabet is accepted.
+ */
+export function attestKeyId(value: string): string | null {
+  const normalized = value.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const raw = b64urlDecode(normalized);
+  if (!raw || raw.length !== 32 || b64urlEncode(raw) !== normalized) return null;
+  return normalized;
+}
+
+/**
  * The sealed body's plaintext. A push token is included only when it is the shape the daemon
  * stores; a missing or odd token still pairs, and that binding gets no push (ADR 676 §5).
  */
@@ -125,6 +137,8 @@ export function pairRequest(input: {
   attestation: string;
   push?: { token: string; environment: 'production' | 'development' };
 }): AppPairRequest | null {
+  const keyId = attestKeyId(input.keyId);
+  if (!keyId) return null;
   const push =
     input.push && PUSH_TOKEN.test(input.push.token)
       ? { push_token: input.push.token, push_environment: input.push.environment }
@@ -134,7 +148,7 @@ export function pairRequest(input: {
     code: input.qr.code,
     signing_public_key: input.signing,
     receive_public_key: input.receive,
-    attest_key_id: input.keyId,
+    attest_key_id: keyId,
     attestation: input.attestation,
     ...push,
   });
