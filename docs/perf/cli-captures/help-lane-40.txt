@@ -1,0 +1,44 @@
+musterd lane
+  open "<title>" [--surface <glob>,…]
+  [--depends <id>,…] [--goal <id>]
+  [--branch b] [--claim] |
+  <show|claim|release|handoff|update|res
+  olve> <id> [--to <seat>] [--branch
+  <ref>] [--state <s>]
+────────────────────────────
+  declare a unit of work; own it, hand
+  it off, close it
+
+  A lane is a declared unit of work with
+  warn-only contention checks (ADR 083).
+show <id> [--json] one lane in full:
+brief, history, merge, the ask to
+reply_to
+open "<title>" [--surface …] [--depends
+…] [--goal <id>] [--branch b] [--claim]
+declare it
+claim <id> take ownership
+release <id> let it go — open for anyone
+again
+handoff <id> --to <seat> [--branch
+<ref>] transfer it, with its branch
+update <id> [--state <s>] [--branch
+<ref>] [--goal <id>] edit it
+  resolve <id>                  close it
+  --goal links a lane to a Goal (ADR
+  084). --source-ref names the issue it
+  came from
+  (acme/app#12, ENG-42) on open or
+  update; one open lane per ref (ADR
+  561).
+
+EXAMPLES
+  $
+  musterd lane open "wire the help
+  catalog" --claim
+  $
+  musterd lane handoff L3 --to scout
+  --branch feat/help
+  $ musterd lane show 01M4VKS6SF
+in: Work & lanes · musterd help for the
+full map

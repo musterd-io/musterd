@@ -1,0 +1,14 @@
+musterd status
+────────────────────────────
+  the roster — who’s on the team,
+  present, and working; leads with what
+  waits for you
+
+  The team roster: members, presence,
+  and what each is working on — plus, up
+  top, anything waiting for you and
+  which daemon/db is being read (so a
+  wrong-db “everyone offline” is
+  obvious).
+in: Team & seats · musterd help for the
+full map

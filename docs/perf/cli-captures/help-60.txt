@@ -1,0 +1,115 @@
+╭────────────────────────────────────╮
+│  ● ● ○   musterd ▊                 │
+│  your agents, on a team with you.  │
+╰────────────────────────────────────╯
+
+the coordination layer for your team
+→ musterd help <command> for detail
+
+────────────────────────────
+START HERE
+init    interactive first-run setup — wire this folder to
+        musterd
+claim   get onto the team from this folder — occupy or adopt
+        a seat (MCP: team_join)
+status  the roster — who’s on the team, present, and
+        working; leads with what waits for you
+next    the orientation brief — what you carry, what to pick
+        up next
+
+────────────────────────────
+WAITING & ORIENTATION  what is waiting for you, what to pick
+                       up next, who you are here
+next          the orientation brief — what you carry, what
+              to pick up next
+inbox         read what’s waiting for you; watch or block
+              for the next act
+whoami        the seat this folder resolves to (member,
+              team, surface, source)
+availability  set your availability (away holds
+              notifications; dnd passes urgent) — MCP:
+              team_availability
+  … +5 more — musterd help waiting
+
+────────────────────────────
+TALKING  send a typed act to a teammate, a few, or everyone
+send  send a typed act to a teammate, a few teammates, the
+      team, or everyone
+  … +1 more — musterd help messaging
+
+────────────────────────────
+WORK & LANES  explore shared Seeds; own, hand off, and close
+              Lanes; the board
+seed   explore a shared idea before it becomes a Lane
+lane   declare a unit of work; own it, hand it off, close it
+lanes  the lane board — who owns what, with live warnings
+done   close your work — mark the lane done (or submit it,
+       with a merge attestation), then show what’s next
+goal   declare a team Goal; lanes join it and status is
+       derived
+board  open the work board in your browser, signed in as
+       yourself
+  … +2 more — musterd help work
+
+────────────────────────────
+REMEMBERING  this seat's private continuity note; findings
+             for the whole team
+memory  this seat’s private continuity note (save before you
+        hand off)
+  … +2 more — musterd help remembering
+
+────────────────────────────
+TEAM & SEATS  who is on the team; create, claim, join,
+              release, and recover seats
+team      create a team, add/remove members, manage scoped
+          bootstrap credentials and invites, archive a team,
+          export the roster to git
+agent     add an agent AND give it its own isolated
+          workspace
+human     add a person AND give them a member workspace to
+          stand in
+status    the roster — who’s on the team, present, and
+          working; leads with what waits for you
+seats     every seat on this machine — what bare `musterd`
+          picks from; launch one with `musterd <name>`
+claim     get onto the team from this folder — occupy or
+          adopt a seat (MCP: team_join)
+requests  list and decide claim/teammate requests
+          (admin-only)
+  … +14 more — musterd help team
+
+────────────────────────────
+INSIGHT & AUDIT  flow metrics, the wasted-work collector,
+                 and the governance trail
+report  the insight report — flow metrics, waiting-on, the
+        Goal board
+  … +4 more — musterd help insight
+
+────────────────────────────
+SETUP & DAEMON  get wired up and run the coordination daemon
+init     interactive first-run setup — wire this folder to
+         musterd
+tour     a hands-on tour: give your agent a small lane,
+         judge it, read the record
+serve    run the coordination daemon in the foreground
+service  run the daemon (or the /live viewer, or the wake
+         actuator) as a background service
+  … +12 more — musterd help setup
+
+────────────────────────────
+RESIDENCY & SESSIONS  wake enrolled seats while offline; the
+                      captured harness session
+residency  enroll this seat for wake-on-message while
+           offline (ADR 131)
+session    this workspace’s captured harness session — what
+           a wake would resume (ADR 131)
+host       the wake actuator — resurrect enrolled offline
+           seats on this machine; provisions the agents you
+           create (ADR 131, 463)
+
+────────────────────────────────────────────────────────────
+global flags  --team <slug> --server <url> --json --no-color
+global flags  --quiet
+acts  message status_update request_help handoff accept
+acts  decline wait resolve steer challenge defer
+more musterd help <command> · musterd help --json
