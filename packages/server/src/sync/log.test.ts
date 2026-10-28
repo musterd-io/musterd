@@ -149,19 +149,20 @@ withDrivers('log', (_o, kind) => {
       return { db, team, provision };
     }
 
-    it('accepts-and-drops a joiner provision-settlement echo when the hub provision is already terminal', async () => {
+    it('stages a joiner provision-settlement echo when the hub provision is already terminal', async () => {
       // The macbook-air-2 wedge (2026-10-28): a joiner's pre-guard sweep settled a provision
       // locally and staged host.provision_cancelled; the hub had already settled it ready, yet
       // ingest refused the credential fact outright and the machine's whole tail wedged behind
-      // it. The echo of a decision the hub already made is dropped, never stored, and the
-      // origin sequence still advances.
+      // it. The echo is STAGED, not dropped: the fold's dense origin sequence cannot skip a
+      // seq (a drop stopped the hub fold with origin_gap at the very next event), and staging
+      // is harmless — the fold cancels only a still-pending provision.
       const { db, team, provision } = await provisionAt('ready');
       const res = await ingestBatch(db, team.id, 'node-a', [
         ledgerEv('node-a', 1, 'host.provision_cancelled', provision.id),
         await ev('node-a', 2),
       ]);
-      expect(res.accepted).toBe(1);
-      expect(await staged(db)).toEqual({ n: 1 });
+      expect(res.accepted).toBe(2);
+      expect(await staged(db)).toEqual({ n: 2 });
       expect(await highestContiguousSeq(db, 'node-a')).toBe(2);
       expect(
         await db.get('SELECT state FROM host_provisions WHERE id = ?', [provision.id]),
