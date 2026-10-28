@@ -1102,6 +1102,29 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec('ALTER TABLE lane_heads ADD COLUMN IF NOT EXISTS pushed_at BIGINT');
     },
   },
+  {
+    // Lane 01M4YY5Z38 (ADR 750): the two `urgent` indexes and the `urgent` virtual generated column
+    // were applied to the revive hub's database out-of-band during that lane's diagnosis, and no
+    // query on main uses them — with planner statistics present the poll's ledger read seeks
+    // idx_messages_team_ts and the candidates read seeks idx_messages_inbox_cover, with or without
+    // the column (measured, plans identical). The full-coverage idx_messages_team_to_kind_urgent
+    // cost an index update per message insert for nothing. Drop them so the live store is
+    // reproducible from the ladder; every step is a no-op where the out-of-band step never ran.
+    version: 133,
+    sqlite: (db) => {
+      db.exec(`
+        DROP INDEX IF EXISTS idx_messages_team_urgent;
+        DROP INDEX IF EXISTS idx_messages_team_to_kind_urgent;
+      `);
+      const cols = db.prepare("SELECT name FROM pragma_table_xinfo('messages')").pluck().all();
+      if (cols.includes('urgent')) db.exec('ALTER TABLE messages DROP COLUMN urgent');
+      db.exec('ANALYZE messages');
+    },
+    postgres: async () => {
+      // The out-of-band ALTER ran on the hub's SQLite store only; a Postgres store never had the
+      // column (and main's SQL never references it — delivery keeps json_extract, ADR 750).
+    },
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (
