@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import {
   ApprovalProofSchema,
   PolicyOverrideSchema,
@@ -75,6 +76,69 @@ export function browserOrigin(server: string): string {
   }
 }
 
+/** How a terminal launches the ceremony page. A pipe returns null so a capturing script never
+ * opens a browser. Chrome is named outright: the Mac login passkey sheet has to come up in the
+ * browser the human actually uses, not whichever app owns http. */
+export function ceremonyLaunch(
+  url: string,
+  platform: NodeJS.Platform = process.platform,
+  tty: boolean = Boolean(process.stdout.isTTY),
+): { command: string; args: string[] } | null {
+  if (!tty) return null;
+  if (platform === 'darwin') return { command: 'open', args: ['-a', 'Google Chrome', url] };
+  if (platform === 'win32') return { command: 'cmd', args: ['/c', 'start', '', 'chrome', url] };
+  return { command: 'google-chrome', args: [url] };
+}
+
+type CeremonyChild = {
+  unref: () => void;
+  on: (event: 'error' | 'exit', listener: (code?: number | null) => void) => void;
+};
+
+/** Open the ceremony URL in Chrome. False when this is not a terminal, or Chrome does not start.
+ * The printed URL remains either way. */
+export function openCeremony(
+  url: string,
+  opts: {
+    platform?: NodeJS.Platform;
+    tty?: boolean;
+    spawn?: (
+      command: string,
+      args: readonly string[],
+      options: { stdio: 'ignore'; detached: true },
+    ) => CeremonyChild;
+  } = {},
+): Promise<boolean> {
+  const launch = ceremonyLaunch(
+    url,
+    opts.platform ?? process.platform,
+    opts.tty ?? Boolean(process.stdout.isTTY),
+  );
+  if (!launch) return Promise.resolve(false);
+  const start = opts.spawn ?? spawn;
+  const child = start(launch.command, launch.args, { stdio: 'ignore', detached: true });
+  child.unref();
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => done(false), 1500);
+    function done(ok: boolean) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(ok);
+    }
+    child.on('error', () => done(false));
+    child.on('exit', (code) => done(code === 0));
+  });
+}
+
+/** Print the ceremony URL, open it in Chrome on a terminal, then say what the command is waiting for. */
+async function presentCeremony(lead: string, url: string, waiting: string): Promise<void> {
+  humanPrompt(`${lead} ${url}\n`);
+  if (await openCeremony(url)) humanPrompt('Opened in Chrome.\n');
+  humanPrompt(waiting);
+}
+
 /** Build the server's descriptor, send the human to approve it with their passkey, and wait for the
  * parked proof (ADR 662). Exported for any command whose act the daemon refuses unsigned. */
 export async function collectApproval(
@@ -99,7 +163,7 @@ export async function collectApproval(
   const url =
     `${browserOrigin(http.server)}/authority/approve?team=${encodeURIComponent(team)}` +
     `&nonce=${encodeURIComponent(d.nonce)}`;
-  humanPrompt(`Approve at ${url}\nwaiting for the parked proof…\n`);
+  await presentCeremony('Approve at', url, 'waiting for the parked proof…\n');
   const deadline = Date.now() + 4 * 60 * 1000;
   for (;;) {
     try {
@@ -516,7 +580,7 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
       `${browserOrigin(http.server)}/authority/passkey?team=${encodeURIComponent(team)}` +
       `&member=${encodeURIComponent(member)}&challenge=${encodeURIComponent(challenge)}` +
       fragment;
-    humanPrompt(`Open ${url}\nwaiting for the passkey ceremony…\n`);
+    await presentCeremony('Open', url, 'waiting for the passkey ceremony…\n');
     const deadline = Date.now() + 4 * 60 * 1000;
     for (;;) {
       const { keys } = await http.listDeviceKeys(team);
