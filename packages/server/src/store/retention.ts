@@ -360,7 +360,16 @@ export async function storeSizes(
   return out;
 }
 
+const syncLogBytesCache = new WeakMap<Driver, { value: number; at: number }>();
+const SYNC_LOG_BYTES_TTL_MS = 60_000;
+
 async function syncLogBytes(db: Driver, out: StoreSizes): Promise<void> {
+  const now = Date.now();
+  const cached = syncLogBytesCache.get(db);
+  if (cached && now - cached.at < SYNC_LOG_BYTES_TTL_MS) {
+    out.sync_log_bytes = cached.value;
+    return;
+  }
   try {
     // The table plus its indexes: dbstat is compiled into better-sqlite3's SQLite; Postgres has
     // pg_total_relation_size. Engine introspection, not store SQL — the one dialect branch here.
@@ -370,7 +379,11 @@ async function syncLogBytes(db: Driver, out: StoreSizes): Promise<void> {
         : await db.get<{ b: number | null }>(
             "SELECT SUM(pgsize) AS b FROM dbstat WHERE name = 'sync_log' OR name LIKE 'idx_sync_log_%'",
           );
-    if (r && r.b !== null) out.sync_log_bytes = Number(r.b);
+    if (r && r.b !== null) {
+      const v = Number(r.b);
+      out.sync_log_bytes = v;
+      syncLogBytesCache.set(db, { value: v, at: now });
+    }
   } catch {
     // a build without dbstat: omit, do not guess
   }
