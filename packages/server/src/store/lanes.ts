@@ -10,6 +10,7 @@ import {
   deriveReadStatus,
   emptyPoolFromCandidates,
   isAwaitingAcceptance,
+  laneCardColumn,
   LANE_CONTENDING_STATES,
   LANE_TERMINAL_STATES,
   LaneRequestedSchema,
@@ -19,6 +20,7 @@ import {
   type BuiltOn,
   type Goal,
   type Lane,
+  type LaneCard,
   type LaneMetric,
   type MetricInput,
   type LaneState,
@@ -32,6 +34,7 @@ import { MusterdError } from '../errors.js';
 import { appendLaneEventRequired, type AuditAction, type AuditRow } from './audit.js';
 import { stalledContinuationWarning } from './continuationStall.js';
 import { listGoals } from './goals.js';
+import { pickCardPlace } from './laneCard.js';
 import { withSamples } from './laneSamples.js';
 import { getPolicy } from './teams.js';
 
@@ -86,6 +89,8 @@ interface LaneRow {
   pre_registered_json: string | null;
   /** ADR 673 (v112): what the read measures, JSON `{name, unit, baseline, target, direction, source, by, at}`; null = none. */
   metric_json: string | null;
+  /** ADR 751 (v134): the card's place on the wall board, JSON `{x, y, by, at}`; null = off the board. */
+  card_json: string | null;
   /** ADR 585 (v95): the claims filed at submit / re-checked at accept; null = none filed. */
   claims_json: string | null;
   /** ADR 582 §3 (v98): explicit area override; null = derive at read time from `surface_globs`. */
@@ -266,6 +271,7 @@ function rowToLane(row: LaneRow, teamSlug: string, nowMs: number = Date.now()): 
       ? { pre_registered: JSON.parse(row.pre_registered_json) as Lane['pre_registered'] }
       : {}),
     ...(row.metric_json ? { metric: JSON.parse(row.metric_json) as Lane['metric'] } : {}),
+    ...(row.card_json ? { card: JSON.parse(row.card_json) as LaneCard } : {}),
     ...(row.claims_json ? { claims: JSON.parse(row.claims_json) as Lane['claims'] } : {}),
     ...(row.declined_json ? { declined: JSON.parse(row.declined_json) as Lane['declined'] } : {}),
     created_by: row.created_by,
@@ -495,6 +501,7 @@ export async function openLane(
     read_verdict_json: null,
     pre_registered_json: preRegistered ? JSON.stringify(preRegistered) : null,
     metric_json: metric ? JSON.stringify(metric) : null,
+    card_json: null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
     created_at: now,
@@ -502,10 +509,14 @@ export async function openLane(
     resolved_at: null,
     updated_at: now,
   };
-  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, requested_json, reads_on, pre_registered_json, metric_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref, requested_json, reads_on, pre_registered_json, metric_json, card_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  let card: LaneCard | null = null;
   await db.tx(async (t) => {
     if (row.source_ref !== null) await refuseHeldSourceRef(t, teamId, row.source_ref, row.id);
+    // ADR 751: a new lane's card goes up in the emptiest part of its cell, put there by its opener.
+    card = await placeCard(t, teamId, row.id, row.goal_id, row.state, createdBy, now);
+    row.card_json = JSON.stringify(card);
     await t.run(INSERT, [
       row.id,
       row.team_id,
@@ -529,6 +540,7 @@ export async function openLane(
       row.reads_on,
       row.pre_registered_json,
       row.metric_json,
+      row.card_json,
       row.state,
       row.created_by,
       row.created_at,
@@ -559,6 +571,7 @@ export async function openLane(
       ...(row.reads_on !== null ? { reads_on: row.reads_on } : {}),
       ...(preRegistered ? { pre_registered: preRegistered } : {}),
       ...(metric ? { metric } : {}),
+      ...(card ? { card } : {}),
       created_by: createdBy,
       created_at: now,
     });
@@ -780,6 +793,34 @@ async function refuseHeldSourceRef(
  * prerequisites, each also correct under today's single daemon (a future `await` between a
  * caller's read and this write must not silently reintroduce the blind overwrite).
  */
+/**
+ * ADR 751: a card for `laneId` in the cell (`goalId` × the column of `state`), at the spot the
+ * picker chooses among the cell's other cards; null when the state is off the board.
+ */
+async function placeCard(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+  goalId: string | null,
+  state: string,
+  by: string,
+  now: number,
+): Promise<LaneCard | null> {
+  const column = laneCardColumn(state);
+  if (column === null) return null;
+  const states =
+    column === 'awaiting_acceptance' ? ['awaiting_acceptance', 'ready_for_review'] : [column];
+  const rows = await db.all<{ card_json: string }>(
+    `SELECT card_json FROM lanes
+      WHERE team_id = ? AND id <> ? AND card_json IS NOT NULL
+        AND state IN (${states.map(() => '?').join(', ')})
+        AND ${goalId === null ? 'goal_id IS NULL' : 'goal_id = ?'}`,
+    [teamId, laneId, ...states, ...(goalId === null ? [] : [goalId])],
+  );
+  const others = rows.map((r) => JSON.parse(r.card_json) as LaneCard);
+  return { ...pickCardPlace(laneId, others), by, at: now };
+}
+
 export async function updateLane(
   db: Driver,
   teamId: string,
@@ -982,6 +1023,25 @@ async function updateLaneInTx(
   // toward the very policy it was overriding — inflating the policy bucket with its own refutations.
   // Untouched otherwise, so a patch to some other field never launders provenance.
   const stakesProvenance = patch.stakes !== undefined ? 'declared' : existing.stakes_provenance;
+  // ADR 751: the card follows its cell. Off the board (parked, abandoned) it is gone; a named place
+  // wins; a new cell, or a lane that never had a card, gets the emptiest spot in its cell.
+  const goalId = patch.goal_id !== undefined ? patch.goal_id : existing.goal_id;
+  const column = laneCardColumn(state);
+  const movedCell =
+    column !== laneCardColumn(existing.state) || goalId !== existing.goal_id || !existing.card;
+  if (patch.card && column === null)
+    throw new MusterdError(
+      'bad_request',
+      `lane ${id} is ${state}, so it has no card on the board to place (ADR 751)`,
+    );
+  const card: LaneCard | null =
+    column === null
+      ? null
+      : patch.card
+        ? { x: patch.card.x, y: patch.card.y, by: audit?.actor ?? 'unknown', at: now }
+        : movedCell
+          ? await placeCard(db, teamId, id, goalId, state, audit?.actor ?? 'unknown', now)
+          : (existing.card ?? null);
   const next = {
     id,
     team_id: teamId,
@@ -993,7 +1053,7 @@ async function updateLaneInTx(
     surface_globs: JSON.stringify(patch.scope ?? existing.scope),
     depends_on: JSON.stringify(patch.depends_on ?? existing.depends_on),
     branch: patch.branch !== undefined ? patch.branch : existing.branch,
-    goal_id: patch.goal_id !== undefined ? patch.goal_id : existing.goal_id,
+    goal_id: goalId,
     risk: risk.length > 0 ? JSON.stringify(risk) : null,
     stakes: stakes !== 'normal' ? stakes : null,
     stakes_provenance: stakesProvenance,
@@ -1011,6 +1071,7 @@ async function updateLaneInTx(
     read_verdict_json: readVerdict !== null ? JSON.stringify(readVerdict) : null,
     pre_registered_json: preRegistered !== null ? JSON.stringify(preRegistered) : null,
     metric_json: metric !== null ? JSON.stringify(metric) : null,
+    card_json: card !== null ? JSON.stringify(card) : null,
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
     // re-claim stamps fresh rather than inheriting the previous holder's timestamp.
@@ -1070,6 +1131,7 @@ async function updateLaneInTx(
     'read_verdict_json',
     'pre_registered_json',
     'metric_json',
+    'card_json',
     'claims_json',
     'areas_json',
     'declined_json',
@@ -1139,6 +1201,7 @@ export const AUDITED_LANE_FIELDS = [
   'read_verdict',
   'pre_registered',
   'metric',
+  'card',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */

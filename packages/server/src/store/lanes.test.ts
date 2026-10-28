@@ -849,6 +849,8 @@ withDrivers('lanes', (o) => {
       expect(laneFieldDiff(before, after)).toEqual({
         title: { from: 'old', to: 'new' },
         scope: { from: ['a/**'], to: ['a/**', 'b/**'] },
+        // ADR 751: claimed → active is a new column, so the card is put up again.
+        card: { from: before.card, to: after.card },
       });
     });
   });
@@ -908,6 +910,7 @@ withDrivers('lanes', (o) => {
           risk: ['schema'],
           stakes: 'high',
           stakes_provenance: 'declared',
+          card: { ...lane.card!, by: 'June', at: 7 },
           created_by: 'June',
           created_at: 7,
         },
@@ -959,7 +962,12 @@ withDrivers('lanes', (o) => {
       });
 
       expect((await rows(db, lane.id))[0].action).toBe('lane.opened');
-      expect((await rows(db, lane.id)).slice(1)).toEqual([
+      // ADR 751: each change of column (the claim, active, the release to open) also re-places the
+      // card, as a `lane.updated` of `card` alone — counted here, then set aside for the edges.
+      const cardOnly = (r: { action: string; detail: { fields?: string[] } }) =>
+        r.action === 'lane.updated' && r.detail.fields?.join() === 'card';
+      expect((await rows(db, lane.id)).filter(cardOnly)).toHaveLength(3);
+      expect((await rows(db, lane.id)).slice(1).filter((r) => !cardOnly(r))).toEqual([
         {
           actor: 'June',
           action: 'lane.claimed',

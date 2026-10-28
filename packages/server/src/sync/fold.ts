@@ -7,6 +7,7 @@ import {
   LANE_TERMINAL_STATES,
   LanePreRegisteredSchema,
   LaneMetricSchema,
+  LaneCardSchema,
   LaneRequestedSchema,
   LaneSampleSchema,
   requestedRecordJson,
@@ -157,6 +158,7 @@ export const LANE_UPDATE_COLUMNS: Readonly<Record<string, string>> = {
   read_verdict: 'read_verdict_json',
   pre_registered: 'pre_registered_json',
   metric: 'metric_json',
+  card: 'card_json',
 };
 
 /** The fields of a `lane.updated` this build has no column for, in the event's order. */
@@ -283,8 +285,8 @@ async function projectLaneEvent(
     await db.run(
       `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
                           depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, areas_json, source_ref,
-                          requested_json, reads_on, pre_registered_json, metric_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
+                          requested_json, reads_on, pre_registered_json, metric_json, card_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, NULL, NULL, ?)`,
       [
         laneId,
         teamId,
@@ -309,6 +311,7 @@ async function projectLaneEvent(
         // ADR 645: parsed, never trusted — a row that fails the schema folds as undeclared.
         foldedPreRegistered(d['pre_registered'], event.actor),
         foldedMetric(d['metric']),
+        foldedCard(d['card']),
         typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
@@ -414,6 +417,7 @@ async function projectLaneEvent(
           value = value === null ? null : JSON.stringify(value);
         else if (field === 'pre_registered') value = foldedPreRegistered(value, event.actor);
         else if (field === 'metric') value = foldedMetric(value);
+        else if (field === 'card') value = foldedCard(value);
         else if (field === 'requested') {
           if (value === null) value = null;
           else {
@@ -454,6 +458,13 @@ async function projectLaneEvent(
 function foldedMetric(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const parsed = LaneMetricSchema.safeParse(value);
+  return parsed.success ? JSON.stringify(parsed.data) : null;
+}
+
+/** ADR 751: a card's place, parsed, never trusted — one that fails the schema folds as no card. */
+function foldedCard(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const parsed = LaneCardSchema.safeParse(value);
   return parsed.success ? JSON.stringify(parsed.data) : null;
 }
 

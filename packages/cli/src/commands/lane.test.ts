@@ -556,6 +556,18 @@ describe('lane commands', () => {
     expect(res.out).toContain('src/c.ts');
   });
 
+  it('--card moves the card on the wall board, and refuses a place outside the cell', async () => {
+    const id = await openLane(['card']);
+    const moved = await capture(() => laneCommand(parseArgs(['update', id, '--card', '0.25,0.7'])));
+    expect(moved.out).toContain('lane updated');
+    await expect(laneCommand(parseArgs(['update', id, '--card', '1.5,0.2']))).rejects.toThrow(
+      /--card takes <x>,<y>/,
+    );
+    await expect(laneCommand(parseArgs(['update', id, '--card', '0.5']))).rejects.toThrow(
+      /--card takes <x>,<y>/,
+    );
+  });
+
   // ADR 701: a dated read with no metric says its chart is one flag away; declaring one quiets it,
   // and --metric-harness scopes a derived source to one harness's seats.
   it('a read with no metric is nudged toward a chart; --metric-harness rides the metric', async () => {

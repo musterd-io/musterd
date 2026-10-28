@@ -24,6 +24,7 @@ import {
   metricNudge,
   BoardQuerySchema,
   LaneQuerySchema,
+  LaneCardPlaceSchema,
   LaneStateSchema,
   reviewWaitMinutes,
   scopeIsHumanVisible,
@@ -514,6 +515,9 @@ export function registerLanes(
         park_until: z.string().optional(),
         // ADR 487 — with state "abandoned": why it is dropped. Undescribed for the same budget.
         abandon_reason: z.string().optional(),
+        // ADR 751 — "x,y" (each 0..1) within the card's goal × state cell. A string, undescribed:
+        // an object schema cost the tools list ~250 B, and the refusal teaches the shape.
+        card: z.string().optional(),
         // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE. A lane stamped with the
         // wrong merge — someone else's PR, a SHA that was never this branch — had no way back.
         merged: z
@@ -527,7 +531,8 @@ export function registerLanes(
     },
     async (args) => {
       try {
-        const { id, park_until, read_verdict, measured, evidence, sample, ...rest } = args;
+        const { id, park_until, read_verdict, measured, evidence, sample, card, ...rest } = args;
+        const place = card !== undefined ? cardPlace(card) : undefined;
         const source = rest.metric?.source;
         if (source !== undefined && !(METRIC_SOURCES as readonly string[]).includes(source))
           throw new Error(`metric.source "${source}" is not one of ${METRIC_SOURCES.join(', ')}`);
@@ -553,6 +558,7 @@ export function registerLanes(
           throw new Error('measured and evidence ride a read_verdict ("met: <what was read>")');
         const patch = {
           ...rest,
+          ...(place ? { card: place } : {}),
           ...(until !== undefined ? { park_until: until } : {}),
           // ADR 673: the number the read found, and where it came from, ride the verdict.
           ...(verdict
@@ -1163,4 +1169,15 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
     lines.push('nothing in flight — lane_open {title, claim:true} to declare your work');
   }
   return lines.join('\n');
+}
+
+/** ADR 751: `card: "x,y"` on lane_update — a place within the card's cell, each axis 0..1. */
+export function cardPlace(raw: string): { x: number; y: number } {
+  const parts = raw.split(',').map((p) => Number(p.trim()));
+  const parsed = LaneCardPlaceSchema.safeParse({ x: parts[0], y: parts[1] });
+  if (parts.length !== 2 || !parsed.success)
+    throw new Error(
+      `card "${raw}" is not a place — pass "x,y", each 0..1, within the card's goal row × state column`,
+    );
+  return parsed.data;
 }

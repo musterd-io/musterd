@@ -68,6 +68,7 @@ export const DONE_FLAGS = [
   'authorized-by',
   'blocked',
   'branch',
+  'card',
   'claimed',
   'clear-merged',
   'depends',
