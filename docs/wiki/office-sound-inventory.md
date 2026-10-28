@@ -5,7 +5,7 @@ Every sound the office can play on `/live` and `/broadcast` as of 2026-10-28 (so
 ## How sound reaches a viewer
 
 - **Two engines, both opt-in and default OFF on `/live`** (`live/sound.ts`): the *act cues* (`firehoseSound`, one of five gestures per act — `gestureFor`; the rest are silent) and the *room tone* (`roomTone`, a bed plus small life noises plus placed "moments"). Each has its own toggle and stored preference; a hidden tab never plays either.
-- **`/broadcast` turns both on** without persisting (`enableForBroadcast`, ADR 228) and runs the whole mix through a ×4 master (+12 dB) measured against the hosted pipeline so the bed sits near −30 LUFS: audible, still background. Act cues on the stream are throttled to one per 700 ms (`BROADCAST_CUE_GAP_MS`); moments to one per 400 ms.
+- **`/broadcast` turns both on** without persisting (`enableForBroadcast`, ADR 228) and runs the whole mix through a ×4 master (+12 dB) measured against the hosted pipeline so the bed sits near −30 LUFS: audible, still background. Act cues on the stream are throttled to one per 700 ms (`BROADCAST_CUE_GAP_MS`); moments to one per 400 ms — except the chimes, which queue a beat apart instead of dropping (lane 01M625KHCN, 2026-10-28).
 - **Everything is synthesized** in WebAudio. There are no audio files (ADR 151 bytes).
 
 ## Inventory
@@ -26,7 +26,7 @@ Every sound the office can play on `/live` and `/broadcast` as of 2026-10-28 (so
 | Life | ~~`footsteps`~~ | ~~always available; 0.03~~ LEFT THE ROLL 2026-10-27 (lane 01M5XS6KAD) — now `stepPlank`/`stepTile` moments per foot plant | the walker | — |
 | Life | ~~`sip`, `water`, `blow`, `eating`~~ | ~~always available~~ LEFT THE ROLL 2026-10-27 (lane 01M5XS6KAD) — now `sipAt` on the sip beat, `bottle` at the cooler, `eatAt` at the couch plate; `blow` is gone | the body | — |
 | Life | `paws`, `jingle`, `yawn`, `bark` | dog on the floor (paws: walking); 0.025 / 0.01 / 0.01 / 0.005 | the dog | paws click 0.035 (≈ keys); jingle sine pings 0.006–0.010 (quiet, bright); yawn lowpassed 0.05; bark bandpassed 0.12 — loud, and meant to be at 0.005 weight; OK |
-| Life | `birds` | 05:00–11:00 office clock with daylight; 0.03 | random side | sine chirps 0.0055–0.0085 — a sine at this gain lands near a 0.03 noise click; quiet and outside; OK |
+| Life | ~~`birds`~~ LEFT THE ROLL 2026-10-28 (lane 01M625KHCN; nick: all morning on the stream, "doesn't really sound like birds") | ~~05:00–11:00 office clock with daylight; 0.03~~ | random side | sine chirps 0.0055–0.0085 — a sine at this gain lands near a 0.03 noise click; quiet and outside; OK |
 | Life | `nightair` | dark room with someone in it; 0.02 | random side | sine pings 0.0035–0.0055 — the quietest thing the room plays; OK |
 | Moment | ~~`fanfare`~~ REMOVED 2026-10-28 (inc 3; superseded by `laneDone`, emit site moved in inc 2) | an accept lands on a celebrant | the celebrant | sine pings 0.020–0.026 + sparkle clicks 0.012–0.020 — clearly above the bed, under the ask bell; OK (rare, earned) |
 | Moment | `door` | a member walks in or out | the entrance | latch 0.04 + sigh 0.022 + steps 0.035 since 2026-10-28 (inc 3; halved — the door is the foley under the `arrive`/`leave` cousin now, −6 dB) |
