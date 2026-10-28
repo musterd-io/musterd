@@ -464,6 +464,17 @@ function approach(
   const dy = mover.ly - target.ly;
   const d = Math.hypot(dx, dy) || 1;
   const off = clamp(d * 0.4, 46, 72);
+  /* Open floor only. The spot used to be the point `off` along the line toward the mover, whatever was
+     there — and beside a pod desk that line runs straight into the desk, so a visitor walked into it
+     and stood inside it (swetha, 2026-10-28: "avatars will walk through furniture"). Swing round the
+     target, nearest the mover's side first, then try the other reaches. */
+  const base = Math.atan2(dy, dx);
+  for (const r of [off, 56, 72, 46]) {
+    for (const swing of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2, -2, 2.6, -2.6, Math.PI]) {
+      const p = { lx: target.lx + Math.cos(base + swing) * r, ly: target.ly + Math.sin(base + swing) * r };
+      if (walkable(p.lx, p.ly)) return p;
+    }
+  }
   return { lx: target.lx + (dx / d) * off, ly: target.ly + (dy / d) * off };
 }
 
