@@ -103,9 +103,12 @@ if [ -n "${MUSTERD_HUB:-}" ]; then
   # Wait for the first fold to carry the sponsor's host key here (ADR 689 d1): the host loop
   # would otherwise poll into 401 until the sync tick lands. Bounded; the loop retries anyway.
   for _ in $(seq 1 90); do
+    # A failed probe is a "not yet", never a death: while the daemon drains its fold backlog
+    # the POST can exceed --max-time, curl exits 28, and the bare assignment under `set -e`
+    # killed the script silently — the machine crash-looped before polling (delta-2, 2026-10-28).
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 -X POST \
       -H "authorization: Bearer $MUSTERD_HOST_KEY" -H 'content-type: application/json' \
-      -d "{\"host\":\"$MUSTERD_HOST\"}" "http://127.0.0.1:4849/teams/$MUSTERD_TEAM/residency/wake-leases")"
+      -d "{\"host\":\"$MUSTERD_HOST\"}" "http://127.0.0.1:4849/teams/$MUSTERD_TEAM/residency/wake-leases")" || code=""
     [ "$code" = 200 ] && break
     sleep 2
   done
