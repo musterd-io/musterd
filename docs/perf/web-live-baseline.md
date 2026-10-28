@@ -2564,3 +2564,17 @@ weather, sounds, this): a re-baseline to measured + 15% would loosen (ADR 183), 
 lever is a trim of the office scene, not another raise.
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 391,000 B with this lane in.
+
+## 2026-10-28 — the daemon renders the wiki; Total JS TIGHTENED 391,000 → 380,000 B (lane 01M6286ZRC, ADR 754)
+
+| Budget   | Before (main)       | This branch (laptop)  | Ceiling                       |
+| -------- | ------------------- | --------------------- | ----------------------------- |
+| total JS | 379.4 KB (73 chunks) | 366.8 KB (73 chunks) | TIGHTENED 391,000 → 380,000 B |
+
+The wiki overlay rendered markdown in the browser with `marked`, which was ~11 KB of its 16.1 KB chunk.
+The daemon now renders each page once per commit and serves the HTML (ADR 754), so the chunk is
+3.2 KB and the client's total JS is 12.6 KB lighter. Four raises on 2026-10-28 took the ceiling from
+375,000 to 391,000 B; this brings it back under the first of them (384,000 B) with room for the next
+overlay. The provider-logo rounding (#3486, ~1 KB) lands separately.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 380,000 B.

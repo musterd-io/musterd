@@ -5,6 +5,8 @@ export {
   WIKI_DEFAULT_PATH,
   WIKI_MAX_PAGE_BYTES,
   WIKI_MAX_PAGES,
+  repoFileUrl,
+  repoWebBase,
   wikiPathProblem,
   wikiRepoProblem,
 } from './wiki.wire.js';
@@ -75,5 +77,11 @@ export const WikiPageSchema = z.object({
   path: z.string(),
   commit: z.string(),
   markdown: z.string(),
+  /**
+   * ADR 754: the page rendered to HTML by the daemon (raw HTML escaped, links vetted and sorted —
+   * ADR 747's rules), so no viewer ships a markdown parser. Absent from an older daemon: show the
+   * markdown as text.
+   */
+  html: z.string().optional(),
 });
 export type WikiPage = z.infer<typeof WikiPageSchema>;

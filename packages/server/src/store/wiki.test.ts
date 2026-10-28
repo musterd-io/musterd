@@ -103,6 +103,19 @@ describe('wiki reader (ADR 747)', () => {
     ]);
   });
 
+  it('serves the page rendered to HTML, once per commit (ADR 754)', async () => {
+    commit(
+      { 'docs/wiki/linky.md': '# Linky\n\n[rotation](ops/rotation.md) <b>raw</b>\n' },
+      'linky',
+    );
+    const r = reader();
+    const page = (await r.page('t1', source, 'linky.md'))!;
+    expect(page.html).toContain('<h1 id="wiki-linky">Linky</h1>');
+    expect(page.html).toContain('data-wiki-page="ops/rotation.md"');
+    expect(page.html).toContain('&lt;b&gt;raw&lt;/b&gt;');
+    expect((await r.page('t1', source, 'linky.md'))!.html).toBe(page.html);
+  });
+
   it('serves a page, and nothing outside the folder or the index', async () => {
     const r = reader();
     expect((await r.page('t1', source, 'amending-an-adr.md'))?.markdown).toContain('Body.');

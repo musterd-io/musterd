@@ -177,8 +177,9 @@ access; roster handles and Presence remain visible.
   render from the read's `can_set` alone — the daemon's per-reader answer, never the viewer's role in
   the client — and a refusal shows in place in the daemon's words. Since 2026-10-19 the `pause…`
   form lives in settings' Team sheet, not the topbar.
-- **Wiki** (`live/wiki/WikiOverlay.tsx`, its own lazy chunk with `Wiki.css` and `wikiRender.ts`,
-  which carries `marked`; ADR 747, lane 01M6017ZEV) — the Team's wiki, read by the daemon from the
+- **Wiki** (`live/wiki/WikiOverlay.tsx`, its own lazy chunk with `Wiki.css`; ADR 747, lane
+  01M6017ZEV; the daemon renders each page to HTML once per commit and the overlay shows it — no
+  markdown parser in the browser, ADR 754) — the Team's wiki, read by the daemon from the
   repo folder named in team policy (`wiki`, set in settings' Team sheet). Opened from the left-wall
   bookshelf (`layout.ts` `WIKI_SHELF`, positioned by `render.ts` `shelfAnchor`), which wears an oak
   "wiki ›" sign hung on the wall above it; on /broadcast the sign hangs and nothing opens. Dressed as

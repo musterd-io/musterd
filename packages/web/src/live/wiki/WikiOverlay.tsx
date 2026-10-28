@@ -3,7 +3,12 @@ import type { WikiIndex, WikiPageEntry } from '@musterd/protocol';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { OPEN_TILT, shouldDismiss, zoomTransform } from '../boardOverlayMath';
 import { getWiki, getWikiPage, type LiveConfig } from '../client';
-import { renderWikiPage, repoWebBase } from './wikiRender';
+import { repoWebBase } from '@musterd/protocol/wire';
+
+/** Markdown shown as text when the daemon sent no HTML (a daemon from before ADR 754). */
+function escapeText(s: string): string {
+  return s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
+}
 
 /** Matches the CSS close transition, as the board and settings overlays do. */
 const CLOSE_MS = 320;
@@ -133,20 +138,15 @@ export function WikiOverlay({
       }
       getWikiPage(cfg, path)
         .then((p) => {
-          const html = renderWikiPage(p.markdown, {
-            repo: ready.repo,
-            folder: ready.path,
-            commit: ready.commit,
-            page: path,
-            pages: pageSet,
-          });
+          // The daemon renders the page (ADR 754); an older one sends markdown only, shown as text.
+          const html = p.html ?? `<pre class="lc-wiki__raw">${escapeText(p.markdown)}</pre>`;
           setPage((cur) =>
             cur.state === 'loading' && cur.path === path ? { state: 'ready', path, html, hash } : cur,
           );
         })
         .catch(() => setPage({ state: 'missing', path }));
     },
-    [cfg, ready, pageSet],
+    [cfg, ready],
   );
 
   // Open on the page this viewer last read here, else the wiki's front page, else the contents.
@@ -342,7 +342,7 @@ export function WikiOverlay({
                 <p className="lc-wiki__dim">That page isn’t on the shelf any more.</p>
               )}
               {page.state === 'ready' && (
-                // The HTML is renderWikiPage's: raw HTML in the page is escaped, links are vetted.
+                // The HTML is the daemon's renderWikiPage (ADR 754): raw HTML escaped, links vetted.
                 // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- delegated clicks on the page's own <a> elements, which are keyboard-reachable
                 <div
                   className="lc-wiki__prose"

@@ -1,5 +1,6 @@
+import { repoFileUrl } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { renderWikiPage, repoFileUrl, resolveWikiLink, type WikiLinkContext } from './wikiRender';
+import { renderWikiPage, resolveWikiLink, type WikiLinkContext } from './wiki.js';
 
 const ctx: WikiLinkContext = {
   repo: 'https://github.com/musterd-io/musterd',
@@ -11,7 +12,10 @@ const ctx: WikiLinkContext = {
 
 describe('wiki rendering (ADR 747)', () => {
   it('shows raw HTML as text, never as markup', () => {
-    const html = renderWikiPage('<script>alert(1)</script>\n\nhi <img src=x onerror=alert(1)>', ctx);
+    const html = renderWikiPage(
+      '<script>alert(1)</script>\n\nhi <img src=x onerror=alert(1)>',
+      ctx,
+    );
     expect(html).not.toMatch(/<script|<img/);
     expect(html).toContain('&lt;script&gt;');
   });
@@ -31,7 +35,11 @@ describe('wiki rendering (ADR 747)', () => {
       hash: 'the-rule',
     });
     expect(resolveWikiLink('./ops/rotation.md', ctx)).toMatchObject({ page: 'ops/rotation.md' });
-    expect(resolveWikiLink('#top', ctx)).toEqual({ kind: 'page', page: 'amending-an-adr.md', hash: 'top' });
+    expect(resolveWikiLink('#top', ctx)).toEqual({
+      kind: 'page',
+      page: 'amending-an-adr.md',
+      hash: 'top',
+    });
   });
 
   it('sends the rest of the repo to its host at the read commit', () => {

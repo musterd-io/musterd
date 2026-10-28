@@ -51,6 +51,7 @@
     "@musterd/telemetry": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
     "better-sqlite3": "^11.7.0",
+    "marked": "^18.0.10",
     "pg": "^8.23.1",
     "ulid": "^2.3.0",
     "ws": "^8.18.0",
