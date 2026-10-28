@@ -58,7 +58,7 @@ export function shouldChime(now: number, last: number, minGapMs = BROADCAST_CUE_
  * the stapler and the drawer a third more common than they were ever tuned to be.
  */
 export const LIFE_EVENTS: ReadonlyArray<{ name: string; weight: number }> = [
-  { name: 'keys', weight: 0.45 },
+  { name: 'keys', weight: 0.48 }, // 0.45 + the birds' 0.03 (lane 01M625KHCN)
   { name: 'murmur', weight: 0.25 },
   { name: 'whisper', weight: 0.04 },
   { name: 'tap', weight: 0.07 },
@@ -77,7 +77,8 @@ export const LIFE_EVENTS: ReadonlyArray<{ name: string; weight: number }> = [
   // A bark on a timer is an alarm clock. Rarity IS the design; do not "fix" this upward.
   { name: 'bark', weight: 0.005 },
   // The day cycle (E2 spec §4): both weight-modulated by the lighting envelope below.
-  { name: 'birds', weight: 0.03 },
+  // `birds` LEFT THE ROLL 2026-10-28 (lane 01M625KHCN): sine chirps that read as a beep series on the
+  // stream all morning (nick: "doesn't really sound like birds"). A real bird is a later synth job.
   { name: 'nightair', weight: 0.02 },
 ];
 
@@ -136,14 +137,13 @@ export function pickWorkDesk(
 /** Is this event available under the current occupancy? Chatter needs a co-located pair — a headcount
  *  of two at opposite ends of the floor is not a conversation. Paws need the dog actually walking.
  *  Work sounds need a desk that is evidenced-working (and keys, one actually typing). The day pair
- *  follows the lighting envelope: birds only into a morning with daylight, night air only for a dark
- *  room someone is actually in — the late shift, not a nature documentary over an empty office. */
+ *  follows the lighting envelope: night air only for a dark room someone is actually in (the birds left
+ *  the roll on 2026-10-28) — the late shift, not a nature documentary over an empty office. */
 function lifeAvailable(name: string, ctx: LifeContext, nowMs: number): boolean {
   if (WORK_EVENTS.has(name)) return workDesksFor(name, ctx, nowMs).length > 0;
   if (CHATTER.has(name)) return ctx.pairs.length > 0;
   if (name === 'paws') return ctx.dog?.walking === true;
   if (DOG_EVENTS.has(name)) return ctx.dog != null;
-  if (name === 'birds') return ctx.hours >= 5 && ctx.hours < 11 && ctx.daylight > 0.15;
   if (name === 'nightair') {
     return ctx.daylight < 0.12 && (ctx.working.length > 0 || ctx.pairs.length > 0);
   }
@@ -305,6 +305,18 @@ const STEP_GAP_MS = 110;
 export function shouldPlayStep(now: number, last: number): boolean {
   return shouldChime(now, last, STEP_GAP_MS);
 }
+/** The chimes never drop under the moment gate: a burst of lane closes rings every lane, each strike
+ *  pushed back to a beat after the last (nick, 2026-10-28). Returns the delay in ms to wait before
+ *  playing `name` now, or null when the gate drops it. `last` is the gate's clock; the caller advances
+ *  it to `now + delay` for a queued chime so the next one lines up behind it. */
+export const CHIME_QUEUE_GAP_MS = 120;
+export function chimeDelay(name: Moment, now: number, last: number): number | null {
+  if (name === 'laneDone' || name === 'goalDone') {
+    return Math.max(0, last + CHIME_QUEUE_GAP_MS - now);
+  }
+  return shouldPlayMoment(now, last) ? 0 : null;
+}
+
 export function isStep(name: Moment): boolean {
   return name === 'stepPlank' || name === 'stepTile';
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   CHIME_BARS,
+  CHIME_QUEUE_GAP_MS,
+  chimeDelay,
   barForLane,
   chordBars,
   chordOffsets,
@@ -71,5 +73,16 @@ describe('the musterd voice (sound identity spec §2.2–2.4)', () => {
     expect(up.gain).toBeCloseTo(0.0324, 6);
     expect(down.decay).toBeCloseTo(1.7, 6);
     expect(jitterStrike(440, 0.03, 2, () => 0.5)).toEqual({ freq: 440, gain: 0.03, decay: 2 });
+  });
+});
+
+describe('the chimes queue under the moment gate instead of dropping (lane 01M625KHCN)', () => {
+  it('a lane done behind another waits a beat; a third waits two; other moments still drop', () => {
+    expect(chimeDelay('laneDone', 1000, -Infinity)).toBe(0);
+    expect(chimeDelay('laneDone', 1000, 1000)).toBe(CHIME_QUEUE_GAP_MS);
+    expect(chimeDelay('goalDone', 1000, 1000 + CHIME_QUEUE_GAP_MS)).toBe(2 * CHIME_QUEUE_GAP_MS);
+    expect(chimeDelay('laneDone', 5000, 1000)).toBe(0);
+    expect(chimeDelay('question', 1000, 900)).toBeNull();
+    expect(chimeDelay('question', 1000, 100)).toBe(0);
   });
 });

@@ -32,7 +32,7 @@ import {
   pickLifeEvent,
   pickWorkDesk,
   shouldChime,
-  shouldPlayMoment,
+  chimeDelay,
   isStep,
   shouldPlayStep,
 } from './soundLife';
@@ -484,9 +484,23 @@ export class RoomTone {
       if (!shouldPlayStep(now, this.lastStepAt)) return;
       this.lastStepAt = now;
     } else {
-      if (!shouldPlayMoment(now, this.lastMomentAt)) return;
-      this.lastMomentAt = now;
+      const delay = chimeDelay(name, now, this.lastMomentAt);
+      if (delay === null) return;
+      this.lastMomentAt = now + delay;
+      if (delay > 0) {
+        // a chime behind another: queued a beat back, never dropped (lane 01M625KHCN)
+        setTimeout(() => this.voice(name, pan, panTo, detail), delay);
+        return;
+      }
     }
+    this.voice(name, pan, panTo, detail);
+  }
+
+  /** Play `name` now — the half of `moment` after the gate. */
+  private voice(name: Moment, pan: number, panTo?: number, detail?: MomentDetail): void {
+    const ctx = this.ctx;
+    const bus = this.lifeBus;
+    if (!ctx || !bus || ctx.state !== 'running') return;
     const panNode = ctx.createStereoPanner?.();
     const out = panNode ?? ctx.createGain();
     if (panNode) panNode.pan.value = momentPan(pan);
@@ -807,7 +821,6 @@ export class RoomTone {
       case 'jingle': return this.jingle(ctx, out);
       case 'yawn': return this.blow(ctx, out, true);
       case 'bark': return this.bark(ctx, out);
-      case 'birds': return this.birds(ctx, out);
       case 'nightair': return this.nightair(ctx, out);
     }
   }
@@ -1061,28 +1074,6 @@ export class RoomTone {
     src.stop(t0 + 0.2);
   }
 
-  /** Birdsong through the window, morning only (E2 spec §4): one bird, a short phrase of quick
-   *  upward chirps. Sine glides, not noise — a chirp is pitched — and each phrase draws its own
-   *  base pitch, count and pacing so no two mornings repeat. Soft: the window is closed. */
-  private birds(ctx: AudioContext, out: AudioNode): void {
-    const base = 2600 + Math.random() * 900;
-    let at = ctx.currentTime + 0.02;
-    for (let i = 0; i < 2 + Math.floor(Math.random() * 3); i++) {
-      const f = base * (0.92 + Math.random() * 0.16);
-      const osc = ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(f, at);
-      osc.frequency.exponentialRampToValueAtTime(f * (1.25 + Math.random() * 0.2), at + 0.06);
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(0.0055 + Math.random() * 0.003, at + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.09);
-      osc.connect(g).connect(out);
-      osc.start(at);
-      osc.stop(at + 0.11);
-      at += 0.13 + Math.random() * 0.22;
-    }
-  }
 
   /** Night air for the late shift (E2 spec §4): a distant cricket-ish pulse train — a few tremolo'd
    *  high pips, very quiet, very sparse. Deliberately under everything else: it is the sound of the

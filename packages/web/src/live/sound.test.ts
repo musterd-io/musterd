@@ -56,7 +56,8 @@ describe('the life event roll', () => {
 
   it('has every requested event in the table', () => {
     const names = LIFE_EVENTS.map((e) => e.name);
-    for (const n of ['stapler', 'drawer', 'paws', 'birds', 'nightair']) expect(names).toContain(n);
+    for (const n of ['stapler', 'drawer', 'paws', 'nightair']) expect(names).toContain(n);
+    expect(names).not.toContain('birds'); // left the roll 2026-10-28 (lane 01M625KHCN)
   });
 
   it('carries no sound the choreography now places — a footstep nobody is taking is a lie (lane 01M5XS6KAD)', () => {
@@ -237,13 +238,9 @@ describe('density is tempo, not gain (E2 spec §4)', () => {
 });
 
 describe('the day cycle follows the window light (E2 spec §4)', () => {
-  it('lets birds sing only into a morning with actual daylight', () => {
+  it('never rolls the birds, morning or not — they left the roll (lane 01M625KHCN)', () => {
     const morning: LifeContext = { ...EMPTY_LIFE, hours: 7.5, daylight: 0.6 };
-    const noon: LifeContext = { ...EMPTY_LIFE, hours: 12, daylight: 1 };
-    const night: LifeContext = { ...EMPTY_LIFE, hours: 7.5, daylight: 0 };
-    expect(sweep(morning).has('birds')).toBe(true);
-    expect(sweep(noon).has('birds')).toBe(false);
-    expect(sweep(night).has('birds')).toBe(false);
+    expect(sweep(morning).has('birds')).toBe(false);
   });
 
   it('keeps night air for a dark room that someone is actually in', () => {
