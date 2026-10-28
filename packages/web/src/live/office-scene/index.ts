@@ -4,7 +4,7 @@ import { preloadCanvasFont } from '../canvasFont';
 import { pulseIntensity, pulseLive, type SeatPulse } from '../pulse';
 import { roomTone, screenPan, type LifeContext } from '../sound';
 import type { Moment } from '../soundLife';
-import { barForLane, gestureFor, voicesForChain } from '../soundVoice';
+import { CHIME_BARS, barForLane, chordBars, gestureFor, voicesForChain } from '../soundVoice';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
@@ -77,6 +77,7 @@ import { createWelcome, stepWelcome } from './welcome';
 import { createWelcomeRoom, type WelcomeSoundAt } from './welcomeRoom';
 import {
   animatedDeskAnchors,
+  CHIME_SWING_S,
   boardAnchor,
   hoursAnchor,
   shelfAnchor,
@@ -942,6 +943,18 @@ export function mountOffice(
   /** Lanes whose done already rang the chimes — `lane_resolve` and `lane_state` can both say done. */
   const rangDone = new Set<string>();
   let lastLaneDoneAt = -Infinity;
+  /** When each shelf-chime bar was last struck, scene-clock seconds — the swing reads it (inc 4). */
+  const chimeHits: number[] = Array.from({ length: CHIME_BARS.length }, () => -Infinity);
+  const chimesSwinging = (): boolean => clock - Math.max(...chimeHits) < CHIME_SWING_S;
+  /** Mark bars struck (now, or `at` seconds from now) and keep the loop alive for the swing. Audio
+   *  is not motion: the strike itself plays regardless; only this visible swing is gated. */
+  const strikeChimes = (bars: readonly number[], offsets: readonly number[] = []): void => {
+    if (reduced) return;
+    bars.forEach((b, i) => {
+      chimeHits[b] = clock + (offsets[i] ?? 0);
+    });
+    ensureLoop();
+  };
   /** Where the shelf chimes hang: beside the work board (sound identity spec §2.2). */
   const boardPan = (): number => screenPan(boardAnchor(fit).x + boardAnchor(fit).w / 2, width);
   let seededOwners: ReadonlyMap<string, string> | undefined; // the board map last handed to `laneOwners.seed`
@@ -1137,7 +1150,7 @@ export function mountOffice(
       recep,
       wallBoardNow(),
       teamWorkingHours,
-      { welcome: welcomeRoom.paint, rendered, weather },
+      { welcome: welcomeRoom.paint, rendered, weather, chimes: chimeHits },
     );
     heads = anchors.heads;
     // The receptionist's bubble anchor — synthetic head above her desk. syncLabels skips names
@@ -2296,7 +2309,7 @@ export function mountOffice(
       recep,
       f.board,
       teamWorkingHours,
-      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather },
+      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, chimes: chimeHits },
     );
     if (units) units.run(() => drawCues(c));
     else drawCues(c);
@@ -2720,7 +2733,7 @@ export function mountOffice(
 
   /** Is anything actually happening right now? One home — two doors used to spell this out separately. */
   const alive = () =>
-    living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active());
+    living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active()) || chimesSwinging();
   /*
    * Coming back to a room that stopped being watched. There are two doors — the tab becoming visible
    * again and the panel re-expanding — and they ask the SAME question: the loop if the room is alive,
@@ -3394,16 +3407,22 @@ export function mountOffice(
       rangDone.add(ev.lane);
       if (rangDone.size > 200) for (const oldest of rangDone) { rangDone.delete(oldest); break; }
       lastLaneDoneAt = Date.now();
-      roomTone.moment('laneDone', boardPan(), undefined, {
-        bar: barForLane(ev.lane),
-        voices: voicesForChain([ev.who, laneOwners.carrier(ev.lane, ev.who)]),
-      });
+      const bar = barForLane(ev.lane);
+      const voices = voicesForChain([ev.who, laneOwners.carrier(ev.lane, ev.who)]);
+      roomTone.moment('laneDone', boardPan(), undefined, { bar, voices });
+      strikeChimes(chordBars(bar, voices), [0, 0.03, 0.06]);
     }
     if (ev.kind === 'goal-done' && !replaying) {
       // The roll wins over a lane chord struck the same instant (§6.1): the moment gate drops, never
       // queues, so the roll waits out the gap instead of being eaten by its own last lane.
       const wait = Math.max(0, 420 - (Date.now() - lastLaneDoneAt));
-      const roll = () => roomTone.moment('goalDone', boardPan());
+      const roll = () => {
+        roomTone.moment('goalDone', boardPan());
+        strikeChimes(
+          CHIME_BARS.map((_, i) => i),
+          CHIME_BARS.map((_, i) => i * 0.075),
+        );
+      };
       if (wait === 0) roll();
       else setTimeout(roll, wait);
     }
