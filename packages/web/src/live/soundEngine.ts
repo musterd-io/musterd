@@ -544,7 +544,7 @@ export class RoomTone {
     const bars = chordBars(bar, voices);
     const offsets = chordOffsets(voices);
     const t0 = ctx.currentTime + 0.02;
-    bars.forEach((b, i) => strikeBar(ctx, out, t0 + offsets[i]!, CHIME_BARS[b]!, 0.03, 1.8));
+    bars.forEach((b, i) => strikeBar(ctx, out, t0 + offsets[i]!, CHIME_BARS[b]!, 0.022, 1.8)); // 0.03 → 0.022 (inc 3, measured +13 dB over keys; ~+10 now)
   }
 
   /** A goal done: the whole scale rolled once, bottom to top, the top bar allowed to ring out. The
@@ -552,7 +552,8 @@ export class RoomTone {
   private goalDone(ctx: AudioContext, out: AudioNode): void {
     const offsets = rollOffsets();
     const t0 = ctx.currentTime + 0.02;
-    CHIME_BARS.forEach((f, i) => strikeBar(ctx, out, t0 + offsets[i]!, f, i === CHIME_BARS.length - 1 ? 0.034 : 0.028, i === CHIME_BARS.length - 1 ? 2.6 : 1.6));
+    // 0.028 / 0.034 → 0.02 / 0.024 (inc 3): the roll measured +21 dB over a keystroke; ~+18 now.
+    CHIME_BARS.forEach((f, i) => strikeBar(ctx, out, t0 + offsets[i]!, f, i === CHIME_BARS.length - 1 ? 0.024 : 0.02, i === CHIME_BARS.length - 1 ? 2.6 : 1.6));
   }
 
   /** A gesture's notes played as a placed desk bell on the LIFE bus: the recipe's shape at the

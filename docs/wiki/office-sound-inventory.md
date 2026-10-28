@@ -38,8 +38,8 @@ Every sound the office can play on `/live` and `/broadcast` as of 2026-10-28 (so
 | Moment | `stepPlank` / `stepTile` | each foot plant of a walker covering ground (plank or café tile by the floor under them); own 110 ms gate | the walker | plank click 0.05 at 110–160 Hz, tile 0.035 at 1.3–1.8 kHz — plank ≈ 2× keys, tile ≈ keys; a walk is the right amount louder than typing; OK (since 2026-10-27, lane 01M5XS6KAD) |
 | Moment | `creak` | a chair taking or losing someone's weight (the sit blend crossing 0.9) | the chair | narrow bandpass (Q 7) 0.05, 0.4 s — a third of the old timer creak; placed on a visible sit; OK |
 | Moment | `sipAt`, `bottle`, `eatAt`, `machine` | the sip beat, the cooler fill, the couch plate, the island pour | the body / the fixture | sip bandpass 0.055 (bottle × 0.72 = 0.04); eat clicks 0.045–0.065; machine sawtooth hum 0.045 under a 180 Hz lowpass + hiss 0.018, a few seconds — each ≈ 1.5–2.5× keys, on a visible action; OK |
-| Moment | `laneDone` | a lane reaches done (emit site: inc 2, landed) | the shelf chimes by the work board | bar voice, sine 0.03 + partial 0.0066 + mallet breath 0.009, 1.8 s decay — one bar per lane (`barForLane`), 1–3 bars by the chain (`voicesForChain`), rolled 15–40 ms apart; ≈ 3× keys, a struck bar across a room |
-| Moment | `goalDone` | a goal reaches done (emit site: inc 2, landed) | the shelf chimes | all eight bars rolled 60–90 ms apart, 0.028 each, the top 0.034 held 2.6 s — the loudest thing the room plays, and the only time all eight sound |
+| Moment | `laneDone` | a lane reaches done (emit site: inc 2, landed) | the shelf chimes by the work board | bar voice, sine 0.022 (was 0.03 until inc 3) + partial ×0.22 + mallet breath ×0.3, 1.8 s decay — one bar per lane (`barForLane`), 1–3 bars by the chain (`voicesForChain`), rolled 15–40 ms apart; ≈ 3× keys, a struck bar across a room |
+| Moment | `goalDone` | a goal reaches done (emit site: inc 2, landed) | the shelf chimes | all eight bars rolled 60–90 ms apart, 0.02 each, the top 0.024 held 2.6 s (trimmed in inc 3) — the loudest thing the room plays, and the only time all eight sound |
 | Moment | `question` / `redirect` / `handoffSend` / `handoffAnswer` | the gestures, placed (emit sites: inc 2, landed) | the asked desk / the redirected desk / each desk of a handoff | the gesture recipe at the room's scale: sine peaks 0.018 / 0.02 / 0.016 / 0.016 — the old askbell's level; the handoff answer lands 0.42 s after the note (inc 3 stripped the recipe's own 0.3 s from the placed moment) |
 | Moment | `arrive` / `leave` | a member walks in or out (emit site: inc 2, landed; `door` is the foley under it at −6 dB since inc 3) | the door cousin above the entrance | D4→E4 up, E4→D4 down, sine 0.014 |
 
@@ -68,6 +68,23 @@ The verdicts below are design judgements from the synthesis, the gates and the s
 **Cut or demote.** `whoosh` on every directed act: on a busy stream it is the most frequent moment after the door, and a sweep gesture is the shape `creak` was cut for. Listen for: whooshes as noise during a burst. Proposal: keep it for steer (interrupt-class) only; a plain directed message gets the cue and nothing from the room. DONE 2026-10-27 (step 2): the whoosh plays only when the tethered act is a steer.
 
 **Stream first, then `/live` follows (decided 2026-10-28, step 3).** `/live` defaults both engines off, so a first-time viewer hears nothing; `/broadcast` plays everything. The mix to judge is the stream's: it is the one strangers hear, and it is the one with a measured loudness (−30 LUFS bed at ×4). `/live` is the same mix at ×1 for a viewer who opted in on headphones, so a relative fix (one event too loud against the rest) is right on both and is made once in the synth; only the master differs, and the master is not in question. The ×4 is retuned at `BROADCAST_MASTER_GAIN` alone, never per sound. Falsify: a per-sound gain that differs between `/live` and `/broadcast` in `soundEngine.ts`.
+
+## Measured 2026-10-28 (inc 3)
+
+Rendered through an `OfflineAudioContext` on the dev server (mono, 44.1 kHz, six renders averaged, each voice straight into the render's gain so the bus makeup cancels), peak dBFS against a keystroke click at 0.026, after the re-level:
+
+| Voice | Over a keystroke | Role |
+| --- | --- | --- |
+| `tap` / `softTap` | +1.3 / −5.9 dB | desk foley, at or under keys |
+| `stapler` | +6.4 dB | foreground action, 2× keys |
+| `drawer` | +3.2 dB | foreground action |
+| `door` (foley) | −0.8 dB | under the arrive/leave cousin |
+| `stepPlank` / `sipAt` | −6.4 / +3.3 dB | on a visible action |
+| `question` / `arrive` bells | +7.5 / +7.3 dB | 2× keys, a pure tone |
+| `laneDone` one bar / three | +11 / +17.7 dB | the chimes, a struck bar across a room |
+| `goalDone` roll | ~+18 dB (was +21 before the trim) | the loudest thing the room plays, once |
+
+The harness resolves about 3 dB, so everything in the room sits where its role puts it; the chimes are the only voices deliberately above the foreground band. Falsify: a re-render putting any room foley more than 3 dB outside this table. <!-- claim: other -->
 
 ## Falsifiers
 
