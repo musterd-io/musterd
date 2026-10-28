@@ -2,6 +2,8 @@ import { PROTOCOL_VERSION } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../db/open.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
+import { insertProvision } from '../store/hostProvisions.js';
+import { addMember } from '../store/members.js';
 import { createTeam } from '../store/teams.js';
 import {
   hubHead,
@@ -118,6 +120,74 @@ withDrivers('log', (_o, kind) => {
       ]);
       expect(res.accepted).toBe(1);
       expect(await highestContiguousSeq(db, 'node-a')).toBe(2);
+      await db.close();
+    });
+
+    const ledgerEv = (node: string, seq: number, action: string, target: string) => ({
+      kind: 'ledger' as const,
+      team: 'revive',
+      origin_node: node,
+      origin_seq: seq,
+      event: {
+        id: `${node}-${seq}`,
+        ts: 1000 + seq,
+        actor: null,
+        action,
+        target,
+        result: 'deny',
+        detail: { agent: 'ada', reason: 'unclaimed' },
+      },
+    });
+
+    async function provisionAt(state: 'pending' | 'ready') {
+      const { db, team } = await seed();
+      const { row: sponsor } = await addMember(db, team, { name: 'nick', kind: 'human' });
+      const { row: agent } = await addMember(db, team, { name: 'ada', kind: 'agent' });
+      const provision = await insertProvision(db, team.id, agent.id, sponsor.id);
+      if (state === 'ready')
+        await db.run("UPDATE host_provisions SET state = 'ready' WHERE id = ?", [provision.id]);
+      return { db, team, provision };
+    }
+
+    it('accepts-and-drops a joiner provision-settlement echo when the hub provision is already terminal', async () => {
+      // The macbook-air-2 wedge (2026-10-28): a joiner's pre-guard sweep settled a provision
+      // locally and staged host.provision_cancelled; the hub had already settled it ready, yet
+      // ingest refused the credential fact outright and the machine's whole tail wedged behind
+      // it. The echo of a decision the hub already made is dropped, never stored, and the
+      // origin sequence still advances.
+      const { db, team, provision } = await provisionAt('ready');
+      const res = await ingestBatch(db, team.id, 'node-a', [
+        ledgerEv('node-a', 1, 'host.provision_cancelled', provision.id),
+        await ev('node-a', 2),
+      ]);
+      expect(res.accepted).toBe(1);
+      expect(await staged(db)).toEqual({ n: 1 });
+      expect(await highestContiguousSeq(db, 'node-a')).toBe(2);
+      expect(
+        await db.get('SELECT state FROM host_provisions WHERE id = ?', [provision.id]),
+      ).toEqual({ state: 'ready' });
+      await db.close();
+    });
+
+    it('still refuses a joiner provision-settlement echo while the hub provision is open', async () => {
+      const { db, team, provision } = await provisionAt('pending');
+      await expect(
+        ingestBatch(db, team.id, 'node-a', [
+          ledgerEv('node-a', 1, 'host.provision_cancelled', provision.id),
+        ]),
+      ).rejects.toThrow(SyncOriginError);
+      expect(await staged(db)).toEqual({ n: 0 });
+      await db.close();
+    });
+
+    it('still refuses a joiner provision settlement for a provision the hub does not hold', async () => {
+      const { db, team } = await provisionAt('ready');
+      await expect(
+        ingestBatch(db, team.id, 'node-a', [
+          ledgerEv('node-a', 1, 'host.provision_cancelled', 'no-such-provision'),
+        ]),
+      ).rejects.toThrow(SyncOriginError);
+      expect(await staged(db)).toEqual({ n: 0 });
       await db.close();
     });
 

@@ -6,6 +6,7 @@ import {
   type SyncPullEvent,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { log } from '../log.js';
 import { getMemberByName } from '../store/members.js';
 import { bindSeatToNode } from '../store/nodes.js';
 import { bindHostToNode, isLiveHostLabel } from '../store/residency.js';
@@ -217,9 +218,28 @@ export async function ingestBatch(
       // ADR 689 decision 6: a credential fact is the hub's to write. A joiner's mint is a request
       // the hub validates and re-emits under its own origin; a `credential.*` row pushed from
       // anywhere else would be a forged verifier, so it is refused before it can be stored.
+      //
+      // One echo is dropped instead of refused: a joiner whose provision sweep settled a
+      // provision locally (pre-guard builds; #3478 now guards the sweep) stages
+      // `host.provision_cancelled` for a decision the hub may already have made. Refusing it
+      // wedges that machine's whole tail behind one stale settlement (macbook-air-2,
+      // 2026-10-28: origin_seq 80246, nothing pushed for an hour). When the hub's provision
+      // is already terminal the echo decides nothing, so it is accepted-and-dropped below —
+      // never stored, no hub_seq spent. An echo naming an open or unknown provision is still
+      // a forged settlement and keeps the refusal.
+      const settlementEcho =
+        event.kind === 'ledger' &&
+        !loopback &&
+        event.event.action === 'host.provision_cancelled' &&
+        typeof event.event.target === 'string' &&
+        (await t.get<{ state: string }>(
+          "SELECT state FROM host_provisions WHERE id = ? AND team_id = ? AND state IN ('ready', 'failed', 'cancelled')",
+          [event.event.target, teamId],
+        )) !== undefined;
       if (
         event.kind === 'ledger' &&
         !loopback &&
+        !settlementEcho &&
         (event.event.action === 'credential.accepted' ||
           event.event.action === 'credential.revoked' ||
           event.event.action === 'host.provision_pending' ||
@@ -282,6 +302,21 @@ export async function ingestBatch(
       // the hub never stored, which is silent loss wearing an ack.
       if (event.origin_seq < expected) continue;
       if (event.origin_seq !== expected) throw new SyncGapError(expected);
+
+      if (settlementEcho) {
+        // Accepted-and-dropped: the origin sequence advances, nothing is stored, no hub_seq is
+        // spent, and the hub's provision row is untouched. Logged so the drop is a record,
+        // not a silence.
+        log.info({
+          msg: 'sync_settlement_echo_dropped',
+          team: node.slug,
+          origin_node: nodeId,
+          origin_seq: event.origin_seq,
+          provision: event.event.target,
+        });
+        expected += 1;
+        continue;
+      }
 
       // Allocated inside the same transaction as the insert, the shape `insertMessage` established
       // for `next_seq`: SQLite's single writer means the read-bump-insert cannot interleave. The
