@@ -19,6 +19,8 @@ import {
   deriveSteeringMetrics,
   deriveDisputes,
   deriveWakeMetrics,
+  splitWaitByGate,
+  WAKE_GATE_STALE_MS,
   flowMetrics,
   goalFlowMetrics,
   waitingOn,
@@ -1046,7 +1048,8 @@ withDrivers('insights', (o) => {
         | 'residency.wake_deferred'
         | 'residency.wake_exhausted'
         | 'residency.wake_cost'
-        | 'residency.wake_leased',
+        | 'residency.wake_leased'
+        | 'residency.wake_gate',
       seat: string,
       detail: Record<string, unknown>,
       ts: number,
@@ -1384,6 +1387,74 @@ withDrivers('insights', (o) => {
         wakes: 0,
         waited_ms: [60_000, 5 * 60_000],
       });
+    });
+
+    it('holds split each wait by the gate rows in force (ADR 753)', async () => {
+      const { db, team, nick, ada } = await wakeSeed();
+      await directed(db, team, nick, ada, 'handoff', 'h1', NOW - 60 * 60_000);
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_gate',
+        'ada',
+        { state: 'present' },
+        NOW - 90 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_gate',
+        'ada',
+        { state: 'snoozed' },
+        NOW - 40 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_gate',
+        'ada',
+        { state: 'passed' },
+        NOW - 10 * 60_000,
+      );
+      await residencyRow(
+        db,
+        team.id,
+        'residency.wake_leased',
+        'ada',
+        { act: 'h1', lease_id: 'L1' },
+        NOW - 5 * 60_000,
+      );
+      const k = await deriveWakeMetrics(db, team.id, NOW);
+      expect(k.by_seat[0]).toMatchObject({
+        seat: 'ada',
+        waited_ms: [55 * 60_000],
+        holds: [
+          {
+            waited_ms: 55 * 60_000,
+            by_state: { present: 20 * 60_000, snoozed: 30 * 60_000, passed: 5 * 60_000 },
+          },
+        ],
+      });
+    });
+
+    it('splitWaitByGate: a gap past the keepalive and time before any row are unobserved', () => {
+      const rows = [
+        { ts: 0, state: 'present' as const },
+        { ts: 200 * 60_000, state: 'passed' as const },
+      ];
+      // 0 → 75 min present, 75 → 200 min no row, 200 → 210 min passed.
+      expect(splitWaitByGate(rows, 0, 210 * 60_000)).toEqual({
+        present: WAKE_GATE_STALE_MS,
+        unobserved: 200 * 60_000 - WAKE_GATE_STALE_MS,
+        passed: 10 * 60_000,
+      });
+      // A wait that starts before the seat's first row.
+      expect(splitWaitByGate(rows.slice(1), 190 * 60_000, 210 * 60_000)).toEqual({
+        unobserved: 10 * 60_000,
+        passed: 10 * 60_000,
+      });
+      // No rows at all.
+      expect(splitWaitByGate([], 0, 1000)).toEqual({ unobserved: 1000 });
     });
 
     it('by_day counts a lease once, on its wake_cost row’s day', async () => {
