@@ -59,11 +59,12 @@ export function WhoIsHere({ roster, you }: { roster: MemberSummary[]; you: strin
     };
   }, [open]);
 
-  if (shown.length === 0) return null;
   const faces = shown.slice(0, MAX_FACES);
   const folded = shown.slice(MAX_FACES).filter((e) => !e.leaving);
   const present = shown.filter((e) => !e.leaving);
-  const alone = present.length === 1 && present[0]!.you;
+  // One person watching is nobody to show (nick, 2026-10-28: "if there is only 1 person watching,
+  // let's not show that at all"); the row appears the moment a second one opens /live.
+  if (present.length < 2) return null;
 
   return (
     <div className="lc-here" ref={rootRef}>
@@ -109,7 +110,6 @@ export function WhoIsHere({ roster, you }: { roster: MemberSummary[]; you: strin
           </div>
         )}
       </div>
-      {alone && <span className="lc-here__alone">just you here</span>}
       <span className="lc-here__whisper" aria-live="polite">
         {whisper && (
           <span key={whisper.key} className={`lc-here__whisper-text${whisper.going ? ' is-going' : ''}`}>
