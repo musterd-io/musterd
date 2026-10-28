@@ -1973,11 +1973,12 @@
    role title) … same thing with the model icon"). It opens on hover or focus on /live, and on
    /broadcast when the spotlight reaches it (index.ts `spotTimer`). A role with no glyph folds away. */
 .lc-gl-label.is-compact:not(.is-spot):not(:hover):not(:focus-within):not(.is-expanded) .lc-gl-label__plate {
-  > :is(.lc-gl-label__rule, .lc-gl-label__model, .lc-gl-label__job:not(:has(svg))),
-  > .lc-gl-label__job > span {
+  /* A founder's or admin's tag never folds (nick, 2026-10-28): idle or away, the whole tag stays. */
+  > :is(.lc-gl-label__rule, .lc-gl-label__model, .lc-gl-label__job:not(:has(svg)):not(.is-governance)),
+  > .lc-gl-label__job:not(.is-governance) > span {
     display: none;
   }
-  > .lc-gl-label__job {
+  > .lc-gl-label__job:not(.is-governance) {
     padding: 1.5px 3px;
   }
 }

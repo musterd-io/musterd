@@ -15,3 +15,23 @@ export function seatRoles(
   const held = roles?.length ? roles : [role ?? ''];
   return [...new Set(held.map((r) => r.trim()).filter((r) => r.length > 0))];
 }
+
+/** The roles a human's plate never folds away, in the order they outrank each other. */
+export const GOVERNANCE_ROLES = ['founder', 'admin'] as const;
+
+/**
+ * The one role the plate's face wears. A human who holds `founder` or `admin` wears that, founder
+ * first when both (nick, 2026-10-28: "if a human has both founder and admin, just show the founder");
+ * everyone else wears their first role. The expanded plate still lists them all.
+ */
+export function plateRole(held: readonly string[], kind: 'human' | 'agent' | string): string | null {
+  if (kind === 'human') {
+    for (const g of GOVERNANCE_ROLES) if (held.includes(g)) return g;
+  }
+  return held[0] ?? null;
+}
+
+/** Whether `job` is a role the plate keeps showing when it folds (idle or away). */
+export function isGovernanceRole(job: string | null, kind: string): boolean {
+  return kind === 'human' && job !== null && (GOVERNANCE_ROLES as readonly string[]).includes(job);
+}

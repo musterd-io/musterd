@@ -8,7 +8,7 @@ import { CHIME_BARS, barForLane, chordBars, gestureFor, voicesForChain } from '.
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
-import { seatRoles } from '../occupation';
+import { isGovernanceRole, plateRole, seatRoles } from '../occupation';
 import { roleGlyph } from '../roleGlyph';
 import { identityMeta, plateDetailParts, shortLaneState, shortWorkTitle } from '../presenceLabel';
 import { musterdChipSvg } from '../../brand/chipMark';
@@ -1443,7 +1443,8 @@ export function mountOffice(
       // plateLayout.ts more collisions to settle by moving plates. A service already says what it is
       // with its tag. The expanded /live plate lists every role when there is more than one.
       const held = node.service ? [] : seatRoles(node.roles, node.role);
-      const job = held[0] ?? null;
+      // A human's founder or admin outranks the rest on the face, founder first (nick, 2026-10-28).
+      const job = plateRole(held, node.kind);
       const jobNow = performance.now();
       const lastJob = plateJobs.get(name);
       if (!lastJob || lastJob.job !== job) {
@@ -1452,6 +1453,8 @@ export function mountOffice(
       if (job) {
         const jobEl = document.createElement('span');
         jobEl.className = 'lc-gl-label__job';
+        // Founder and admin never fold: the compact plate (idle, away) keeps this tag whole.
+        jobEl.classList.toggle('is-governance', isGovernanceRole(job, node.kind));
         // The role's glyph, then its name in a span of its own: the tag is a flex box, and
         // `::first-letter` (the sentence-case capital) only reaches a block-level child.
         jobEl.innerHTML = roleGlyph(job) ?? '';
