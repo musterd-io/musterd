@@ -83,7 +83,10 @@ export async function listInterruptCandidates(
   // wants the unbounded read (the contract test) passes `now: 0`, which makes the floor the
   // cursor itself. The equality contract with interruptCandidates.test.ts is preserved that way.
   const now = opts.now ?? Date.now();
-  const lookbackFloor = Math.max(opts.cursorTs ?? 0, now - (opts.maxLookbackMs ?? INTERRUPT_LOOKBACK_MS));
+  const lookbackFloor = Math.max(
+    opts.cursorTs ?? 0,
+    now - (opts.maxLookbackMs ?? INTERRUPT_LOOKBACK_MS),
+  );
   const windowRows = await db.all<MessageRow>(
     `SELECT * FROM messages
         WHERE team_id = ?
