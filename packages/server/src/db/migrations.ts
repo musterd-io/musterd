@@ -2077,8 +2077,9 @@ export function runMigrations(db: Database, ladder: readonly Migration[] = MIGRA
 }
 
 /**
- * Re-`ANALYZE` every table that has planner statistics but is missing an index from them, and
- * return the tables it analyzed (lane 01M4VGRX57).
+ * Re-`ANALYZE` every table that is missing planner statistics — a table whose statistics omit one
+ * of its indexes, or a table with no statistics row at all — and return the tables it analyzed
+ * (lanes 01M4VGRX57, 01M4YY5Z38).
  *
  * SQLite plans from `sqlite_stat1` once a table has any rows there, and an index with no row of its
  * own gets default estimates that look far more selective than the measured ones. So an index added
@@ -2088,22 +2089,39 @@ export function runMigrations(db: Database, ladder: readonly Migration[] = MIGRA
  * accept/decline in the team through that index instead of seeking `idx_messages_in_reply_to`.
  * Every wake-lease poll ran that query: 3.2 s warm on the hub's 25k messages, 0.026 s once analyzed.
  *
+ * A table with no statistics row was once left as it is (lane 01M4VGRX57: there every index gets the
+ * same defaults, so a new one cannot outrank the rest). The hub's own daytime stall tail
+ * (ADR 750, lane 01M4YY5Z38) is that case measured: 15 of `sqlite_stat1`'s rows, all `messages`,
+ * 37 other tables planned from defaults, and the audit high-water mark and the wake-lease EXISTS
+ * check blocked the loop for 0.5–2.5 s each at low swap. `ANALYZE audit` alone took the hwm subquery
+ * from 94 ms to 9 ms. Without statistics the planner does not merely rank indexes equally — it has
+ * no reason to prefer a covering seek over a scan.
+ *
  * Done here, after every ladder run, rather than as an `ANALYZE` in each index migration, so a
- * migration that forgets it cannot leave the trap. A table with no statistics stays as it is: the
- * planner treats all of its indexes alike, so a new one cannot outrank the rest. On a store whose
- * statistics already cover every index this is one read of `sqlite_master`.
+ * migration that forgets it cannot leave the trap. A table this has analyzed now has statistics, so
+ * steady state is one read of `sqlite_master`. On a store whose statistics already cover every
+ * index that is all it costs.
  */
 export function analyzeTablesMissingIndexStats(db: Database): string[] {
-  if (!tableExists(db, 'sqlite_stat1')) return [];
-  const tables = db
+  const missingClause = tableExists(db, 'sqlite_stat1')
+    ? 'AND NOT EXISTS (SELECT 1 FROM sqlite_stat1 s WHERE s.idx = m.name)'
+    : '';
+  const candidates = db
     .prepare<[], string>(
       `SELECT DISTINCT m.tbl_name FROM sqlite_master m
         WHERE m.type = 'index' AND m.name NOT LIKE 'sqlite_autoindex_%'
-          AND m.tbl_name IN (SELECT tbl FROM sqlite_stat1)
-          AND NOT EXISTS (SELECT 1 FROM sqlite_stat1 s WHERE s.idx = m.name)`,
+          ${missingClause}`,
     )
     .pluck()
     .all();
+  // ANALYZE writes no row for an empty table, so an empty candidate would be re-analyzed on every
+  // boot. It needs no statistics either — an empty table has nothing for a plan to mis-rank. Only a
+  // table holding rows, whose planner is choosing between its indexes from defaults, is analyzed.
+  const tables: string[] = [];
+  for (const table of candidates) {
+    if (db.prepare(`SELECT 1 FROM "${table.replaceAll('"', '""')}" LIMIT 1`).get() !== undefined)
+      tables.push(table);
+  }
   for (const table of tables) db.exec(`ANALYZE "${table.replaceAll('"', '""')}"`);
   return tables;
 }

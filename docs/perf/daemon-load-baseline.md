@@ -1238,3 +1238,39 @@ Hub. The expand-phase change was real, not staged for the test: main had landed 
 - **Spec §8 increment 1 acceptance:** item 1 (load) met by runs 40–44; items 2 and 3 (tenancy,
   loopback audit) landed earlier; item 4 met here. Falsify: a later rolling deploy under load whose
   hub log holds a 5xx from the deploy window, or an old image that boots against a newer schema.
+
+## 2026-10-28 — the hub's daytime tail at low swap: the polls met the budget, and the rest of the tail is the process blocking itself, not paging (lane 01M4YY5Z38)
+
+The lane's earlier window (2026-10-14) read daytime p90 0.8–1.1 s, max 9.7 s, and traced it to the
+laptop's swap. The brief's remaining step: read a daytime of the `sqlite_stmt_slow` /
+`event_loop_stall` lines (#2603) at swap **under** 1.5 GB, and fix an in-process blocker if one
+shows. This machine sat at 1 427 MB of swap (of 2 GB) for the window, under the threshold.
+
+**The wake-lease polls, 09:30–09:49 local on the live daemon (279 `GET
+/teams/revive/residency/wake-leases` lines):** p50 **4 ms**, p90 **117 ms**, max 2 669 ms. The
+lane's daytime target — p90 under 400 ms — is met. The p50 fell from ~150 ms mostly through the
+planner: this database's `sqlite_stat1` was empty through 2026-10-27 and now holds 15 rows for
+`messages` (the hub's out-of-band `ANALYZE messages`, ADR 750); the same query on a copy went
+0.566 s → 0.017 s from that alone.
+
+**The residual tail is not the polls.** The window also holds 13 `event_loop_stall` lines
+(553–2 508 ms) and 32 `sqlite_stmt_slow` lines, and each slow poll's timestamp sits on the same
+second as a stall. The statements in the stalls run on tables with **no** planner statistics —
+`sqlite_stat1` covers `messages` only, and the shipped guard analyzed only tables already in it:
+
+| statement (from the stalls) | before `ANALYZE` (copy of the live DB) | after | fix |
+| --- | --- | --- | --- |
+| audit high-water mark (`prunableSql`, retention) | 94 ms | 9 ms | ADR 750 — guard extends to stat-less tables |
+| usage aggregate (`insights`) | 1 792 ms live | — | same |
+| `wake_leases` EXISTS check | 925 ms live | — | same |
+| `SELECT SUM(pgsize) FROM dbstat` (`syncLogBytes`) | 1 003 ms (134 ms warm) | 134 ms | not planner-fixable — a virtual-table walk |
+
+All 37 stat-less tables analyze in **251 ms** once (213 ms of it `audit`, 329k rows). ADR 750 makes
+the guard do that at boot; v133 drops the two `urgent` indexes and the `urgent` virtual column the
+lane applied out-of-band, which no query uses with statistics present.
+
+Falsify the headline: a daytime window on a post-merge daemon whose polls exceed p90 400 ms at swap
+under 1.5 GB, or whose stalls still coincide with slow statements on tables that hold statistics.
+The `dbstat` walk stays — a cold retention pass can still hold the loop ~1.5 s — so a stall that
+cannot be traced to a stat-less table may be that, and it is a separate lever (cache or thin the
+retention read), not this lane's.

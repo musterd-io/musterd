@@ -1103,25 +1103,26 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
     },
   },
   {
-    // Lane 01M4YY5Z38: wake-leases poll scans open directed ledger filtering
-    // (to_kind='member' AND json_extract(m.meta,'$.urgent')=1) without an index; the
-    // expression has no affinity for TEXT id comparisons. Add a VIRTUAL generated column
-    // `urgent` carrying the same extracted value so an index on it can be used.
+    // Lane 01M4YY5Z38 (ADR 750): the two `urgent` indexes and the `urgent` virtual generated column
+    // were applied to the revive hub's database out-of-band during that lane's diagnosis, and no
+    // query on main uses them — with planner statistics present the poll's ledger read seeks
+    // idx_messages_team_ts and the candidates read seeks idx_messages_inbox_cover, with or without
+    // the column (measured, plans identical). The full-coverage idx_messages_team_to_kind_urgent
+    // cost an index update per message insert for nothing. Drop them so the live store is
+    // reproducible from the ladder; every step is a no-op where the out-of-band step never ran.
     version: 133,
     sqlite: (db) => {
-      const cols = db.prepare("SELECT name FROM pragma_table_xinfo('messages')").pluck().all();
-      if (!cols.includes('urgent'))
-        db.exec(
-          "ALTER TABLE messages ADD COLUMN urgent INTEGER GENERATED ALWAYS AS (json_extract(meta, '$.urgent')) VIRTUAL",
-        );
       db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_messages_team_urgent ON messages(team_id, urgent) WHERE urgent IS NOT NULL;
-        CREATE INDEX IF NOT EXISTS idx_messages_team_to_kind_urgent ON messages(team_id, to_kind, urgent);
+        DROP INDEX IF EXISTS idx_messages_team_urgent;
+        DROP INDEX IF EXISTS idx_messages_team_to_kind_urgent;
       `);
+      const cols = db.prepare("SELECT name FROM pragma_table_xinfo('messages')").pluck().all();
+      if (cols.includes('urgent')) db.exec('ALTER TABLE messages DROP COLUMN urgent');
       db.exec('ANALYZE messages');
     },
-    postgres: async (d) => {
-      // Postgres uses jsonb; schema defined elsewhere; best-effort no-op for this optimization
+    postgres: async () => {
+      // The out-of-band ALTER ran on the hub's SQLite store only; a Postgres store never had the
+      // column (and main's SQL never references it — delivery keeps json_extract, ADR 750).
     },
   },
 ];
