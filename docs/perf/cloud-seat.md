@@ -1281,3 +1281,44 @@ finding 9 named (a pull that starts near the head) stays unbuilt; the cheaper on
 by the next page immediately, and the 60 s interval is only the wait once a page comes up short. A
 fold stop part-way is never "full", so a blocked fold still waits for its tick and never spins.
 Measured figure for the Air's first drain goes in `docs/guides/second-machine.md` when it runs.
+
+## 2026-10-28 — cloud agents 2b-5: the hosted seat boots on the revive hub (lane `01M5DTSQ7B`)
+
+The 2b pilot end to end: one Fly machine (`musterd-agent-delta-2`, `87e126c01399e8`, sjc) as a
+joiner of the laptop hub (`nicks-laptop`), hosting the sponsored seat `delta-2` on host label
+`cloud-delta-2`, model `claude-sonnet-5-5`, budget $5/wake set by the sponsor. Human steps per
+boot after `create.sh` was re-run: two passkey approvals (host-key mint, team policy) and one
+sponsored mint — all sponsor-side by design; **zero steps on the machine**. The lane's falsifier
+(any human step on the machine, or a `bound_elsewhere` in the week) did not fire.
+
+Boot attempt 1 (2026-10-27) died at `node join` — "no team", because a fresh joiner has nothing
+for `resolveRead` to find (fixed by PR #3403, `--team "$MUSTERD_TEAM"`). Attempt 2 then found
+four more defects, each now landed with a regression test or a live falsifier:
+
+| # | defect | fix |
+| --- | --- | --- |
+| 1 | `fly deploy` updates a stopped machine but never starts it; create.sh's 4-minute polling window expired before the host could report polling | started the machine by hand this run; the window-vs-boot race is the finding, still open in create.sh |
+| 2 | sync fold wedged forever at hub_seq 305458 on an act from `board`, a db-only service seat no roster carries; 102k later events — the day's host-key credential mint included — never replicated (PR #3456) | the fold mints `board`/`policy` service seats on first folded act, mirroring ADR 645's host seat |
+| 3 | `agent.sh`'s host-key probe died on a curl timeout under `set -e` while the daemon drained its backlog; the machine crash-looped to Fly's restart cap before ever polling (PR #3460) | a failed probe is a "not yet", never a death |
+| 4 | `musterd agent --hosted` never collected the ADR 662 `agent_create` approval, so create.sh's sponsor mint could never complete for a passkey-only human (PR #3464); its new ceremony then raced roster reconcile, which created the member, made the mint conflict, and left the name tombstoned (PR #3467) | CLI collects the approval and retries; the server mint adopts the agent row its verified declared seat file already made |
+
+Attempt 2's verified sequence, 2026-10-28 (UTC): tailnet up 17:56:56 → daemon up 17:57:00 →
+enrolled at the hub 17:57:04 → (after defect 2–3 fixes redeployed) host key honoured 18:43:01 →
+host polling 18:43:02 → provision claimed and ready within seconds of the sponsor's mint
+(20:07–20:08). After the fold fix the joiner drained its remaining backlog and now folds at the
+live tip (`sync_pulled applied: 1` per event).
+
+**Wake latency** (hub `residency.*` audit rows; act `created_at` → reply):
+
+| wake | leased→woke | wall / cost | notes |
+| --- | --- | --- | --- |
+| first (provision `work_order`) | 12.5 s | 18.8 s, $0.0244 | fresh session, `invoke→roster 12.3s`, 2 turns |
+| `steer` from fifty, 20:12:56 | 3.3 s (act→reply 17 s end to end) | 8.7 s, $0.0112 | rehydrated session, `invoke→roster 2.1s`, 4 turns; reply named its workdir and model |
+
+Two honest caveats. A plain `message` did **not** wake the seat within 3 minutes; the `steer`
+did, on the next poll — waking acts are the directed ones, and the reading should not be quoted
+as "messages wake the cloud seat". And the end-to-end steer number includes the joiner's fold
+plus the host's 10 s poll, so it is a floor set by plumbing, not by the model: a laptop seat,
+already live, pays neither. What the cloud buys is presence while the laptop is shut, at these
+latencies and roughly two cents a wake. big-body's read-only post-boot Verify (pilot gate) is
+asked and still outstanding as this entry lands; the falsifier stands until it answers.
