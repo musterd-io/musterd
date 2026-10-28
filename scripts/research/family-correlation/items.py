@@ -1,12 +1,15 @@
 """Seed candidate mutants, then draw the study's items from the ones the keep step kept.
 
     python3 items.py seed --dataset <cooperbench>/dataset --out <dir>       # candidates/*.patch + candidates.jsonl
+    python3 items.py topup --dataset <cooperbench>/dataset --out <dir>      # appends every site `seed` skipped
     python3 items.py draw --dataset <cooperbench>/dataset --out <dir>       # needs <dir>/kept.jsonl; writes items.jsonl
 
-Both steps are deterministic under SEED. `seed` takes at most two sites per (feature, class), so
-the keep step evaluates a few hundred mutants, not every site. `draw` applies the manifest's rules:
-at most two items per feature in different classes, classes as even as the kept pool allows, the
-first PILOT items as the pilot, and one control per four seeded items from features with no item.
+All steps are deterministic under SEED. `seed` takes at most two sites per (feature, class), so
+the first keep pass evaluates a few hundred mutants, not every site. `topup` appends the sites
+`seed` left out, under new ids, so a second keep pass resumes over them. `draw` applies the
+manifest's rules: at most three items per feature and two per class within a feature, classes as
+even as the kept pool allows, the first PILOT items as the pilot, and one control per four seeded
+items from features with no item.
 """
 
 from __future__ import annotations
@@ -24,6 +27,8 @@ import patchlib  # noqa: E402
 
 SEED = 20261027
 PER_FEATURE_CLASS = 2
+DRAW_PER_FEATURE = 3
+DRAW_PER_FEATURE_CLASS = 2
 MAIN = 100
 PILOT_SEEDED = 8
 PILOT_CONTROLS = 2
@@ -54,22 +59,44 @@ def seed(dataset: Path, out: Path) -> list[dict]:
         for cls in mutate.CLASSES:
             pool = by_class.get(cls, [])
             for site in rng.sample(pool, min(PER_FEATURE_CLASS, len(pool))):
-                m = mutate.apply(files, site)
-                cid = f"{feature_key(p).replace('/', '__')}__{cls}__{len(rows):04d}"
-                (out / "candidates" / f"{cid}.patch").write_text(m.patch)
-                rows.append({
-                    "id": cid,
-                    "feature": feature_key(p),
-                    "class": cls,
-                    "detail": site.detail,
-                    "path": m.path,
-                    "loc": [m.loc_start, m.loc_end],
-                    "hunk": list(m.hunk_range),
-                })
+                rows.append(_row(out, len(rows), p, cls, site, mutate.apply(files, site)))
     with open(out / "candidates.jsonl", "w") as f:
         for r in rows:
             f.write(json.dumps(r) + "\n")
     return rows
+
+
+def _row(out: Path, n: int, p: Path, cls: str, site: mutate.Site, m: mutate.Mutant) -> dict:
+    cid = f"{feature_key(p).replace('/', '__')}__{cls}__{n:04d}"
+    (out / "candidates" / f"{cid}.patch").write_text(m.patch)
+    return {
+        "id": cid,
+        "feature": feature_key(p),
+        "class": cls,
+        "detail": site.detail,
+        "path": m.path,
+        "loc": [m.loc_start, m.loc_end],
+        "hunk": list(m.hunk_range),
+    }
+
+
+def topup(dataset: Path, out: Path) -> list[dict]:
+    """Append every site `seed` did not take. Existing ids and patches are left as they are."""
+    rows = [json.loads(l) for l in open(out / "candidates.jsonl") if l.strip()]
+    have = {(r["feature"], (out / "candidates" / f"{r['id']}.patch").read_text()) for r in rows}
+    added = []
+    for p in python_features(dataset):
+        files = patchlib.parse(p.read_text())
+        for site in mutate.sites(files):
+            m = mutate.apply(files, site)
+            if (feature_key(p), m.patch) in have:
+                continue
+            have.add((feature_key(p), m.patch))
+            added.append(_row(out, len(rows) + len(added), p, site.cls, site, m))
+    with open(out / "candidates.jsonl", "a") as f:
+        for r in added:
+            f.write(json.dumps(r) + "\n")
+    return added
 
 
 def draw(dataset: Path, out: Path) -> list[dict]:
@@ -82,7 +109,7 @@ def draw(dataset: Path, out: Path) -> list[dict]:
     for cls in pool:
         rng.shuffle(pool[cls])
 
-    used: dict[str, set[str]] = collections.defaultdict(set)  # feature -> classes drawn
+    used: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)  # feature -> class -> n
     seeded: list[dict] = []
     want = MAIN + PILOT_SEEDED
     progress = True
@@ -94,8 +121,8 @@ def draw(dataset: Path, out: Path) -> list[dict]:
             while pool.get(cls):
                 k = pool[cls].pop()
                 f = k["feature"]
-                if len(used[f]) < 2 and cls not in used[f]:
-                    used[f].add(cls)
+                if sum(used[f].values()) < DRAW_PER_FEATURE and used[f][cls] < DRAW_PER_FEATURE_CLASS:
+                    used[f][cls] += 1
                     seeded.append(k)
                     progress = True
                     break
@@ -123,11 +150,11 @@ def draw(dataset: Path, out: Path) -> list[dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["seed", "draw"])
+    ap.add_argument("step", choices=["seed", "topup", "draw"])
     ap.add_argument("--dataset", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
-    rows = seed(a.dataset, a.out) if a.step == "seed" else draw(a.dataset, a.out)
+    rows = {"seed": seed, "topup": topup, "draw": draw}[a.step](a.dataset, a.out)
     counts = collections.Counter((r.get("stage", "candidate"), r["class"]) for r in rows)
     for k in sorted(counts):
         print(*k, counts[k], sep="\t")
