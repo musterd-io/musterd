@@ -175,7 +175,9 @@ withDrivers('sponsoredAgents', (o) => {
           adoptDeclared: true,
         }),
       ).rejects.toThrowError(/already exists/);
-      expect((await getMemberByName(db, team.id, 'shared-x'))!.sponsored_by).toBe(erins.sponsored_by);
+      expect((await getMemberByName(db, team.id, 'shared-x'))!.sponsored_by).toBe(
+        erins.sponsored_by,
+      );
       expect(await db.all('SELECT * FROM agent_connect_nonces')).toHaveLength(1);
     });
 
