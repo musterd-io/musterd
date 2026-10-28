@@ -162,8 +162,16 @@ export async function createSponsoredAgent(
     // file, and reconcile tombstones the name for good. When the transport has verified the
     // declared file names this sponsor (`adoptDeclared`), that row IS this mint's seat: adopt
     // it (live) or revive it (tombstoned by the same race), never a stranger's. A human seat
-    // is never adoptable.
-    const adoptable = opts.adoptDeclared === true && existing?.kind === 'agent';
+    // is never adoptable. Neither is another sponsor's agent: reconcile's row carries no
+    // sponsor, so adoption requires `sponsored_by` unset or already this sponsor's — a
+    // different sponsor's row, live or tombstoned, keeps the refusals below (security review,
+    // 2026-10-28: the unbounded form reassigned the sponsor and issued a connect nonce).
+    const adoptable =
+      opts.adoptDeclared === true &&
+      existing?.kind === 'agent' &&
+      (existing.sponsored_by === null ||
+        existing.sponsored_by === '' ||
+        existing.sponsored_by === sponsor.id);
     if (existing && existing.left_at !== null && !adoptable)
       throw new MusterdError(
         'conflict',

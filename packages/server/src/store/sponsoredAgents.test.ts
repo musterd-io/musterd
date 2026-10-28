@@ -166,6 +166,34 @@ withDrivers('sponsoredAgents', (o) => {
       expect((await getMemberByName(db, team.id, 'delta-x'))!.left_at).toBeNull();
     });
 
+    it('adoptDeclared never takes a live agent from a different sponsor', async () => {
+      const { db, team, human } = await teamWithHuman();
+      const { row: erin } = await addMember(db, team, { name: 'erin', kind: 'human' });
+      const { member: erins } = await createSponsoredAgent(db, team, erin, { name: 'shared-x' });
+      await expect(
+        createSponsoredAgent(db, team, human, { name: 'shared-x' }, Date.now(), {
+          adoptDeclared: true,
+        }),
+      ).rejects.toThrowError(/already exists/);
+      expect((await getMemberByName(db, team.id, 'shared-x'))!.sponsored_by).toBe(erins.sponsored_by);
+      expect(await db.all('SELECT * FROM agent_connect_nonces')).toHaveLength(1);
+    });
+
+    it('adoptDeclared never revives a tombstone from a different sponsor', async () => {
+      const { db, team, human } = await teamWithHuman();
+      const { row: erin } = await addMember(db, team, { name: 'erin', kind: 'human' });
+      const { member: erins } = await createSponsoredAgent(db, team, erin, { name: 'gone-x' });
+      await leaveMember(db, erins.id);
+      await expect(
+        createSponsoredAgent(db, team, human, { name: 'gone-x' }, Date.now(), {
+          adoptDeclared: true,
+        }),
+      ).rejects.toThrowError(/was used by a removed member/);
+      const row = (await getMemberByName(db, team.id, 'gone-x'))!;
+      expect(row.left_at).not.toBeNull();
+      expect(row.sponsored_by).toBe(erin.id);
+    });
+
     it('adoptDeclared never adopts a human seat with the same name', async () => {
       const { db, team, human } = await teamWithHuman();
       await addMember(db, team, { name: 'person-x', kind: 'human' });
