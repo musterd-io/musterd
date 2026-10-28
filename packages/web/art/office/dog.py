@@ -4,7 +4,7 @@ action is a function of the clip's phase), rendered whole — one sheet, its own
 
 Run through `render.py --dog`. The painted dog (`drawDog` in render.ts) is the reference for the
 look: a warm-white coat with soft near-black patches over the shoulders, the hip and a small one on
-the flank, black ears and one dark eye patch, a cream muzzle, chest, paws and tail tip, and the team's
+the flank, black ears and a painted ski mask with big eyes (2026-10-28), a cream muzzle, chest, paws and tail tip, and the team's
 mustard collar with a tag. Its modes (`pet.ts` PetMode) are the clips: a trot (`walk`), `sit`, `curl`
 (also `sleep`) and the play-bow `stretch`.
 
@@ -123,8 +123,37 @@ class Dog:
         return self._attach(o, joint, mat)
 
 
-def build_dog(zs: float, origin: Vector) -> Dog:
-    """The dog standing square, facing +x."""
+# The eyes (nick, 2026-10-28: "make the eyes very cute and expressive"). The old ones were 0.55 units
+# of near-black on a white skull: one or two pixels at office size, and the dog read as eyeless.
+#   button  — a big glossy dark eye with two catch-lights
+#   bright  — a white rim round a big dark pupil, one catch-light
+#   blush   — `bright` plus two soft pink cheeks under the eyes
+FACE = "blush"
+
+
+def face_eyes(d: "Dog", face: str, hx: float, hz: float, eye) -> None:
+    white = scene.matte("dog-eye-white", scene.srgb("#fbf8f2"), 0.35)
+    shine = scene.glow("dog-eye-shine", (1.0, 1.0, 1.0), strength=3.0)
+    pink = scene.matte("dog-blush", scene.srgb("#f2a7a0"), 0.9)
+    for side, sy in (("L", 1), ("R", -1)):
+        ex, ey, ez = hx + 3.0, sy * 1.55, hz + 0.35
+        if face == "button":
+            d.orb(f"eye{side}", "head", eye, ex, ey, ez, 0.95, 0.9, 1.05)
+            d.orb(f"shine{side}", "head", shine, ex + 0.85, ey - 0.25 * sy, ez + 0.6, 0.3, 0.3, 0.3)
+            d.orb(f"glint{side}", "head", shine, ex + 0.9, ey + 0.25 * sy, ez - 0.1, 0.14, 0.14, 0.14)
+        else:
+            d.orb(f"eyewhite{side}", "head", white, ex, ey, ez, 0.95, 0.95, 1.05)
+            d.orb(f"eye{side}", "head", eye, ex + 0.45, ey, ez - 0.05, 0.7, 0.72, 0.82)
+            d.orb(f"shine{side}", "head", shine, ex + 1.05, ey - 0.2 * sy, ez + 0.4, 0.22, 0.22, 0.22)
+            # asleep: a soft dark lid line where the eye was, shown only when a pose closes the eyes
+            lid = d.orb(f"lid{side}", "head", eye, ex + 0.75, ey, ez - 0.15, 0.35, 0.8, 0.16)
+            lid.hide_render = True
+            if face == "blush":
+                d.orb(f"blush{side}", "head", pink, ex + 0.75, sy * 1.85, ez - 1.0, 0.5, 0.4, 0.32)
+
+
+def build_dog(zs: float, origin: Vector, face: str = FACE) -> Dog:
+    """The dog standing square, facing +x. `face` picks the eyes (see `FACE`)."""
     d = Dog(zs, origin)
     plain = scene.matte("dog-plain", scene.srgb(COAT), 0.85)
     patch = scene.matte("dog-patch", scene.srgb(PATCH), 0.8)
@@ -162,14 +191,24 @@ def build_dog(zs: float, origin: Vector) -> Dog:
     c = d.orb("collar", "neck", collar, 9.4, 0, BODY_Z + 3.2, 2.9, 2.9, 0.75)
     d.orb("tag", "neck", tag, 11.6, 0, BODY_Z + 1.8, 0.5, 0.25, 0.75)
     del c
-    # the head: skull, a dark eye patch on the near side, the cream muzzle, nose, eyes, flop ears
+    # the head: skull under its ski mask, the cream muzzle, nose, eyes, flop ears
     hx, hz = 11.4, BODY_Z + 6.0
-    d.orb("skull", "head", plain, hx, 0, hz, 3.9, 3.4, 3.4)
-    d.orb("eyepatch", "head", patch, hx + 0.8, -1.3, hz + 0.7, 2.2, 2.2, 2.0)
+    # The ski mask (nick, 2026-10-28): painted on the skull, not stuck on it — the top of the head dark
+    # and a ring round each eye, so the white eye rims read as the mask's eye holes and the muzzle
+    # stays cream. Centres are in the head joint's space (z stretched by zs), like the coat's patches.
+    # It replaced the one-sided eye patch.
+    sk = (hx - 10.6, hz - (BODY_Z + 5.6))  # the skull's centre from the head joint
+    mask = coat_with_patches(
+        "dog-mask",
+        [((sk[0] - 0.2, 0.0, (sk[1] + 2.9) * zs), 3.3)]
+        + [((sk[0] + 2.9, sy * 1.55, (sk[1] + 0.45) * zs), 1.5) for sy in (1, -1)],
+        d.joints["head"],
+    )
+    d.orb("skull", "head", mask, hx, 0, hz, 3.9, 3.4, 3.4)
     d.orb("muzzle", "head", cream, hx + 3.6, 0, hz - 1.0, 2.6, 2.0, 1.8)
     d.orb("nose", "head", nose, hx + 6.0, 0, hz - 0.6, 0.75, 0.85, 0.6)
+    face_eyes(d, face, hx, hz, eye)
     for side, sy in (("L", 1), ("R", -1)):
-        d.orb(f"eye{side}", "head", eye, hx + 2.5, sy * 1.7, hz + 1.0, 0.55, 0.45, 0.6)
         d.orb(f"ear{side}", "head", patch, hx - 0.6, sy * 3.0, hz - 0.2, 1.4, 0.7, 2.6)
         d.orb(f"earin{side}", "head", ear_in, hx - 0.4, sy * 2.6, hz - 0.4, 0.9, 0.4, 1.8)
     # the tail: a short sabre, up and back, with the cream tip
@@ -245,6 +284,7 @@ def pose(name: str, f: int, frames: int) -> tuple[dict, float]:
         p["neck"] = (0, 6, 0)
         p["head"] = (0, 8, 0)
         p["tail"] = (0, 70, 0)
+        p["eyes"] = "closed"  # asleep: lids down (nick, 2026-10-28: "very cute and expressive")
         p["body.scale"] = (1.0, b, 1.0)
         return p, -5.6
     if name == "stretch":
@@ -274,6 +314,13 @@ def apply_pose(d: Dog, p: dict, lift: float, heading_rad: float) -> None:
         j.rotation_euler = (math.radians(rx), math.radians(ry), math.radians(rz))
         j.scale = p.get(f"{name}.scale", (1, 1, 1))
         j.location = rest[name]
+    closed = p.get("eyes") == "closed"
+    for o in d.meshes:
+        n = o.name.split("/")[-1]
+        if n.startswith(("eyewhite", "eye", "shine", "glint")) and not n.startswith("eyepatch"):
+            o.hide_render = closed
+        elif n.startswith("lid"):
+            o.hide_render = not closed
     bpy.context.view_layer.update()
 
 
