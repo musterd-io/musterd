@@ -86,10 +86,13 @@ function lineFor(account: AllowanceLineAccount, now: number): AllowanceLine | nu
   if (!top) return null;
   const used = usedPercent(top.left);
   const count = top.kind === 'amount' ? amountLeft(top) : null;
+  const named = ordered.length > 1 && top.kind === 'percent';
   return {
     text:
       top.kind === 'percent'
-        ? `${account.label} ${used}% used`
+        ? named
+          ? `${account.label} ${top.name} ${used}% used`
+          : `${account.label} ${used}% used`
         : count
           ? `${account.label} ${count.left}${count.unit === '' ? '' : ` ${count.unit}`} left`
           : account.label,
@@ -176,7 +179,11 @@ export function allowanceChips(
     const read = `last read ${readingAge(age)}`;
     const note = stale ? (offline ? `offline · ${read}` : read) : null;
     const label = [
-      `${member.name}'s allowance: ${lines.map((line) => line.text).join(', ')}`,
+      `${member.name}'s allowance: ${lines
+        .map((line) =>
+          line.suffixes.length > 0 ? `${line.text}, ${line.suffixes.join(', ')}` : line.text,
+        )
+        .join(', ')}`,
       stale && offline ? 'offline' : null,
       stale ? read : null,
     ]

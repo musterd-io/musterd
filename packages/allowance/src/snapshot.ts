@@ -56,9 +56,16 @@ function accountLabel(card: LiveProvider): string {
   return clip(card.name);
 }
 
-/** Short words for the card. Anything else keeps the window id (`characters`, `on-demand`). */
+/**
+ * Short words for the card. A model weekly window keeps the model name, so Fable is not
+ * folded into week. Anything else keeps the window id (`characters`, `on-demand`).
+ */
 function shortName(window: Window): string {
-  const text = `${window.label ?? ''} ${window.id}`.toLowerCase();
+  const label = (window.label ?? '').trim();
+  const modelWeek = /^([A-Za-z0-9][A-Za-z0-9.+-]{0,24})\s+weekly\b/i.exec(label);
+  const model = modelWeek?.[1];
+  if (model && model.toLowerCase() !== 'weekly') return model;
+  const text = `${label} ${window.id}`.toLowerCase();
   if (text.includes('week')) return 'week';
   if (text.includes('5-hour') || text.includes('5 hour')) return '5h';
   if (text.includes('daily') || text.includes('day')) return 'day';

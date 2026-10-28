@@ -73,6 +73,56 @@ describe('allowanceSnapshot', () => {
     });
   });
 
+  it('keeps a model weekly window under the model name', () => {
+    const board: Board = {
+      readAt: 1_700_000_000_000,
+      timeZone: 'UTC',
+      chosen: ['claude'],
+      providers: [
+        {
+          id: 'claude',
+          name: 'Claude',
+          state: 'live',
+          detail: 'Claude Max 20x',
+          windows: [
+            {
+              id: 'session',
+              unit: 'percent',
+              used: 12,
+              limit: 100,
+              resetsAt: 1_700_000_100_000,
+              label: '5-hour window',
+            },
+            {
+              id: 'weekly_all',
+              unit: 'percent',
+              used: 51,
+              limit: 100,
+              resetsAt: 1_700_000_200_000,
+              label: 'weekly window',
+            },
+            {
+              id: 'weekly_scoped_2',
+              unit: 'percent',
+              used: 78,
+              limit: 100,
+              resetsAt: 1_700_000_200_000,
+              label: 'Fable weekly window',
+            },
+          ],
+        },
+      ],
+    };
+    const snapshot = allowanceSnapshot(board, [
+      { provider: 'claude', accountKey: 'sha256:claude-account' },
+    ]);
+    expect(snapshot?.accounts[0]?.windows.map((window) => window.name)).toEqual([
+      '5h',
+      'week',
+      'Fable',
+    ]);
+  });
+
   it('keeps character counts on an amount window', () => {
     const board: Board = {
       readAt: 50,

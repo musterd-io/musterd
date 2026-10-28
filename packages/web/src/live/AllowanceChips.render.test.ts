@@ -115,6 +115,21 @@ describe('AllowanceChips', () => {
     expect(html.indexOf('Claude Max 73% used')).toBeLessThan(html.indexOf('Muse 7% used'));
   });
 
+  it('shows the 5-hour, weekly, and Fable windows on the chip', () => {
+    const claude = account('Claude Max 20x', 0.22);
+    claude.windows = [
+      { name: 'Fable', left: 0.22, resetsAt: 2, kind: 'percent' },
+      { name: 'week', left: 0.49, resetsAt: 2, kind: 'percent' },
+      { name: '5h', left: 0.88, resetsAt: 1, kind: 'percent' },
+    ];
+    const html = render([member('nick', 'human', [claude])]);
+    expect(html).toContain('Claude Max 20x Fable 78% used');
+    expect(html).toContain('week 51%');
+    expect(html).toContain('5h 12%');
+    expect(html.indexOf('Fable 78% used')).toBeLessThan(html.indexOf('week 51%'));
+    expect(html.indexOf('week 51%')).toBeLessThan(html.indexOf('5h 12%'));
+  });
+
   it('quiets a stale chip', () => {
     const html = render([member('nick', 'human', [account('Claude Max', 0.5, NOW - 5 * MIN)])]);
     expect(html).toContain('is-quiet');

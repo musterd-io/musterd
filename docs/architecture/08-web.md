@@ -113,8 +113,10 @@ access; roster handles and Presence remain visible.
   [ADR 744](../decisions/744-allowance-in-the-live-header.md),
   [ADR 745](../decisions/745-allowance-percent-used.md)) — in the /live top bar after the Now
   slot: one chip per human with a reading, offline humans included, agents never. A chip is the
-  human's face and name, then every account by name with the percent used and a bar of that share
-  (an amount window stays a count left). Warn ink under 15% left, muted type and a dimmed face once
+  human's face and name, then every account by name. Each window of that account is on the chip,
+  tightest first: a model week keeps its name (Fable), the shared week stays week, and the 5-hour
+  window stays 5h. The bar is the tightest window's share used (an amount window stays a count
+  left). Warn ink under 15% left, muted type and a dimmed face once
   the reading is two minutes old. A click opens a card with every account, most used first, and
   "last read 3h ago" (or "offline · last read …") when stale; Escape or an outside press closes it.
   Under 440px the name hides. The tour's entry button left this bar for it, and the bar's wordmark
