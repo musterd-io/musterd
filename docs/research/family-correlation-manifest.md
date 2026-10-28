@@ -53,7 +53,15 @@ ground truth with a known location, so a miss and a shared miss need no judgment
   `n + 1`. Swallowed error: an added one-line `raise` replaced with `pass`. _Narrowed 2026-10-27 to
   the operators `scripts/research/family-correlation/mutate.py` implements; the first text also
   named range bounds and dropped error returns._
-- **At most two items per feature**, in different classes. The analysis resamples by feature.
+- **At most three items per feature, and at most two of one class within a feature.** The analysis
+  resamples by feature. _Amended 2026-10-28, before any item was reviewed; the first text said "at
+  most two items per feature, in different classes"._ The first keep pass kept 110 of 252 mutants,
+  but that rule let only 79 be drawn, against the 108 the run needs (100 main and 8 pilot). nick
+  chose to seed every remaining site (170 more, in 40 features, by `items.py topup`) and loosen the
+  rule, over shrinking the run to N = 71. More items now share a feature, so the effective N is
+  below 100. The bootstrap by feature carries that into the interval, and the power table, which
+  treats items as independent, overstates power somewhat. The finding reports the number of
+  features and the largest per-feature count.
 - **Controls:** one clean reference patch for every four seeded items, mixed in, so a reviewer
   cannot assume every item has a defect. Drawn by the same seed from Python features that carry no
   seeded item. Controls count only toward the false-alarm rate.
