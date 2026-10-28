@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_LIFE, firehoseSound, type LifeContext, roomTone, screenPan } from './sound';
+import { CUES } from './soundEngine';
 import {
   deskPhase,
   keyboardFor,
@@ -389,5 +390,12 @@ describe('milestone moments (E3 spec)', () => {
     for (const m of ['plateOpen', 'plateClose', 'boardOpen', 'boardClose'] as const) {
       expect(() => roomTone.moment(m, 0)).not.toThrow();
     }
+  });
+});
+
+describe('the sound re-evaluation (lane 01M6096TA7)', () => {
+  it('the ask cue is no louder than a message — the askbell at the desk carries the weight', () => {
+    const peak = (act: string) => Math.max(...CUES[act]!.map((n) => n.gain));
+    expect(peak('ask')).toBeLessThanOrEqual(peak('message'));
   });
 });
