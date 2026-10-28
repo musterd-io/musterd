@@ -863,8 +863,12 @@ export const WALL_BOARD = { wall: 1 as const, tc: 0.8922, uc: 0.4787, w: 170, h:
  */
 export const SHELF_CHIMES = {
   wall: 1 as const,
-  tc: 0.84,
-  uc: 0.955,
+  // 0.84 → 0.875 (2026-10-28): the string lights' bulbs hang at t 0.833 and 0.917 (`cablePts`, odd
+  // indices of twelve); the rail sits midway so neither bulb lands on a bar.
+  tc: 0.875,
+  // 0.955 → 0.965 (2026-10-28): the board grew to 170 × 120 in #3461 and its top edge rose; the rail
+  // lifts so the C4 bar keeps its clearance (layout.test.ts holds 3 units).
+  uc: 0.965,
   /** rail width, logical units */
   w: 46,
   /** bar lengths, left to right — the scale rising C4…E5 */
