@@ -19,7 +19,10 @@
  *    native is copied and nothing under `ios/` is committed. `addTarget` does not add a
  *    Sources phase and quotes the Info.plist path with the path.join quirk; both are handled
  *    here. The target is skipped when it already exists, so a second prebuild does not
- *    duplicate it.
+ *    duplicate it. Its Info.plist is hand-written (GENERATE_INFOPLIST_FILE is NO), so it
+ *    must carry the standard `CFBundle*` keys itself — without `CFBundleIdentifier`
+ *    expanding `$(PRODUCT_BUNDLE_IDENTIFIER)` the archive fails validation with an
+ *    embedded-binary bundle identifier of `(null)` (EAS build bf82d194, 2026-10-28).
  *
  * No runtime dependency is added. Token registration is UserNotifications inside the existing
  * module, and the seen-nonce store is a keychain item, not expo-sqlite.
@@ -79,6 +82,24 @@ function infoPlist() {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>$(DEVELOPMENT_LANGUAGE)</string>
+  <key>CFBundleDisplayName</key>
+  <string>${EXTENSION_NAME}</string>
+  <key>CFBundleExecutable</key>
+  <string>$(EXECUTABLE_NAME)</string>
+  <key>CFBundleIdentifier</key>
+  <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>$(PRODUCT_NAME)</string>
+  <key>CFBundlePackageType</key>
+  <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$(MARKETING_VERSION)</string>
+  <key>CFBundleVersion</key>
+  <string>$(CURRENT_PROJECT_VERSION)</string>
   <key>NSExtension</key>
   <dict>
     <key>NSExtensionPointIdentifier</key>
@@ -114,11 +135,13 @@ function targetAlreadyExists(project) {
   });
 }
 
-function setExtensionBuildSettings(project, target) {
+function setExtensionBuildSettings(project, target, extensionBundleId) {
   const listId = target.pbxNativeTarget.buildConfigurationList;
   const list = project.pbxXCConfigurationList()[listId];
   const configs = project.pbxXCBuildConfigurationSection();
   const settings = {
+    PRODUCT_BUNDLE_IDENTIFIER: `"${extensionBundleId}"`,
+    INFOPLIST_FILE: `"${EXTENSION_NAME}/${EXTENSION_NAME}-Info.plist"`,
     IPHONEOS_DEPLOYMENT_TARGET: MIN_IOS_VERSION,
     SWIFT_VERSION: '5.9',
     CODE_SIGN_STYLE: 'Automatic',
@@ -168,7 +191,7 @@ function withNotificationExtension(config, bundleId) {
     for (const framework of EXTENSION_FRAMEWORKS) {
       project.addFramework(framework, { target: target.uuid });
     }
-    setExtensionBuildSettings(project, target);
+    setExtensionBuildSettings(project, target, extensionBundleId);
     return cfg;
   });
 }

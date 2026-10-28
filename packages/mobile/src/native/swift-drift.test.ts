@@ -46,6 +46,8 @@ describe('the Swift extension matches the TypeScript sentences', () => {
     expect(pkg).not.toContain('"expo-notifications"');
     expect(pkg).not.toContain('"expo-sqlite"');
     expect(plugin).toContain('aps-environment');
+    expect(plugin).toContain('CFBundleIdentifier');
+    expect(plugin).toContain('$(PRODUCT_BUNDLE_IDENTIFIER)');
     expect(plugin).toContain('com.apple.usernotifications.service');
     expect(plugin).toContain('io.musterd.app.notify');
     expect(plugin).toContain('extension/PinBinding.swift');
