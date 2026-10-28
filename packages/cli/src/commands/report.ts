@@ -592,6 +592,11 @@ async function residencyReport(parsed: Parsed): Promise<number> {
       w(
         `  ${theme.memberName(s.seat, 'agent')} — ${s.wakes} wake${s.wakes === 1 ? '' : 's'} · ${cost} · ${budget}\n`,
       );
+      // ADR 748: the priced total by UTC day, so a per-day spend rule reads off the hub.
+      for (const d of s.by_day ?? [])
+        w(
+          `    ${theme.meta(d.day)} $${d.cost_usd_total.toFixed(2)} ${theme.meta(`· ${String(d.priced)} priced`)}\n`,
+        );
     }
   }
   return 0;
