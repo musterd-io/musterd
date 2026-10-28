@@ -225,11 +225,12 @@
   height: 20px;
 }
 
-/* ─── allowance chips (ADR 744, option C) ─────────────────────────────────
-   One chip per human: face, the lowest window's percent, a thin bar of what is left. Same rules as
-   ADR 723's line: warn ink under 15%, muted type when the read is older than two minutes, no new
-   color. Dim the face on a quiet chip, never the words (2026-08-13). The card opens under its chip;
-   AllowanceChips shifts it left so it keeps 12px from the viewport's right edge on a phone. */
+/* ─── allowance chips (ADR 744, option C; ADR 745) ────────────────────────
+   One chip per human: face, name, then every account named with the percent used and a thin bar of
+   that share. Warn ink under 15% left, muted type when the read is older than two minutes, no new
+   color. Dim the face on a quiet chip, never the words (2026-08-13). The chip wraps so Claude and
+   the other accounts stay on screen at 390px. The card opens under its chip; AllowanceChips shifts
+   it left so it keeps 12px from the viewport's right edge on a phone. */
 .lc-allow {
   position: relative;
   display: flex;
@@ -243,16 +244,26 @@
   gap: 7px;
   /* Load-bearing: a flex item shrinks under its 30px height otherwise (2026-09-21). */
   flex: none;
-  height: 30px;
-  padding: 0 10px 0 4px;
+  /* Several named accounts wrap inside the chip; the 30px floor stays (2026-09-21). */
+  height: auto;
+  min-height: 30px;
+  max-width: 100%;
+  padding: 3px 10px 3px 4px;
   border: 1px solid var(--lc-border);
   border-radius: 999px;
   background: #fff;
   color: var(--lc-text);
   font: inherit;
   font-size: 12px;
-  white-space: nowrap;
+  white-space: normal;
+  flex-wrap: wrap;
   cursor: pointer;
+}
+.lc-allow__acct {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
 }
 .lc-allow__chip.is-open {
   border-color: rgba(17, 24, 39, 0.22);
