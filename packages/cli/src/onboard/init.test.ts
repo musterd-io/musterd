@@ -104,7 +104,15 @@ const h = vi.hoisted(() => {
   const claimQueue: Array<
     { state: 'occupied' } | { state: 'refused'; code: string; message: string }
   > = [];
-  const box: { folderBinding: { team: string } | null; folderSpec: { team: string } | null } = {
+  const box: {
+    folderBinding: {
+      team: string;
+      server?: string;
+      agent_key?: string;
+      claim?: { mode: 'seat'; name: string };
+    } | null;
+    folderSpec: { team: string } | null;
+  } = {
     folderBinding: null,
     folderSpec: null,
   };
@@ -567,7 +575,12 @@ describe('runInit — the picker offers every team this machine can reach (L6)',
     // Bound to revive, current is a dead experiment cell, and revive lives only in the vault. Before
     // L6 folderKey came from `identities` only, so this fell into "no working credential for it" and
     // offered to repoint the folder — the exact ADR 161 failure, one layer down.
-    h.folderBinding = { team: 'revive' };
+    h.folderBinding = {
+      team: 'revive',
+      server: 'http://localhost:4849',
+      agent_key: 'mscr_revive',
+      claim: { mode: 'seat', name: 'nick' },
+    };
     h.config.current = 'cookoff-gb2';
     h.config.knownIdentities.push({
       team: 'revive',
@@ -600,7 +613,12 @@ describe('runInit — the picker offers every team this machine can reach (L6)',
 
 describe("runInit — the folder's own team outranks the machine cache (ADR 161)", () => {
   it("offers the folder's team as the default, even when config.current names another live team", async () => {
-    h.folderBinding = { team: 'revive' };
+    h.folderBinding = {
+      team: 'revive',
+      server: 'http://localhost:4849',
+      agent_key: 'mscr_revive',
+      claim: { mode: 'seat', name: 'nick' },
+    };
     h.config.current = 'dawn';
     h.config.identities['dawn'] = { name: 'nick', key: 'mscr_dawn', surface: 'cli' };
     h.config.identities['revive'] = { name: 'nick', key: 'mscr_revive', surface: 'cli' };
@@ -725,6 +743,44 @@ describe('runInit — intent branches', () => {
     h.selectQueue.push('watch');
     expect(await runInit()).toBe(0);
     expect(h.http.addMember).not.toHaveBeenCalled();
+  });
+
+  it('binds the new human to this folder so the suggested inbox command has an identity', async () => {
+    h.textQueue.push('dawn', 'nick', '');
+    h.selectQueue.push('watch');
+    expect(await runInit()).toBe(0);
+    const { saveBinding } = await import('../config.js');
+    expect(saveBinding).toHaveBeenCalledWith(
+      cwd,
+      expect.objectContaining({
+        team: 'dawn',
+        agent_key: 'mscr_creator',
+        claim: { mode: 'seat', name: 'nick' },
+      }),
+    );
+  });
+
+  it('does not replace another member binding when choosing to watch', async () => {
+    h.folderBinding = { team: 'dawn', claim: { mode: 'seat', name: 'ada' } };
+    h.config.identities['dawn'] = { name: 'nick', key: 'mscr_creator', surface: 'cli' };
+    h.selectQueue.push('dawn', 'watch');
+    expect(await runInit()).toBe(1);
+    const { saveBinding } = await import('../config.js');
+    expect(saveBinding).not.toHaveBeenCalled();
+  });
+
+  it('does not claim readiness when the existing human binding has a stale credential', async () => {
+    h.folderBinding = {
+      team: 'dawn',
+      server: 'http://localhost:4849',
+      agent_key: 'mscr_old',
+      claim: { mode: 'seat', name: 'nick' },
+    };
+    h.config.identities['dawn'] = { name: 'nick', key: 'mscr_creator', surface: 'cli' };
+    h.selectQueue.push('dawn', 'watch');
+    expect(await runInit()).toBe(1);
+    const { saveBinding } = await import('../config.js');
+    expect(saveBinding).not.toHaveBeenCalled();
   });
 
   it('"activate an existing member" drives the real claim flow and occupies the seat (ADR 077)', async () => {
