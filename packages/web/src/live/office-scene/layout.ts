@@ -467,7 +467,8 @@ export const LOUNGE = {
   armchairs: [
     { dx: 143, dy: 20 },
     { dx: 143, dy: 84 },
-    { dx: 870 - NOOK.lx, dy: 505 - NOOK.ly },
+    // ly 505 → 540 (2026-10-27, lane 01M5ZZ72D7): its back nearly touched desk 20's chair on screen.
+    { dx: 870 - NOOK.lx, dy: 540 - NOOK.ly },
   ],
   // dy -50 → -36 (2026-10-27): a clear gap between the couch front and the table (nick).
   table: { dx: 131, dy: -36, w: 40, d: 30 },
@@ -487,16 +488,17 @@ export const LOUNGE = {
 /** Where the six visible `away` members stand — an arc on the rug around the lounge set's open (front)
  * side. Hand-placed (offsets from NOOK) so nobody stands inside the couch/armchairs/table/kitchenette. */
 export const NOOK_SPOTS: ReadonlyArray<{ dx: number; dy: number }> = [
-  // Office v3-3: four standing spots along the café's south threshold, between the stools —
-  // idle members take the café's seats, away members stand small (spec §2.9). Each is inside CAFE,
-  // walkable; a small away avatar may brush a seated stool's label, and away is rare (spec §2.9).
-  // Measured 2026-10-27: spots 2 and 3 stand 18 and 28 px on screen from the stool at (775, 239),
-  // under MIN_SPOT_GAP 46. No nudge inside the tile clears it; it needs the stools moved.
+  // Office v3-3: standing spots on the café tile — idle members take the café's seats, away
+  // members stand small (spec §2.9). Each is inside CAFE and walkable, and every one clears every
+  // leisure seat and every other spot by MIN_SPOT_GAP on screen (`layout.test.ts`).
   // dy 135 → 108 → 94 (2026-10-27): the tile's south edge came in twice; the spots came with it.
+  // Spots 2 and 3 moved off the threshold's east end (2026-10-27, lane 01M5ZZ72D7): they stood 18
+  // and 28 px on screen from the island stool, under its label. They now stand on the tile's open
+  // west half. The stool stays: it and the island were placed to keep the lane past the fridge open.
   { dx: -82, dy: 94 },
   { dx: 12, dy: 94 },
-  { dx: 78, dy: 94 },
-  { dx: 100, dy: 98 }, // east end
+  { dx: -39, dy: 5 },
+  { dx: -95, dy: 21 },
 ];
 
 /**
