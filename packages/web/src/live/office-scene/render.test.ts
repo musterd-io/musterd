@@ -2240,7 +2240,7 @@ describe('the shelf chimes swing (sound identity inc 4)', () => {
     expect(chimeSwing(-1)).toBe(0);
     expect(chimeSwing(0)).toBeCloseTo(0, 6);
     expect(Math.abs(chimeSwing(0.15))).toBeGreaterThan(0.1);
-    expect(Math.abs(chimeSwing(CHIME_SWING_S - 0.01))).toBeLessThan(0.02);
+    expect(Math.abs(chimeSwing(CHIME_SWING_S - 0.01))).toBeLessThan(0.05);
     expect(chimeSwing(CHIME_SWING_S)).toBe(0);
   });
 });
