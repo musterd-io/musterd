@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { resolveAttestedModel } from '@musterd/protocol';
 import { flagHue, flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
+import type { AuthorityProof } from '../client.js';
 import { loadConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { infraTouchWarning } from '../infra-gate.js';
@@ -137,6 +138,8 @@ export async function agentCommand(
   deps: {
     /** ADR 227 inc 2: the warn-only infra-touch gate (injected so tests never reach a daemon). */
     infraGate?: (verb: string) => Promise<string | null>;
+    /** ADR 662: collect an A2 proof after an unsigned mint is refused (tests inject a stub). */
+    authorityApproval?: (act: string, target: string, payload: unknown) => Promise<AuthorityProof>;
   } = {},
 ): Promise<number> {
   // A flag this command does not know would take the NEXT argument as its value and drop it
@@ -220,12 +223,29 @@ export async function agentCommand(
       created = writeHostedSeatFile(rosterHome, name, identity.name, role);
     }
     let minted: Awaited<ReturnType<typeof http.mintSponsoredAgent>>;
+    const mintBody = {
+      name,
+      ...(role ? { role } : {}),
+      ...(host ? { host } : {}),
+    };
     try {
-      minted = await http.mintSponsoredAgent(team, {
-        name,
-        ...(role ? { role } : {}),
-        ...(host ? { host } : {}),
-      });
+      try {
+        minted = await http.mintSponsoredAgent(team, mintBody);
+      } catch (err) {
+        // ADR 662: agent_create is a listed act. A passkey-only human has no device signature
+        // to send first, so the unsigned mint is refused `no_signature`; collect the approval
+        // over the server's descriptor and send the same mint again carrying it — the retry
+        // mintBootstrapCredentialSigned and provisionSeat already make (delta-2, 2026-10-28:
+        // create.sh's sponsor mint could never complete without it).
+        if (!(err instanceof CliError && /authority refused \(no_signature\)/.test(err.message)))
+          throw err;
+        const collect =
+          deps.authorityApproval ??
+          ((act: string, target: string, payload: unknown) =>
+            collectApproval(http, team, act, target, payload));
+        const approval = await collect('agent_create', name, { name, role: role ?? null });
+        minted = await http.mintSponsoredAgent(team, { ...mintBody, approval });
+      }
     } catch (err) {
       if (rosterHome) settleHostedSeatFile(rosterHome, name, created, err, role);
       throw err;
