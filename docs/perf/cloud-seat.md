@@ -1327,5 +1327,9 @@ asked and still outstanding as this entry lands; the falsifier stands until it a
 seat holds no operational authority) and, on the platform operator's sanitized observations —
 600/seat on credential and config files, daemon and host as uid 1001 with root limited to the
 tailnet phase, invite consumed, the active host credential and ready provision pinned to
-cloud-delta-2 with no other target — returned a **PASS** verdict on the post-boot gate, scoped
-to those observations rather than an independent re-run. The falsifier is discharged.
+cloud-delta-2 with no other target — returned a **PASS** verdict on the post-boot gate
+(observed 2026-10-28). Narrowly stated: the pilot's Verify question is answered for the
+checks as run by one operator and reported second-hand; big-body did not independently
+re-run them. Falsify: an independent re-run of those presence/mode/UID checks showing any
+different reading. The lane's own falsifier (a human step on the machine, or a
+`bound_elsewhere` in the week) was separately not observed in this run's record.
