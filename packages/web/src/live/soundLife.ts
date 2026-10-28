@@ -58,7 +58,7 @@ export function shouldChime(now: number, last: number, minGapMs = BROADCAST_CUE_
  * the stapler and the drawer a third more common than they were ever tuned to be.
  */
 export const LIFE_EVENTS: ReadonlyArray<{ name: string; weight: number }> = [
-  { name: 'keys', weight: 0.45 },
+  { name: 'keys', weight: 0.48 }, // 0.45 + the birds' 0.03 (lane 01M625KHCN)
   { name: 'murmur', weight: 0.25 },
   { name: 'whisper', weight: 0.04 },
   { name: 'tap', weight: 0.07 },
