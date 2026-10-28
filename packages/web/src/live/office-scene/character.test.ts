@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { appearanceOf } from './appearance';
-import { animFor, drawCharacter, gestureFrame } from './character';
+import { animFor, drawCharacter, gestureFrame, lookClip } from './character';
 import { fitFloor } from './iso';
 import { recordingCtx } from './recording-ctx';
 import type { FigureAssets } from './rendered/assets';
-import { GESTURE_ANIMS, type SheetSpec } from './rendered/figureSheet';
+import { GESTURE_ANIMS, LOOK_ANIMS, type SheetSpec } from './rendered/figureSheet';
 import { GESTURE, IDLE_GESTURES } from './skeleton';
 import type { OfficeNode, Pose } from './types';
 
@@ -302,5 +302,39 @@ describe('rendered parity (plan Task 17: what the painter drew per member, the s
     expect(animFor(pose({ sit: 1, bubble: '?' as never }), 0.8, 5, 0.3, anims).anim).toBe(
       'sit-type',
     );
+  });
+});
+
+describe('heads that look (lane 01M5XS5ZYP): the look clips', () => {
+  const withLooks: SheetSpec['anims'] = {
+    ...anims,
+    ...Object.fromEntries(
+      LOOK_ANIMS.map((a, i) => [
+        a,
+        { row: 200 + i * 8, frames: 6, fps: 12, loop: false, dirs: ['E', 'S', 'W', 'N'] },
+      ]),
+    ),
+  };
+
+  it('each look is a seated, held beat on its own clip', () => {
+    for (const [g, clip] of [
+      [GESTURE.look45L, 'g-look45L'],
+      [GESTURE.look45R, 'g-look45R'],
+      [GESTURE.look90L, 'g-look90L'],
+      [GESTURE.look90R, 'g-look90R'],
+    ] as const) {
+      const r = animFor(pose({ sit: 1, gesture: g, gestureT: 0.5 }), 0.8, 5, 0.3, withLooks);
+      expect(r.anim).toBe(clip);
+      expect(r.frame).toBe(5); // held at the peak through the middle of the window
+      // standing, the look falls back to the base clip
+      expect(animFor(pose({ sit: 0, gesture: g, gestureT: 0.5 }), 0, 5, 0.3, withLooks).anim).toBe('idle');
+    }
+  });
+
+  it('a mirrored direction swaps the side: S is E flipped, so a left look stored for E reads as right', () => {
+    expect(lookClip('g-look45L', true)).toBe('g-look45R');
+    expect(lookClip('g-look90R', true)).toBe('g-look90L');
+    expect(lookClip('g-look45L', false)).toBe('g-look45L');
+    expect(lookClip('g-glance', true)).toBe('g-glance'); // only the looks have a side
   });
 });

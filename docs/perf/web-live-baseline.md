@@ -2467,3 +2467,20 @@ seconds.
 
 Read: the rendered office holds a median 29 draws/s against a 30 fps capture on the stream box, with
 the p5 dips at 23. Chrome at ~1.6 cores is the cost; nothing else on the machine competes with it.
+
+## 2026-10-27 — heads that look; Office art RAISED 8,420,000 → 8,500,000 B (lane 01M5XS5ZYP)
+
+| Budget     | Before (main `c4ffb6fa`) | This branch (laptop) | Ceiling                         |
+| ---------- | ------------------------ | -------------------- | ------------------------------- |
+| office art | 8,121,654 B (41 sheets)  | 8,420,218 B          | RAISED 8,420,000 → 8,500,000 B  |
+
+Four seated look clips (`g-look45L/R`, `g-look90L/R`: six env frames each, east and north rendered,
+south and west mirrored) add 298,564 B across the figure sheets — a head and neck turn moves the
+head's pixels on every layer, so each clip stores whole cells, not just a head. That is the price
+of a seated member turning toward whoever just spoke (nick: "people nearby look over when a new
+message/act"); the JS is a clip map, a side swap on mirrored directions and `actors.lookAt`, under
+the total-JS ceiling without a raise. The ceiling moves 80,000 B, 218 over the measured need was
+not a number worth a second PR for. A re-baseline to measured + 15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 8,500,000 B with this
+  change in.

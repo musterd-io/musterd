@@ -83,6 +83,15 @@ export const GESTURE = {
   reach: 20,
   /** …and down again with the card in it, to where `carry: 'card'` holds it. */
   take: 21,
+  /**
+   * Heads that look (lane 01M5XS5ZYP): a seated member turns the head toward the desk an act just
+   * landed on — 45° or 90°, "L" or "R" being the rig's yaw sign, which `actors.lookToward` maps to
+   * the floor. Played by `lookAt` only, never by the scheduler, so they live in `ERRAND_GESTURES`.
+   */
+  look45L: 22,
+  look45R: 23,
+  look90L: 24,
+  look90R: 25,
 } as const;
 
 /**
@@ -90,7 +99,7 @@ export const GESTURE = {
  * scheduler. Listed here (rather than by id range) because this is the ONLY thing that separates the
  * two families, and the separation has to be derivable — see `IDLE_GESTURES` directly below.
  */
-const ERRAND_GESTURES = ['browse', 'fill', 'eat', 'pour', 'call', 'wave', 'reach', 'take'] as const;
+const ERRAND_GESTURES = ['browse', 'fill', 'eat', 'pour', 'call', 'wave', 'reach', 'take', 'look45L', 'look45R', 'look90L', 'look90R'] as const;
 
 /** Beats that are the two halves of ONE motion over two legs — the first ends where the second starts
  *  (the hand up at the wall board), so neither returns to rest alone; the pair does. */

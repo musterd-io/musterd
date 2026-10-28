@@ -623,7 +623,7 @@ function OfficePreviewPage() {
           run();
           loop = setInterval(run, LOOP);
         }
-        // `?beat=fridge|water|coffee|phone|<gesture number>` fires that beat right after mount (and again every
+        // `?beat=fridge|water|coffee|phone|look|<gesture number>` fires that beat right after mount (and again every
         // 30s) — the only way to verify a ~25s errand headlessly, where clicking the poke buttons isn't
         // an option and waiting out the ambient scheduler isn't either.
         const beat = search.get('beat');
@@ -633,6 +633,7 @@ function OfficePreviewPage() {
             if (!h) return;
             if (beat === 'fridge' || beat === 'water' || beat === 'coffee' || beat === 'phone')
               h.pokeErrand(beat);
+            else if (beat === 'look') h.pokeLook();
             else h.pokeGesture(Number(beat) || 1);
           };
           timers.push(setTimeout(poke, 600));

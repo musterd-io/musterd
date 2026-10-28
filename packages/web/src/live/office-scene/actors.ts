@@ -132,6 +132,31 @@ export function travelDir(fx: number, fy: number, tx: number, ty: number): Dir {
   return dy >= 0 ? 'S' : 'N';
 }
 
+/** How long a look is held before the head drifts back (lane 01M5XS5ZYP) — about a bubble's first beat. */
+export const LOOK_HOLD_S = 1.8;
+
+/**
+ * Which look turns a seated figure facing `dir` at (fx, fy) toward (tx, ty): 0 when the target is
+ * within 22.5° of straight ahead (nothing to turn toward), 45° out to 67.5°, 90° beyond — a target
+ * behind the chair still gets the 90°. The clips' "L" is the rig's +z yaw, which on screen turns an
+ * east-facing head toward south and a north-facing head toward east — clockwise in the floor's
+ * y-down coordinates (checked on the rendered stills, 2026-10-27; the floor frame is the mirror of
+ * the rig's, so the rig's left is the screen's right).
+ */
+export function lookToward(dir: Dir, fx: number, fy: number, tx: number, ty: number): number {
+  const f = FWD[dir];
+  const dx = tx - fx;
+  const dy = ty - fy;
+  if (dx === 0 && dy === 0) return 0;
+  const dot = f[0] * dx + f[1] * dy;
+  const cross = f[0] * dy - f[1] * dx; // > 0: target clockwise of the facing (y down) = the "L" clips
+  const ang = Math.abs(Math.atan2(cross, dot)); // 0 ahead … π behind
+  if (ang < Math.PI / 8) return 0;
+  const l = cross > 0;
+  if (ang < (3 * Math.PI) / 8) return l ? GESTURE.look45L : GESTURE.look45R;
+  return l ? GESTURE.look90L : GESTURE.look90R;
+}
+
 /** The deterministic home pose of every present member (desk / nook / strip). Gone members are absent. */
 export function homePoses(
   placements: Map<string, Placement>,
@@ -560,6 +585,15 @@ export interface Actors {
    *  padding past, a colleague heading for coffee — then turns back to work. Stays in the chair.
    *  False when they can't (absent, small, already busy), so the caller can fall back to a gesture. */
   notice(who: string, at: { lx: number; ly: number }, rng?: () => number): boolean;
+  /**
+   * Heads that look (lane 01M5XS5ZYP): a seated desk member turns the head toward `at` — the desk an
+   * act just landed on — holds it for `hold` seconds (default ~1.8) and comes back. Head only; the body
+   * stays on the keyboard. Quantised to 45° or 90° on the nearer side; a target straight ahead needs no
+   * turn and a target behind gets the 90°, never an owl. `delay` keeps the head at rest that long
+   * first, so a row of lookers turns in sequence. Returns the look played (a `GESTURE.look*` id), or 0
+   * when the member can't (absent, small, walking, already busy) or has nothing to turn toward.
+   */
+  lookAt(who: string, at: { lx: number; ly: number }, opts?: { hold?: number; delay?: number }): number;
   /** True while `name` is on a walk (an errand, a stroll, a meet) rather than seated or gesturing in place. */
   walking(name: string): boolean;
   /** Seated desk members eligible to be sent on an ambient stroll right now (present, not small, idle). */
@@ -1591,6 +1625,17 @@ export function createActors(): Actors {
       });
       walks.set(who, { legs: [leg(watch), leg(1.1, react)], i: 0, t: 0, small: false, ambient: true });
       return true;
+    },
+    lookAt(who, at, opts = {}) {
+      const h = homes.get(who);
+      if (!h || !canGesture(who) || h.sit <= 0) return 0;
+      const kind = lookToward(h.dir, h.lx, h.ly, at.lx, at.ly);
+      if (!kind) return 0;
+      const delay = Math.max(0, opts.delay ?? 0);
+      // `t` counts up from −delay: the pose clamps a negative gestureT to 0, which is the clip's rest
+      // frame, so the head stays put until the delay has passed and then turns.
+      gestures.set(who, { kind, t: -delay, dur: opts.hold ?? LOOK_HOLD_S });
+      return kind;
     },
     aisleMeet(a, b, rng = Math.random) {
       const ta = errandStart(a);

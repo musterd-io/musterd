@@ -1831,3 +1831,58 @@ describe('meeting in the aisle', () => {
     expect(actors.ambientOnly()).toBe(false);
   });
 });
+
+describe('heads that look (lane 01M5XS5ZYP): lookAt', () => {
+  it('turns a seated desk member’s head toward a point, quantised to 45° or 90° on the nearer side', () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    const h = actors.poses().get('Ada')!;
+    const [fx, fy] = { E: [1, 0], S: [0, 1], W: [-1, 0], N: [0, -1] }[h.dir] as [number, number];
+    // The "L" clips turn clockwise in floor coords (y down): east-facing toward south, north-facing
+    // toward east — what the rendered stills show (actors.ts `lookToward`).
+    const [lx, ly] = [-fy, fx];
+    const at = (ax: number, ay: number) => ({ lx: h.lx + ax * 100, ly: h.ly + ay * 100 });
+    // straight ahead: nothing to turn toward
+    expect(actors.lookAt('Ada', at(fx, fy))).toBe(0);
+    // 45° off to the left, and 90° to the left
+    expect(actors.lookAt('Ada', at(fx + lx, fy + ly))).toBe(GESTURE.look45L);
+    actors.cancelAmbient('Ada');
+    expect(actors.lookAt('Ada', at(lx, ly))).toBe(GESTURE.look90L);
+    actors.cancelAmbient('Ada');
+    // to the right, and behind on the right — behind is a 90°, never an owl
+    expect(actors.lookAt('Ada', at(-lx, -ly))).toBe(GESTURE.look90R);
+    actors.cancelAmbient('Ada');
+    expect(actors.lookAt('Ada', at(-fx - lx, -fy - ly))).toBe(GESTURE.look90R);
+  });
+
+  it('is a held beat the member returns from on its own, and refuses the busy or the small', () => {
+    const { placements, byName } = world([node('Ada'), node('Bo'), node('Zoe', 'away')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    const h = actors.poses().get('Ada')!;
+    const at = { lx: h.lx + (h.dir === 'E' || h.dir === 'W' ? 0 : 100), ly: h.ly + (h.dir === 'E' || h.dir === 'W' ? 100 : 0) };
+    expect(actors.lookAt('Zoe', at)).toBe(0); // the nook's small figures don't
+    expect(actors.lookAt('Ada', at, { hold: 1.0 })).not.toBe(0);
+    expect(actors.lookAt('Ada', at)).toBe(0); // already looking
+    expect(actors.ambientOnly()).toBe(true);
+    actors.step(0.5);
+    expect([GESTURE.look90L, GESTURE.look90R]).toContain(actors.poses().get('Ada')!.gesture);
+    let g = 0;
+    while (actors.active() && g++ < 2000) actors.step(0.05);
+    expect(actors.poses().get('Ada')!.gesture).toBe(0);
+  });
+
+  it('a delayed look stays at rest until its delay has passed, so a row of heads turns in sequence', () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    const h = actors.poses().get('Ada')!;
+    const at = { lx: h.lx + (h.dir === 'E' || h.dir === 'W' ? 0 : 100), ly: h.ly + (h.dir === 'E' || h.dir === 'W' ? 100 : 0) };
+    expect(actors.lookAt('Ada', at, { delay: 0.3, hold: 1.0 })).not.toBe(0);
+    actors.step(0.1);
+    expect(actors.poses().get('Ada')!.gestureT).toBe(0); // still at rest
+    actors.step(0.4);
+    expect(actors.poses().get('Ada')!.gestureT).toBeGreaterThan(0);
+  });
+});

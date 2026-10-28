@@ -8,6 +8,7 @@ import {
   dir8FromHeading,
   type GestureAnim,
   type SheetSpec,
+  type LookAnim,
 } from './rendered/figureSheet';
 import { project, type Fit, type Pt } from './iso';
 import { arcEnv, GESTURE, holdEnv, smooth } from './skeleton';
@@ -89,7 +90,7 @@ export interface CharacterOpts {
  */
 const GESTURE_CLIP: Record<
   number,
-  { anim: GestureAnim; seated: boolean; map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq' }
+  { anim: GestureAnim | LookAnim; seated: boolean; map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq' }
 > = {
   [GESTURE.stretch]: { anim: 'g-stretch', seated: true, map: 'arc' },
   [GESTURE.glance]: { anim: 'g-glance', seated: true, map: 'arc' },
@@ -112,7 +113,26 @@ const GESTURE_CLIP: Record<
   [GESTURE.wave]: { anim: 'g-wave', seated: false, map: 'seq' },
   [GESTURE.reach]: { anim: 'g-reach', seated: false, map: 'rise' },
   [GESTURE.take]: { anim: 'g-reach', seated: false, map: 'fall' },
+  // heads that look (lane 01M5XS5ZYP): held, so the head turns, stays on the speaker, and comes back
+  [GESTURE.look45L]: { anim: 'g-look45L', seated: true, map: 'hold' },
+  [GESTURE.look45R]: { anim: 'g-look45R', seated: true, map: 'hold' },
+  [GESTURE.look90L]: { anim: 'g-look90L', seated: true, map: 'hold' },
+  [GESTURE.look90R]: { anim: 'g-look90R', seated: true, map: 'hold' },
 };
+
+/**
+ * The look clip to blit for a direction: the sheet stores the looks facing east and north and the
+ * runtime mirrors south and west from them, and a horizontal flip turns a left look into a right one.
+ * So on a mirrored direction the OTHER side's clip is the one whose flipped pixels look the right way.
+ */
+export function lookClip(anim: Anim, mirrored: boolean): Anim {
+  if (!mirrored) return anim;
+  if (anim === 'g-look45L') return 'g-look45R';
+  if (anim === 'g-look45R') return 'g-look45L';
+  if (anim === 'g-look90L') return 'g-look90R';
+  if (anim === 'g-look90R') return 'g-look90L';
+  return anim;
+}
 
 const GESTURE_SEATED: ReadonlySet<Anim> = new Set(
   Object.values(GESTURE_CLIP)
@@ -216,7 +236,7 @@ export function drawCharacter(
   const look = lookOf(o);
   const dir8 = o.heading !== undefined ? dir8FromHeading(o.heading) : dir8FromDir(dir);
   // A gesture clip covers the directions it is seen in; anywhere else the base clip stands in.
-  let anim = o.anim ?? 'idle';
+  let anim = lookClip(o.anim ?? 'idle', o.rendered.spec.mirror?.[dir8] !== undefined);
   let frame = o.animFrame;
   const spec = o.rendered.spec.anims[anim];
   if (!spec || (spec.dirs && !spec.dirs.includes(dir8))) {

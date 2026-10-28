@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cellIndex, DIR8, dir8FromDir, dir8FromHeading, frameCell, frameRect, type SheetSpec } from './figureSheet';
+import { ANIMS, cellIndex, DIR8, dir8FromDir, dir8FromHeading, frameCell, frameRect, type SheetSpec } from './figureSheet';
 
 const spec: SheetSpec = {
   scale: 3,
@@ -165,5 +165,12 @@ describe('a shorter clip over a longer base reads the base at the same point of 
     cells.splice(cellIndex(over, 'sit-idle', 'E', 4) * 6, 6, 11, 12, 13, 14, 0, 0);
     const packed: SheetSpec = { ...over, cells: { 'hair/bob': cells } };
     expect(frameCell(packed, 'hair/bob', 'sit-hand', 'E', 0, 0, 1)).toMatchObject({ sx: 11, sw: 13 });
+  });
+});
+
+describe('look clips (heads that look, lane 01M5XS5ZYP)', () => {
+  it('come last in ANIMS, after sit-lap, so every earlier clip keeps its cells', () => {
+    const i = ANIMS.indexOf('sit-lap');
+    expect(ANIMS.slice(i + 1)).toEqual(['g-look45L', 'g-look45R', 'g-look90L', 'g-look90R']);
   });
 });

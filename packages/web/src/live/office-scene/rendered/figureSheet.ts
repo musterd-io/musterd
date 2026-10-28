@@ -53,6 +53,14 @@ export const CARRY_ANIMS = [
   'idle-hold1',
 ] as const;
 export type CarryAnim = (typeof CARRY_ANIMS)[number];
+/**
+ * Heads that look (lane 01M5XS5ZYP): a seated member turns the head toward a desk where an act just
+ * landed. Four held env clips — 45° and 90° to the figure's left and right — rendered east and north
+ * and mirrored like the gestures; a mirrored direction flips the side (`lookClip`, character.ts).
+ * Appended after `sit-lap` so every earlier clip keeps its cells.
+ */
+export const LOOK_ANIMS = ['g-look45L', 'g-look45R', 'g-look90L', 'g-look90R'] as const;
+export type LookAnim = (typeof LOOK_ANIMS)[number];
 export type Anim =
   | 'idle'
   | 'walk'
@@ -65,7 +73,8 @@ export type Anim =
   | GestureAnim
   | CarryAnim
   | 'sit-hand'
-  | 'sit-lap';
+  | 'sit-lap'
+  | LookAnim;
 export const ANIMS: readonly Anim[] = [
   'idle',
   'walk',
@@ -80,6 +89,7 @@ export const ANIMS: readonly Anim[] = [
   // Task 17: a seated member with a bubble puts a hand up, as the painter's help overlay does
   'sit-hand',
   'sit-lap',
+  ...LOOK_ANIMS,
 ];
 
 export interface AnimSpec {

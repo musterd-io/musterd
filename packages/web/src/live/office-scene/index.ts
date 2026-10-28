@@ -3163,6 +3163,8 @@ export function mountOffice(
 
   /** The `count` nearest drawn members to `name` (excluding them) within one pod's reach — the desk
    * neighbors who plausibly noticed. Head positions are already screen-space, so plain distance works. */
+  /** How many desks look over at an act — the nearest few, not the whole floor. */
+  const LOOKERS = 4;
   function nearestNeighbors(name: string, count: number, from?: Pt | null): string[] {
     const at = from ?? heads.get(name);
     if (!at) return [];
@@ -3173,6 +3175,23 @@ export function mountOffice(
       .sort((a, b) => a.d - b.d)
       .slice(0, count)
       .map((e) => e.n);
+  }
+
+  /**
+   * Heads that look (lane 01M5XS5ZYP, nick: "people nearby look over when a new message/act"): the
+   * seated members nearest `target` turn their heads toward that desk, nearest first, each a beat after
+   * the last so the row turns in sequence rather than on one frame; the target and `except` don't.
+   * A member who is walking, gesturing, away or small simply doesn't (`lookAt` says no).
+   */
+  function lookOver(target: string, except?: string) {
+    const at = actors.poses().get(target);
+    if (!at) return;
+    let i = 0;
+    for (const name of nearestNeighbors(target, LOOKERS)) {
+      if (name === except) continue;
+      const rng = slotRng(teamName, laneSeed(name) % 1000, 'look');
+      if (actors.lookAt(name, at, { delay: 0.06 + i * 0.07 + rng() * 0.08, hold: 1.6 + rng() * 0.6 })) i++;
+    }
   }
 
   /** A broadcast sweep rolling out from the announcer. */
@@ -3234,6 +3253,7 @@ export function mountOffice(
     // Speech is legible content, not motion — it plays even under reduced-motion (typewriter off there).
     if (ev.kind === 'speech') {
       showSpeech(ev.who, ev.text, ev.tone, ev.id, ev.act, ev.addressee, ev.marking, ev.lane);
+      if (!reduced) lookOver(ev.who); // the desks nearby look up at whoever just spoke (lane 01M5XS5ZYP)
       // An ask lands with acoustic weight in the room (E3 spec §2): one soft held tone, panned to
       // the asked member's desk when directed, soft-centre for a team ask. Stateless by design.
       if (ev.act === 'ask') {
@@ -3356,9 +3376,7 @@ export function mountOffice(
           pushThread(ev.who, ev.of, '#5cd49a');
           pushCue(ev.of, '#5cd49a', '✓');
           pushConfetti(ev.of);
-          for (const name of nearestNeighbors(ev.of, 2)) {
-            if (name !== ev.who) actors.gestureBeat(name, GESTURE.glance);
-          }
+          lookOver(ev.of, ev.who); // the neighbours turn to the celebrant; the acceptor already has
         }
         break;
       case 'decline':
@@ -3845,6 +3863,13 @@ export function mountOffice(
         }
       }
       return null;
+    },
+    pokeLook: (who) => {
+      const target = who ?? actors.idleDeskMembers()[0];
+      if (!target || !heads.has(target)) return null;
+      lookOver(target);
+      ensureLoop();
+      return target;
     },
     pokeErrand: (kind) => {
       // The errand twin of pokeGesture: play the full fridge/water/coffee arc now, on the first idle
