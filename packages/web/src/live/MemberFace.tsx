@@ -11,9 +11,12 @@ import { usePortrait } from './portraits';
  * the colour of their top in the room. A reader who knows miley by her lilac beanie on the floor knows
  * her here too. Every hue on the Now card belongs to a person; this is where they come from.
  *
- * The scene's agent/human tell survives (ADR 079): an agent wears the dark visor with two eyes in its
- * own colour, a human has eyes. A name the roster does not know gets a plain disc — never a face made
- * up for nobody. Static SVG: no canvas, no animation, nothing to pause.
+ * The scene's agent/human tell survives (ADR 079), in the figure v2 form: an agent's eyes and collar
+ * light glow in its own colour (no visor, nick 2026-10-22), a human has eyes. The spots the wardrobe
+ * deals (figure v2-5a) are worn here too — glasses on the eyes, headphones on the ears, a scarf at the
+ * neck, in the member's accessory colour — so a face in a row matches the body on the floor. A name
+ * the roster does not know gets a plain disc — never a face made up for nobody. Static SVG: no
+ * canvas, no animation, nothing to pause.
  *
  * Once the office has painted the member from their rendered figure (`portraits.ts`, lane 01M6017Z38),
  * that head and shoulders replaces the vector face in the same circle: the team panel, the Now card
@@ -91,15 +94,35 @@ export function MemberFace({
         )}
         {kind === 'agent' ? (
           <>
-            <rect x="9.6" y="15.6" width="12.8" height="4.4" rx="2.2" fill="#242d33" />
-            <circle cx="12.9" cy="17.8" r="1.25" fill={color} />
-            <circle cx="19.1" cy="17.8" r="1.25" fill={color} />
+            {/* the tell: eyes that glow in the identity colour, and a collar light at the neckline */}
+            <circle cx="13.1" cy="17.4" r="1.6" fill={color} opacity="0.35" />
+            <circle cx="18.9" cy="17.4" r="1.6" fill={color} opacity="0.35" />
+            <circle cx="13.1" cy="17.4" r="1.05" fill={color} />
+            <circle cx="18.9" cy="17.4" r="1.05" fill={color} />
+            <rect x="13.4" y="24.6" width="5.2" height="1.3" rx="0.65" fill="#f6f1e8" opacity="0.9" />
           </>
         ) : (
           <>
             <circle cx="13.1" cy="17.4" r="1.1" fill="#2e2a26" />
             <circle cx="18.9" cy="17.4" r="1.1" fill="#2e2a26" />
           </>
+        )}
+        {look.eyes === 'glasses' && (
+          <g fill="none" stroke={look.accessoryColor} strokeWidth="0.9" data-spot="eyes">
+            <circle cx="13" cy="17.5" r="2.4" />
+            <circle cx="19" cy="17.5" r="2.4" />
+            <path d="M15.4 17.3h1.2" />
+          </g>
+        )}
+        {look.ears === 'headphones' && (
+          <g fill={look.accessoryColor} data-spot="ears">
+            <path d="M8.4 16.2a7.6 7.6 0 0 1 15.2 0" fill="none" stroke={look.accessoryColor} strokeWidth="1.1" />
+            <rect x="6.9" y="15" width="2.6" height="4.2" rx="1.1" />
+            <rect x="22.5" y="15" width="2.6" height="4.2" rx="1.1" />
+          </g>
+        )}
+        {look.neck === 'scarf' && (
+          <path d="M9.5 24.2c2 1.6 4.2 2.3 6.5 2.3s4.5-.7 6.5-2.3v2.6c-2 1.5-4.2 2.2-6.5 2.2s-4.5-.7-6.5-2.2z" fill={look.accessoryColor} data-spot="neck" />
         )}
       </g>
       <circle cx="16" cy="16" r="15.5" fill="none" stroke="var(--lc-border-2)" />
