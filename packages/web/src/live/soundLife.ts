@@ -58,18 +58,19 @@ export function shouldChime(now: number, last: number, minGapMs = BROADCAST_CUE_
  * the stapler and the drawer a third more common than they were ever tuned to be.
  */
 export const LIFE_EVENTS: ReadonlyArray<{ name: string; weight: number }> = [
-  { name: 'keys', weight: 0.39 },
-  { name: 'murmur', weight: 0.2 },
+  { name: 'keys', weight: 0.45 },
+  { name: 'murmur', weight: 0.25 },
   { name: 'whisper', weight: 0.04 },
   { name: 'tap', weight: 0.07 },
   { name: 'softTap', weight: 0.03 },
   { name: 'stapler', weight: 0.03 },
   { name: 'drawer', weight: 0.03 },
-  { name: 'footsteps', weight: 0.03 },
-  { name: 'sip', weight: 0.03 },
-  { name: 'blow', weight: 0.01 },
-  { name: 'water', weight: 0.02 },
-  { name: 'eating', weight: 0.02 },
+  // `footsteps`, `sip`, `blow`, `water` and `eating` LEFT THE ROLL on 2026-10-27 (lane 01M5XS6KAD):
+  // they played from a random side on a timer while the office had real walks, sip beats, water
+  // errands and plates — a footstep nobody is taking is the thing the `creak` cut was about. They
+  // are placed moments now (`stepPlank`/`stepTile`, `sipAt`, `bottle`, `eatAt`, `machine`), fired
+  // by the choreography where the body is (actors.ts `MotionSound`). Their 0.11 went to keys and
+  // murmur, the majority the mix is built around. Adding any of them back here is a regression.
   { name: 'paws', weight: 0.025 },
   { name: 'jingle', weight: 0.01 },
   { name: 'yawn', weight: 0.01 },
@@ -155,9 +156,12 @@ function lifeWeight(e: { name: string; weight: number }, ctx: LifeContext): numb
   return WORK_EVENTS.has(e.name) ? e.weight * (1 + 0.6 * ctx.density) : e.weight;
 }
 
-/** Pick the next life event for a uniform `roll` in [0, 1). Pure and deterministic. */
-export function pickLifeEvent(roll: number, ctx: LifeContext, nowMs = 0): string {
+/** Pick the next life event for a uniform `roll` in [0, 1). Pure and deterministic. Null when nothing
+ *  is available — an empty office with no dog and no daylight event has nothing to say, and says
+ *  nothing (since 2026-10-27 the always-available timer sounds are gone, lane 01M5XS6KAD). */
+export function pickLifeEvent(roll: number, ctx: LifeContext, nowMs = 0): string | null {
   const avail = LIFE_EVENTS.filter((e) => lifeAvailable(e.name, ctx, nowMs));
+  if (avail.length === 0) return null;
   const total = avail.reduce((sum, e) => sum + lifeWeight(e, ctx), 0);
   let acc = 0;
   for (const e of avail) {
@@ -256,7 +260,18 @@ export type Moment =
   | 'ratchet'
   | 'rattle'
   | 'doorbell'
-  | 'pop';
+  | 'pop'
+  // Sound tied to motion (lane 01M5XS6KAD): fired by the choreography where the body is — a foot on
+  // the planks or the café tile, a chair taking or losing weight, the sip beat, the bottle at the
+  // cooler, the plate at the couch, the machine at the island. The placed `creak` is distinguishable
+  // from a cue precisely because it lands on a visible sit; the timer creak never was.
+  | 'stepPlank'
+  | 'stepTile'
+  | 'creak'
+  | 'sipAt'
+  | 'bottle'
+  | 'eatAt'
+  | 'machine';
 
 /** Minimum gap between moments, ms. Moments are act-driven and sparse by nature; the one plausible
  *  burst (a flood of accepts) coalesces rather than becoming a slot machine — same principle as the
@@ -266,6 +281,16 @@ const MOMENT_GAP_MS = 400;
 /** Pure gate for the moment throttle — a burst plays once, the rest are dropped, never queued. */
 export function shouldPlayMoment(now: number, last: number): boolean {
   return shouldChime(now, last, MOMENT_GAP_MS);
+}
+
+/** Footsteps have their own, shorter gate: a walk plants a foot every ~250 ms, and the moment gate
+ *  would drop most of them. Two walkers at once still coalesce to one pair of feet. */
+const STEP_GAP_MS = 110;
+export function shouldPlayStep(now: number, last: number): boolean {
+  return shouldChime(now, last, STEP_GAP_MS);
+}
+export function isStep(name: Moment): boolean {
+  return name === 'stepPlank' || name === 'stepTile';
 }
 
 /** The engine's one squeeze: clamp, then ×0.75 — everything in an office happens off to one side. */

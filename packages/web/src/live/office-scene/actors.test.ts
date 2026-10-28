@@ -1833,6 +1833,41 @@ describe('meeting in the aisle', () => {
   });
 });
 
+describe('sound tied to motion (lane 01M5XS6KAD): what the floor earns', () => {
+  it('a walk plants feet along its path, and arriving home sits with a creak', () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    actors.takeMotionSounds(); // the snap's own events
+    expect(actors.walk('Ada', { kind: 'help', to: 'Bo', urgent: false })).toBe(true);
+    const got: ReturnType<typeof actors.takeMotionSounds> = [];
+    let g = 0;
+    while ((actors.active() || actors.settling()) && g++ < 4000) {
+      actors.step(0.05);
+      got.push(...actors.takeMotionSounds());
+    }
+    const steps = got.filter((m) => m.kind === 'step');
+    expect(steps.length).toBeGreaterThan(2);
+    for (const s of steps) expect(s.who).toBe('Ada');
+    expect(new Set(steps.map((s) => `${s.lx.toFixed(0)},${s.ly.toFixed(0)}`)).size).toBeGreaterThan(1);
+    expect(got.some((m) => m.kind === 'rose' && m.who === 'Ada')).toBe(true);
+    expect(got.some((m) => m.kind === 'sat' && m.who === 'Ada')).toBe(true);
+    expect(actors.takeMotionSounds()).toEqual([]); // taking clears
+  });
+
+  it('a sip beat says so, where the sipper sits; a stretch does not', () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    actors.takeMotionSounds();
+    expect(actors.gestureBeat('Ada', GESTURE.stretch)).toBe(true);
+    expect(actors.takeMotionSounds()).toEqual([]);
+    expect(actors.gestureBeat('Bo', GESTURE.sip)).toBe(true);
+    const h = actors.poses().get('Bo')!;
+    expect(actors.takeMotionSounds()).toEqual([{ kind: 'sip', who: 'Bo', lx: h.lx, ly: h.ly }]);
+  });
+});
+
 describe('a conversation (lane 01M5XS6GYM): who turns to whom', () => {
   it('everyone addressed turns to the speaker, the speaker turns to the first of them present, nobody to themself', () => {
     const poses = new Map([

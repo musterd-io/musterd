@@ -14,6 +14,8 @@ import {
   pickWorkDesk,
   shouldChime,
   shouldPlayMoment,
+  isStep,
+  shouldPlayStep,
 } from './soundLife';
 
 // These tests cover the parts of the room-tone layer that are LOGIC — which event fires, under what
@@ -35,7 +37,10 @@ function typingMomentFor(seed: number): number {
 /** Every event the roll can produce for a context, swept finely across [0, 1). */
 function sweep(ctx: LifeContext, nowMs = 0): Set<string> {
   const out = new Set<string>();
-  for (let r = 0; r < 1; r += 0.001) out.add(pickLifeEvent(r, ctx, nowMs));
+  for (let r = 0; r < 1; r += 0.001) {
+    const e = pickLifeEvent(r, ctx, nowMs);
+    if (e !== null) out.add(e);
+  }
   return out;
 }
 
@@ -50,9 +55,22 @@ describe('the life event roll', () => {
 
   it('has every requested event in the table', () => {
     const names = LIFE_EVENTS.map((e) => e.name);
-    for (const n of ['stapler', 'drawer', 'footsteps', 'sip', 'blow', 'water', 'eating']) {
-      expect(names).toContain(n);
-    }
+    for (const n of ['stapler', 'drawer', 'paws', 'birds', 'nightair']) expect(names).toContain(n);
+  });
+
+  it('carries no sound the choreography now places — a footstep nobody is taking is a lie (lane 01M5XS6KAD)', () => {
+    const names = LIFE_EVENTS.map((e) => e.name);
+    for (const n of ['footsteps', 'sip', 'blow', 'water', 'eating']) expect(names).not.toContain(n);
+    // and an empty office at noon — nobody working, nobody near anybody, no dog — has nothing to say
+    expect(pickLifeEvent(0.5, EMPTY_LIFE)).toBeNull();
+  });
+
+  it('gates footsteps on their own short gap, not the moment gap', () => {
+    expect(shouldPlayStep(1000, 1000 - 120)).toBe(true);
+    expect(shouldPlayStep(1000, 1000 - 50)).toBe(false);
+    expect(shouldPlayMoment(1000, 1000 - 120)).toBe(false);
+    expect(isStep('stepTile')).toBe(true);
+    expect(isStep('creak')).toBe(false);
   });
 
   it('keeps work and talk the majority of the mix', () => {
