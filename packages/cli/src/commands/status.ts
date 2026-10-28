@@ -46,7 +46,7 @@ import { renderMemoryLine } from './memory.js';
  * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
  * without being declared fails the build instead of working in the field.
  */
-export const STATUS_FLAGS = ['resumable', 'session', 'wakeable'] as const;
+export const STATUS_FLAGS = ['resumable', 'session', 'wakeable', 'all'] as const;
 
 export async function statusCommand(parsed: Parsed): Promise<number> {
   // A flag this command does not know would take the NEXT argument as its value and drop it
@@ -182,9 +182,13 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
       cliBuild: cliBuild(),
     }) + '\n',
   );
-  process.stdout.write(
-    '\n' + renderRoster(res.members, undefined, undefined, health?.build, marks) + '\n',
-  );
+  if (parsed.flags['all']) {
+    process.stdout.write(
+      '\n' + renderRoster(res.members, undefined, undefined, health?.build, marks) + '\n',
+    );
+  } else {
+    process.stdout.write(theme.dim('roster: musterd status --all\n'));
+  }
   // ADR 360 follow-on: a wedged push says so here, on the surface a human on this machine reads.
   if (res.sync?.wedged)
     process.stdout.write('\n' + theme.warn(describeSyncWedge(res.sync.wedged)) + '\n');
