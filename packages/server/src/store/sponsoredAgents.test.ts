@@ -129,6 +129,52 @@ withDrivers('sponsoredAgents', (o) => {
       ).rejects.toThrowError(/was used by a removed member/);
       expect((await getMemberByName(db, team.id, 'ghost-of-old'))!.left_at).not.toBeNull();
     });
+
+    it('adoptDeclared adopts the live agent roster reconcile already made from the declared seat file', async () => {
+      // The hub race (2026-10-28): the CLI writes the seat file, the approval ceremony takes
+      // seconds, and reconcile creates the member from the file before the approved mint runs.
+      // The mint that declared that file adopts the row instead of conflicting.
+      const { db, team, human } = await teamWithHuman();
+      const { row: reconciled } = await addMember(db, team, { name: 'delta-x', kind: 'agent' });
+      const { member } = await createSponsoredAgent(
+        db,
+        team,
+        human,
+        { name: 'delta-x' },
+        Date.now(),
+        { adoptDeclared: true },
+      );
+      expect(member.id).toBe(reconciled.id);
+      expect(member.sponsored_by).toBe(human.id);
+      expect(member.left_at).toBeNull();
+    });
+
+    it('adoptDeclared revives a tombstone the same race left behind', async () => {
+      const { db, team, human } = await teamWithHuman();
+      const { row: reconciled } = await addMember(db, team, { name: 'delta-x', kind: 'agent' });
+      await leaveMember(db, reconciled.id);
+      const { member } = await createSponsoredAgent(
+        db,
+        team,
+        human,
+        { name: 'delta-x' },
+        Date.now(),
+        { adoptDeclared: true },
+      );
+      expect(member.id).toBe(reconciled.id);
+      expect(member.sponsored_by).toBe(human.id);
+      expect((await getMemberByName(db, team.id, 'delta-x'))!.left_at).toBeNull();
+    });
+
+    it('adoptDeclared never adopts a human seat with the same name', async () => {
+      const { db, team, human } = await teamWithHuman();
+      await addMember(db, team, { name: 'person-x', kind: 'human' });
+      await expect(
+        createSponsoredAgent(db, team, human, { name: 'person-x' }, Date.now(), {
+          adoptDeclared: true,
+        }),
+      ).rejects.toThrowError(/already exists/);
+    });
   });
 
   describe('agent mint hardening (ADR 459)', async () => {
