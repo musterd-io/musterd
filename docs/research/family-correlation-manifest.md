@@ -59,9 +59,12 @@ ground truth with a known location, so a miss and a shared miss need no judgment
   but that rule let only 79 be drawn, against the 108 the run needs (100 main and 8 pilot). nick
   chose to seed every remaining site (170 more, in 40 features, by `items.py topup`) and loosen the
   rule, over shrinking the run to N = 71. More items now share a feature, so the effective N is
-  below 100. The bootstrap by feature carries that into the interval, and the power table, which
-  treats items as independent, overstates power somewhat. The finding reports the number of
-  features and the largest per-feature count.
+  below 100, and the bootstrap by feature carries that into the interval. Re-simulated on the drawn
+  main list's real clusters (60 features: 27 with one item, 26 with two, 7 with three), with each
+  item's difficulty and family effect partly shared within its feature: power at `D = 0.15` is
+  80–83% for a feature share of 0.25–0.75, against 80% with the items independent (400 runs each,
+  about ±2 points). Clustering costs no measurable power here, because `D` contrasts reviewer pairs
+  on the same items. The finding reports the number of features and the largest per-feature count.
 - **Controls:** one clean reference patch for every four seeded items, mixed in, so a reviewer
   cannot assume every item has a defect. Drawn by the same seed from Python features that carry no
   seeded item. Controls count only toward the false-alarm rate.
@@ -119,13 +122,20 @@ starts.
 
 ## Measures
 
-- **Hit, primary:** a finding in the seeded file whose line is within 3 lines of the seeded hunk.
-  Scored by script, with no judge.
+- **Hit, primary:** a finding in the seeded file whose line is within 3 lines of the seeded site
+  (the mutated line; for a deletion, the line after it). Scored by script, with no judge.
+  _Reworded 2026-10-28, before any item was reviewed (lazara): the first text said "the seeded
+  hunk", which the coarse rule uses for something else. The scorer always used the site._
 - **Hit, coarse:** a finding in the seeded file whose line falls inside the diff hunk that holds the
   seeded site (its new-file range). _Amended 2026-10-27, before any item ran: the first text said
   the same function, but a function's bounds cannot be read from the diff the scorer has, and
   CooperBench's feature hunks mostly add whole functions anyway._ The verdict must hold under
-  both rules (see Verdict rules).
+  both rules (see Verdict rules). Where a hunk adds a whole function or file, the coarse rule comes
+  close to "any finding in the file", so it partly measures how much each family reports. Under
+  the both-rules gate that can only push the run towards inconclusive, not create a verdict. The
+  finding reports the seeded hunks' line spans (median and largest) and, per family, the gap
+  between the coarse and primary hit rates, so a reader can see how lenient the coarse rule was.
+  _Added 2026-10-28, before any item was reviewed (lazara)._
 - **Location of a deletion** (missed branch, dropped error return): the new-file line where the
   removed lines were, which is the first line after them.
 - **Miss:** a seeded item with no hit.
