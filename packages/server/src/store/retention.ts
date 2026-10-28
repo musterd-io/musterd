@@ -19,35 +19,10 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import { gzipSync } from 'node:zlib';
 import { ulid } from 'ulid';
-import { Worker } from 'node:worker_threads';
 import type { Driver } from '../db/driver.js';
-
-// ... (existing imports)
-
-async function measurePrunableRows(
-  dbPath: string,
-  floors: [string, number][],
-  cutoff: number,
-  limit: number,
-): Promise<AuditRow[]> {
-  return new Promise<AuditRow[]>((resolve, reject) => {
-    const worker = new Worker(new URL('./pruneQueryWorker.js', import.meta.url), {
-      workerData: { dbPath, floors, cutoff, limit },
-    });
-    worker.unref();
-    worker.once(
-      'message',
-      (reply: { ok: true; rows: AuditRow[] } | { ok: false; error: string }) =>
-        reply.ok ? resolve(reply.rows as AuditRow[]) : reject(new Error(reply.error)),
-    );
-    worker.once('error', reject);
-    worker.once('exit', (code) => {
-      if (code !== 0) reject(new Error(`prune query worker exited (${code})`));
-    });
-  });
-}
 import { readNodeState } from '../node/state.js';
 import type { AuditAction, AuditRow } from './audit.js';
 
@@ -516,4 +491,27 @@ export function auditReadersOfChurnActions(): Record<string, string[]> {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => [k, [...v].sort()]),
   );
+}
+
+async function measurePrunableRows(
+  dbPath: string,
+  floors: [string, number][],
+  cutoff: number,
+  limit: number,
+): Promise<AuditRow[]> {
+  return new Promise<AuditRow[]>((resolve, reject) => {
+    const worker = new Worker(new URL('./pruneQueryWorker.js', import.meta.url), {
+      workerData: { dbPath, floors, cutoff, limit },
+    });
+    worker.unref();
+    worker.once(
+      'message',
+      (reply: { ok: true; rows: AuditRow[] } | { ok: false; error: string }) =>
+        reply.ok ? resolve(reply.rows as AuditRow[]) : reject(new Error(reply.error)),
+    );
+    worker.once('error', reject);
+    worker.once('exit', (code) => {
+      if (code !== 0) reject(new Error(`prune query worker exited (${code})`));
+    });
+  });
 }
