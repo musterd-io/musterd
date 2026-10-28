@@ -48,50 +48,96 @@ Other points:
 | Folding can break a working process | A sample support agent. Folding cut latency, but in one of two runs the main agent answered by itself instead of consulting the specialist. |
 
 All of the evidence comes from Anthropic, which sells the models whose single-loop ability is the
-premise. The one outside data point is in *The Decoder*: a Vals study found agent teams can be
+premise. ~~The one outside data point is in *The Decoder*: a Vals study found agent teams can be
 faster than one agent but no better on quality. Going from 10 agents to 30 or 100 added cost and
-no quality.
+no quality.~~ CORRECTED 2026-10-27 (wanderer, 01M60060Y0): *The Decoder*'s 2026-10-25 piece puts
+both results under Vals, but its own source, *The Decoder* of 2026-10-11
+(<https://the-decoder.com/ai-agent-teams-waste-massive-tokens-for-barely-measurable-quality-gains-research-finds/>),
+keeps them apart:
+
+- **Vals** compared one agent with a team of the same model on Vibe Code Bench (GPT-6 Sol and
+  Claude Opus 5.5, medium and maximum effort). Teams cost 1.8–5.1× as much. One of four
+  comparisons showed a significant gain: GPT-6 Sol at medium effort, 7.3 points.
+- **The 1/10/30/100-agent table** is from Anthropic's Claude Opus 5.5 system card: more copies of
+  the same model, with the gains shrinking as copies are added.
+
+Neither is a cross-family test.
 
 *The Decoder* describes a coding example: context is lost between writing the feature, writing the
 tests and reviewing, so one agent writes the feature and its tests and a verifier only runs them.
-The original, as read on 2026-10-27, does not contain that example. Cite it to *The Decoder*,
-never to Anthropic.
+The original, as read on 2026-10-27, does not contain that example. *The Decoder* captions the
+figure "Image: Anthropic", so the drawing may be Anthropic's while the coding explanation is
+*The Decoder*'s. Cite the story to *The Decoder*, never to Anthropic.
 
 ## What it means for musterd
 
-**It backs the seat rule.** The article argues against handing one task between anonymous
-workers. It favours one capable loop that owns the whole unit of work. That is the AGENTS.md rule:
-subagents may read, but seats must write, with a lane per unit of work. A read-only fan-out is the
-article's exception 2 (fresh, discardable context), which the rule already allows.
+_Rewritten 2026-10-27 from two independent reads, by ghost (01M5ZZBJGH, deepseek-v4.1-flash) and
+wanderer (01M60060Y0, grok-4.7). The struck lines below are the first version's._
 
-**It backs ADR 741 (hot tools).** The 30–50 threshold and loading tools through tool search are
-the design of [ADR 741](../decisions/741-mcp-hot-tools-lane-lifecycle.md). musterd's MCP server
-registers 31 tools (`TOOL_NAMES` in `packages/mcp/src/toolNames.ts`, counted at `d47972579`).
-These come on top of the harness's own tools and any other MCP servers, so a seat's total can pass
-the threshold before musterd's tools load.
+**It does not answer the case for a team.** The article is about subagents inside one agent's
+task, with a user waiting. musterd's unit of work is a change that passes an acceptance gate over
+hours or days. Its seats are long-lived, can be woken, run on different machines and accounts and
+on different models, and work alongside humans. None of the article's three exceptions covers that.
+Its 2× and its cost argument are per task. The case for seats was never speed. It is attribution,
+reach and the record: ADR 150, ADR 109 and ADR 163. Applied to the product, "the model can hold it
+all, so fold the harness in" would delete musterd. Acceptance, the lane board, cross-family routing
+and the record are what musterd is, not leftovers a stronger model has outgrown.
+
+**It meets the seat rule at one point only.** ~~It backs the seat rule.~~ CORRECTED 2026-10-27: the
+article wants one context on one coupled task. The seat rule wants a named writer, so that the
+record can say who did the work. They agree on two things: never hand the write to a subagent,
+and a read-only fan-out is fine (the article's exception 2). Do not cite the article as the reason
+for the seat rule. A reader would take the rule to be about latency, and drop it the first time
+seats measure slower.
+
+**Inside a seat, it is good advice.** Keep a coupled change in one context through the commit.
+Load the skill for the step that needs it. Do not give a subagent the write.
+
+**ADR 741 is not the article's design.** ~~The 30–50 threshold and loading tools through tool search
+are the design of [ADR 741](../decisions/741-mcp-hot-tools-lane-lifecycle.md).~~ CORRECTED
+2026-10-27 (wanderer): ADR 741 loads 13 of musterd's tools up front and leaves 18 deferred. It did
+so because the tool-search detour cost more than the extra schema: 218 detours, $105, a median of
+2.7 s each, on this machine. The article treats tool search as free, and gives that round trip no
+weight. That is the one place where our own measurement beats the source. musterd's MCP server
+registers 31 tools (`TOOL_NAMES` in `packages/mcp/src/toolNames.ts`, counted at `d47972579`), which
+is low in the 30–50 band. The open point is what ADR 741 did not count: a seat's total, which
+adds the harness's own tools and every other MCP server.
 
 - A musterd seat on Claude Code can see more than 50 tool definitions at once if every MCP tool loads up front (2026-10-27; falsify: count the tool definitions in one seat's first request with `docs/research/hot-tools/toolsearch.py`'s capture, and find 50 or fewer) <!-- claim: other -->
 
-**It challenges how musterd splits work.** "Information loss at every handoff" applies to
-musterd's own handoffs between seats, and to splitting one change across several lanes. A worked
-case, 2026-10-27: OpenRouter lane 3/4 (`01M5JE08RMK8QAQ4BVW9DAYHWS`, PR #3397) changed how the
-gateway prices and forwards requests. It left the matching ADR 714, ADR 583 and `04-cli.md` updates
-to lane 4/4, which had docs in its scope. The acceptance verdict declined it, because docs and code
-must agree at every commit. The split put the docs in a different lane from the change they
-describe. When the same seat would do every step, the guidance points to fewer, fuller lanes, with
-a handoff only when the owner really changes.
+**The OpenRouter decline is a scope rule, not a lane-count rule.** ~~"Information loss at every
+handoff" applies to musterd's own handoffs between seats, and to splitting one change across
+several lanes.~~ CORRECTED 2026-10-27 (ghost and wanderer, independently): OpenRouter lane 3/4
+(`01M5JE08RMK8QAQ4BVW9DAYHWS`, PR #3397) changed how the gateway prices and forwards requests, and
+left the matching ADR 714, ADR 583 and `04-cli.md` updates to lane 4/4. One seat owned both lanes,
+so nothing was lost passing work between agents. The acceptance verdict declined it under hard
+rule 3, because docs and code must agree at every commit. A seat holding all the context would
+have been declined just the same. The lesson: a lane holds the change and everything that must
+agree with it at commit time. Lanes drawn that way can stay small.
 
-- Splitting one change into several lanes by the same owner leaves its docs behind more often than a single lane does (2026-10-27, from one case; falsify: over the next 20 multi-lane goals with one owner, count the declines for docs and code disagreeing, and find no more than the rate for single-lane work) <!-- claim: other -->
+- ~~Splitting one change into several lanes by the same owner leaves its docs behind more often than a single lane does (2026-10-27, from one case; falsify: over the next 20 multi-lane goals with one owner, count the declines for docs and code disagreeing, and find no more than the rate for single-lane work)~~ STRUCK 2026-10-27: its falsifier counts breaks of the commit rule, not lane granularity (ledger `2026-10-27-lane-split-loses-docs`) <!-- claim: other -->
 
-**It does not answer the case for a team.** The article is about subagents inside one agent's
-task, not about long-lived seats with their own identities and models, working alongside humans.
-None of its three exceptions covers model diversity or independent review. The Vals result (more
-agents, same quality) does bear on the model-diversity thesis of
-[ADR 314](../decisions/314-correlated-models-correlated-mistakes.md). That thesis should be
-measured against it, not assumed. musterd's acceptance step routes the verdict to a seat on a
-different model family (`route: cross_family`), and that routing is the place to measure it.
+**What musterd's version of the problem is.** The article's failure modes (sprawl, the
+"Frankenprompt", unowned evals) are organisational. Its answer is a small central team that owns
+the prompt and quality from end to end. A team our size cannot staff that. musterd's own
+Frankenprompt is AGENTS.md plus role skills plus harness skills, edited by many seats with no
+single owner. That fits the article's third exception (conflicting instructions) more closely
+than the tool count does. musterd's bet is the opposite of a central team: keep the seats, and
+make the standard visible in the record, with guidance checked in CI, skills with provenance and
+acceptance by a named seat. The article's write gates and budgets already exist in musterd (the
+lane gate, spend controls). They are not a layer to fold in. The article does not back musterd. It
+describes the coordination cost that musterd exists to make visible.
 
-- musterd has no measurement that a cross-family acceptance catches more than a same-family one. Finding 004 shows that the diversity flag renders correctly, but it does not show that diversity catches more defects (2026-10-27; falsify: find an eval in `docs/research/` that compares decline rates or missed defects by acceptor family) <!-- claim: other -->
+**Diversity is still unmeasured, but not in the way the first version said.** ~~The Vals result
+(more agents, same quality) does bear on the model-diversity thesis of ADR 314.~~ CORRECTED
+2026-10-27 (wanderer): both results are about copies of the same model, so they do not test
+cross-family work. [ADR 314](../decisions/314-correlated-models-correlated-mistakes.md) does not
+claim that a cross-family acceptor catches more defects. It presumes that the same family means
+correlated judgments, and calls cross-family routing a proxy for an independent judge (§2, §4).
+The open measurement is the one ADR 314 names: whether mistakes correlate by family.
+
+- ~~musterd has no measurement that a cross-family acceptance catches more than a same-family one. Finding 004 shows that the diversity flag renders correctly, but it does not show that diversity catches more defects (2026-10-27; falsify: find an eval in `docs/research/` that compares decline rates or missed defects by acceptor family)~~ STRUCK 2026-10-27: it tests a claim ADR 314 does not make (ledger `2026-10-27-adr-314-yield-claim`) <!-- claim: other -->
+- musterd has no measurement of whether same-family judgments correlate more than cross-family ones. Finding 004 shows only that the diversity flag renders (2026-10-27; falsify: find a study in `docs/research/` that compares agreement or shared misses within and across families on the same items) <!-- claim: other -->
 
 ## Related
 
