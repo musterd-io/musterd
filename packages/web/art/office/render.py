@@ -836,7 +836,7 @@ def main() -> None:
     for state in scene.LIGHT_STATES:
         if not wanted(f"room/light-{state}"):
             continue
-        scene.lights(state, "off", zs)
+        scene.lights(state, "off", zs, window_spots=False)  # the runtime paints the sun pools (lane 01M5ZW21JH)
         path = out_path(f"room/light-{state}")
         render_alone(shell, path, export)
         record(f"room/light-{state}", path, origin, SHELL_DOWNSAMPLE)

@@ -1561,11 +1561,14 @@ def clear_lights() -> None:
         bpy.data.objects.remove(o, do_unlink=True)
 
 
-def lights(state: str = "day", ceiling: str = "off", zs: float = 1.0) -> None:
+def lights(state: str = "day", ceiling: str = "off", zs: float = 1.0, window_spots: bool = True) -> None:
     """The light rig for one day state and one ceiling state. Items are rendered under `day`/`off`
     (their own shading is baked in; the room's state tints them at runtime); the shell is rendered
     under every state. Windows are on both back walls, so each gets a spot that pools light across
-    the floor the way the painted `drawWindowBeams` does."""
+    the floor — for the items. The shell is rendered WITHOUT them (`window_spots=False`, lane
+    01M5ZW21JH): a pool baked at one sun angle would read as a second sun under the runtime's, which
+    paints the pools from `lighting.ts` `sunBeam(hour)` into the cached shell so they slide across the
+    planks through the day."""
     clear_lights()
     L = LIGHT_STATES[state]
     energy, color, elev = L["sun"]
@@ -1602,7 +1605,7 @@ def lights(state: str = "day", ceiling: str = "off", zs: float = 1.0) -> None:
         bsdf.inputs["Emission Strength"].default_value = p_strength
     # window spots: one per window per wall, just outside the pane, aimed down across the floor
     w_energy, w_color = L["window"]
-    if w_energy > 0:
+    if w_energy > 0 and window_spots:
         for which in (0, 1):
             for t0, t1, u0, u1, _ in WINDOWS:
                 c = (t0 + t1) / 2 * FLOOR
