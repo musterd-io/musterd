@@ -1274,3 +1274,36 @@ under 1.5 GB, or whose stalls still coincide with slow statements on tables that
 The `dbstat` walk stays — a cold retention pass can still hold the loop ~1.5 s — so a stall that
 cannot be traced to a stat-less table may be that, and it is a separate lever (cache or thin the
 retention read), not this lane's.
+
+## 2026-10-28 — monitoring pass: ADR 750 landed, the audit-hwm stall is gone, two remain (lane 01M61P856VJYE42MXK9FR96HR0)
+
+Follow-up to the 2026-10-28 entry above, after the daemon bounced onto `7d9e059a` (schema 133, the
+guard now analyzes stat-less tables). Two windows, both under the 1.5 GB swap threshold:
+
+| window | wake-leases polls | p50 | p90 | max | stalls | max stall |
+| --- | --- | --- | --- | --- | --- | --- |
+| pre-bounce 09:30–09:49 | 279 | 4 ms | 117 ms | 2669 ms | 13 | 2508 ms |
+| post-bounce 10:35–10:44 | 150 | 5 ms | 317 ms | 998 ms | 7 | 1558 ms |
+
+**What changed.** The audit high-water-mark statement (`prunableSql` in `retention.ts`) no longer
+appears in the slow log — it was 1 562 ms pre-bounce and is absent post-bounce. `sqlite_stat1` now
+has 82 rows (was 15), 6 of them for `audit`. The guard's fix landed and did the work ADR 750
+predicted.
+
+**What did not change.** Two other statements still hold the loop:
+- `SELECT team_id, seat, MIN(harness) AS harness, …` (the usage aggregate in `insights.ts`) — 1 770 ms
+  post-bounce, unchanged. It is an aggregation over ~329k `audit` rows with a `GROUP BY`; statistics
+  do not remove the scan, so it is a different lever (narrow the read, or move it off the loop).
+- `SELECT * FROM messages WHERE team_id = ? AND (to_member = ? OR to_kind IN ('team','broadcast')) …`
+  (the inbox window read) — 507–756 ms post-bounce. `messages` has statistics and the plan already
+  seeks `idx_messages_inbox_cover`; the cost is the per-seat unread window (grokbot 28 839, lazara
+  32 839 unread acts), not the planner. `deriveSeatPasses` calls it per enrolled seat regardless of
+  whether the seat is due.
+- `SELECT SUM(pgsize) FROM dbstat` — 389 ms post-bounce (was 1 003–1 582 ms). Better when warm, still
+  a virtual-table walk; not planner-fixable.
+
+**Read of it.** ADR 750 closed the stat-less-tables blocker it was written for. The daytime poll
+p90 is still under the 400 ms target (317 ms), but it is now stall-dragged rather than
+poll-inherent: the poll code is fast (p50 5 ms) and the loop is being blocked by the two statements
+above. The next two blockers are different root causes and need their own lanes; they are not
+planner problems and ANALYZE will not touch them.
