@@ -56,8 +56,17 @@ and tested before declaring generic model coverage.
   model call on any route. Controlled-upstream tests cover reported and table-derived costs,
   unknown-cost budget refusal, and the unbudgeted case.
 
-Follows-up: implement interactive setup guidance and OpenRouter routing for metered OpenCode wakes
-under Goal `openrouter-opencode`, with unknown-price and budget handling covered by acceptance tests.
+- _Acceptance note (dated, 2026-10-28, lane `01M5JE0E5B5X4ZK6MFH35VPDPJ`)._ Interactive setup
+  coverage confirms adding musterd's MCP entry preserves OpenCode's selected OpenRouter model,
+  provider settings, and existing MCP entries. Wake coverage confirms the gateway base-URL override
+  exists only in the spawned process's `OPENCODE_CONFIG_CONTENT`. Interactive usage remains billed
+  by OpenRouter; Musterd records a wake cost only when OpenRouter reports `usage.cost` or its dated
+  table can price the model. Without either source, the turn remains unpriced and a configured wake
+  budget blocks the next model call. The CLI architecture guide states the same boundary.
+
+Follows-up: none — Goal `openrouter-opencode` is complete across lanes `01M5JDT3SGXG2SBNEACSWJ4Q5Y`,
+`01M5JE041SXYC7BNA8J7V90RH0`, `01M5JE08RMK8QAQ4BVW9DAYHWS`, and
+`01M5JE0E5B5X4ZK6MFH35VPDPJ`.
 
 ## Observability & Evaluation
 

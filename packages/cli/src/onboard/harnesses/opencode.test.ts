@@ -70,6 +70,38 @@ describe('opencode.configure', () => {
     expect(cfg.mcp['musterd']).toBeDefined();
   });
 
+  it('preserves interactive OpenRouter provider and model settings when adding musterd', async () => {
+    mkdirSync(join(cwd, '.opencode'), { recursive: true });
+    const provider = {
+      openrouter: {
+        options: {
+          apiKey: '${OPENROUTER_API_KEY}',
+          baseURL: 'https://openrouter.ai/api/v1',
+        },
+      },
+    };
+    writeFileSync(
+      cfgPath(),
+      JSON.stringify({
+        model: 'openrouter/anthropic/claude-sonnet-4',
+        provider,
+        mcp: { context7: { type: 'local', command: ['npx'] } },
+      }),
+    );
+
+    await opencode.configure(buildEntry(binding), binding);
+
+    const cfg = JSON.parse(readFileSync(cfgPath(), 'utf8')) as {
+      model?: string;
+      provider?: unknown;
+      mcp: Record<string, unknown>;
+    };
+    expect(cfg.model).toBe('openrouter/anthropic/claude-sonnet-4');
+    expect(cfg.provider).toEqual(provider);
+    expect(cfg.mcp['context7']).toBeDefined();
+    expect(cfg.mcp['musterd']).toBeDefined();
+  });
+
   it('refuses to write when the folder carries an opencode.jsonc — it does not race a second config', async () => {
     mkdirSync(join(cwd, '.opencode'), { recursive: true });
     writeFileSync(join(cwd, '.opencode', 'opencode.jsonc'), '{ // hand-tuned\n}');
