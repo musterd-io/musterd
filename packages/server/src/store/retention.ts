@@ -19,6 +19,7 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import { gzipSync } from 'node:zlib';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
@@ -124,7 +125,7 @@ async function unpushedFloors(db: Driver): Promise<[string, number][]> {
     .map((l) => [l.node_id, l.last_seq ?? 0]);
 }
 
-function prunableSql(floors: number): string {
+export function prunableSql(floors: number): string {
   return `
     WITH hwm AS (
       SELECT origin_node, MAX(origin_seq) AS seq FROM audit WHERE origin_seq > 0 GROUP BY origin_node
@@ -190,23 +191,36 @@ export async function pruneAuditChurn(
   const batch = opts.batch ?? AUDIT_PRUNE_BATCH;
   const maxBatches = opts.maxBatches ?? AUDIT_PRUNE_MAX_BATCHES;
   const floors = await unpushedFloors(db);
-  const SELECT = `${prunableSql(floors.length)} LIMIT ?`;
   const deleteAll = async (t: Driver, ids: string[]) => {
     for (const id of ids) await t.run('DELETE FROM audit WHERE id = ?', [id]);
   };
   let pruned = 0;
   let archivedBytes = 0;
-  for (let i = 0; i < maxBatches; i++) {
-    const rows = await db.all<AuditRow>(SELECT, [cutoff, ...floors.flat(), batch]);
-    if (rows.length === 0) break;
-    let taken = rows;
+
+  // The prunable-row SELECT is a full scan of `audit` (~329k rows on the hub) and blocks the
+  // loop for ~1.2 s on a cold cache. Run it on a worker thread with its own read-only
+  // connection, the way storeSizes does, so the daemon keeps serving while it scans.
+  // File-backed SQLite only; in-memory and Postgres (async I/O) run inline.
+  const dbPath =
+    db.dialect === 'sqlite' ? (db as unknown as { raw?: { name?: string } }).raw?.name : undefined;
+  const fileBacked = !!dbPath && dbPath !== ':memory:';
+  const limit = maxBatches * batch;
+  let rows: AuditRow[];
+  if (fileBacked) {
+    rows = await measurePrunableRows(dbPath!, floors, cutoff, limit);
+  } else {
+    const SELECT = `${prunableSql(floors.length)} LIMIT ?`;
+    rows = await db.all<AuditRow>(SELECT, [cutoff, ...floors.flat(), limit]);
+  }
+  // Process in `batch`-sized chunks, preserving the archive-then-delete ordering.
+  for (let off = 0; off < rows.length; off += batch) {
+    const chunk = rows.slice(off, off + batch);
+    if (chunk.length === 0) break;
+    let taken = chunk;
     if (opts.archiveTable) {
-      // Every Cloud server runs this loop, so two can select the same batch. Delete first and
-      // archive only the rows THIS transaction deleted: the other server's delete of a row waits on
-      // ours and then removes nothing, so no row is archived twice.
       const done = await db.tx(async (t) => {
         const gone: AuditRow[] = [];
-        for (const row of rows) {
+        for (const row of chunk) {
           const { changes } = await t.run('DELETE FROM audit WHERE id = ?', [row.id]);
           if (changes > 0) gone.push(row);
         }
@@ -215,17 +229,17 @@ export async function pruneAuditChurn(
       taken = done.gone;
       archivedBytes += done.bytes;
     } else {
-      archivedBytes += archiveRows(opts.archiveDir!, rows);
+      archivedBytes += archiveRows(opts.archiveDir!, chunk);
       await db.tx((t) =>
         deleteAll(
           t,
-          rows.map((r) => r.id),
+          chunk.map((r) => r.id),
         ),
       );
     }
     for (const r of taken) perTeam[r.team_id] = (perTeam[r.team_id] ?? 0) + 1;
     pruned += taken.length;
-    if (rows.length < batch) break;
+    if (chunk.length < batch) break;
   }
   return { pruned, archivedBytes, cutoff, capturedThrough, perTeam };
 }
@@ -477,4 +491,27 @@ export function auditReadersOfChurnActions(): Record<string, string[]> {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => [k, [...v].sort()]),
   );
+}
+
+async function measurePrunableRows(
+  dbPath: string,
+  floors: [string, number][],
+  cutoff: number,
+  limit: number,
+): Promise<AuditRow[]> {
+  return new Promise<AuditRow[]>((resolve, reject) => {
+    const worker = new Worker(new URL('./pruneQueryWorker.js', import.meta.url), {
+      workerData: { dbPath, floors, cutoff, limit },
+    });
+    worker.unref();
+    worker.once(
+      'message',
+      (reply: { ok: true; rows: AuditRow[] } | { ok: false; error: string }) =>
+        reply.ok ? resolve(reply.rows as AuditRow[]) : reject(new Error(reply.error)),
+    );
+    worker.once('error', reject);
+    worker.once('exit', (code) => {
+      if (code !== 0) reject(new Error(`prune query worker exited (${code})`));
+    });
+  });
 }
