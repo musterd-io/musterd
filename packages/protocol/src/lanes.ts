@@ -703,6 +703,45 @@ export function leftoverSignal(lane: {
   return null;
 }
 
+/** ADR 751: a point within a card's cell, each axis `0..1`. */
+export const LaneCardPlaceSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+});
+export type LaneCardPlace = z.infer<typeof LaneCardPlaceSchema>;
+
+/**
+ * ADR 751: where a lane's card hangs on the wall board — a place within its **cell** (its goal ×
+ * its board column, {@link laneCardColumn}), plus who put it there and when. The server stamps `by`
+ * and `at`; a client only ever names `x` and `y`.
+ */
+export const LaneCardSchema = LaneCardPlaceSchema.extend({
+  by: z.string(),
+  at: z.number().int(),
+});
+export type LaneCard = z.infer<typeof LaneCardSchema>;
+
+/**
+ * ADR 751: the board column a lane's card hangs in, or null when it has none. `ready_for_review`
+ * folds into `awaiting_acceptance` (ADR 192), as the board does; `parked` and `abandoned` are off
+ * the board.
+ */
+export function laneCardColumn(state: string): string | null {
+  switch (state) {
+    case 'open':
+    case 'claimed':
+    case 'active':
+    case 'blocked':
+    case 'awaiting_acceptance':
+    case 'done':
+      return state;
+    case 'ready_for_review':
+      return 'awaiting_acceptance';
+    default:
+      return null;
+  }
+}
+
 /** How strongly "who asked for this lane" is known (ADR 629). Same split ADR 624 made for a claim. */
 export const LaneRequestedBasisSchema = z.enum(['act', 'seed', 'self', 'stated']);
 export const LaneRequestedSchema = z.object({
@@ -878,6 +917,8 @@ export const LaneSchema = z.object({
   read_status: z.enum(READ_STATUSES).optional(),
   /** ADR 673: what this read measures. Absent or null: no metric. Requires `reads_on`. */
   metric: LaneMetricSchema.nullable().optional(),
+  /** ADR 751: the card's place on the wall board. Absent or null: no card (abandoned, parked). */
+  card: LaneCardSchema.nullable().optional(),
   /** ADR 673: the newest {@link LANE_SAMPLES_SERVED} daily samples, oldest first; only with `metric`. */
   samples: z.array(LaneSampleSchema).max(LANE_SAMPLES_SERVED).optional(),
   /** ADR 487: why the lane was dropped (≤ 280), set on or after the move to `abandoned`. */
@@ -1062,6 +1103,13 @@ export const UpdateLaneSchema = z.object({
   reads_on: CalendarDateSchema.nullable().optional(),
   /** ADR 673: set, replace or clear (with `null`) what the read measures. Needs `reads_on`. */
   metric: MetricInputSchema.nullable().optional(),
+  /**
+   * ADR 751: put the card at this place in its cell. With a `state` or `goal_id` change it is the
+   * place in the new cell; on its own it moves the card within the cell it is in. The server stamps
+   * `by` and `at`. Refused on a lane with no card (parked, abandoned) unless the same write moves it
+   * onto the board.
+   */
+  card: LaneCardPlaceSchema.optional(),
   /**
    * ADR 644: the read's verdict. The daemon stamps `by` and `at`; a later verdict replaces an
    * earlier one. Rides an update, a submit or a resolve. A lane with `reads_on` and no verdict is

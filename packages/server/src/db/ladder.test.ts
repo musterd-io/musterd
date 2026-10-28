@@ -124,7 +124,7 @@ describe('the portable ladder (spec §12.2)', () => {
         'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
       )
       .all();
-    expect(runMigrations(sqlite)).toBe(133);
+    expect(runMigrations(sqlite)).toBe(134);
     expect(
       sqlite
         .prepare(
@@ -223,7 +223,7 @@ describe('the portable ladder (spec §12.2)', () => {
     const pgSyncBefore = await owner.all(
       'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
     );
-    expect(await migratePostgres(owner)).toBe(133);
+    expect(await migratePostgres(owner)).toBe(134);
     expect(
       await owner.all(
         'SELECT id, ts, actor, action, target, result, created_at, origin_node, origin_seq FROM audit ORDER BY id',
@@ -311,7 +311,7 @@ describe('the portable ladder (spec §12.2)', () => {
       "INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at) VALUES ('M', NULL, 0, 1)",
     );
     s.exec("INSERT INTO schema_meta (key, value) VALUES ('schema_version', '80')");
-    expect(runMigrations(s)).toBe(133);
+    expect(runMigrations(s)).toBe(134);
     expect(s.prepare('SELECT team_id FROM presence WHERE id = ?').get('P')).toEqual({
       team_id: 'T',
     });
@@ -342,7 +342,7 @@ describe('the portable ladder (spec §12.2)', () => {
       `INSERT INTO tool_call_stats (team_id, seat, role, tool, outcome, bucket_start, calls,
          total_duration_ms, max_duration_ms) VALUES ('T','ada','backend','team_send','ok',3600000,4,40,20)`,
     );
-    expect(runMigrations(s)).toBe(133);
+    expect(runMigrations(s)).toBe(134);
     expect(s.prepare('SELECT rail, calls, role FROM tool_call_stats').get()).toEqual({
       rail: 'stdio',
       calls: 4,
@@ -395,7 +395,7 @@ describe('the portable ladder (spec §12.2)', () => {
       "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '103') ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     ).run();
 
-    expect(runMigrations(s)).toBe(133);
+    expect(runMigrations(s)).toBe(134);
 
     expect(s.prepare('SELECT * FROM presence WHERE id = ?').get('P')).toMatchObject({
       id: 'P',
@@ -451,7 +451,7 @@ describe('the portable ladder (spec §12.2)', () => {
 
     // A rewind replays the rebuild. The lease must still be there: fkOff is the whole point.
     s.prepare("UPDATE schema_meta SET value = '103' WHERE key = 'schema_version'").run();
-    expect(runMigrations(s)).toBe(133);
+    expect(runMigrations(s)).toBe(134);
     expect(s.prepare('SELECT presence_id FROM session_leases WHERE id = ?').get('L')).toEqual({
       presence_id: 'P',
     });

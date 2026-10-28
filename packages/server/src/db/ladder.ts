@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { backfillCards, type CardBackfillRow } from '../store/laneCard.js';
 import { redactPolicySecrets } from '../store/policyRedaction.js';
 import type { Driver } from './driver.js';
 
@@ -1125,7 +1126,32 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       // column (and main's SQL never references it — delivery keeps json_extract, ADR 750).
     },
   },
+  {
+    // v134 — ADR 751 (lane 01M61T04S9): where a lane's card hangs on the wall board
+    // (`lanes.card_json`: `{x, y, by, at}`, a place within its goal × board-column cell; null = off
+    // the board). Backfilled for every lane on the board, in `created_at` order, with the picker the
+    // writes use, so the first board after the upgrade already holds places. The picker is a pure
+    // function of the rows, so every daemon backfills the same places without a sync.
+    version: 134,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!cols.includes('card_json')) db.exec('ALTER TABLE lanes ADD COLUMN card_json TEXT');
+      const rows = db.prepare(CARD_BACKFILL_SQL).all() as CardBackfillRow[];
+      const set = db.prepare('UPDATE lanes SET card_json = ? WHERE id = ?');
+      for (const u of backfillCards(rows)) set.run(u.card_json, u.id);
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS card_json TEXT');
+      const rows = await d.all<CardBackfillRow>(CARD_BACKFILL_SQL);
+      for (const u of backfillCards(rows))
+        await d.run('UPDATE lanes SET card_json = ? WHERE id = ?', [u.card_json, u.id]);
+    },
+  },
 ];
+
+/** v134: the lanes the card backfill places, in the order it places them. */
+const CARD_BACKFILL_SQL = `SELECT id, team_id, goal_id, state, owner_seat, created_by, updated_at
+  FROM lanes WHERE card_json IS NULL ORDER BY team_id, created_at, id`;
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (
   team_id TEXT NOT NULL REFERENCES teams(id),

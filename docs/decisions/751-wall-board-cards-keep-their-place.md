@@ -54,6 +54,7 @@ Moving a card to another column is still a state change. A place never changes a
 - A position is written on most lane state changes, so the `lanes` row is updated a little more. No new table.
 - A cell can fill: 12 candidates is a soft limit. A 13th card takes the least-crowded point and overlaps it, the way paper piles up on a real board. The wall paints a cell's cards oldest first, so the newest is on top.
 - Older clients ignore the field; `card` is optional in both directions.
+- 2026-10-28 (lane 01M61T04S9): a hub or joiner still on a build without `card` stops its fold at the first `lane.updated` that carries it (`unknown_lane_event`, by design since lane 01M56NXFFB), and resumes once the auto-refresher brings it up to date. Every state change now carries a `card` change, so on a fleet the stop comes within minutes of the first upgraded write rather than on some rare field. Normative text: SPEC.md Appendix A.30.
 - Follows-up: increment 2 of lane 01M5XS67X2 (the bigger board with goal rows, cards drawn at their places) and increment 3 (a walk for every recorded move, and a crumple into the bin on abandon), each its own PR.
 
 ## Observability & Evaluation

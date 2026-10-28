@@ -1161,3 +1161,22 @@ A team's Slack workspace is installed through Slack's OAuth flow, not an operato
   `destination`, from the server's operator-configured public origin). No request field
   selects a destination: an install link carries only its team and state, and any
   destination a link or callback carries MUST be ignored.
+
+## A.30 Wall board card places (unreleased — ADR 751)
+
+A Lane may carry where its card hangs on the Team's wall board, so every viewer sees the same
+board and a card that nobody moved does not move.
+
+- `card` is `{x, y, by, at}`, `x` and `y` each in `0..1`: a place within the Lane's **cell**, its
+  `goal_id` (or none) crossed with its board column. The column is the Lane's `state`, with
+  `ready_for_review` read as `awaiting_acceptance`; `parked` and `abandoned` have no column and no
+  card (`laneCardColumn`). Absent or `null`: no card.
+- An update MAY carry `card: {x, y}`. A server MUST stamp `by` (the actor) and `at`, and MUST
+  refuse it with `bad_request` when the write leaves the Lane with no column. With a `state` or
+  `goal_id` change it is the place in the new cell; alone it moves the card within its cell.
+- When a write gives a Lane a cell it did not have — on open, on a change of column or goal, or a
+  Lane on the board with no card — and names no place, a server MUST place the card itself. Any
+  rule works; the reference daemon takes the free spot farthest from the cell's other cards.
+- A move to a state with no column MUST clear the card.
+- A change of `card` is a `lane.updated` change like any audited field.
+

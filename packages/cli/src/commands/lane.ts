@@ -10,6 +10,7 @@ import {
   laneDetailLines,
   laneIdQuery,
   laneLanded,
+  LaneCardPlaceSchema,
   LaneStakesSchema,
   LaneStateSchema,
   reviewWaitMinutes,
@@ -45,7 +46,7 @@ const USAGE =
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
   '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
-  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--reads-on <YYYY-MM-DD>|none] [--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>] [--metric-source <s>] [--metric-harness <h>] | --metric none] [--read-verdict met|missed|inconclusive --read-note "<what was read>" [--measured <value> --n <count>] [--evidence <url|path>]] [--self | --by <name> | --act <id> | --seed <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
+  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--area <area>[,<area>…]|none] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--reads-on <YYYY-MM-DD>|none] [--metric "<name>" --unit <u> --target <t> --direction up|down [--baseline <b>] [--metric-source <s>] [--metric-harness <h>] | --metric none] [--read-verdict met|missed|inconclusive --read-note "<what was read>" [--measured <value> --n <count>] [--evidence <url|path>]] [--self | --by <name> | --act <id> | --seed <id>] [--clear-merged] [--abandon-reason "<why>"] [--card <x>,<y>]\n' +
   '  musterd lane sample <id> --value <v> --n <count> [--day <YYYY-MM-DD>]\n' +
   '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]\n' +
   '                          [--branch b]\n' +
@@ -66,6 +67,16 @@ function parseStakes(raw: string): LaneStakes {
       2,
     );
   }
+  return parsed.data;
+}
+
+/** Parse `--card <x>,<y>` (ADR 751): the card's place within its cell, each in 0..1. */
+function parseCard(raw: string): { x: number; y: number } {
+  const parsed = LaneCardPlaceSchema.safeParse(
+    (([x, y]) => ({ x: Number(x), y: Number(y) }))(raw.split(',')),
+  );
+  if (!parsed.success || raw.split(',').length !== 2)
+    throw new CliError(`--card takes <x>,<y>, each between 0 and 1 (got "${raw}")`, 2);
   return parsed.data;
 }
 
@@ -229,6 +240,7 @@ export const LANE_FLAGS = [
   'blocked',
   'branch',
   'by',
+  'card',
   'claim',
   'claimed',
   'claims',
@@ -673,6 +685,10 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       // ADR 487: why a lane is dropped — with --state abandoned, or later on an abandoned lane.
       ...(flagStr(parsed.flags, 'abandon-reason') !== undefined
         ? { abandon_reason: flagStr(parsed.flags, 'abandon-reason')! }
+        : {}),
+      // ADR 751: move the card on the wall board, within its goal × state cell.
+      ...(flagStr(parsed.flags, 'card') !== undefined
+        ? { card: parseCard(flagStr(parsed.flags, 'card')!) }
         : {}),
     });
     process.stdout.write(`${theme.ok('✓')} lane updated\n${renderLane(res.lane)}\n`);

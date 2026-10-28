@@ -514,6 +514,13 @@ export function registerLanes(
         park_until: z.string().optional(),
         // ADR 487 — with state "abandoned": why it is dropped. Undescribed for the same budget.
         abandon_reason: z.string().optional(),
+        // ADR 751 — the card's place on the wall board, within its goal × state cell.
+        card: z
+          .object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })
+          .optional()
+          .describe(
+            "move the lane's wall-board card: x,y in 0..1 within its goal row × state column",
+          ),
         // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE. A lane stamped with the
         // wrong merge — someone else's PR, a SHA that was never this branch — had no way back.
         merged: z
