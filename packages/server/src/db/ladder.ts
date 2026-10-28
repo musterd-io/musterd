@@ -1102,6 +1102,28 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec('ALTER TABLE lane_heads ADD COLUMN IF NOT EXISTS pushed_at BIGINT');
     },
   },
+  {
+    // Lane 01M4YY5Z38: wake-leases poll scans open directed ledger filtering
+    // (to_kind='member' AND json_extract(m.meta,'$.urgent')=1) without an index; the
+    // expression has no affinity for TEXT id comparisons. Add a VIRTUAL generated column
+    // `urgent` carrying the same extracted value so an index on it can be used.
+    version: 133,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_xinfo('messages')").pluck().all();
+      if (!cols.includes('urgent'))
+        db.exec(
+          "ALTER TABLE messages ADD COLUMN urgent INTEGER GENERATED ALWAYS AS (json_extract(meta, '$.urgent')) VIRTUAL",
+        );
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_messages_team_urgent ON messages(team_id, urgent) WHERE urgent IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_messages_team_to_kind_urgent ON messages(team_id, to_kind, urgent);
+      `);
+      db.exec('ANALYZE messages');
+    },
+    postgres: async (d) => {
+      // Postgres uses jsonb; schema defined elsewhere; best-effort no-op for this optimization
+    },
+  },
 ];
 
 const GATE_HOLD_REFUSALS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gate_hold_refusals (

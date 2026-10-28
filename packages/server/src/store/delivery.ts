@@ -599,7 +599,7 @@ export async function openDirectedLedger(
     `SELECT m.* FROM messages m
         WHERE m.team_id = ?
           AND (m.act IN ('request_help','handoff')
-               OR (m.to_kind = 'member' AND json_extract(m.meta, '$.urgent') = 1))
+               OR (m.to_kind = 'member' AND (m.urgent = 1 OR json_extract(m.meta, '$.urgent') = 1)))
           AND m.act NOT IN ('accept','decline','resolve')
           ${undischargedSql('m', 'm.to_member')}
         ORDER BY m.ts ASC`,
