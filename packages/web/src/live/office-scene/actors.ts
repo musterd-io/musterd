@@ -157,6 +157,31 @@ export function lookToward(dir: Dir, fx: number, fy: number, tx: number, ty: num
   return l ? GESTURE.look90L : GESTURE.look90R;
 }
 
+/**
+ * Who turns to whom when `speaker` addresses `to` (lane 01M5XS6GYM): everyone addressed turns to the
+ * speaker, and the speaker turns to the first of them who is in the room. The speaker never looks at
+ * themself, and nobody absent is on the list. Pure, so the pairing is testable without a scene.
+ */
+export function conversationLooks(
+  speaker: string,
+  to: readonly string[],
+  poses: ReadonlyMap<string, { lx: number; ly: number }>,
+): Array<{ who: string; at: { lx: number; ly: number } }> {
+  const from = poses.get(speaker);
+  if (!from) return [];
+  const out: Array<{ who: string; at: { lx: number; ly: number } }> = [];
+  let first: { lx: number; ly: number } | undefined;
+  for (const name of to) {
+    if (name === speaker) continue;
+    const at = poses.get(name);
+    if (!at) continue;
+    first ??= at;
+    out.push({ who: name, at: { lx: from.lx, ly: from.ly } });
+  }
+  if (first) out.push({ who: speaker, at: { lx: first.lx, ly: first.ly } });
+  return out;
+}
+
 /** The deterministic home pose of every present member (desk / nook / strip). Gone members are absent. */
 export function homePoses(
   placements: Map<string, Placement>,
