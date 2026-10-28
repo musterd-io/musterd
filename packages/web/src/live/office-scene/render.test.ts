@@ -70,7 +70,7 @@ import {
 } from './render';
 import type { Weather } from './weather';
 import { assignSeats } from './seating';
-import type { RenderOpts } from './render';
+import { CHIME_SWING_S, chimeSwing, type RenderOpts } from './render';
 import type { OfficeNode, Pose, WelcomePaint } from './types';
 import { projectWallBoard, type WallBoard } from './wallboard';
 import { fmtOps, recordingCtx, type RecordedOp } from './recording-ctx';
@@ -2216,5 +2216,16 @@ describe('furnishedBox (2026-10-01: /live and /broadcast fit the furnished room)
       broadcast: grow(1459, 1080),
       phone: grow(390, 500),
     });
+  });
+});
+
+describe('the shelf chimes swing (sound identity inc 4)', () => {
+  it('a struck bar swings from the hit and is still by the end of its note; an unstruck bar hangs plumb', () => {
+    expect(chimeSwing(Infinity)).toBe(0);
+    expect(chimeSwing(-1)).toBe(0);
+    expect(chimeSwing(0)).toBeCloseTo(0, 6);
+    expect(Math.abs(chimeSwing(0.15))).toBeGreaterThan(0.1);
+    expect(Math.abs(chimeSwing(CHIME_SWING_S - 0.01))).toBeLessThan(0.02);
+    expect(chimeSwing(CHIME_SWING_S)).toBe(0);
   });
 });

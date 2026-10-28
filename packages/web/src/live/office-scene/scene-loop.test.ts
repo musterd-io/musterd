@@ -429,8 +429,9 @@ describe('the musterd voice at its objects (sound identity spec §2.2–2.3, lan
   it('rings the chimes at the board for a lane done by any route, once per lane, never on replay', () => {
     expect(emitBody).toContain("ev.kind === 'walk-pin' && ev.state === 'done' && !replaying && !rangDone.has(ev.lane)");
     expect(emitBody).toContain("roomTone.moment('laneDone', boardPan()");
-    expect(emitBody).toContain('bar: barForLane(ev.lane)');
-    expect(emitBody).toContain('voices: voicesForChain([ev.who, laneOwners.carrier(ev.lane, ev.who)])');
+    expect(emitBody).toContain('const bar = barForLane(ev.lane)');
+    expect(emitBody).toContain('voicesForChain([ev.who, laneOwners.carrier(ev.lane, ev.who)])');
+    expect(emitBody).toContain("roomTone.moment('laneDone', boardPan(), undefined, { bar, voices })");
     expect(index).not.toContain("roomTone.moment('fanfare'");
   });
   it('rolls the scale for a goal shipped, waiting out the gate behind its last lane', () => {
@@ -452,5 +453,17 @@ describe('the musterd voice at its objects (sound identity spec §2.2–2.3, lan
     expect(index).toContain("roomTone.moment('door', doorPan)");
     expect(index).toContain("if (came) roomTone.moment('arrive', doorPan)");
     expect(index).toContain("roomTone.moment('leave', doorPan)");
+  });
+});
+
+describe('the shelf chimes swing when struck (sound identity inc 4, lane 01M61R4HQ3)', () => {
+  it('records the struck bars on a lane done and the whole scale on a goal, keeps the loop alive, and is gated by reduced motion', () => {
+    expect(index).toContain('strikeChimes(chordBars(bar, voices), [0, 0.03, 0.06])');
+    expect(index).toContain('CHIME_BARS.map((_, i) => i * 0.075)');
+    const fn = index.slice(index.indexOf('const strikeChimes ='), index.indexOf('ensureLoop();', index.indexOf('const strikeChimes =')) + 13);
+    expect(fn).toContain('if (reduced) return;');
+    expect(fn).toContain('ensureLoop();');
+    expect(index).toContain('|| chimesSwinging()');
+    expect((index.match(/chimes: chimeHits/g) ?? []).length).toBe(2);
   });
 });

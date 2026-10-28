@@ -40,6 +40,7 @@ import {
   PODS,
   PRINTER,
   RECEPTION,
+  SHELF_CHIMES,
   WALL_BOARD,
   WIKI_SHELF,
   WORKING_HOURS_CALENDAR,
@@ -1102,6 +1103,8 @@ export function drawWalls(
   art: RenderedAssets,
   /** The sky at the windows (lane 01M5XS6597): clear draws nothing, the rest paint over the panes. */
   weather: Weather = 'clear',
+  /** The shelf chimes' strike times (RenderOpts.chimes). */
+  chimes?: readonly number[],
 ): void {
   /**
    * What each wall carries. The right wall gets the clock (it is the only one whose `+t` runs screen-right,
@@ -1134,6 +1137,9 @@ export function drawWalls(
       run(() => {
         if (blitIf(ctx, fit, art, 'wall/board', bx, by)) wallLaneBoard(ctx, fit, edge, wallBoard);
       });
+      // The shelf chimes over the board (sound identity inc 4): its own unit, so a swinging bar
+      // damages the chimes and not the board under them.
+      run(() => shelfChimes(ctx, fit, edge, chimes, t));
       return;
     }
     const [hx, hy] = edge(0.52);
@@ -1163,6 +1169,88 @@ function weatherRnd(n: number): number {
  * pane falling down the glass with the clock; snow is a few flakes drifting down and wobbling. Both are
  * in wall (t, u) space through `wallPt`, so they lean with the wall like the mullions do.
  */
+/** How long a struck bar swings, seconds — the bar voice's decay (`strikeBar`, 1.8 s). */
+export const CHIME_SWING_S = 1.8;
+
+/** A struck bar's angle off plumb at `dt` seconds after the strike, radians: a damped swing that
+ *  starts at the hit and dies with the note. Pure, so the test can hold its shape. */
+export function chimeSwing(dt: number): number {
+  if (!(dt >= 0) || dt >= CHIME_SWING_S) return 0;
+  return 0.26 * Math.sin(2 * Math.PI * 1.7 * dt) * Math.exp(-dt / 0.6);
+}
+
+/**
+ * The shelf chimes (sound identity spec §2.2, inc 4): a short oak rail on the wall over the board's
+ * left half, eight wood bars with a brass sleeve hanging from it, longest (C4) on the left. A bar
+ * struck within `CHIME_SWING_S` swings in the wall's plane and glows warm for the length of its note,
+ * so a viewer who looks can see which one rang. Resting, it is eight quiet bars and nothing moves.
+ */
+function shelfChimes(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  edge: (t: number) => [number, number],
+  hits: readonly number[] | undefined,
+  t: number,
+): void {
+  const { tc, uc, w: W, len, hang, thick } = SHELF_CHIMES;
+  const T = (dx: number): number => tc + dx / FLOOR;
+  const U = (dy: number): number => uc + dy / WALL_H;
+  const s = fit.scale;
+  // the rail and its shadow line
+  wallRect(ctx, fit, edge, T(-W / 2), U(-1.6), T(W / 2), U(1.4), '#5a3d26');
+  wallRect(ctx, fit, edge, T(-W / 2), U(0.6), T(W / 2), U(1.4), '#8a6440');
+  const n = len.length;
+  const step = W / n;
+  for (let i = 0; i < n; i++) {
+    const a = -W / 2 + step * (i + 0.5);
+    const L = len[i]!;
+    const dt = hits ? t - (hits[i] ?? -Infinity) : Infinity;
+    const th = chimeSwing(dt);
+    const top = wallPt(edge, T(a), U(-1.6), fit);
+    // the bar's hang point is the end of its string; the bar swings about that point
+    const px = a + hang * Math.sin(th);
+    const py = -1.6 - hang * Math.cos(th);
+    const bx = px + L * Math.sin(th);
+    const by = py - L * Math.cos(th);
+    const p0 = wallPt(edge, T(px), U(py), fit);
+    const p1 = wallPt(edge, T(bx), U(by), fit);
+    ctx.save();
+    ctx.lineCap = 'round';
+    // string
+    ctx.strokeStyle = 'rgba(40, 28, 18, 0.7)';
+    ctx.lineWidth = Math.max(0.5, 0.5 * s);
+    ctx.beginPath();
+    ctx.moveTo(top.x, top.y);
+    ctx.lineTo(p0.x, p0.y);
+    ctx.stroke();
+    // the glow of a ringing bar, under it
+    if (th !== 0 || (dt >= 0 && dt < CHIME_SWING_S)) {
+      ctx.strokeStyle = `rgba(255, 214, 140, ${(0.55 * Math.exp(-dt / 0.7)).toFixed(3)})`;
+      ctx.lineWidth = Math.max(1, thick * 2.2 * s);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+    }
+    // the bar: oak, with a brass sleeve a third of the way down
+    ctx.strokeStyle = '#a07a4c';
+    ctx.lineWidth = Math.max(1, thick * s);
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.stroke();
+    const s0 = { x: p0.x + (p1.x - p0.x) * 0.3, y: p0.y + (p1.y - p0.y) * 0.3 };
+    const s1 = { x: p0.x + (p1.x - p0.x) * 0.46, y: p0.y + (p1.y - p0.y) * 0.46 };
+    ctx.strokeStyle = '#d9b36a';
+    ctx.lineWidth = Math.max(1, thick * 1.1 * s);
+    ctx.beginPath();
+    ctx.moveTo(s0.x, s0.y);
+    ctx.lineTo(s1.x, s1.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 export function drawWeather(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
@@ -1827,6 +1915,9 @@ export interface RenderOpts {
   units?: UnitHook | undefined;
   /** The sky at the windows (weather.ts, lane 01M5XS6597). Absent → clear, which draws nothing. */
   weather?: Weather | undefined;
+  /** When each shelf-chime bar was last struck, in scene-clock seconds (sound identity inc 4): a bar
+   *  struck within `CHIME_SWING_S` of `t` swings. Absent or all −Infinity → the chimes hang still. */
+  chimes?: readonly number[] | undefined;
   /**
    * The pre-rendered art (office realism, plan Task 2 onward): every static item, the room's light
    * states, the figure sheets and the dog. An asset that failed to load is simply not drawn.
@@ -4284,7 +4375,7 @@ export function renderScene(
       blitIf(c, fit, rendered, `room/ceiling-${ceiling}`, 0, 0, 1 - 0.8 * env.daylight);
       c.restore();
     }
-    if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, undefined, rendered, opts.weather);
+    if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, undefined, rendered, opts.weather, opts.chimes);
     if (!cache) rugs(c);
   };
   /* Flat floor paint, drawn with the floor (before every solid and every actor) so a member standing
@@ -4300,7 +4391,7 @@ export function renderScene(
     run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
     // On the stage, in their existing order: the live fixtures over the blitted walls, then the
     // additive bulb strands (see `drawWalls`).
-    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather);
+    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather, opts.chimes);
     // Source-over floor paint, so it caches cleanly on top of the shell.
     run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));
   } else {

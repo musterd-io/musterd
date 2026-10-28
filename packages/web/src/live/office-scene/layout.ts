@@ -852,6 +852,29 @@ export const BEAM_SHEAR = 46;
  */
 export const WALL_BOARD = { wall: 1 as const, tc: 0.8922, uc: 0.4787, w: 170, h: 120 };
 
+/**
+ * The shelf chimes — the one object in the room that is musterd's and only musterd's (sound identity
+ * spec 2026-10-28 §2.2). Eight bars on a rail, one note each, that ring when a lane reaches done and
+ * roll when a goal ships. They hang from the ceiling line over the work board's left half: the free
+ * wall between window 2 and the board is 19 units, too narrow for eight bars, and a chime that rings
+ * for finished work belongs over the thing that shows it. `uc` is the rail; the bars hang `len`
+ * units below it (longest = lowest note, C4, on the left) and the longest must clear the board's
+ * top edge (`layout.test.ts` holds that line).
+ */
+export const SHELF_CHIMES = {
+  wall: 1 as const,
+  tc: 0.84,
+  uc: 0.955,
+  /** rail width, logical units */
+  w: 46,
+  /** bar lengths, left to right — the scale rising C4…E5 */
+  len: [22, 20.5, 19, 17.5, 16, 14.5, 13, 11.5] as const,
+  /** string from rail to bar */
+  hang: 3,
+  /** bar thickness */
+  thick: 2.4,
+};
+
 /** What sits on a shelf top. A credenza-height top is a real surface — leaving it bare repeats the
  *  same uniformity problem one shelf down. */
 export type ShelfDecor = 'plant' | 'photo' | 'books' | 'trophy';

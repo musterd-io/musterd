@@ -32,6 +32,7 @@ import {
   PODS,
   RECEPTION,
   SEAT_BACK,
+  SHELF_CHIMES,
   WALL_BOARD,
   WORKING_HOURS_CALENDAR,
   WINDOWS,
@@ -340,6 +341,22 @@ describe('the walls are not a matched set', () => {
     // Vertically: on the wall (u ∈ [0,1]), above the bookshelf line the art also respects.
     expect(WALL_BOARD.uc * WALL_H - WALL_BOARD.h / 2).toBeGreaterThan(0);
     expect(WALL_BOARD.uc * WALL_H + WALL_BOARD.h / 2).toBeLessThan(WALL_H);
+  });
+
+  it('hangs the shelf chimes over the board, clear of its top edge, the windows and the wall top (sound identity inc 4)', () => {
+    expect(SHELF_CHIMES.wall).toBe(WALL_BOARD.wall);
+    expect(SHELF_CHIMES.len).toHaveLength(8);
+    for (let i = 1; i < SHELF_CHIMES.len.length; i++) expect(SHELF_CHIMES.len[i]!).toBeLessThan(SHELF_CHIMES.len[i - 1]!); // C4 longest, on the left
+    const half = SHELF_CHIMES.w / 2 / FLOOR;
+    const t0 = SHELF_CHIMES.tc - half;
+    const t1 = SHELF_CHIMES.tc + half;
+    expect(t1).toBeLessThanOrEqual(1);
+    for (const w of WINDOWS) expect(t1 <= w.t0 || t0 >= w.t1, 'chimes overlap a window').toBe(true);
+    const rail = SHELF_CHIMES.uc * WALL_H;
+    expect(rail + 1.4).toBeLessThan(WALL_H);
+    const lowest = rail - 1.6 - SHELF_CHIMES.hang - Math.max(...SHELF_CHIMES.len);
+    const boardTop = WALL_BOARD.uc * WALL_H + WALL_BOARD.h / 2;
+    expect(lowest, 'the longest bar reaches the board').toBeGreaterThan(boardTop + 3);
   });
 
   it('reserves the former under-clock art slot for the compact working-hours calendar', () => {
