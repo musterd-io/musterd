@@ -66,13 +66,19 @@ Two different models from each of three families, six reviews per item:
 | --- | --- |
 | Claude | `claude-opus-5-5`, `claude-sonnet-5-5` |
 | GPT | `gpt-6-sol`, `gpt-6.1-terra` |
-| Grok | `grok-4.7`, a second Grok model confirmed before the pilot |
+| Grok | `grok-4.7`, `grok-4.3` |
 
 The within-family pairs are **two different models** in a family. That is the primary contrast.
 Two runs of the same model measure something else (lazara) and are not in this run. If no second
 Grok model is available when the pilot starts, the manifest gets a dated note before any measured
 item, and Grok contributes cross-family pairs only. That leaves 2 within-family pairs per item
 instead of 3. The power table below assumes 3.
+
+_Confirmed 2026-10-27, before any item ran:_ the second Grok model is `grok-4.3`. No smaller Grok of
+the 4.7 generation is listed, and 4.3 is the cheaper tier, which mirrors the larger and cheaper
+member of the Claude and GPT pairs. All six are called through OpenRouter, by the ids in
+`scripts/research/family-correlation/models.json`. OpenRouter lists temperature as a supported
+parameter for the two Grok models only, so the Claude and GPT models run at the provider default.
 
 **Blind, one-shot, outside revive.** Each review is one API call with the same prompt: the task
 text and the diff, nothing else. There is no seat, no lane, no trailer and no team context, because
@@ -186,7 +192,10 @@ counts as a miss and is reported. A scored review is never re-run.
 
 Each review is about 10k input and 1k output tokens: $0.225 at Opus-class list rates. The upper
 figures price all six models at that rate. The lower figures assume the cheaper models bring the
-mean to about $0.15. **Hard stop: $200 of model spend**, retries included.
+mean to about $0.15. _Priced 2026-10-27 from OpenRouter's list:_ the six cost $0.015–0.06 a review
+at that size, about $0.18 for all six on one item, or about $22 for the main run. Reasoning tokens
+count as output and can raise that, which is why the estimate above stands until the pilot measures
+it. **Hard stop: $200 of model spend**, retries included.
 **nick approves the spend** before the pilot starts. _Approved 2026-10-27 by nick, in dolly's
 session, for N = 100 and up to the $200 stop._
 
