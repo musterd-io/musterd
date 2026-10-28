@@ -11,12 +11,14 @@ import {
   WIKI_MAX_PAGE_BYTES,
   WIKI_MAX_PAGES,
   wikiPathProblem,
+  repoFileUrl,
   wikiRepoProblem,
   type WikiIndex,
   type WikiPage,
   type WikiPageEntry,
   type WikiSource,
 } from '@musterd/protocol';
+import { Marked, type Tokens } from 'marked';
 import { log } from '../log.js';
 
 /**
@@ -232,6 +234,8 @@ interface SourceState {
   /** The last check failed; what is served is the last good read. */
   failed: string | null;
   inflight: Promise<void> | null;
+  /** ADR 754: pages rendered at `commit`, by path — a page renders once per commit, not per read. */
+  rendered: Map<string, string>;
 }
 
 export interface WikiReader {
@@ -270,6 +274,7 @@ export function createWikiReader(opts: WikiReaderOptions): WikiReader {
         checkedAt: 0,
         failed: null,
         inflight: null,
+        rendered: new Map(),
       };
       states.set(key, st);
     }
@@ -320,6 +325,7 @@ export function createWikiReader(opts: WikiReaderOptions): WikiReader {
       st.commit = (await git(['rev-parse', 'HEAD'], st.dir)).trim();
       st.branch = branch;
       st.index = await buildIndex(st.dir, source.path);
+      st.rendered.clear();
       st.failed = null;
       log.info({ msg: 'wiki_fetch', team: teamId, outcome: 'fetched', ms: now() - started });
     } catch (err) {
@@ -383,7 +389,19 @@ export function createWikiReader(opts: WikiReaderOptions): WikiReader {
       const entry = st.index.pages.find((p) => p.path === path);
       if (!entry || entry.bytes > WIKI_MAX_PAGE_BYTES) return null;
       const markdown = await readPage(st.dir, source.path, path);
-      return markdown === null ? null : { path, commit: st.commit, markdown };
+      if (markdown === null) return null;
+      let html = st.rendered.get(path);
+      if (html === undefined) {
+        html = renderWikiPage(markdown, {
+          repo: source.repo,
+          folder: source.path,
+          commit: st.commit,
+          page: path,
+          pages: new Set(st.index.pages.map((p) => p.path)),
+        });
+        st.rendered.set(path, html);
+      }
+      return { path, commit: st.commit, markdown, html };
     },
   };
 }
@@ -464,4 +482,119 @@ export function sharedWikiReader(dbPath: string): WikiReader {
     shared.set(root, reader);
   }
   return reader;
+}
+
+// ── rendering (ADR 754) ──────────────────────────────────────────────────────────────────────────────
+
+/*
+ * A wiki page's markdown to HTML, done here once per commit rather than in every viewer's browser
+ * (ADR 754; the rules are ADR 747's). The page comes from a Team's repo, so it is treated as untrusted:
+ * raw HTML is shown as text and never parsed, and a link is followed only to `http`, `https` or
+ * `mailto`. Links are sorted three ways:
+ *
+ * - another page in the wiki folder → `data-wiki-page`, which the overlay opens in place;
+ * - anything else in the repo (an ADR, a source file) → the file on its host at the read commit,
+ *   when the host is one we know how to link to; plain text otherwise;
+ * - an absolute web link → itself, in a new tab.
+ */
+
+export interface WikiLinkContext {
+  repo: string;
+  /** The wiki folder in the repo, e.g. `docs/wiki` (empty: the repo root). */
+  folder: string;
+  commit: string;
+  /** The page being rendered, relative to the folder. */
+  page: string;
+  /** Every page in the index, relative to the folder. */
+  pages: ReadonlySet<string>;
+}
+
+const ESC: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+export function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ESC[c]!);
+}
+
+export type ResolvedLink =
+  | { kind: 'page'; page: string; hash: string }
+  | { kind: 'out'; href: string }
+  | { kind: 'none' };
+
+/** Where a link in a wiki page goes (see the module comment). */
+export function resolveWikiLink(href: string, ctx: WikiLinkContext): ResolvedLink {
+  const raw = href.trim();
+  if (/^(https?:|mailto:)/i.test(raw)) return { kind: 'out', href: raw };
+  // Any other scheme (javascript:, data:, file:, …) or a protocol-relative URL goes nowhere.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith('//')) return { kind: 'none' };
+  if (raw.startsWith('#')) return { kind: 'page', page: ctx.page, hash: raw.slice(1) };
+  const folder = ctx.folder === '' ? '' : `${ctx.folder}/`;
+  const here = new URL(`https://wiki.invalid/${folder}${ctx.page}`);
+  let target: URL;
+  try {
+    target = new URL(raw, here);
+  } catch {
+    return { kind: 'none' };
+  }
+  const file = decodeURIComponent(target.pathname.replace(/^\//, ''));
+  const hash = target.hash.replace(/^#/, '');
+  if (file.startsWith(folder) && ctx.pages.has(file.slice(folder.length))) {
+    return { kind: 'page', page: file.slice(folder.length), hash };
+  }
+  const url = repoFileUrl(ctx.repo, ctx.commit, file);
+  return url ? { kind: 'out', href: url + (target.hash || '') } : { kind: 'none' };
+}
+
+export function renderWikiPage(markdown: string, ctx: WikiLinkContext): string {
+  const md = new Marked({ gfm: true, async: false });
+  md.use({
+    renderer: {
+      // Comments vanish, as in any markdown viewer (the wiki's `<!-- claim: … -->` markers); every
+      // other tag is shown as the text it is.
+      html({ text }: Tokens.HTML | Tokens.Tag) {
+        return escapeHtml(text.replace(/<!--[\s\S]*?-->/g, ''));
+      },
+      link({ href, title, tokens }: Tokens.Link) {
+        const inner = this.parser.parseInline(tokens);
+        const t = title ? ` title="${escapeHtml(title)}"` : '';
+        const to = resolveWikiLink(href, ctx);
+        if (to.kind === 'page') {
+          return `<a href="#" data-wiki-page="${escapeHtml(to.page)}" data-wiki-hash="${escapeHtml(to.hash)}"${t}>${inner}</a>`;
+        }
+        if (to.kind === 'out') {
+          return `<a href="${escapeHtml(to.href)}" target="_blank" rel="noopener noreferrer"${t}>${inner}</a>`;
+        }
+        return `<span class="lc-wiki__deadlink"${t}>${inner}</span>`;
+      },
+      // Images are not fetched from a page's links (they would leave the daemon's origin on every
+      // open); the alt text links to the image where the host can show it.
+      image({ href, text }: Tokens.Image) {
+        const to = resolveWikiLink(href, ctx);
+        const label = escapeHtml(text || 'image');
+        return to.kind === 'out'
+          ? `<a href="${escapeHtml(to.href)}" target="_blank" rel="noopener noreferrer">[${label}]</a>`
+          : `[${label}]`;
+      },
+      heading({ tokens, depth }: Tokens.Heading) {
+        const inner = this.parser.parseInline(tokens);
+        const id = slugify(inner.replace(/<[^>]+>/g, ''));
+        return `<h${depth} id="wiki-${id}">${inner}</h${depth}>\n`;
+      },
+    },
+  });
+  return md.parse(markdown) as string;
+}
+
+/** GitHub-style heading anchors, so `page.md#some-heading` lands. */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/&[a-z#0-9]+;/g, '')
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .trim()
+    .replace(/\s/g, '-');
 }

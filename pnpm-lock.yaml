@@ -280,6 +280,9 @@ importers:
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0
+      marked:
+        specifier: ^18.0.10
+        version: 18.0.10
       pg:
         specifier: ^8.23.1
         version: 8.23.1
@@ -7615,9 +7618,7 @@ snapshots:
       metro-runtime: 0.87.1
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.88.0': {}
 

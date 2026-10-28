@@ -35,3 +35,48 @@ export function wikiPathProblem(raw: string): string | null {
   if (/[\0\\]/.test(raw)) return 'may not contain backslashes';
   return null;
 }
+
+/** `https://host/owner/repo` for a GitHub, GitLab or Codeberg remote, else null. */
+export function repoWebBase(
+  repo: string,
+): { base: string; kind: 'github' | 'gitlab' | 'codeberg' } | null {
+  let host: string;
+  let path: string;
+  const scp = /^[\w.-]+@([\w.-]+):(.+)$/.exec(repo);
+  if (scp) {
+    host = scp[1]!;
+    path = scp[2]!;
+  } else {
+    try {
+      const u = new URL(repo);
+      host = u.hostname;
+      path = u.pathname;
+    } catch {
+      return null;
+    }
+  }
+  path = path
+    .replace(/^\/+/, '')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '');
+  if (!path.includes('/')) return null;
+  const kind =
+    host === 'github.com'
+      ? 'github'
+      : host === 'gitlab.com'
+        ? 'gitlab'
+        : host === 'codeberg.org'
+          ? 'codeberg'
+          : null;
+  return kind ? { base: `https://${host}/${path}`, kind } : null;
+}
+
+/** The web URL of one repo file at a commit, or null for a host we cannot link into. */
+export function repoFileUrl(repo: string, commit: string, file: string): string | null {
+  const web = repoWebBase(repo);
+  if (!web) return null;
+  const f = file.split('/').map(encodeURIComponent).join('/');
+  if (web.kind === 'github') return `${web.base}/blob/${commit}/${f}`;
+  if (web.kind === 'gitlab') return `${web.base}/-/blob/${commit}/${f}`;
+  return `${web.base}/src/commit/${commit}/${f}`;
+}
