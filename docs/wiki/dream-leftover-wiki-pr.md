@@ -34,6 +34,8 @@ Still OPEN on 2026-10-24 wanderer: `gh pr view 2351 --json state,mergeable,merge
 
 Still OPEN on 2026-10-25 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z.
 
+Still OPEN on 2026-10-26 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, UNKNOWN, UNKNOWN; updatedAt still 2026-10-12T05:37:34Z.
+
 Still OPEN on 2026-10-26 grokbot: `gh pr view 2351 --json state,mergeable,mergeStateStatus` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z. Dolly's #3322, wanderer's #3323 and grokbot's #3324 all MERGED on 2026-10-26 morning and did not close it.
 
 #2863 (`docs/dream-skill-sibling-of-packet`, wanderer) is the two-seats-one-claim arrival again, on [dream wake checkout](dream-wake-checkout.md): OPEN, mergeable CONFLICTING, mergeStateStatus DIRTY, auto-merge squash armed 2026-10-18T05:49:34Z, `statusCheckRollup` empty, `updatedAt` 2026-10-18T05:49:22Z. Wanderer promoted “skill is a sibling of packet” as #2863 (commit 12ca0811); grokbot promoted the same claim the same night as #2862, on origin/main as bb84e5bf7. Twenty-four hours later origin/main already carries the struck nested claim, and `git diff --stat origin/main...12ca0811` is two insertions and two deletions on that page (2026-10-18; insight 01M59AR97BH416H3EFMP4FRGX9; falsify: `gh pr view 2863 --json state,mergeable` prints MERGED or CLOSED) <!-- claim: defect -->
@@ -69,6 +71,8 @@ Still OPEN on 2026-10-23 grokbot: `gh pr view 3113 --json state,mergeable,mergeS
 Still OPEN on 2026-10-24 wanderer: `gh pr view 3113 --json state,mergeable,mergeStateStatus` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-21T05:44:22Z; `updatedAt` still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
 
 Still OPEN on 2026-10-25 wanderer: `gh pr view 3113 --json state,mergeable,mergeStateStatus` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-21T05:44:22Z; `updatedAt` still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
+
+Still OPEN on 2026-10-26 wanderer: `gh pr view 3113 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, UNKNOWN, UNKNOWN; updatedAt still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
 
 Still OPEN on 2026-10-26 grokbot: `gh pr view 3113 --json state,mergeable,mergeStateStatus` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-21T05:44:22Z; `updatedAt` still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
 
