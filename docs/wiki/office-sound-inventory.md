@@ -84,7 +84,9 @@ Rendered through an `OfflineAudioContext` on the dev server (mono, 44.1 kHz, six
 | `laneDone` one bar / three | +11 / +17.7 dB | the chimes, a struck bar across a room |
 | `goalDone` roll | ~+18 dB (was +21 before the trim) | the loudest thing the room plays, once |
 
-The harness resolves about 3 dB, so everything in the room sits where its role puts it; the chimes are the only voices deliberately above the foreground band. Falsify: a re-render putting any room foley more than 3 dB outside this table. <!-- claim: other -->
+The harness resolves about 3 dB, so everything in the room sits where its role puts it; the chimes are the only voices deliberately above the foreground band.
+
+- Falsify: a re-render putting any room foley more than 3 dB outside this table. <!-- claim: other -->
 
 ## Falsifiers
 
