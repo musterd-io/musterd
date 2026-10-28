@@ -11,7 +11,6 @@ import {
   type WorkspaceSpec,
   type WorktreeProvisioning,
 } from '@musterd/protocol';
-import pc from 'picocolors';
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { loadBinding, loadWorkspace } from '../config.js';
 import { CliError } from '../errors.js';
@@ -285,7 +284,7 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
           .filter(Boolean)
       : await promptSelection(registry, availability, current));
   if (selected === null) {
-    out(pc.dim('no changes made'));
+    out(theme.dim('no changes made'));
     return 0;
   }
   const known = new Set(registry.map((a) => a.id));
@@ -337,7 +336,7 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
               `${desired.length > 0 ? desired.join(', ') : '(none)'}?`,
           ));
     if (!confirmed) {
-      out(pc.dim('no changes made'));
+      out(theme.dim('no changes made'));
       return 0;
     }
   }
@@ -345,7 +344,7 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
   // ── Save desire BEFORE reconciliation (ADR 282): a stop right after this leaves honest intent. ──
   const converted = saveLocalState(ctx, { workspace, binding, provisioning }, desired);
   out(`${theme.ok('✓')} desired harnesses: ${desired.length > 0 ? desired.join(', ') : '(none)'}`);
-  out(pc.dim(`  ${deltaLine(current, desired)}`));
+  out(theme.dim(`  ${deltaLine(current, desired)}`));
 
   // Install a missing bundled skill, then resolve bridges again so reconcile sees the new file.
   const equipTarget = { workspace: ctx.worktreeRoot, team: ctx.team, harnessIds: desired };
@@ -357,7 +356,7 @@ async function configureCommand(parsed: Parsed, deps?: HarnessDeps): Promise<num
   const equipped = await finishRoleEquipment(equipTarget);
   for (const r of report.results) out(renderConfigureReceipt(r, report.results));
   for (const line of equipped.lines) out(theme.meta(line));
-  if (converted) out(pc.dim('converted the legacy identity/manifest to the current format'));
+  if (converted) out(theme.dim('converted the legacy identity/manifest to the current format'));
   if (report.ok) {
     out(`${theme.ok('✓')} worktree configured — musterd wire repairs it any time`);
   } else {
@@ -447,7 +446,7 @@ export function missingBlock(missing: HarnessAdapter[]): string {
     'not installed here — install one, then run `musterd harness configure` again:',
     ...missing.map(
       (a) =>
-        `  ${a.id.padEnd(width)}  ${pc.dim(a.interactive?.installHint ?? 'no install command known')}`,
+        `  ${a.id.padEnd(width)}  ${theme.dim(a.interactive?.installHint ?? 'no install command known')}`,
     ),
   ].join('\n');
 }
