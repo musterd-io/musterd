@@ -122,9 +122,8 @@ that excludes 0.
 The **minimum effect worth acting on is `D = 0.15`**. Below that, a family proxy would buy so little
 independence that it should not drive routing. Simulated at that effect itself, **N = 80 seeded
 items gives 74% power and N = 100 gives 81%.** The 20 items in the first draft would not have come
-close. N = 80 is the pre-registered size, accepted at 74% to keep the spend inside the stop.
-N = 100 costs about $25–35 more, and is nick's choice at the spend approval. The choice is
-recorded here before the pilot. The miss rate matters as much as N: at
+close. **N = 100 is the pre-registered size**, chosen by nick on 2026-10-27 over N = 80 for the
+extra power, at about $25–35 more. The miss rate matters as much as N: at
 a 10% or 90% miss rate, few pairs disagree and power collapses. The pilot sets the rate.
 
 ## Verdict rules, fixed before the run
@@ -142,7 +141,7 @@ disagree, the run is inconclusive, and the finding reports both.
 
 ## Pilot and kill rule
 
-Eight seeded items and two controls, run first and excluded from the 80. The pilot passes if:
+Eight seeded items and two controls, run first and excluded from the 100. The pilot passes if:
 
 - every model answers in the JSON shape on at least 9 of 10 items, and
 - the pooled miss rate on seeded items is between 20% and 80%.
@@ -163,17 +162,17 @@ counts as a miss and is reported. A scored review is never re-run.
 | --- | --- |
 | Seeding: CooperBench eval runs to keep or drop each mutant (no model calls) | Fly machine, under $5 |
 | Pilot, 10 items × 6 reviews | $9–14 |
-| Main run, 80 seeded + 20 controls × 6 reviews | $90–135 |
-| **Total model spend** | **about $100–150** |
+| Main run, 100 seeded + 25 controls × 6 reviews | $112–169 |
+| **Total model spend** | **about $121–183** |
 
 Each review is about 10k input and 1k output tokens: $0.225 at Opus-class list rates. The upper
 figures price all six models at that rate. The lower figures assume the cheaper models bring the
-mean to about $0.15. **Hard stop: $160 of model spend**, retries included.
+mean to about $0.15. **Hard stop: $200 of model spend**, retries included.
 **nick approves the spend** before the pilot starts.
 
 **Re-ask after the pilot.** The six models are not priced yet. After the pilot, the mean cost per
-review is multiplied by the main run's reviews (600 at N = 80) and added to the pilot's spend. If
-that exceeds $160, the run stops there and goes back to nick before any main-run item, so it is
+review is multiplied by the main run's reviews (750 at N = 100) and added to the pilot's spend. If
+that exceeds $200, the run stops there and goes back to nick before any main-run item, so it is
 never found out at item 70 (lazara).
 
 ## Procedure
@@ -181,9 +180,9 @@ never found out at item 70 (lazara).
 1. Write the mutation script and the review runner in `scripts/research/family-correlation/`,
    in their own lane, with tests for the scorer.
 2. Seed candidate mutants, run CooperBench's evaluator, keep the failing ones until the pilot set and
-   the 80 are drawn. Commit the item list with each item's feature, class, file and hunk.
+   the 100 are drawn. Commit the item list with each item's feature, class, file and hunk.
 3. Confirm the six models. Run the pilot. Apply the kill rule.
-4. Run the 80 seeded items and 20 controls in a random order fixed by seed.
+4. Run the 100 seeded items and 25 controls in a random order fixed by seed.
 5. Score, compute `D`, and write the finding.
 
 ## Not in this run
