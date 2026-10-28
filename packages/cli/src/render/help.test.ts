@@ -8,6 +8,7 @@ import {
   renderHelpJson,
   wantsCommandHelp,
 } from './help.js';
+import { visibleLen } from './ui.js';
 
 // Color is pinned OFF via NO_COLOR in vitest.config, so assertions are on visible text.
 
@@ -27,6 +28,23 @@ describe('renderHelp (grouped overview)', () => {
     for (const n of START_HERE) expect(out).toContain(n);
     expect(out).toContain('musterd help <command>');
     expect(out).toContain('musterd help --json');
+  });
+
+  it('does not overflow the available width at 40, 60 and 80 columns', () => {
+    for (const width of [40, 60, 80]) {
+      const out = renderHelp({ width });
+      for (const line of out.split('\n')) {
+        expect(visibleLen(line)).toBeLessThanOrEqual(width);
+      }
+      const cmd = renderCommandHelp('lane', { width })!;
+      for (const line of cmd.split('\n')) {
+        expect(visibleLen(line)).toBeLessThanOrEqual(width);
+      }
+      const grp = renderGroupHelp('setup', { width })!;
+      for (const line of grp.split('\n')) {
+        expect(visibleLen(line)).toBeLessThanOrEqual(width);
+      }
+    }
   });
 
   it('folds non-primary commands behind a "+N more" pointer by default', () => {
