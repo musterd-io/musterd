@@ -329,7 +329,8 @@ live/
   briefing.ts                   // the Now briefing's one selector (pure, node-tested): needs-a-human by human, goals in motion ("d of n done", who), shipped by who; waitingFor(viewer)
   NowOverlay.tsx                // the Now card's shell (lazy chunk): overlay / full screen, docked into the topbar's "Now" chip (portalled); opens itself once per period (nowWhen.ts)
   NowPanel.tsx                  // the Now card's body: waiting-on-you band, goals in motion, shipped since yesterday; a goal row lights its people in the room
-  MemberFace.tsx                // a member's head as the office draws them (appearanceOf), as small inline SVG; the agent visor / human eyes tell survives
+  MemberFace.tsx                // a member's head as the office draws them: the rendered portrait once the office has painted it (portraits.ts), else a small inline SVG from appearanceOf with the agent visor / human eyes tell
+  portraits.ts                  // the members' rendered portraits (lane 01M6017Z38): a tiny store the office publishes to and MemberFace and the team column's discs read; the figure sheets stay in the office's lazy chunk
   TraceTimeline.tsx             // the per-seat trace timeline (ADR 445 inc 4b): pure TraceTimeline + default SeatTracePanel (fetch, then re-reads every 4s while open, paused on a hidden tab, last list kept on a failed refresh); a lazy chunk, never on /live's eager graph
   SeedsTray.tsx                 // read-only active/history Seed drawer; promoted history → focused Lane
   OfficeScene.tsx               // React wrapper: mounts the scene, feeds it envelopes → emit
@@ -338,6 +339,7 @@ live/
   Live.css                      // the /live palette + component styles (--lc-* tokens)
   office-scene/
     index.ts                    // the imperative scene handle {update, emit, dispose}; the emit switch
+    portrait.ts                 // paints each member's head and shoulders from their rendered figure (idle, facing the camera) into a 64px PNG and publishes it to portraits.ts; repainted only when the look, colour or loaded sheets change
     laneOwners.ts               // who owns each lane the room has watched (claim / pin walks) — the deliver walk's carrier when the ask was re-routed (lane 01M4V774MK); bounded
     mapping.ts                  // actToEvent: act/envelope → OfficeEvent (the projection)
     types.ts                    // OfficeEvent / OfficeNode / Pose / OfficeHandle
