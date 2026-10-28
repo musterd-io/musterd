@@ -8,7 +8,7 @@ them. Change the manifest first.
 | Step | Script | Where | Model calls |
 | --- | --- | --- | --- |
 | 1. Seed candidate mutants | `items.py seed` | anywhere, on a CooperBench `63b9d44` clone | none |
-| 2. Keep or drop each mutant | `keep.py` | `musterd-cooperbench` (needs docker and the task images) | none |
+| 2. Keep or drop each mutant | `keep_all.sh` (runs `keep.py` per task) | `musterd-cooperbench` (needs docker and the task images; pulls and then removes any image the volume lacks) | none |
 | 3. Draw pilot and main items | `items.py draw` | anywhere | none |
 | 4. Review | `review.py --stage pilot`, then `--stage main` | anywhere, with `OPENROUTER_API_KEY` | yes |
 | 5. Score, gate, compute `D` | `analyze.py --stage pilot`, then `--stage main` | anywhere | none |

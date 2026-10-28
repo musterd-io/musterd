@@ -1,6 +1,7 @@
 """The keep step: run each candidate mutant against its feature's tests, on the CooperBench machine.
 
-    python3 keep.py --dataset /opt/cooperbench/dataset --run <dir> [-c 6]
+    python3 keep.py --dataset /opt/cooperbench/dataset --run <dir> [-c 6] [--task <repo>/task<N>]
+    sh keep_all.sh <dir>     # every task in turn, pulling and then removing images the disk lacks
 
 Reads <dir>/candidates.jsonl and <dir>/candidates/*.patch (from `items.py seed`), and appends one
 row per candidate to <dir>/kept.jsonl. Resumable: a candidate already in kept.jsonl is skipped.
@@ -52,12 +53,15 @@ def main() -> None:
     ap.add_argument("--dataset", type=Path, required=True)
     ap.add_argument("--run", type=Path, required=True)
     ap.add_argument("-c", type=int, default=6)
+    ap.add_argument("--task", help="only this <repo>/task<N> (keep_all.sh runs one task at a time)")
     a = ap.parse_args()
 
     cands = [json.loads(l) for l in open(a.run / "candidates.jsonl") if l.strip()]
     out_path = a.run / "kept.jsonl"
     done = {json.loads(l)["id"] for l in open(out_path)} if out_path.exists() else set()
     todo = [c for c in cands if c["id"] not in done]
+    if a.task:
+        todo = [c for c in todo if c["feature"].startswith(a.task + "/")]
     print(f"{len(cands)} candidates, {len(done)} already done, {len(todo)} to run", flush=True)
 
     refs: dict[str, dict] = {}
