@@ -252,6 +252,10 @@ the build against the 8.42 MB budget.
   --dog --out packages/web/src/live/office-scene/rendered/assets --scale 1.5 --ky 0.31
 ```
 
+`--dog-coat visitor` renders the same dog in the visiting neighbour's coat (`dog.py` `COATS`: golden,
+brown patches, a blue collar) to `dog-visitor.json` / `office-art-dog-visitor.webp` and leaves the
+office dog's files alone (lane 01M5XS6DP2).
+
 `dog.py` builds the office dog the way `figure.py` builds a member: rigid parts on joint Empties, an
 action is a function of the clip's phase. It is the painter's terrier: a warm-white coat with the three
 dark patches (a material mask in the body joint's space, so a patch follows the surface), black ears,

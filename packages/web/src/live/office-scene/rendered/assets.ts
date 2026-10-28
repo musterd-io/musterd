@@ -19,6 +19,8 @@ export interface RenderedAssets {
   missing: string[];
   /** The office dog's sheet and spec (`dog.json`, increment 4), when in the build and loaded. */
   dog?: { spec: DogSpec; sheet: CanvasImageSource } | undefined;
+  /** The visiting dog's sheet (`dog-visitor.json`, lane 01M5XS6DP2), fetched only when a visit is due. */
+  visitorDog?: { spec: DogSpec; sheet: CanvasImageSource } | undefined;
   /** The member figure's sprite sheets (increment 3), when `figure.json` is in the build and loaded. */
   figure?: FigureAssets | undefined;
 }

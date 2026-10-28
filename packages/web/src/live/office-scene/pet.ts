@@ -493,6 +493,25 @@ function startErrand(pet: PetState, pickup: P, drop: P, load: 'wagon'): boolean 
   return true;
 }
 
+/**
+ * A trip for the visiting dog (lane 01M5XS6DP2): to `target`, then sit `sitFor` seconds — no
+ * minimum distance, since a visitor's script decides where it goes next, not a nap.
+ */
+export function petTrip(pet: PetState, target: P | null, sitFor: number): boolean {
+  pet.sitFor = sitFor;
+  return setOff(pet, target, 'sit-then-nap', 0);
+}
+
+/** Open floor beside `at` (see `besideSpot`), for the visitor to sit with the office dog. */
+export function petBeside(at: P): P | null {
+  return besideSpot(at);
+}
+
+/** Turn to look at `at` — a settled, full-profile look (see `faceToward`). */
+export function petLookAt(pet: PetState, at: P): void {
+  faceToward(pet, at);
+}
+
 /** How far off a destination the dog parks itself — close enough to be *with* you, not underfoot. */
 const BESIDE_OFF = 52;
 

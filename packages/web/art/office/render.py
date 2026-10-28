@@ -55,6 +55,8 @@ def args() -> dict:
             out["figure"] = True; i += 1
         elif k == "--dog":
             out["dog"] = True; i += 1
+        elif k == "--dog-coat":
+            out["dog_coat"] = argv[i + 1]; i += 2
         elif k == "--force":
             out["force"] = True; i += 1
         elif k == "--stills":
@@ -690,6 +692,10 @@ def render_dog(a: dict) -> None:
     own pixels and shelf-packed into one atlas; S, W and SW are their mirrors (lane 01M5D8EJ40)."""
     import dog
 
+    coat = a.get("dog_coat")
+    if coat:
+        dog.set_coat(coat)
+    suffix = f"-{coat}" if coat else ""
     scene.clear()
     zs = scene.z_scale(a["ky"])
     px = a["scale"]
@@ -758,7 +764,7 @@ def render_dog(a: dict) -> None:
         x, y, w, h, ox, oy = pl
         atlas[y : y + h, x : x + w] = c[0]
         cells.extend([x, y, w, h, ox, oy])
-    path = os.path.join(a["out"], "office-art-dog.png")
+    path = os.path.join(a["out"], f"office-art-dog{suffix}.png")
     write_pixels(path, atlas)
     if a["save"]:
         shutil.copy(path, a["save"])  # a PNG copy to look at before it is quantized
@@ -773,10 +779,10 @@ def render_dog(a: dict) -> None:
         "file": os.path.basename(path),
         "cells": cells,
     }
-    with open(os.path.join(a["out"], "dog.json"), "w") as fj:
+    with open(os.path.join(a["out"], f"dog{suffix}.json"), "w") as fj:
         json.dump(spec, fj, separators=(",", ":"))
         fj.write("\n")
-    print(f"dog: wrote {os.path.basename(path)} {ATLAS_W}x{atlas.shape[0]} {os.path.getsize(path)} B, dog.json, {time.time() - t0:.0f}s")
+    print(f"dog: wrote {os.path.basename(path)} {ATLAS_W}x{atlas.shape[0]} {os.path.getsize(path)} B, dog{suffix}.json, {time.time() - t0:.0f}s")
 
 
 def main() -> None:
