@@ -244,8 +244,8 @@ describe('CLI end-to-end (Scenario A: two humans on one team)', () => {
     const boToken = JSON.parse(added.out).human_credential as string;
     expect(boToken).toMatch(/^mscr_/);
 
-    // status shows both members
-    const status = await run(statusCommand, []);
+    // status shows both members (full roster is behind --all now)
+    const status = await run(statusCommand, ['--all']);
     expect(status.out).toContain('nick');
     expect(status.out).toContain('bo');
 
@@ -392,12 +392,12 @@ describe('comeback summary on status (ADR 024)', () => {
     actAs('dawn', 'bo', boToken);
 
     const status1 = await run(statusCommand, []);
-    expect(status1.out).toContain('1 request waiting for you');
+    expect(status1.out).toContain('1 waiting on you');
 
     // After bo reads the inbox (cursor advances), status no longer nags.
     await run(inboxCommand, []);
     const status2 = await run(statusCommand, []);
-    expect(status2.out).not.toContain('waiting for you');
+    expect(status2.out).not.toContain('1 waiting on you');
   });
 });
 
@@ -421,7 +421,7 @@ describe('thread-close clears the comeback summary (ADR 025)', () => {
     // bo (away) would see 1 waiting — explicit via env (ADR 036).
     actAs('dawn', 'bo', boToken);
     const before = await run(statusCommand, []);
-    expect(before.out).toContain('1 request waiting for you');
+    expect(before.out).toContain('1 waiting on you');
 
     // ...but nick (back to his auto-bound folder) resolves the thread, and bo's status goes quiet
     // without reading the inbox.
@@ -439,7 +439,7 @@ describe('thread-close clears the comeback summary (ADR 025)', () => {
 
     actAs('dawn', 'bo', boToken);
     const after = await run(statusCommand, []);
-    expect(after.out).not.toContain('waiting for you');
+    expect(after.out).not.toContain('1 waiting on you');
   });
 });
 
@@ -724,7 +724,7 @@ describe('team remove command (ADR 019)', () => {
     await run(teamCommand, ['add', 'Ada', '--kind', 'agent']);
 
     // Ada is on the roster before removal.
-    const before = await run(statusCommand, []);
+    const before = await run(statusCommand, ['--all']);
     expect(before.out).toContain('Ada');
 
     const removed = await run(teamCommand, ['remove', 'Ada']);
@@ -733,7 +733,7 @@ describe('team remove command (ADR 019)', () => {
     expect(removed.out).toContain('Ada');
 
     // ... and gone from `status` afterwards.
-    const after = await run(statusCommand, []);
+    const after = await run(statusCommand, ['--all']);
     expect(after.out).not.toContain('Ada');
 
     // Unknown (or already-removed) member → not_found (CLI exit 6).
@@ -872,7 +872,7 @@ describe('an active identity is required to act (ADR 036)', () => {
     cwdSpy.mockReturnValue(elsewhere);
 
     // `status` is a free read: it still shows the (auth-free) roster, no identity needed.
-    const status = await run(statusCommand, []);
+    const status = await run(statusCommand, ['--all']);
     expect(status.out).toContain('nick');
 
     // The stored identity is not this folder's: nothing resolves (ADR 442 §6).
