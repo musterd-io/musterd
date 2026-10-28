@@ -2497,3 +2497,18 @@ not a number worth a second PR for. A re-baseline to measured + 15% would loosen
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,500,000 B with this
   change in.
+
+## 2026-10-28 — weather at the windows and motion-tied sounds; Total JS RAISED 379,600 → 382,000 B (lanes 01M5XS6597, 01M5XS6KAD)
+
+| Budget   | Before (main) | This branch (laptop)    | Ceiling                       |
+| -------- | ------------- | ----------------------- | ----------------------------- |
+| total JS | 370.7 KB ceiling | 370.8 KB (72 chunks) | RAISED 379,600 → 382,000 B    |
+
+The weather module (`office-scene/weather.ts`: the WMO table, the hourly gate, the fetch) and
+`drawWeather` sit in the office's lazy chunk, so initial JS is untouched (147.8 KB of 148.0). Total
+JS crossed the ceiling by ~100 B locally and ~0.6 KB in CI (CI reads ~0.8 KB above local on this
+tree). The motion-tied sounds (four small synths in `soundEngine.ts`, the `MotionSound` collector in
+`actors.ts`) land in the same week and are the rest of the 2.3 KB this raise leaves. A re-baseline to
+measured + 15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 382,000 B with both lanes in.
