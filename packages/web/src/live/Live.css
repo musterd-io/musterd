@@ -9890,8 +9890,12 @@ a.lc-xp__hit:focus-visible {
   z-index: calc(var(--lc-z-overlay) + 2);
 }
 @media (max-width: 640px) {
-  .lc-here__whisper,
-    /* A phone's row sits near the left edge, where a card centred on its face runs off-screen: the
+  /* The arrival whisper has no room beside a phone's row (it sits on the left edge) — hidden, as it
+     was before the "just you here" label left the rule it shared (lane 01M62C32GC). */
+  .lc-here__whisper {
+    display: none;
+  }
+  /* A phone's row sits near the left edge, where a card centred on its face runs off-screen: the
      card hangs from the row's left instead, and loses the caret that would point at nothing. */
   .lc-here {
     position: relative;
