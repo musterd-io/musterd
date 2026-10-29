@@ -542,3 +542,115 @@
     justify-content: flex-end;
   }
 }
+
+/* Your phone (lane 01M64DSBQV): pair from /live — the QR, the phone's key, the passkey confirm. */
+.lc-pair__idle {
+  display: grid;
+  gap: var(--lc-4);
+  justify-items: start;
+}
+.lc-pair__code {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lc-6);
+  align-items: center;
+}
+.lc-pair__qr {
+  flex: none;
+  width: 168px;
+  height: 168px;
+  padding: var(--lc-3);
+  border: 1px solid var(--lc-border);
+  border-radius: var(--lc-r-md);
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.08);
+  animation: lc-pair-in var(--lc-dur-3) var(--lc-ease-out);
+}
+.lc-pair__qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.lc-pair__side {
+  display: grid;
+  gap: var(--lc-3);
+  flex: 1 1 180px;
+  justify-items: start;
+}
+.lc-pair__step,
+.lc-pair__device {
+  margin: 0;
+  font: 600 13px/1.35 var(--font-sans);
+  color: var(--lc-text);
+}
+.lc-pair__fp {
+  display: block;
+  margin: 2px 0;
+  font: 500 12px/1.3 var(--font-mono);
+  color: var(--lc-text);
+  word-break: break-all;
+}
+.lc-pair__wait {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lc-3);
+}
+.lc-pair__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lc-success);
+  animation: lc-pair-pulse 1.4s var(--lc-ease-in-out) infinite;
+}
+.lc-pair__phone {
+  display: grid;
+  gap: var(--lc-3);
+  animation: lc-pair-in var(--lc-dur-3) var(--lc-ease-out);
+}
+.lc-pair__act {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--lc-3);
+}
+.lc-pair__done {
+  display: flex;
+  gap: var(--lc-4);
+  align-items: flex-start;
+  font: 400 12.5px/1.4 var(--font-sans);
+  color: var(--lc-text);
+  animation: lc-pair-in var(--lc-dur-3) var(--lc-ease-pop);
+}
+.lc-pair__tick {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--lc-success);
+  color: #fff;
+  font: 700 13px/1 var(--font-sans);
+}
+.lc-pair__done b {
+  color: var(--lc-success-ink);
+}
+@keyframes lc-pair-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes lc-pair-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-pair__qr,
+  .lc-pair__phone,
+  .lc-pair__done,
+  .lc-pair__pulse {
+    animation: none;
+  }
+}

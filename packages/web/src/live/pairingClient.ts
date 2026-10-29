@@ -1,4 +1,4 @@
-import type { LastAskOutcome } from '@musterd/protocol';
+import type { ApprovalProof, LastAskOutcome } from '@musterd/protocol';
 import { apiGet, LiveFetchError, type LiveConfig } from './client';
 
 /**
@@ -17,12 +17,32 @@ export interface ChannelPairing {
   provider_user_id: string | null;
   expires_at: number;
   created_at: number;
+  /** ADR 676 §5: an app pairing the phone has staged — its key, and what approving enrolls. */
+  app?: {
+    fingerprint: string;
+    environment: string;
+    device_name: string | null;
+    enroll_payload: { action: 'enroll'; public_key: string; kind: 'phone' };
+  } | null;
 }
 
-async function channelPost<T>(cfg: LiveConfig, path: string): Promise<T> {
+/** A started app pairing (ADR 676 §5): the QR payload, shown once, and the daemon's fingerprint. */
+export interface AppPairingStart {
+  pairing_id: string;
+  qr: Record<string, unknown>;
+  daemon_fingerprint: string;
+  expires_at: number;
+}
+
+async function channelPost<T>(cfg: LiveConfig, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { authorization: `Bearer ${cfg.token}`, 'x-musterd-surface': 'web' },
+    headers: {
+      authorization: `Bearer ${cfg.token}`,
+      'x-musterd-surface': 'web',
+      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   const text = await res.text();
   const json = text ? JSON.parse(text) : {};
@@ -46,12 +66,25 @@ export async function fetchChannelPairings(cfg: LiveConfig): Promise<ChannelPair
   return out.pairings;
 }
 
-/** Confirm a staged pairing on /live (the original surface); creates the binding. */
-export async function confirmChannelPairing(cfg: LiveConfig, pairingId: string): Promise<unknown> {
+/**
+ * Confirm a staged pairing on /live (the original surface); creates the binding. An app pairing
+ * carries the passkey's `device_key_admin` proof over the phone key it enrolls (ADR 676 §5).
+ */
+export async function confirmChannelPairing(
+  cfg: LiveConfig,
+  pairingId: string,
+  approval?: ApprovalProof,
+): Promise<unknown> {
   return channelPost(
     cfg,
     `/teams/${encodeURIComponent(cfg.team)}/channels/pairings/${encodeURIComponent(pairingId)}/confirm`,
+    approval ? { approval } : undefined,
   );
+}
+
+/** Start an app pairing (ADR 676 §5): the same POST `musterd channels pair --channel app` makes. */
+export async function startAppPairing(cfg: LiveConfig): Promise<AppPairingStart> {
+  return channelPost(cfg, `/teams/${encodeURIComponent(cfg.team)}/channels/app/pairing`);
 }
 
 /** Per-human channel settings (away channels 6): nothing is on by default. */

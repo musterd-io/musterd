@@ -2667,3 +2667,21 @@ rest of the v2 series about 1 MB at the new encoding. Arithmetic on the files, n
 `perf:check` (no local full builds on the shared laptop).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,000,000 B with this lane in.
+
+## 2026-10-29 — pair a phone from /live; Total JS RAISED 380,000 → 387,000 B (lane 01M64DSBQV)
+
+| Budget   | Before (main) | This branch (laptop)    | Ceiling                   |
+| -------- | ------------- | ----------------------- | ------------------------- |
+| total JS | ≈ 370 KB      | 375.5 KB (384,500 B)    | RAISED 380,000 → 387,000 B |
+| initial JS | 148.0 KB    | 148.0 KB                | unchanged                 |
+
+nick: pairing a phone took two terminal steps. Settings → You → Your phone now draws the pairing QR
+and runs the passkey confirm in the browser. The QR encoder is `uqr` (ADR 761). It is imported
+inside the "Pair a phone" click, so it sits in its own 3.7 KB gzip chunk (`dist-*.js`) that loads
+only then. The panel itself rides the settings sheet's lazy chunk. Neither is in /live's eager graph,
+which is why initial JS is unchanged. Lazy-loading cannot move the total (ADR 183), and there is no
+code to delete for it: the encoder is the feature. A re-baseline to measured + 15% would loosen.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 387,000 B with this lane in,
+  and initial JS no higher than before it.
+

@@ -85,6 +85,18 @@ export async function authorityProofForPolicy(
   return authorityProofForDescriptor(cfg, 'admin.team_policy', cfg.team, stored);
 }
 
+/**
+ * Confirming an app pairing enrolls the phone's key (`device_key_admin`, ADR 676 §5): the payload
+ * is the `enroll_payload` the daemon listed for that pairing, exactly as the CLI signs it.
+ */
+export async function authorityProofForPhone(
+  cfg: LiveConfig,
+  member: string,
+  enrollPayload: unknown,
+): Promise<ApprovalProof | null> {
+  return authorityProofForDescriptor(cfg, 'device_key_admin', member, enrollPayload);
+}
+
 async function authorityProofForDescriptor(
   cfg: LiveConfig,
   act: string,
