@@ -778,11 +778,11 @@
     {
       "id": "nook/armchair",
       "file": "office-art-nook-armchair.webp",
-      "w": 178,
-      "h": 185,
+      "w": 168,
+      "h": 175,
       "anchor": {
-        "x": 86.51,
-        "y": 140.92
+        "x": 83.51,
+        "y": 130.92
       },
       "scale": 3.0
     },
@@ -800,11 +800,11 @@
     {
       "id": "nook/couch",
       "file": "office-art-nook-couch.webp",
-      "w": 270,
-      "h": 230,
+      "w": 252,
+      "h": 235,
       "anchor": {
-        "x": 133.86,
-        "y": 165.53
+        "x": 125.38,
+        "y": 172.48
       },
       "scale": 3.0
     },
@@ -910,11 +910,11 @@
     {
       "id": "reception/armchair",
       "file": "office-art-reception-armchair.webp",
-      "w": 178,
-      "h": 185,
+      "w": 168,
+      "h": 175,
       "anchor": {
-        "x": 91.16,
-        "y": 140.9
+        "x": 84.16,
+        "y": 130.9
       },
       "scale": 3.0
     },
