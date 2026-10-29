@@ -18,15 +18,15 @@ import {
  * Its own module so the rail can import it lazily: a verdict is rare, and the ceremony
  * code should not ride in every /live load.
  */
-const b64urlToBytes = (s: string): Uint8Array =>
+export const b64urlToBytes = (s: string): Uint8Array =>
   Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
-const bytesToB64url = (b: ArrayBuffer): string =>
+export const bytesToB64url = (b: ArrayBuffer): string =>
   btoa(String.fromCharCode(...new Uint8Array(b)))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
-const isLoopbackIp = (hostname: string): boolean =>
+export const isLoopbackIp = (hostname: string): boolean =>
   hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
 
 export async function authorityProofForVerdict(
@@ -95,6 +95,20 @@ export async function authorityProofForPhone(
   enrollPayload: unknown,
 ): Promise<ApprovalProof | null> {
   return authorityProofForDescriptor(cfg, 'device_key_admin', member, enrollPayload);
+}
+
+/**
+ * A further passkey for a human who already has one (`device_key_admin`, ADR 662 decision 6): the
+ * standing passkey approves the enrollment, with the payload the daemon's guard rebuilds.
+ */
+export async function authorityProofForPasskeyEnroll(
+  cfg: LiveConfig,
+  member: string,
+): Promise<ApprovalProof | null> {
+  return authorityProofForDescriptor(cfg, 'device_key_admin', member, {
+    action: 'enroll',
+    kind: 'passkey',
+  });
 }
 
 async function authorityProofForDescriptor(

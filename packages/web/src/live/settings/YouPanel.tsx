@@ -25,6 +25,7 @@ import { MyStylePart, StyleNote, useStyleEdit, type SheetNote } from '../StyleSh
 import { statusLineDraft, visibleStatusLine } from '../statusLine';
 import { Row, Segmented, Switch } from './controls';
 import { PairPhone } from './PairPhone';
+import { Passkeys } from './Passkeys';
 
 /**
  * The You side of settings: everything here is the viewer's own, and the daemon answers each route
@@ -52,6 +53,7 @@ export function YouPanel({
       {others.length > 0 && (
         <Pairings cfg={cfg} pairings={others} onChanged={onPairingsChanged} />
       )}
+      <Passkeys cfg={cfg} me={me?.name ?? null} />
       <PairPhone
         cfg={cfg}
         me={me?.name ?? null}
