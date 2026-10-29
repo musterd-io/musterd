@@ -607,8 +607,8 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     outer_body("outer/blazer", cloth_dark, drop=3.0)
     for sy in (1, -1):
         r.orb("pad", f"shoulder{"L" if sy > 0 else "R"}", "outer/blazer", cloth_dark, 0, sy * SHOULDER_W, SHOULDER + 0.2 * FIG, 4.3 * FIG, 4.4 * FIG, 2.6 * FIG)
-        r.turn(r.box("lapel", "spine", "outer/blazer", cloth, front - 0.2, sy * 2.2 * FIG, CHEST - 3 * FIG, 0.8, 2.6 * FIG, 10 * FIG),
-               (math.radians(sy * -20), 0, 0))
+        r.turn(r.box("lapel", "spine", "outer/blazer", rib, front + 0.1, sy * 2.6 * FIG, CHEST - 4 * FIG, 1.0, 3.4 * FIG, 12 * FIG),
+               (math.radians(sy * -22), 0, 0))
         r.box("pocket", "hips", "outer/blazer", cloth, 0.5 + 5.6 * FIG, sy * 5.2 * FIG, HIP - 0.5 * FIG, 0.8, 3.6 * FIG, 0.9 * FIG)
     for i in range(2):
         r.orb("button", "spine", "outer/blazer", rib, front, 0, HIP + 3.5 * FIG - i * 3.0 * FIG, 0.6, 0.6, 0.6)
@@ -617,7 +617,7 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     # elastic cuffs
     outer_body("outer/zip", drop=1.0)
     zipper = grey("fig-zip", 0.85, 0.3)
-    r.cyl("zip", "spine", "outer/zip", zipper, front + 0.1, 0, HIP - 2.2 * FIG, 0.3, 0.3, SHOULDER - HIP - 2 * FIG)
+    r.cyl("zip", "spine", "outer/zip", zipper, front + 0.2, 0, HIP - 2.2 * FIG, 0.6, 0.6, SHOULDER - HIP - 2 * FIG)
     r.orb("pull", "spine", "outer/zip", zipper, front + 0.4, 0, SHOULDER - 4.5 * FIG, 0.45, 0.6, 1.1)
     r.torus("collar", "spine", "outer/zip", cloth, HEAD_X * 0.4, 0, NECK - 2.0 * FIG, 4.6 * FIG, 1.4)
     o = r.torus("waist", "hips", "outer/zip", rib, 0.45, 0, HIP - 2.2 * FIG, 6.0 * FIG, 1.3)
