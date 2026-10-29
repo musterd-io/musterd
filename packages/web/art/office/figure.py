@@ -411,6 +411,16 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         clump("hair/bun", "wisp", HEAD_X - R * 0.62, sy * R * 0.5, HEAD_C - R * 0.42, R * 0.14, R * 0.12, R * 0.3)
     # centred well back of the face, so the face stands in front of it (it covered the face at -0.25)
     clump("hair/afro", "afro", HEAD_X - R * 0.5, 0, HEAD_C + R * 0.3, R * 1.15, R * 1.42, R * 1.32)
+    # (v2-3b) polished: the buzz gets a shaped hairline and sideburns, so it reads as a cut, not a cap;
+    # the afro gets a rounded, textured surface — smaller curls standing out of the big volume
+    clump("hair/buzz", "hairline", HEAD_X + R * 0.58, 0, HEAD_C + R * 0.62, R * 0.32, R * 0.7, R * 0.2)
+    for sy in (1, -1):
+        clump("hair/buzz", "sideburn", HEAD_X + R * 0.2, sy * R * 0.86, HEAD_C + R * 0.08, R * 0.14, R * 0.1, R * 0.26)
+    for i in range(14):
+        a, b = i * 2.399, (i % 5) / 4.0  # golden-angle round the volume, five bands top to sides
+        el = math.radians(-20 + 85 * b)
+        cx, cy, cz = HEAD_X - R * 0.5, 0, HEAD_C + R * 0.3
+        clump("hair/afro", f"curl{i}", cx + R * 1.1 * math.cos(el) * math.cos(a) * 0.8, R * 1.35 * math.cos(el) * math.sin(a), cz + R * 1.25 * math.sin(el), R * 0.32, R * 0.32, R * 0.3)
     cap("hair/bun")
     clump("hair/bun", "bun", HEAD_X - R * 0.75, 0, HEAD_C + R * 0.95, R * 0.42, R * 0.42, R * 0.42)
 
