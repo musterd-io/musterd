@@ -1,0 +1,11 @@
+# Keeps the joiner on the hub's build (main): a joiner on an older build stops the fold
+# (sync_fold_newer_build). The Linux stand-in for `musterd service install --auto`, which is launchd-only.
+[Unit]
+Description=musterd runtime refresh
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin
+ExecStart=/bin/bash %h/.musterd/runtime/deploy/second-machine/linux/refresh.sh
+StandardOutput=append:%h/.musterd/refresh.log
+StandardError=append:%h/.musterd/refresh.log

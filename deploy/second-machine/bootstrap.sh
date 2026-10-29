@@ -1,5 +1,5 @@
 #!/bin/bash
-# Second machine — a macOS laptop joins a musterd team as a federated machine (ADR 325 / 328 / 376)
+# Second machine — a macOS laptop (or a Linux VM, prepared by linux/prep-ubuntu.sh) joins a musterd team as a federated machine (ADR 325 / 328 / 376)
 # and hosts agent seats. The Mac twin of delta's cloud-seat scripts (retired 2026-10-21; the record is
 # docs/perf/cloud-seat.md, the successor deploy/cloud-agent in hub mode): the same steps
 # in the same order, with no root, no container, and launchd services where the VM has a
@@ -10,7 +10,8 @@
 #   bootstrap.sh reset --yes             # start this machine over: un-enrol, state aside, keep the build
 #
 # Run as the human (the one who created the team), from a shell whose `node` is ≥22: `musterd
-# service install` embeds that node into every plist (AGENTS.md "TRAP"). The guide is
+# service install` embeds that node into every plist (AGENTS.md "TRAP"). On Linux the services are
+# systemd --user units from linux/ instead, since `musterd service` is launchd-only. The guide is
 # docs/guides/second-machine.md; this file is its executable half.
 #
 # Env (every one has a default):
@@ -32,6 +33,8 @@ TEAM_HOME="$HOME/musterd/$MUSTERD_TEAM"
 CONFIG="$HOME/.musterd/config.json"
 LOG="$HOME/.musterd/second-machine.log"
 mkdir -p "$HOME/.musterd"
+OS="$(uname -s)"
+UNITS="$HOME/.config/systemd/user"
 
 ADMIN_DIR="$HOME/.musterd/second-machine-admin"
 # The human's member Workspace on this machine (ADR 447: ~/musterd/<team>/<repo>/<human>).
@@ -47,7 +50,8 @@ wait_local() {
 # ── preflight — what a human must have done first (the guide's "Before the script") ─────────
 preflight() {
   [ "$(id -u)" -ne 0 ] || die "run as yourself, never as root"
-  command -v tailscale >/dev/null || die "tailscale is not on PATH — the Mac app does not add its CLI: menu-bar Tailscale → Settings → Install CLI (or: sudo ln -sf /Applications/Tailscale.app/Contents/MacOS/Tailscale /usr/local/bin/tailscale)"
+  [ "$OS" = Darwin ] || [ "$OS" = Linux ] || die "unsupported OS: $OS"
+  command -v tailscale >/dev/null || die "tailscale is not on PATH — on Linux run linux/prep-ubuntu.sh as root; the Mac app does not add its CLI: menu-bar Tailscale → Settings → Install CLI (or: sudo ln -sf /Applications/Tailscale.app/Contents/MacOS/Tailscale /usr/local/bin/tailscale)"
   tailscale status >/dev/null 2>&1 || die "tailscale is not up — open the app and sign in to the same tailnet as the hub"
   local major
   major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
@@ -88,6 +92,7 @@ step_runtime() {
     # A plain shim in pnpm's global bin dir, not `pnpm link --global`: pnpm 12 removed that flag
     # (second-machine run, 2026-10-02), and the shim is all the link ever amounted to.
     local bin="${PNPM_HOME:-$HOME/Library/pnpm}"
+    [ "$OS" = Linux ] && bin="${PNPM_HOME:-$HOME/.local/share/pnpm}"
     mkdir -p "$bin"
     printf '#!/bin/sh\nexec node "%s/packages/cli/dist/bin.js" "$@"\n' "$RUNTIME" >"$bin/musterd"
     chmod +x "$bin/musterd"
@@ -99,6 +104,18 @@ step_runtime() {
 
 # ── 2. services: daemon (loopback), wake actuator, autorefresh — launchd, like the hub ───────
 step_services() {
+  if [ "$OS" = Linux ]; then
+    # `musterd service` is launchd-only: install the systemd --user twins from the runtime checkout,
+    # so a refresh that changes a unit lands on the next run of this step.
+    mkdir -p "$UNITS"
+    cp "$RUNTIME"/deploy/second-machine/linux/musterd-*.service "$RUNTIME"/deploy/second-machine/linux/musterd-*.timer "$UNITS/"
+    systemctl --user daemon-reload
+    systemctl --user enable --now musterd-daemon.service >>"$LOG" 2>&1
+    wait_local
+    systemctl --user enable --now musterd-host.service musterd-refresh.timer >>"$LOG" 2>&1
+    log "services: $(systemctl --user is-active musterd-daemon.service musterd-host.service | tr '\n' ' ')"
+    return 0
+  fi
   if ! local_health; then
     log "installing the daemon service (loopback bind — a joiner dials out, nothing dials in)"
     musterd service install >>"$LOG" 2>&1
@@ -136,7 +153,11 @@ step_team() {
       fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n"); console.log("roster root declared");
     }' "$CONFIG" "$MUSTERD_TEAM" "$TEAM_HOME" | tee -a "$LOG"
   # --force: the only session on a fresh joiner is its own wake actuator (second-machine run, 2026-10-02).
-  musterd service restart --force >>"$LOG" 2>&1
+  if [ "$OS" = Linux ]; then
+    systemctl --user restart musterd-daemon.service >>"$LOG" 2>&1
+  else
+    musterd service restart --force >>"$LOG" 2>&1
+  fi
   wait_local
   log "team $MUSTERD_TEAM: roster root $TEAM_HOME"
   # The human's own Workspace here (ADR 447): every later admin act — enrol, key, provisioning a
@@ -254,10 +275,14 @@ $others"
 
   log "stopping this machine's musterd services"
   local label
-  for label in studio.sandrise.musterd-host studio.sandrise.musterd-autorefresh studio.sandrise.musterd; do
-    launchctl bootout "gui/$(id -u)/$label" >>"$LOG" 2>&1 || true
-    rm -f "$HOME/Library/LaunchAgents/$label.plist"
-  done
+  if [ "$OS" = Linux ]; then
+    systemctl --user disable --now musterd-refresh.timer musterd-host.service musterd-daemon.service >>"$LOG" 2>&1 || true
+  else
+    for label in studio.sandrise.musterd-host studio.sandrise.musterd-autorefresh studio.sandrise.musterd; do
+      launchctl bootout "gui/$(id -u)/$label" >>"$LOG" 2>&1 || true
+      rm -f "$HOME/Library/LaunchAgents/$label.plist"
+    done
+  fi
   for _ in $(seq 1 20); do local_health || break; sleep 1; done
   ! local_health || die "a daemon is still answering on :${MUSTERD_HUB_PORT} — stop it (launchctl list | grep musterd) and re-run"
 
