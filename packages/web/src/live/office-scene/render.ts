@@ -1257,6 +1257,33 @@ function weatherRnd(n: number): number {
 /** How long a struck bar swings, seconds — the bar voice's decay (`strikeBar`, 1.8 s). */
 export const CHIME_SWING_S = 1.8;
 
+/** How far a desk chair rolls back from its seated spot when it is pulled out (logical units). */
+export const CHAIR_PULL = 16;
+/** Within this distance of their chair a member has it pulled out; past `CHAIR_FAR` it is home. */
+const CHAIR_NEAR = 30;
+const CHAIR_FAR = 110;
+
+/**
+ * How far a desk chair stands pulled out from where its sitter sits, on top of `CHAIR_OFF` (the
+ * chair beats' own roll-back is separate). A member walking up finds the chair easing back from the
+ * desk ahead of them; it rolls in under them through the sit-down blend, back out as they rise, and
+ * home again once they have walked off. `peek` is the vacant chair's resting pull (the facing-viewer
+ * desk that would otherwise hide it), which fades through the sit the same way, so nothing snaps.
+ * Pure in the pose, so the chair can never disagree with the body it is under.
+ */
+export function chairPull(pose: Pose | undefined, seat: { lx: number; ly: number }, peek: number): number {
+  if (!pose) return peek;
+  if (pose.sit > 0.9) return 0;
+  const s = pose.sit / 0.9;
+  let near = 1;
+  if (pose.sit === 0) {
+    const d = Math.hypot(pose.lx - seat.lx, pose.ly - seat.ly);
+    const k = Math.max(0, Math.min(1, (CHAIR_FAR - d) / (CHAIR_FAR - CHAIR_NEAR)));
+    near = k * k * (3 - 2 * k);
+  }
+  return Math.max(CHAIR_PULL * near * (1 - s), peek * (1 - s));
+}
+
 /** A struck bar's angle off plumb at `dt` seconds after the strike, radians: a damped swing that
  *  starts at the hit and dies with the note. Pure, so the test can hold its shape. */
 export function chimeSwing(dt: number): number {
@@ -4252,19 +4279,21 @@ export function deskStationItems(
   // owner is away. Facing is measured on screen, not guessed from the dir name.
   const fScreen =
     project(slot.lx + f[0] * 10, slot.ly + f[1] * 10, fit).y - project(slot.lx, slot.ly, fit).y;
-  const vacantPeek = !seated && fScreen > 0 ? 16 : 0;
-  const cx = slot.lx - f[0] * (CHAIR_OFF + shift + vacantPeek);
-  const cy = slot.ly - f[1] * (CHAIR_OFF + shift + vacantPeek);
+  const vacantPeek = fScreen > 0 ? 16 : 0;
+  // Pulled out as the owner walks up, rolled in through the sit, back out as they rise (`chairPull`).
+  const pull = chairPull(ownerPose, { lx: slot.lx - f[0] * CHAIR_OFF, ly: slot.ly - f[1] * CHAIR_OFF }, vacantPeek);
+  const cx = slot.lx - f[0] * (CHAIR_OFF + shift + pull);
+  const cy = slot.ly - f[1] * (CHAIR_OFF + shift + pull);
   const bdx = -f[0] * CHAIR_BACK_OFF;
   const bdy = -f[1] * CHAIR_BACK_OFF;
   const bx = cx + bdx * Math.cos(yaw) - bdy * Math.sin(yaw);
   const by = cy + bdx * Math.sin(yaw) + bdy * Math.cos(yaw);
   const chairColor = node ? hslL(node.color, 0.5) : '#4a5560';
-  /* A chair at rest is furniture, so it is a sprite keyed on where it rests (seated or vacant) and its
-     colour. Mid-beat (a roll-back, a swivel) it moves every frame, and a sprite per position would
+  /* A chair at rest is furniture, so it is a sprite keyed on where it rests (seated, vacant or pulled
+     out) and its colour. Mid-beat (a roll-back, a swivel, a pull) it moves every frame, and a sprite per position would
      only churn the cache, so it paints live until the beat ends. */
-  const resting = shift === 0 && yaw === 0;
-  const chairKey = `chair·${slot.id}·${vacantPeek}·${chairColor}·${statKey}`;
+  const resting = shift === 0 && yaw === 0 && (pull === 0 || pull === vacantPeek || pull === CHAIR_PULL);
+  const chairKey = `chair·${slot.id}·${pull}·${chairColor}·${statKey}`;
   // The rendered chair (lane 01M5D8EJ40): the kind's sprite, tinted with the chair colour. The base
   // (a star) is the same from every side, so one image per seat axis; the back curves round the sitter
   // and reclines (office v3-4), so it has one image per facing.

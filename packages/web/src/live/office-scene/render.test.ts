@@ -70,7 +70,7 @@ import {
 } from './render';
 import type { Weather } from './weather';
 import { assignSeats } from './seating';
-import { CHIME_SWING_S, chimeSwing, type RenderOpts } from './render';
+import { CHAIR_PULL, chairPull, CHIME_SWING_S, chimeSwing, type RenderOpts } from './render';
 import type { OfficeNode, Pose, WelcomePaint } from './types';
 import { projectWallBoard, type WallBoard } from './wallboard';
 import { fmtOps, recordingCtx, type RecordedOp } from './recording-ctx';
@@ -2256,5 +2256,30 @@ describe('the shelf chimes swing (sound identity inc 4)', () => {
     expect(Math.abs(chimeSwing(0.15))).toBeGreaterThan(0.1);
     expect(Math.abs(chimeSwing(CHIME_SWING_S - 0.01))).toBeLessThan(0.05);
     expect(chimeSwing(CHIME_SWING_S)).toBe(0);
+  });
+});
+
+describe('chairPull — the desk chair pulled out and tucked in around its sitter', () => {
+  const seat = { lx: 100, ly: 100 };
+  const pose = (sit: number, lx = 100, ly = 100) => ({ lx, ly, sit }) as Pose;
+  it('is home when seated, and when the owner is far off', () => {
+    expect(chairPull(pose(1), seat, 0)).toBe(0);
+    expect(chairPull(pose(0, 400, 100), seat, 0)).toBe(0);
+  });
+  it('is pulled out as the owner stands at it, and eases on the walk up', () => {
+    expect(chairPull(pose(0), seat, 0)).toBe(CHAIR_PULL);
+    const mid = chairPull(pose(0, 170, 100), seat, 0);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(CHAIR_PULL);
+  });
+  it('rolls in through the sit-down with no jump at either end', () => {
+    expect(chairPull(pose(0.45), seat, 0)).toBeCloseTo(CHAIR_PULL / 2);
+    expect(chairPull(pose(0.9), seat, 0)).toBeCloseTo(0);
+    expect(chairPull(pose(0.0001), seat, 0)).toBeCloseTo(CHAIR_PULL, 2);
+  });
+  it('keeps the vacant peek for an absent owner, fading it through the sit', () => {
+    expect(chairPull(undefined, seat, 16)).toBe(16);
+    expect(chairPull(pose(0, 400, 100), seat, 16)).toBe(16);
+    expect(chairPull(pose(0.9), seat, 16)).toBeCloseTo(0);
   });
 });
