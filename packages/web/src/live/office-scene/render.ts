@@ -3650,11 +3650,16 @@ export function drawWorkstation(
     const sp = PROP_SPEC[kind];
     at(sp.along, sp.across, (ix, iy) => {
       switch (kind) {
-        case 'coffee':
+        case 'coffee': {
+          // Rendered (ADR 755): a Meshy mug per MUGS glaze, full while its member is at the desk.
+          const mug = `desk/mug-${MUGS.indexOf(deskMugColor(id))}-${node != null ? 'full' : 'empty'}`;
+          if (blitIf(ctx, fit, rendered, mug, ix, iy)) return;
           return deskCoffee(ctx, fit, ix, iy, up, deskMugColor(id), node != null);
+        }
         case 'water':
           return deskWater(ctx, fit, ix, iy, up);
         case 'plant':
+          if (blitIf(ctx, fit, rendered, 'desk/plant', ix, iy)) return; // a Meshy succulent (ADR 755)
           return deskPlant(ctx, fit, ix, iy, up);
         case 'photo':
           return deskPhoto(

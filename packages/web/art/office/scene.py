@@ -782,10 +782,11 @@ def nook_cooler(asset_id: str, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, lx, ly, col)
 
 
-def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing: str, mats: list, split, zs: float) -> bpy.types.Object:
+def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing: str, mats: list, split, zs: float, up: float = 0.0) -> bpy.types.Object:
     """A Meshy prop (ADR 755): `meshes/<name>.glb` imported, turned to `facing` (the meshes face -y as
     generated), scaled so its width across the facing axis is `across`, re-materialed with the room's
-    own `mats` — `split(z_frac, poly)` picks each face's index — smooth-shaded, and seated by its bounds:
+    own `mats` — `split(z_frac, poly)` picks each face's index — smooth-shaded, and seated by its bounds at
+    height `up`:
     an imported mesh's origin is not its foot (docs/wiki/meshy-props.md)."""
     bpy.ops.object.select_all(action="DESELECT")
     bpy.ops.import_scene.gltf(filepath=os.path.join(os.path.dirname(os.path.abspath(__file__)), "meshes", f"{name}.glb"))
@@ -814,7 +815,7 @@ def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing:
         p.material_index = split(((m.matrix_world @ p.center).z - z0) / (z1 - z0), p)
         p.use_smooth = True
     foot = Vector(((min(v.x for v in vs) + max(v.x for v in vs)) / 2, (min(v.y for v in vs) + max(v.y for v in vs)) / 2, z0))
-    m.location = Vector((lx, ly, 0.0)) - foot
+    m.location = Vector((lx, ly, up * zs)) - foot
     return m
 
 
@@ -1547,6 +1548,32 @@ def desk_note(asset_id: str, ky: float, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, C, C, col)
 
 
+# The desk mug's colours, in `render.ts` MUGS order — `desk/mug-<i>-full|empty` is MUGS[i].
+MUGS = ("#d6d0c6", "#c95c4a", "#3d6b8f", "#e0a72b", "#5f8a5a")
+
+
+def desk_mug(asset_id: str, colour: str, full: bool, zs: float, col) -> bpy.types.Object:
+    """The desk coffee mug — a Meshy mesh (ADR 755, `meshes/desk-mug.json`) in one of the MUGS glazes,
+    11 across like the painted one it replaces. Full (its member is at the desk) shows the coffee;
+    empty shows the glaze's own shadowed inside."""
+    C = FLOOR / 2
+    glaze = matte(f"mug-{colour}", srgb(colour), 0.35)
+    inside = matte("coffee", srgb("#3a2416"), 0.2) if full else glaze
+    m = meshy(asset_id, "desk-mug", C, C, 11, "S", [glaze, inside],
+              lambda z, p: 1 if 0.6 < z < 0.97 and p.normal.z > 0.9 else 0, zs, DESK_UP)
+    return finish(asset_id, [m], C, C, col)
+
+
+def desk_plant(asset_id: str, zs: float, col) -> bpy.types.Object:
+    """The desk plant — a Meshy succulent (ADR 755, `meshes/desk-plant.json`) in a terracotta pot, 14
+    across, standing where the painted pot-and-ellipses one did."""
+    C = FLOOR / 2
+    pot = paint("pot", srgb("#b9603a"), rough=0.7)
+    leaf = paint("succulent", srgb("#6f9a58"), rough=0.55)
+    m = meshy(asset_id, "desk-plant", C, C, 14, "S", [pot, leaf], lambda z, p: 0 if z < 0.6 else 1, zs, DESK_UP)
+    return finish(asset_id, [m], C, C, col)
+
+
 def desk_folder(asset_id: str, sn: bool, zs: float, col) -> bpy.types.Object:
     """A manila folder lying on the desk's front lip — a handoff waits for this member. The papers
     peek out past the cover on the room side; the tab past the back edge says folder, not pad."""
@@ -1859,6 +1886,10 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     for frame in range(4):
         a[f"desk/fan-{frame}"] = desk_fan(f"desk/fan-{frame}", frame, zs, export)
     a["desk/note"] = desk_note("desk/note", ky, zs, export)
+    for i, colour in enumerate(MUGS):
+        for state, full in (("full", True), ("empty", False)):
+            a[f"desk/mug-{i}-{state}"] = desk_mug(f"desk/mug-{i}-{state}", colour, full, zs, export)
+    a["desk/plant"] = desk_plant("desk/plant", zs, export)
     for axis, sn in (("sn", True), ("ew", False)):
         a[f"desk/folder-{axis}"] = desk_folder(f"desk/folder-{axis}", sn, zs, export)
         a[f"desk/tray-{axis}"] = desk_tray(f"desk/tray-{axis}", sn, 1, zs, export)
