@@ -53,7 +53,7 @@ HEAD_X = 1.6 * FIG
 CROWN = HEAD_C + HEAD_R * 1.04
 
 # ── layers ─────────────────────────────────────────────────────────────────────────────────
-HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun", "slicked"]
+HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun", "slicked", "curly"]
 FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band", "bucket"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
@@ -431,6 +431,17 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         clump("hair/slicked", f"comb{i}", HEAD_X - R * 0.15, y * R, HEAD_C + R * 0.88, R * 0.75, R * 0.26, R * 0.22, (0, math.radians(14), 0))
     clump("hair/slicked", "ridge", HEAD_X - R * 0.35, 0, HEAD_C + R * 1.0, R * 0.55, R * 0.6, R * 0.2)
     clump("hair/slicked", "nape", HEAD_X - R * 0.8, 0, HEAD_C - R * 0.15, R * 0.3, R * 0.7, R * 0.45)
+
+    # (v2-3c) new: curly — a close cap covered in tight curls, a little fuller at the crown and sides,
+    # clear of the face (relaxed pool)
+    cap("hair/curly", 1.02)
+    for i in range(22):
+        a, b = i * 2.399, (i % 6) / 5.0
+        el = math.radians(-5 + 80 * b)
+        x, y = math.cos(el) * math.cos(a), math.cos(el) * math.sin(a)
+        if x > 0.55 and el < math.radians(45):
+            continue  # the face
+        clump("hair/curly", f"curl{i}", HEAD_X - R * 0.22 + R * 0.98 * x, R * 1.0 * y, HEAD_C + R * 0.14 + R * 1.02 * math.sin(el), R * 0.24, R * 0.24, R * 0.22)
 
     # ── facial hair (v2-3a, spec §2.4): each style is one fused group that follows the jaw, with a
     # trimmed and an untrimmed beard. Every piece is tinted with the hair colour at draw time; the
