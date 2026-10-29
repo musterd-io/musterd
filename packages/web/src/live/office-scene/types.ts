@@ -3,6 +3,7 @@ import type { SeatPulse } from '../pulse';
 import type { Caption } from '../captions';
 import type { ActTone } from '../format';
 import type { Addressee, SpeechMarking } from './speech';
+import type { DeskWaiting } from './deskWaiting';
 import type { WallBoard } from './wallboard';
 
 /** Facing on the isometric floor. S = toward the viewer (front), N = away, E/W = profiles. */
@@ -51,6 +52,8 @@ export interface OfficeNode {
   moreLanes: number;
   /** Owns a lane that is blocked (briefing inc 2b) — a small flag on the plate. */
   blocked?: boolean;
+  /** What is waiting at their desk right now — a note, a folder or a tray (deskWaiting.ts). */
+  waiting?: DeskWaiting | null;
   /** ADR 721: a human's own status line while it lasts — the plate's colour footer. Never on an agent. */
   statusLine?: { text: string; expiresAt: number } | null;
   /** Self-set do-not-disturb (ADR 044) — at their desk, headphones on, never walked to (§4). */

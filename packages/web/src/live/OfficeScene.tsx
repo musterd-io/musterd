@@ -18,6 +18,7 @@ import { stalledLaneIds } from './briefing';
 import { experimentEntries } from './experimentReads';
 import { nextStatusExpiry, visibleStatusLine } from './statusLine';
 import { projectWallBoard } from './office-scene/wallboard';
+import { deskWaitingFor, openHandoffs } from './office-scene/deskWaiting';
 
 /** The key (ADR 464 §3.4) is a corner card a viewer reads once; it rides a lazy chunk so the words
  *  cost /live's eager graph nothing (ADR 151/183 — initial JS sat exactly at its ceiling). */
@@ -88,6 +89,12 @@ function computeData(
   // ADR 449's `sponsored_by` is a member ID; the welcome caption says the sponsor's NAME.
   const nameById = new Map(roster.map((m) => [m.id, m.name]));
   const blocked = blockedOwners(board);
+  // What waits at each desk (lane 01M5XS6ARW): an unanswered handoff, open review asks routed there.
+  const handoffs = openHandoffs(envelopes, now);
+  const reviews = new Map<string, number>();
+  for (const a of asks)
+    if (a.to !== null && askIsLoud(a.state) && a.env.meta?.['lane_review'] != null)
+      reviews.set(a.to, (reviews.get(a.to) ?? 0) + 1);
   return {
     teamName,
     teamWorkingHours,
@@ -133,6 +140,7 @@ function computeData(
         workSource: entry?.source ?? null,
         laneState: entry?.laneState ?? null,
         blocked: blocked.has(m.name),
+        waiting: deskWaitingFor(m.name, blocked.has(m.name), handoffs, reviews),
         statusLine: visibleStatusLine(m, now),
         moreLanes: entry?.moreLanes ?? 0,
         dnd: m.availability?.status === 'dnd',

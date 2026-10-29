@@ -14,6 +14,7 @@ import type { sendAct } from '../live/client';
 import type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode } from '../live/office-scene';
 import { spritesFromUrl } from './broadcast';
 import { projectWallBoard } from '../live/office-scene/wallboard';
+import type { DeskWaiting } from '../live/office-scene/deskWaiting';
 
 // `?promptbar`: the /live composer on the preview floor, so it can be looked at without a signed-in
 // admin seat (on /live it mounts only for one). There is no daemon here, so its sends go to a fake that
@@ -440,6 +441,20 @@ function OfficePreviewPage() {
     return raw ? new Set(raw.split(',').map((s) => s.trim())) : new Set();
   });
 
+  // `?waiting=<name>:blocked,<name>:handoff,<name>:review2` puts a desk prop on those desks (lane 01M5XS6ARW),
+  // so the note, the folder and the tray can be looked at without a timeline that produces them.
+  const [waitingSet] = useState<Map<string, DeskWaiting>>(() => {
+    const out = new Map<string, DeskWaiting>();
+    for (const part of (previewSearch().get('waiting') ?? '').split(',')) {
+      const [name, what = ''] = part.split(':').map((s) => s.trim());
+      if (!name) continue;
+      if (what === 'blocked') out.set(name, { kind: 'blocked' });
+      else if (what === 'handoff') out.set(name, { kind: 'handoff', from: 'nick' });
+      else if (what.startsWith('review')) out.set(name, { kind: 'review', count: Number(what.slice(6)) || 1 });
+    }
+    return out;
+  });
+
   // `?offline=<names>` marks members offline (owned desks, presence-honesty §4) — `off=<name>:disconnected`
   // shape is not supported; the first name gets `disconnected` so the amber glint is visible in preview.
   const [offlineSet] = useState<Set<string>>(() => {
@@ -536,6 +551,8 @@ function OfficePreviewPage() {
             woken: WOKEN.has(m.name) && !isOffline,
             dreaming: dreamSet.has(m.name) && !isOffline,
             dnd: dndSet.has(m.name) && !isOffline,
+            blocked: waitingSet.get(m.name)?.kind === 'blocked',
+            waiting: waitingSet.get(m.name) ?? null,
             // ADR 721: one human with a status line, so the plate's colour footer is on the preview.
             statusLine:
               m.name === 'Ada' ? { text: 'assembling a new dresser for the nursery', expiresAt: Date.now() + 3_600_000 } : null,
@@ -554,7 +571,7 @@ function OfficePreviewPage() {
       ],
       ...(previewSearch().has('board') ? { wallBoard: fixtureBoard(boardEdits) } : {}),
     }),
-    [teamName, present, away, idle, stale, offlineSet, dndSet, dreamSet, newcomers, devRole, boardEdits],
+    [teamName, present, away, idle, stale, offlineSet, dndSet, dreamSet, waitingSet, newcomers, devRole, boardEdits],
   );
   const dataRef = useRef(buildData);
   // Synced in an effect, not during render — see OfficeScene: the mount effect subscribes once and

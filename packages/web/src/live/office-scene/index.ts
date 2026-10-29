@@ -18,6 +18,7 @@ import { surfaceGlyph } from '../surfaceGlyph';
 import { createActors, type Actors,
   conversationLooks,
 } from './actors';
+import { deskWaitingLine } from './deskWaiting';
 import { solidHit, walkable } from './nav';
 import {
   plateCoversBoard, layoutPlates, leaderFrom, type PlateBox, type PlateMemo } from './plateLayout';
@@ -1593,6 +1594,20 @@ export function mountOffice(
             segEl.textContent = part.text;
           }
           detailIn.appendChild(segEl);
+        }
+        // What waits at their desk, in words (lane 01M5XS6ARW) — the folder and the tray are pictures,
+        // and a blocked lane already has its pennant on the plate face.
+        if (node.waiting && node.waiting.kind !== 'blocked') {
+          if (detailIn.children.length > 0) {
+            const divider = document.createElement('span');
+            divider.className = 'lc-gl-label__rule';
+            divider.setAttribute('aria-hidden', 'true');
+            detailIn.appendChild(divider);
+          }
+          const waitEl = document.createElement('span');
+          waitEl.className = 'lc-gl-label__seg lc-gl-label__seg--waiting';
+          waitEl.textContent = deskWaitingLine(node.waiting);
+          detailIn.appendChild(waitEl);
         }
         // Each child carries its own position so ONE css rule can stagger them. Five nth-child rules
         // did the same job and cost enough gzip to sit on the CSS budget's ceiling.
