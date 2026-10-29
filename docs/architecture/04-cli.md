@@ -815,11 +815,11 @@ When `--authorized-by` is present on `submit` or `resolve`, the CLI requires the
 | 4    | unauthorized (bad/missing token)                | `unauthorized` |
 | 5    | forbidden                                       | `forbidden`    |
 | 6    | not found (team/member)                         | `not_found`    |
-| 7    | server unreachable (daemon down)                | (connection)   |
+| 7    | server unreachable, or a write interrupted      | (connection)   |
 | 9    | conflict (name/slug taken)                      | `conflict`     |
 | 10   | member already active elsewhere (single-active) | `member_busy`  |
 
-`state/server-down`, `state/no-team`, `state/unknown-member` frames map to exits 7, 2, 6 respectively. Every error prints `✗ <message>` in red to stderr and exits with the code above.
+`state/server-down`, `state/no-team`, `state/unknown-member` frames map to exits 7, 2, 6 respectively. Exit 7 has two messages. A read, or a write whose connection never opened (refused, DNS), says `can't reach team server at <url> — is the daemon running?`. A write whose connection dropped after it opened (reset, timeout) may already have been processed, so it says `<METHOD> <path> lost its connection to <url> before the reply — the write may or may not have happened` and names the reads that show whether it landed (`musterd status`, `musterd inbox --all`, `musterd lane show <id>`). It is never retried, and `isDaemonUnreachable` does not count it as unreachable. Every error prints `✗ <message>` in red to stderr and exits with the code above.
 
 ## Acceptance tests (`06-testing.md`)
 

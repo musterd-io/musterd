@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HttpClient } from './client.js';
-import { RETRY_DELAYS_MS, connectionNeverEstablished, worthRetrying } from './errors.js';
+import { HttpClient, isDaemonUnreachable } from './client.js';
+import {
+  CliError,
+  RETRY_DELAYS_MS,
+  connectionNeverEstablished,
+  transportError,
+  worthRetrying,
+} from './errors.js';
 
 /*
  * The CLI carries acts for hooks and humans over the same HTTP path the MCP adapter uses, so it needs
@@ -45,7 +51,7 @@ describe('HttpClient retries a WRITE across a daemon bounce', () => {
     const fn = vi.fn().mockRejectedValue(fetchError('ECONNRESET'));
     vi.stubGlobal('fetch', fn);
 
-    await expect(write()).rejects.toThrow(/can't reach team server/);
+    await expect(write()).rejects.toThrow(/may or may not have happened/);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
@@ -56,6 +62,51 @@ describe('HttpClient retries a WRITE across a daemon bounce', () => {
     // The retry must not swallow the diagnosis a human depends on when the daemon really is stopped.
     await expect(write()).rejects.toThrow(/is the daemon running/);
     expect(fn).toHaveBeenCalledTimes(RETRY_DELAYS_MS.length + 1);
+  });
+});
+
+describe('an interrupted WRITE says its outcome is unknown, not that the daemon is down', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const failure = async (err: unknown) => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(err));
+    return (await write().catch((e: unknown) => e)) as CliError;
+  };
+
+  it('names the route and how to check, exit 7, for a reset connection', async () => {
+    const err = await failure(fetchError('ECONNRESET'));
+    expect(err).toBeInstanceOf(CliError);
+    expect(err.exitCode).toBe(7);
+    expect(err.message).toMatch(/^POST \/teams\/revive\/\S+ lost its connection to http:\/\/x/);
+    expect(err.message).toContain('may or may not have happened');
+    expect(err.message).toContain('Check before re-running it');
+    expect(err.message).not.toMatch(/is the daemon running/);
+    // An interrupted write is not an unreachable daemon: best-effort probes must not read it as one.
+    expect(isDaemonUnreachable(err)).toBe(false);
+  });
+
+  it('treats a timed-out write the same way — a slow server may still have acted', async () => {
+    const err = await failure(
+      new DOMException('The operation was aborted due to timeout', 'TimeoutError'),
+    );
+    expect(err.message).toContain('may or may not have happened');
+  });
+
+  it('keeps the plain unreachable error for a write that never connected', async () => {
+    const err = await failure(fetchError('ENOTFOUND'));
+    expect(err.message).toMatch(/can't reach team server at http:\/\/x/);
+    expect(isDaemonUnreachable(err)).toBe(true);
+  });
+
+  it('rethrows a failure that is not a transport error untouched', () => {
+    const boom = new Error('boom');
+    expect(transportError(boom, 'POST', 'http://x', '/a')).toBeUndefined();
+  });
+
+  it('names the path, never the query string', () => {
+    const err = transportError(fetchError('ECONNRESET'), 'POST', 'http://x', '/a/b?token=t');
+    expect(err?.message).toContain('POST /a/b lost');
+    expect(err?.message).not.toContain('token');
   });
 });
 

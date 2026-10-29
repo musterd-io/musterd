@@ -173,8 +173,8 @@ import {
   RETRY_DELAYS_MS,
   connectionNeverEstablished,
   exitForCode,
-  isConnRefused,
   schemaError,
+  transportError,
   worthRetrying,
 } from './errors.js';
 import { workspaceGuidanceEpoch } from './guidanceAttestation.js';
@@ -750,13 +750,7 @@ export class HttpClient {
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
     } catch (err) {
-      if (isConnRefused(err)) {
-        throw new CliError(
-          `can't reach team server at ${this.opts.server} — is the daemon running? (musterd serve)`,
-          7,
-        );
-      }
-      throw err;
+      throw transportError(err, method, this.opts.server, path) ?? err;
     }
     const text = await res.text();
     // `any` as before: JSON.parse returned it, and this method's callers type their own result.
@@ -2619,13 +2613,7 @@ export class HttpClient {
         body: JSON.stringify(body),
       });
     } catch (err) {
-      if (isConnRefused(err)) {
-        throw new CliError(
-          `can't reach team server at ${this.opts.server} — is the daemon running? (musterd serve)`,
-          7,
-        );
-      }
-      throw err;
+      throw transportError(err, 'POST', this.opts.server, `/teams/${slug}/claim`) ?? err;
     }
     const text = await res.text();
     const json = parseReplyBody(res, text, this.opts.server, 'POST', `/teams/${slug}/claim`);
