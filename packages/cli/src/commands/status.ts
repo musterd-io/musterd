@@ -10,10 +10,13 @@ import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
 import { findBinding } from '../config.js';
 import { huddleMarks, TIMELINE_WINDOW } from '../render/huddles.js';
 import {
+  type DailyWarning,
+  renderDailyView,
   renderMachineLine,
   renderPendingSummary,
   renderRoster,
   renderStatusHeader,
+  sameCommit,
 } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { traceDepth, tracedLine } from '../trace/hook.js';
@@ -47,6 +50,15 @@ import { renderMemoryLine } from './memory.js';
  * without being declared fails the build instead of working in the field.
  */
 export const STATUS_FLAGS = ['resumable', 'session', 'wakeable', 'all', 'verbose'] as const;
+
+/**
+ * The daily view's width: the terminal's columns, or `COLUMNS` when output is piped (so a seat can
+ * check the 40-column layout from a shell), clamped to the frames' 40–80.
+ */
+function dailyWidth(): number {
+  const cols = process.stdout.columns ?? Number(process.env['COLUMNS'] ?? 80);
+  return Math.max(40, Math.min(80, Number.isFinite(cols) && cols > 0 ? cols : 80));
+}
 
 export async function statusCommand(parsed: Parsed): Promise<number> {
   // A flag this command does not know would take the NEXT argument as its value and drop it
@@ -84,92 +96,88 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
   const brief = explicit && identity ? await http.next(team).catch(() => undefined) : undefined;
   const memory =
     explicit && identity ? await http.getMemoryEnvelope(team).catch(() => undefined) : undefined;
-  const daily: string[] = [];
-  if (identity) {
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    daily.push(theme.meta(`musterd · ${team} · ${hh}:${mm}`));
-    daily.push(`you are ${theme.accent(identity.name)} · ${mine?.kind ?? 'agent'}`);
-    if (memory) daily.push(theme.dim(renderMemoryLine(memory, Date.now(), { compact: true })));
+  // The hub cannot be read: up next would be a stale list, and the team line is only as fresh as
+  // the last good sync — the view says so instead (frame 27-8).
+  const hubLink = res.sync?.hub_link ?? undefined;
+  const hubDown = !!hubLink && hubLink.failing_since !== null;
+  const blockedLanes =
+    explicit && identity && !hubDown
+      ? await http
+          .laneBoard(team, { q: 'state:blocked' })
+          .then((b) => b.lanes.filter((l) => l.owner_seat && l.owner_seat !== identity.name))
+          .catch(() => [])
+      : [];
+  const kindOf = (name: string) =>
+    res.members.find((m) => m.name === name)?.kind ?? ('agent' as const);
+  const warnings: DailyWarning[] = [];
+  if (hubDown)
+    warnings.push({ line: describeHubLink(hubLink, Date.now()).line, fix: 'musterd node list' });
+  // ADR 135 self-check: build skew is a diagnostic, so it surfaces even in the daily view.
+  const cli = cliBuild();
+  if (cli && health?.build && !sameCommit(cli, health.build)) {
+    warnings.push({
+      line: `⚠ your CLI build (${cli.slice(0, 7)}) differs from the daemon (${health.build.slice(0, 7)})`,
+      fix: 'rebuild your checkout (pnpm build)',
+    });
   }
-  const ACT_WORD: Record<string, string> = {
-    ask: 'asks',
-    request_help: 'needs help',
-    handoff: 'hands you',
-    steer: 'redirects you',
-    challenge: 'questions',
-    message: 'wrote',
-  };
-  if (pending) {
-    daily.push('');
-    daily.push(theme.warn(`\u2691 ${pending.count} waiting on you`));
-    for (const a of (pending.waiting ?? []).slice(0, 3)) {
-      const who = a.from ?? '?';
-      const verb = ACT_WORD[a.act ?? 'message'] ?? a.act ?? 'wrote';
-      const gist = (a.body ?? '').slice(0, 40).replace(/\n/g, ' ');
-      daily.push(`  ${theme.accent(who)} · ${verb}: ${gist}`);
-    }
-    if ((pending.waiting?.length ?? 0) > 3)
-      daily.push(theme.dim(`  +${(pending.waiting?.length ?? 0) - 3} more · musterd inbox`));
-    daily.push(theme.dim('  → musterd inbox'));
-  } else {
-    daily.push('');
-    daily.push(theme.dim('\u2691 nothing waiting on you'));
-  }
-  const inFlight = brief?.in_flight ?? [];
-  daily.push('');
-  if (inFlight.length === 0) {
-    daily.push(theme.dim('You hold no lanes.'));
-    if (brief?.up_next?.length)
-      daily.push(theme.dim(`pick one up  musterd lane claim ${brief.up_next[0]!.id}`));
-  } else {
-    daily.push(`◆ your work  ${inFlight.length}`);
-    for (const lane of inFlight.slice(0, 3)) {
-      daily.push(`  ${lane.state ?? 'active'} · ${lane.title}`);
-    }
-    if (inFlight.length > 3)
-      daily.push(theme.dim(`  +${inFlight.length - 3} more · musterd lanes --mine`));
-  }
-  const upNext = brief?.up_next ?? [];
-  const upLimit = (process.stdout.columns ?? 80) < 60 ? 1 : 2;
-  if (upNext.length > 0) {
-    daily.push('');
-    daily.push('○ up next');
-    for (const lane of upNext.slice(0, upLimit)) {
-      daily.push(`  ${lane.title} — ${lane.id}`);
-    }
-    if (upNext.length > upLimit)
-      daily.push(theme.dim(`  +${upNext.length - upLimit} more · musterd next`));
-    daily.push(theme.dim('  → musterd next'));
-  }
-  // Partial: an older daemon that lacks a section says so (ADR 490 pattern).
-  if (!brief && explicit && identity) daily.push(theme.dim('lanes: not reported by this daemon'));
-  if (!health) daily.push(theme.dim('health: not reported by this daemon'));
-  const hereCount = res.members.filter((m) => m.presence !== 'offline').length;
-  const onlineCount = res.members.filter((m) => m.presence === 'online').length;
-  daily.push('');
-  daily.push(`team ${hereCount} here · ${onlineCount} online`);
-  // All-quiet check.
-  if (inFlight.length === 0 && (pending?.count ?? 0) === 0 && upNext.length === 0) {
-    daily.push(theme.dim('All quiet. musterd next shows open work.'));
-  }
-  // ADR 135 self-check: build skew is a diagnostic, so it surfaces even in the daily view
-  // (sloane: ⚠ lines only when something is wrong, ending with the fix command).
-  if (cliBuild() && health?.build && cliBuild() !== health.build) {
-    // sameCommit logic from rows.ts: ignore -dirty suffix
-    const cli = cliBuild()!;
-    const daemon = health.build;
-    const same = cli.replace(/-dirty$/, '') === daemon.replace(/-dirty$/, '');
-    if (!same) {
-      daily.push('');
-      daily.push(
-        theme.warn(
-          `⚠ your CLI build (${cli.slice(0, 7)}) differs from the daemon (${daemon.slice(0, 7)}) — rebuild your checkout (pnpm build)`,
-        ),
-      );
-    }
-  }
+  const notReported: string[] = [];
+  if (!brief && explicit && identity) notReported.push('lanes');
+  if (!health) notReported.push('health');
+  const newestModel = [...(mine?.presences ?? [])]
+    .sort((a, b) => b.last_seen_at - a.last_seen_at)
+    .find((p) => p.model)?.model;
+  const daily = renderDailyView(
+    {
+      team,
+      me: identity
+        ? {
+            name: identity.name,
+            kind: mine?.kind ?? 'agent',
+            role: mine?.role || mine?.roles[0],
+            model: newestModel ?? undefined,
+          }
+        : undefined,
+      memory:
+        identity && memory ? renderMemoryLine(memory, Date.now(), { compact: true }) : undefined,
+      waiting: pending
+        ? {
+            count: pending.count,
+            acts: pending.waiting.map((a) => ({
+              from: a.from ?? '?',
+              fromKind: kindOf(a.from ?? ''),
+              act: a.act ?? 'message',
+              body: a.body ?? '',
+              ts: a.ts,
+            })),
+          }
+        : undefined,
+      lanes: (brief?.in_flight ?? []).map((l) => ({
+        state: l.state ?? 'active',
+        title: l.title,
+        merged: !!l.merged?.sha,
+      })),
+      upNext: hubDown
+        ? { unreadable: 'the hub cannot be read' }
+        : { lanes: brief?.up_next ?? [], total: brief?.up_next_total ?? 0 },
+      crew: {
+        here: res.members.filter((m) => m.presence !== 'offline').length,
+        working: res.members.filter(
+          (m) => m.presence !== 'offline' && m.activity === 'working' && m.state,
+        ).length,
+        // Teammates who are here and hold a blocked lane — one each, named by their first.
+        blocked: [...new Map(blockedLanes.map((l) => [l.owner_seat!, l])).values()]
+          .filter((l) =>
+            res.members.some((m) => m.name === l.owner_seat && m.presence !== 'offline'),
+          )
+          .map((l) => ({ name: l.owner_seat!, kind: kindOf(l.owner_seat!), why: l.title })),
+        asOf: hubDown ? (hubLink.last_ok_at ?? undefined) : undefined,
+      },
+      warnings,
+      notReported,
+    },
+    Date.now(),
+    dailyWidth(),
+  );
   process.stdout.write(daily.join('\n') + '\n\n');
   // `Identity` carries no kind — the roster is the authority on it, so read it back from there.
   const me = identity ? { name: identity.name, kind: mine?.kind ?? 'agent' } : undefined;
@@ -210,9 +218,9 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
     );
   // ADR 738: this joiner's link to its hub — last good sync, or since when it fails and why. Absent
   // on the hub, on a machine without one, and from an older daemon.
-  if (res.sync?.hub_link) {
-    const link = describeHubLink(res.sync.hub_link, Date.now());
-    process.stdout.write('\n' + (link.warn ? theme.warn(link.line) : theme.meta(link.line)) + '\n');
+  // A failing link is already a ⚠ line in the daily view; a healthy one is detail for --all.
+  if (hubLink && !hubDown && (parsed.flags['all'] || parsed.flags['verbose'])) {
+    process.stdout.write('\n' + theme.meta(describeHubLink(hubLink, Date.now()).line) + '\n');
   }
   // ADR 516: the Team's active holds — what is paused, by whom, until when. Seat-authed and
   // best-effort like `pending` above: an ambient identity or an older daemon prints nothing.
