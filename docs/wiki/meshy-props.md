@@ -6,6 +6,8 @@ What a Meshy-generated mesh is worth as an office prop, what it costs, and the o
 
 One prompt, `meshy-t2.5` preview, smart topology, 3,000 polygons: a 57 KB `.glb` in about 20 s for 5 credits. Re-materialed with the room's own brass and wood and smooth-shaded, it sat beside a trophy built from `scene.py` primitives (boxes, a cylinder cup, torus handles). The Meshy cup has a real flare, a thin waisted stem and handles that follow the bowl; the scripted one reads as stacked primitives. nick's read: it looks "pretty realistic".
 
+![The Meshy trophy (right) beside the scripted one (left), day rig, corner camera](../design/assets/office/meshy-trophy-compare.webp)
+
 Its own textures are not used — the scene owns materials, so a Meshy prop matches the room's light the same way a scripted one does.
 
 ## It costs /live and /broadcast nothing but sprite bytes (2026-10-28; falsify: a Meshy prop whose shipped asset is anything other than a WebP sheet under `rendered/assets/`) <!-- claim: other -->
