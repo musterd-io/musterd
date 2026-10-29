@@ -2649,3 +2649,21 @@ what a viewer downloads grows with the roster's wardrobe, not with this total. A
 measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 9,050,000 B with this lane in.
+
+## 2026-10-29 — figure sheets at 64 colours; Office art TIGHTENED 9,050,000 → 8,000,000 B (lane 01M647H93F)
+
+| Budget     | Before (main)        | This branch (files)  | Ceiling                           |
+| ---------- | -------------------- | -------------------- | --------------------------------- |
+| office art | ~8,980,000 B (150)   | ~6,920,000 B (150)   | TIGHTENED 9,050,000 → 8,000,000 B |
+
+nick: be careful not to raise the budget too much. The v2 series was adding 0.4–0.5 MB a branch.
+A figure sheet is neutral grey multiplied by a tint at runtime, so it needs far fewer colours than
+a room shell: `render.py` now quantizes figure sheets to 64 colours (room art stays at 256 with the
+70–95 quality floor; at 64 that floor refuses most sheets, so figure sheets drop it). Every
+committed `office-art-fig-*` sheet was re-encoded the same way (decode → pngquant 64 → lossless
+WebP): 6.7 → 4.7 MB. Side-by-side tinted crops of skin, tee, beard, long hair, short hair and the
+headband show no visible change at office size. The ceiling is measured + 15%, which leaves the
+rest of the v2 series about 1 MB at the new encoding. Arithmetic on the files, not a local
+`perf:check` (no local full builds on the shared laptop).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 8,000,000 B with this lane in.
