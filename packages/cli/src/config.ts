@@ -1036,7 +1036,11 @@ function acquireConfigLock(lockPath: string): void {
 
 function withConfigLock<T>(fn: () => T): T {
   const lockPath = `${configPath()}.lock`;
-  if (configLockDepth === 0) acquireConfigLock(lockPath);
+  // A new machine has no ~/.musterd yet; the lock file is the first thing written there.
+  if (configLockDepth === 0) {
+    mkdirSync(dirname(lockPath), { recursive: true });
+    acquireConfigLock(lockPath);
+  }
   configLockDepth++;
   try {
     return fn();
