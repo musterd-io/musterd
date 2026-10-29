@@ -215,6 +215,23 @@ run fly deploy "$ROOT" --config "$ROOT/deploy/cloud-agent/fly.toml" \
   --env "MUSTERD_MODEL=$MODEL" \
   --env "REPO_URL=$REPO_URL" \
   ${HUB:+--env "MUSTERD_HUB=$HUB" --env "MUSTERD_HUB_PORT=$HUB_PORT" --env "ROSTER_REPO=$ROSTER_REPO"}
+
+# `fly deploy` updates a machine's image without starting it: a machine a previous run (or an
+# operator stopping a crash loop) left stopped stays stopped, and the polling wait below then
+# expires against a machine that never booted (delta-2 attempt 2, 2026-10-28 — started by hand
+# that day). Start it here, where the boot is this script's promise.
+say "-- fly: make sure the machine is running"
+if [ "$DRY_RUN" = 1 ]; then
+  printf '  $ fly machine start <the machine, if the deploy left it stopped> --app %s\n' "$APP"
+else
+  machine_json="$(fly machine list --app "$APP" --json 2>/dev/null || true)"
+  machine_id="$(printf '%s' "$machine_json" | jq -r '.[0].id // empty' 2>/dev/null || true)"
+  machine_state="$(printf '%s' "$machine_json" | jq -r '.[0].state // empty' 2>/dev/null || true)"
+  if [ -n "$machine_id" ] && [ "$machine_state" != "started" ]; then
+    say "   machine $machine_id was '${machine_state:-unknown}' after deploy — starting it"
+    run fly machine start "$machine_id" --app "$APP"
+  fi
+fi
 fi
 
 # ── the agent, minted once the host is polling ────────────────────────────────────────────────
@@ -230,9 +247,16 @@ if [ "$SKIP_SPONSOR" = 0 ]; then
     # (lane 01M5D7TP — the 2026-10-20 canary minted by hand after exactly that silent loop).
     seen=0
     last_fly_error=""
-    for _ in $(seq 1 24); do
+    last_stage=""
+    # Ten minutes, not four: a cold first boot pays image start + tailnet + daemon + the
+    # host-key probe (up to 3 minutes against a daemon busy draining its fold) + the workspace
+    # clone before the host can print 'polling'. Delta-2's attempt 2 measured ~6 minutes
+    # (2026-10-28) and the old 24×10s window expired mid-boot, stranding the sponsor steps.
+    for _ in $(seq 1 60); do
       if logs_now="$(fly logs --app "$APP" --no-tail 2>&1)"; then
         last_fly_error=""
+        stage_now="$(printf '%s' "$logs_now" | grep 'cloud-agent:' | tail -1 || true)"
+        [ -z "$stage_now" ] || last_stage="$stage_now"
         if printf '%s' "$logs_now" | grep -q 'polling'; then seen=1; break; fi
       else
         last_fly_error="$(printf '%s' "$logs_now" | tail -1)"
@@ -241,6 +265,7 @@ if [ "$SKIP_SPONSOR" = 0 ]; then
     done
     if [ "$seen" != 1 ]; then
       echo "host '$HOST_LABEL' never reported polling — fly logs --app $APP" >&2
+      [ -z "$last_stage" ] || echo "last boot stage seen: $last_stage" >&2
       [ -z "$last_fly_error" ] || echo "last fly logs error: $last_fly_error" >&2
       echo "the machine-side log is /data/log/host.log (fly ssh console --app $APP)" >&2
       exit 1
