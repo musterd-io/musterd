@@ -243,7 +243,8 @@ writer when a delivery is displayed. A store that cannot be read fails closed.
 The app is light only and set in the brand's faces (ADR 760). `expo-font`'s config plugin embeds
 static DM Sans and JetBrains Mono TTFs from `assets/fonts/`, instanced from the web's variable
 files, and styles name them through `font` in `src/ui/theme.ts`. `expo-haptics` gives a press a
-light tick and an answer sent or a phone paired a success buzz. The icon is `assets/icon.svg`
+light tick and an answer sent or a phone paired a success buzz. Cards are Liquid Glass on iOS 26 (`expo-glass-effect`, solid
+white before it) and the app's glyphs are SF Symbols (`expo-symbols`), ADR 764. The icon is `assets/icon.svg`
 (the ADR 702 mark, full-bleed) rendered to `icon.png`; `wordmark.png` and `mark.png` are the
 ADR 704 nameplate and the mark, rendered from `docs/design/assets/`.
 
@@ -284,6 +285,8 @@ src/app/_layout.tsx   // the Stack, themed from the palette; the nameplate wordm
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
 src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, and answering
+src/ui/glass.tsx      // Glass (Liquid Glass card, solid fallback) and the warm Backdrop (ADR 764)
+src/ui/icon.tsx       // an SF Symbol in the text's colour, with a text fallback (ADR 764)
 src/ui/motion.tsx     // Rise, Squish, Breathe, Pop, Halo — RN Animated, off under Reduce Motion
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```

@@ -6,7 +6,9 @@ import type { AskEntry } from '../../native/asks';
 import { STALE_TEXT, UNVERIFIED_TEXT, waitingSubtitle } from '../../native/notice';
 import { showOffer, type ShownOffer } from '../../native/offer';
 import type { PairingPin } from '../../native/pairingPin';
-import { success } from '../../ui/haptics';
+import { Backdrop, Glass } from '../../ui/glass';
+import { success, warning } from '../../ui/haptics';
+import { Icon } from '../../ui/icon';
 import { Breathe, Pop, Rise, Squish } from '../../ui/motion';
 import { ago, Seat } from '../../ui/seat';
 import { font, radius, space, usePalette } from '../../ui/theme';
@@ -182,7 +184,7 @@ export default function AskScreen() {
     return (
       <View style={[styles.center, { backgroundColor: p.bg }]}>
         <Pop style={[styles.done, { backgroundColor: p.accent }]}>
-          <Text style={[styles.doneMark, { color: p.onAccent }]}>✓</Text>
+          <Icon name="checkmark" color={p.onAccent} size={34} fallback="✓" bounce />
         </Pop>
         <Rise index={2}>
           <Text style={[styles.title, { color: p.text }]}>Sent</Text>
@@ -245,6 +247,7 @@ export default function AskScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: p.bg }} contentContainerStyle={styles.page}>
+      <Backdrop />
       <Rise style={styles.who}>
         <Seat name={ask.from} agent={agent} size={44} />
         <View style={styles.whoText}>
@@ -256,31 +259,31 @@ export default function AskScreen() {
       </Rise>
 
       {offers ? (
-        <Rise
-          index={1}
-          style={[styles.card, { backgroundColor: p.surface, borderColor: p.border }]}
-        >
-          <View style={[styles.cardEdge, { backgroundColor: p.accent }]} />
-          <View style={[styles.chip, { backgroundColor: p.tint }]}>
-            <Text style={[styles.chipText, { color: p.accentText }]}>Needs your Face ID</Text>
-          </View>
-          <Text style={[styles.headline, { color: p.text }]}>
-            {offers.approve.wording.headline}
-          </Text>
-          <View style={styles.fields}>
-            <Field label="Asked by" value={agent ? `${ask.from}, an agent seat` : ask.from} />
-            <Field label="Target" value={offers.approve.descriptor.target} />
-            <Field label="Authority" value={offers.approve.wording.scope} />
-            <Field label="If you decline" value={offers.reject.wording.headline} />
-            <Field label="Requested" value={clock(ask.ts)} />
-            <Field
-              label="Expires in"
-              value={expiresIn(
-                Math.min(offers.approve.descriptor.expiry, offers.reject.descriptor.expiry),
-                now,
-              )}
-            />
-          </View>
+        <Rise index={1}>
+          <Glass style={styles.card}>
+            <View style={[styles.cardEdge, { backgroundColor: p.accent }]} />
+            <View style={[styles.chip, { backgroundColor: p.tint }]}>
+              <Icon name="faceid" color={p.accentText} size={12} />
+              <Text style={[styles.chipText, { color: p.accentText }]}>Needs your Face ID</Text>
+            </View>
+            <Text style={[styles.headline, { color: p.text }]}>
+              {offers.approve.wording.headline}
+            </Text>
+            <View style={styles.fields}>
+              <Field label="Asked by" value={agent ? `${ask.from}, an agent seat` : ask.from} />
+              <Field label="Target" value={offers.approve.descriptor.target} />
+              <Field label="Authority" value={offers.approve.wording.scope} />
+              <Field label="If you decline" value={offers.reject.wording.headline} />
+              <Field label="Requested" value={clock(ask.ts)} />
+              <Field
+                label="Expires in"
+                value={expiresIn(
+                  Math.min(offers.approve.descriptor.expiry, offers.reject.descriptor.expiry),
+                  now,
+                )}
+              />
+            </View>
+          </Glass>
         </Rise>
       ) : null}
 
@@ -317,6 +320,7 @@ export default function AskScreen() {
           onPress={() => void answer('approve', false)}
           style={[styles.primary, { backgroundColor: p.accent }]}
         >
+          {offers ? <Icon name="faceid" color={p.onAccent} size={19} /> : null}
           <Text style={[styles.primaryText, { color: p.onAccent }]}>
             {offers ? 'Approve with Face ID' : 'Approve'}
           </Text>
@@ -333,7 +337,10 @@ export default function AskScreen() {
           accessibilityRole="button"
           accessibilityLabel="Decline — I did not expect this"
           accessibilityHint={`Records it and flags ${ask.from} on /live. It locks nothing.`}
-          onPress={() => void answer('reject', true)}
+          onPress={() => {
+            warning();
+            void answer('reject', true);
+          }}
           style={styles.link}
         >
           <Text style={[styles.linkText, { color: p.danger }]}>
@@ -383,26 +390,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: space.sm,
   },
-  doneMark: { fontSize: 34, fontFamily: font.display },
   title: { fontSize: 22, fontFamily: font.bold, textAlign: 'center', letterSpacing: -0.3 },
   page: { padding: space.lg, gap: space.lg, paddingBottom: space.xl * 2 },
   who: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   whoText: { flex: 1, gap: 2 },
   from: { fontSize: 17, fontFamily: font.semibold },
-  card: {
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: space.lg,
-    paddingTop: space.lg + 4,
-    gap: space.md,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-  },
+  card: { padding: space.lg, paddingTop: space.lg + 4, gap: space.md },
   cardEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     alignSelf: 'flex-start',
     borderRadius: radius.pill,
     paddingHorizontal: space.sm + 2,
@@ -429,6 +427,8 @@ const styles = StyleSheet.create({
   bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
   actions: { gap: space.sm, marginTop: space.sm },
   primary: {
+    flexDirection: 'row',
+    gap: space.sm,
     minHeight: 52,
     borderRadius: radius.md,
     paddingHorizontal: space.lg,

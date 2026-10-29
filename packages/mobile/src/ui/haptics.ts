@@ -11,3 +11,8 @@ export function tap(): void {
 export function success(): void {
   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
 }
+
+/** A warning buzz: "I did not expect this" flags a teammate. */
+export function warning(): void {
+  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+}

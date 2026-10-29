@@ -6,6 +6,8 @@ import type { AskEntry, AsksView } from '../native/asks';
 import { heldBody, waitingSubtitle } from '../native/notice';
 import { showOffer } from '../native/offer';
 import type { PairingPin } from '../native/pairingPin';
+import { Backdrop, Glass } from '../ui/glass';
+import { Icon } from '../ui/icon';
 import { Breathe, Halo, Rise, Squish } from '../ui/motion';
 import { ago, Seat } from '../ui/seat';
 import { font, radius, space, usePalette } from '../ui/theme';
@@ -119,6 +121,7 @@ export default function AsksScreen() {
   if (!paired || asks.length === 0) {
     return (
       <View style={[styles.empty, { backgroundColor: p.bg }]}>
+        <Backdrop />
         {banners}
         <Rise>
           <Halo color={p.tint}>
@@ -156,6 +159,7 @@ export default function AsksScreen() {
               onPress={() => router.push('/pair')}
               style={[styles.primary, { backgroundColor: p.accent }]}
             >
+              <Icon name="qrcode.viewfinder" color={p.onAccent} size={19} />
               <Text style={[styles.primaryText, { color: p.onAccent }]}>{pairLabel}</Text>
             </Squish>
           ) : (
@@ -183,6 +187,7 @@ export default function AsksScreen() {
       keyExtractor={(entry) => entry.delivery.ask.id}
       ListHeaderComponent={
         <View style={styles.header}>
+          <Backdrop />
           <Rise>
             <Text style={[styles.greeting, { color: p.muted }]}>{greeting(new Date())}</Text>
             <Text style={[styles.count, { color: p.text }]}>
@@ -242,31 +247,33 @@ function AskRow({ entry }: { entry: AskEntry }) {
           },
         })
       }
-      style={[styles.row, { backgroundColor: p.surface, borderColor: p.border }]}
     >
-      <View style={styles.rowTop}>
-        <Seat name={delivery.ask.from} agent={agent} />
-        <View style={styles.rowWho}>
-          <Text style={[styles.from, { color: p.text }]}>{delivery.ask.from}</Text>
-          <Text style={[styles.meta, { color: p.muted }]}>
-            {agent ? 'agent' : 'person'} · {ago(delivery.ask.ts, Date.now())}
-          </Text>
+      <Glass style={styles.row}>
+        <View style={styles.rowTop}>
+          <Seat name={delivery.ask.from} agent={agent} />
+          <View style={styles.rowWho}>
+            <Text style={[styles.from, { color: p.text }]}>{delivery.ask.from}</Text>
+            <Text style={[styles.meta, { color: p.muted }]}>
+              {agent ? 'agent' : 'person'} · {ago(delivery.ask.ts, Date.now())}
+            </Text>
+          </View>
+          {listed ? (
+            <View style={[styles.chip, { backgroundColor: p.tint }]}>
+              <Icon name="faceid" color={p.accentText} size={12} />
+              <Text style={[styles.chipText, { color: p.accentText }]}>Face ID</Text>
+            </View>
+          ) : null}
         </View>
-        {listed ? (
-          <View style={[styles.chip, { backgroundColor: p.tint }]}>
-            <Text style={[styles.chipText, { color: p.accentText }]}>Face ID</Text>
+        <Text numberOfLines={3} style={[styles.headline, { color: p.text }]}>
+          {headline}
+        </Text>
+        {waiting ? (
+          <View style={styles.waitingRow}>
+            <View style={[styles.waitingDot, { backgroundColor: p.accent }]} />
+            <Text style={[styles.meta, { color: p.muted }]}>{waiting}</Text>
           </View>
         ) : null}
-      </View>
-      <Text numberOfLines={3} style={[styles.headline, { color: p.text }]}>
-        {headline}
-      </Text>
-      {waiting ? (
-        <View style={styles.waitingRow}>
-          <View style={[styles.waitingDot, { backgroundColor: p.accent }]} />
-          <Text style={[styles.meta, { color: p.muted }]}>{waiting}</Text>
-        </View>
-      ) : null}
+      </Glass>
     </Squish>
   );
 }
@@ -294,6 +301,8 @@ const styles = StyleSheet.create({
   bannerTitle: { fontSize: 15, fontFamily: font.bold },
   bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
   primary: {
+    flexDirection: 'row',
+    gap: space.sm,
     minHeight: 50,
     marginTop: space.sm,
     borderRadius: radius.md,
@@ -315,21 +324,19 @@ const styles = StyleSheet.create({
   header: { gap: space.md, marginBottom: space.xs },
   greeting: { fontSize: 15, fontFamily: font.medium },
   count: { fontSize: 28, fontFamily: font.bold, letterSpacing: -0.5 },
-  row: {
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: space.lg,
-    gap: space.md,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-  },
+  row: { padding: space.lg, gap: space.md },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   rowWho: { flex: 1, gap: 1 },
   from: { fontSize: 15, fontFamily: font.semibold },
   meta: { fontFamily: font.regular, fontSize: 13 },
-  chip: { borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 3 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.sm + 2,
+    paddingVertical: 3,
+  },
   chipText: { fontSize: 12, fontFamily: font.bold },
   headline: { fontSize: 17, lineHeight: 24, fontFamily: font.medium },
   waitingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
