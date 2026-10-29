@@ -765,6 +765,7 @@ export const CATALOG: readonly CommandEntry[] = [
     detail:
       'The orientation brief (ADR 049/084): what you’re carrying, what just shipped, open lanes you ' +
       'could pick up, the next Goal, and the latest handoff *why* — so a fresh session self-orients.',
+    examples: ['musterd next', 'musterd next --carrying', 'musterd next --json'],
   },
   {
     name: 'done',
@@ -879,6 +880,7 @@ export const CATALOG: readonly CommandEntry[] = [
     detail:
       'The team roster: members, presence, and what each is working on — plus, up top, anything waiting ' +
       'for you and which daemon/db is being read (so a wrong-db “everyone offline” is obvious).',
+    examples: ['musterd status', 'musterd status --all', 'musterd status --json'],
   },
   {
     name: 'seats',
@@ -908,6 +910,7 @@ export const CATALOG: readonly CommandEntry[] = [
     signature: '[--limit <n>] [--before <ms-epoch>] [--authorized-by <seat>] [--json]',
     summary: 'read the governance audit log (admin-only)',
     group: 'insight',
+    examples: ['musterd audit', 'musterd audit --limit 50 --json'],
   },
   {
     name: 'authority',
@@ -983,6 +986,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'Show the seat this folder resolves to right now and where it came from (env > binding). A ' +
       'folder acts only as the member it is bound to (ADR 442): an unbound folder resolves to nobody, ' +
       'which is a valid answer — it tells you how to claim a seat.',
+    examples: ['musterd whoami'],
   },
   {
     name: 'memory',
@@ -994,6 +998,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'This seat’s continuity note (ADR 093): save before handing off or wrapping up; claim/status ' +
       'show the one-line pointer. A human reads an agent seat’s note with `show --seat <agent>`; a ' +
       'human seat’s note is that human’s alone, and no agent reads another seat’s (ADR 651).',
+    examples: ['musterd memory', 'musterd memory save --headline "mid-refactor" "the body"'],
   },
   {
     name: 'insight',
@@ -1008,6 +1013,10 @@ export const CATALOG: readonly CommandEntry[] = [
       'The fast tier under docs/wiki/: promote a durable finding there once it proves out. ADR 526: ' +
       '`--supersedes` names findings this one replaces, `retract` withdraws one — honoured from its ' +
       'author or a human, after which search, dreams and the digest stop carrying it.',
+    examples: [
+      'musterd insight save --headline "trap: X" "body"',
+      'musterd insight search "keyword"',
+    ],
   },
   {
     name: 'dream',
