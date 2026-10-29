@@ -2624,3 +2624,16 @@ trim: the motion went onto the token scale, the screen-reader rule reuses `.lc-s
 keyframes were shortened. A re-baseline to measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports app CSS at or under 17,600 B with this lane in.
+
+## 2026-10-28 — figure v2-4a glasses; Office art RAISED 8,800,000 → 8,950,000 B (lane 01M62405HH)
+
+| Budget     | Before (main)       | This branch (laptop) | Ceiling                          |
+| ---------- | ------------------- | -------------------- | -------------------------------- |
+| office art | ~8,720,000 B (42)   | ~8,838,000 B (44)    | RAISED 8,800,000 → 8,950,000 B |
+
+nick: more glasses shapes. Two new frame sheets beside the round one — `acc/glasses-square` (58 KB)
+and `acc/glasses-browline` (61 KB). No other layer re-rendered. Arithmetic on the files, not a local
+`perf:check` (no local full builds on the shared laptop). A re-baseline to measured + 15% would
+loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 8,950,000 B with this lane in.

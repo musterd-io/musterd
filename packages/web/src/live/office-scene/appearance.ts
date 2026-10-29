@@ -215,10 +215,11 @@ const SHOES_BY_STYLE: Record<Style, readonly string[]> = {
  * take the ears spot. Today's pieces are the three the sheets carry; earrings (v2-4b), the watch
  * (v2-4c) and headphones around the neck (v2-4d) slot into their spots as they land.
  */
-export type Eyes = 'none' | 'glasses';
+export type Eyes = 'none' | 'glasses' | 'glasses-square' | 'glasses-browline';
 export type Ears = 'none' | 'headphones';
 export type Neck = 'none' | 'scarf';
-const EYES: readonly Eyes[] = ['none', 'none', 'none', 'none', 'none', 'glasses', 'glasses'];
+// Three frame shapes (v2-4a): round, square rims, a browline — about one in four wear any, as before.
+const EYES: readonly Eyes[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'glasses', 'glasses-square', 'glasses-browline'];
 const EARS: readonly Ears[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'headphones'];
 const NECK: readonly Neck[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'scarf'];
 /** The one legacy summary the painters still read (`character.ts`, the portrait): the most visible
@@ -272,7 +273,7 @@ export interface Appearance {
 
 function summaryOf(eyes: Eyes, ears: Ears, neck: Neck): Accessory {
   if (ears !== 'none') return ears;
-  if (eyes !== 'none') return eyes;
+  if (eyes !== 'none') return 'glasses'; // whatever the frame, the painters draw one pair
   if (neck !== 'none') return neck;
   return 'none';
 }

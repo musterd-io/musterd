@@ -5,7 +5,7 @@
  * A layer whose sheet is missing is skipped, so a new hair style or hat added to `appearance.ts`
  * before its sheet is rendered draws the figure without it, never nothing (Review Focus 2).
  */
-import { type Accessory, type Appearance, type FacialHair, type Hat, type HairStyle, lookFor, type Smile, type TopCut } from '../appearance';
+import { type Accessory, type Appearance, type Eyes, type FacialHair, type Hat, type HairStyle, lookFor, type Smile, type TopCut } from '../appearance';
 import { project, type Fit } from '../iso';
 import type { CarryKind, OfficeNode } from '../types';
 import { type Anim, type Dir8, frameCell, type SheetSpec } from './figureSheet';
@@ -22,6 +22,7 @@ export type LayerId =
   | 'bottom'
   | 'shoes'
   | `acc/${Accessory}`
+  | `acc/${Eyes}`
   | 'tell/eyes'
   | 'tell/collar'
   | `carry/${CarryLayer}`

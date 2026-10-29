@@ -57,7 +57,7 @@ HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun"]
 FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
-ACCS = ["glasses", "headphones", "scarf"]
+ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it.
 CARRY = ["laptop", "box", "plant", "plate", "card", "mug", "bottle", "phone"]
@@ -519,6 +519,24 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.torus("lens", "head", "acc/glasses", frame, HEAD_X + R * 0.95, sy * R * 0.3, HEAD_C + R * 0.36, R * 0.2, 0.32, (0, math.radians(90), 0))
         r.box("arm", "head", "acc/glasses", frame, HEAD_X + R * 0.45, sy * R * 0.9, HEAD_C + R * 0.34, R * 0.95, 0.3, 0.35)
     r.box("bridge", "head", "acc/glasses", frame, HEAD_X + R * 0.97, 0, HEAD_C + R * 0.34, 0.4, R * 0.2, 0.35)
+    # two more frame shapes (figure v2-4a, spec §2.4 "several frame shapes"): square rims — four thin
+    # bars a lens — and a browline, a heavy bar across the top of each lens with a fine rim below.
+    # Each is its own layer; the eyes spot picks one of the three (`appearance.ts` EYES).
+    lw, lh = R * 0.42, R * 0.36  # a lens's width and height on the face
+    for sy in (1, -1):
+        cy, cz = sy * R * 0.3, HEAD_C + R * 0.36
+        # the square lens is a touch smaller than the round one, and its outer bar sits back on the cheek:
+        # the face curves away there, and at the round lens's depth the bar floated in profile
+        sw, sh = R * 0.36, R * 0.3
+        for name, dx, dy, dz, w, h in (("top", 0.95, 0, sh / 2, sw, 0.34), ("bottom", 0.95, 0, -sh / 2, sw, 0.34), ("outer", 0.86, sy * sw / 2, 0, 0.34, sh), ("inner", 0.97, -sy * sw / 2, 0, 0.34, sh)):
+            # `box` takes its BASE height, so each bar drops by half its own height to centre on the lens
+            r.box(f"sq-{name}", "head", "acc/glasses-square", frame, HEAD_X + R * dx, cy + dy, cz + dz - h / 2, 0.4, w, h)
+        r.box("sq-arm", "head", "acc/glasses-square", frame, HEAD_X + R * 0.45, sy * R * 0.9, HEAD_C + R * 0.34, R * 0.95, 0.3, 0.35)
+        r.box("bl-brow", "head", "acc/glasses-browline", frame, HEAD_X + R * 0.95, cy, cz + lh * 0.42 - 0.375, 0.5, lw * 1.08, 0.75)
+        r.torus("bl-rim", "head", "acc/glasses-browline", frame, HEAD_X + R * 0.95, cy, cz, R * 0.19, 0.2, (0, math.radians(90), 0))
+        r.box("bl-arm", "head", "acc/glasses-browline", frame, HEAD_X + R * 0.45, sy * R * 0.9, HEAD_C + R * 0.36, R * 0.95, 0.3, 0.5)
+    r.box("sq-bridge", "head", "acc/glasses-square", frame, HEAD_X + R * 0.97, 0, HEAD_C + R * 0.36 - 0.17, 0.4, R * 0.2, 0.34)
+    r.box("bl-bridge", "head", "acc/glasses-browline", frame, HEAD_X + R * 0.97, 0, HEAD_C + R * 0.36 + lh * 0.42 - 0.3, 0.5, R * 0.2, 0.6)
     # over the top of the head from ear to ear: the ring's axis turned onto x (about x it looped through the face)
     r.torus("headband", "head", "acc/headphones", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.3, R * 1.08, 1.0, (0, math.radians(90), 0))
     for sy in (1, -1):

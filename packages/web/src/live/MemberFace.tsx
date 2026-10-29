@@ -107,7 +107,7 @@ export function MemberFace({
             <circle cx="18.9" cy="17.4" r="1.1" fill="#2e2a26" />
           </>
         )}
-        {look.eyes === 'glasses' && (
+        {look.eyes !== 'none' && (
           <g fill="none" stroke={look.accessoryColor} strokeWidth="0.9" data-spot="eyes">
             <circle cx="13" cy="17.5" r="2.4" />
             <circle cx="19" cy="17.5" r="2.4" />
