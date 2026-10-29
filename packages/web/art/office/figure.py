@@ -59,8 +59,9 @@ HATS = ["cap", "beanie", "band"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
 ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
-# moving box is `carry/box` in kraft with `carry/plant` poking out of it.
-CARRY = ["laptop", "box", "plant", "plate", "card", "mug", "bottle", "phone"]
+# moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
+# every earlier layer keeps its place.
+CARRY = ["laptop", "box", "plant", "plate", "card", "mug", "bottle", "phone", "folder"]
 LAYERS = (
     ["skin", "eyes", "mouth/soft", "mouth/wide"]
     + [f"hair/{h}" for h in HAIR]
@@ -634,6 +635,15 @@ def build_props(r: Rig) -> None:
     plant.add(r, scene.ball("carry/plant", 1.5, 1, 4.5, 4.6, 4.6, 4.0, m("leaf", "#4f8a4b", 0.8), 1), "carry/plant")
     plant.add(r, scene.ball("carry/plant-lit", -1, -1.5, 8.5, 3.2, 3.2, 3.0, m("leaf-lit", "#79b36a", 0.8), 1), "carry/plant")
     r.props.append(plant)
+    # a handoff's manila folder, held upright against the chest in both hands — the one it sets down on
+    # the recipient's desk (`desk/folder-*`, lane 01M62X6FCC): two covers round the papers, the tab up
+    folder = Prop("folder", HOLD2, lambda rig, f, l, zs: mid(rig) - f * 2.0)
+    manila = m("folder-cover", "#e6b862", 0.75)
+    folder.add(r, scene.box("carry/folder-back", -0.9, 0, -5.5, 0.5, 15, 11, manila, 1), "carry/folder")
+    folder.add(r, scene.box("carry/folder-papers", 0, 0.3, -5.2, 1.2, 14, 11.2, m("folder-paper", "#fbf8f1", 0.85), 1), "carry/folder")
+    folder.add(r, scene.box("carry/folder-front", 0.9, 0, -5.5, 0.5, 15, 10.2, manila, 1), "carry/folder")
+    folder.add(r, scene.box("carry/folder-tab", -0.9, -3.6, 5.5, 0.5, 6, 1.8, m("folder-tab", "#d4a04c", 0.75), 1), "carry/folder")
+    r.props.append(folder)
 
     # a plate of food: resting on both palms on the way back from the fridge; in the left hand to eat
     def plate_meshes(p: Prop) -> None:

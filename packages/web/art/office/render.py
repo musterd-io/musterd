@@ -37,7 +37,7 @@ import scene  # noqa: E402  (the scene builder beside this file)
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False,
-           "resample_from": None, "stills": None, "warm": None, "dog": False}
+           "resample_from": None, "stills": None, "warm": None, "dog": False, "layers": None}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -66,6 +66,10 @@ def args() -> dict:
             # clip,clip,… — render these clips into the store and write no sheets, so a long figure
             # render can be split across runs (the last, plain run writes the sheets from the store)
             out["warm"] = set(argv[i + 1].split(",")); i += 2
+        elif k == "--layers":
+            # layer,layer,… — render only these figure layers and merge their sheets into the
+            # figure.json on disk; every other layer's sheet and cells stay as they are
+            out["layers"] = argv[i + 1].split(","); i += 2
         elif k == "--resample-from":
             out["resample_from"] = float(argv[i + 1]); i += 2
         else:
@@ -530,6 +534,8 @@ def render_figure(a: dict) -> None:
                 cname = f"{name}/{d}/{f}"
                 fused = None  # this frame's fused copies, made at its first render
                 calls = [("base", set(base), set())] + [(l, {l}, holdout_for(l)) for l in variants if figure.stored_in(name, l)]
+                if a["layers"] is not None:
+                    calls = [c for c in calls if c[0] in a["layers"]]
                 for kind, layers, holdout in calls:
                     if not show(layers, holdout, name):
                         continue  # nothing of it in this clip (a prop, the lanyard)
@@ -629,7 +635,22 @@ def render_figure(a: dict) -> None:
         "layers": [],
         "cells": {},
     }
+    only = a["layers"]
+    if only is not None:
+        # `--layers`: the other layers' sheets are the ones on disk, so the frame and the clip table
+        # must be the ones they were packed against — refuse rather than mix two layouts
+        with open(fig_json) as fjson:
+            prev = json.load(fjson)
+        unknown = [l for l in only if l not in figure.LAYERS]
+        if unknown:
+            raise SystemExit(f"render.py: --layers names no figure layer: {unknown}")
+        if any(prev[k] != spec[k] for k in ("scale", "frame", "anchor", "anims", "mirror")):
+            raise SystemExit("render.py: --layers needs the figure.json on disk to have this run's frame and clips; render the whole figure")
+        spec["layers"] = [x for x in prev["layers"] if x["id"] not in only]
+        spec["cells"] = {k: v for k, v in prev["cells"].items() if k.split("@")[0] not in only}
     for layer in figure.LAYERS:
+        if only is not None and layer not in only:
+            continue
         if not crops.get(layer):
             print(f"figure: layer {layer} rendered nothing — not written")
             continue
@@ -678,6 +699,10 @@ def render_figure(a: dict) -> None:
         if len(grids) > 1:
             spec["cells"][f"{layer}@arms"] = cells[n:]
         print(f"figure: wrote {file} {ATLAS_W}x{atlas_h} {os.path.getsize(path)} B", flush=True)
+    if only is not None:
+        # keep the sheets in figure.LAYERS order, as a whole-figure run writes them
+        spec["layers"].sort(key=lambda x: figure.LAYERS.index(x["id"]))
+        spec["cells"] = {k: spec["cells"][k] for k in sorted(spec["cells"], key=lambda k: (figure.LAYERS.index(k.split("@")[0]), k))}
     with open(fig_json, "w") as fjson:
         json.dump(spec, fjson, separators=(",", ":"))
         fjson.write("\n")

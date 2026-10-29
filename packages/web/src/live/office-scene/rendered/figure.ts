@@ -30,7 +30,16 @@ export type LayerId =
   | 'lanyard-card';
 
 /** The carried things' sheets (`figure.py` CARRY): the moving box is the box in kraft, a plant in it. */
-export type CarryLayer = 'laptop' | 'box' | 'plant' | 'plate' | 'card' | 'mug' | 'bottle' | 'phone';
+export type CarryLayer =
+  | 'laptop'
+  | 'box'
+  | 'plant'
+  | 'plate'
+  | 'card'
+  | 'mug'
+  | 'bottle'
+  | 'phone'
+  | 'folder';
 
 /** The handoff box's blue, and the moving box's kraft — the painter's colours (`character.ts`). */
 const BOX = '#8fd0dd';
@@ -63,6 +72,7 @@ function carried(h: Held): Layer[] {
     case 'card':
     case 'bottle':
     case 'phone':
+    case 'folder':
       return [{ id: `carry/${h.carry}`, color: null }];
     default:
       return h.mug ? [{ id: 'carry/mug', color: h.mug }] : [];
@@ -285,6 +295,7 @@ const ALWAYS_LOADED: readonly LayerId[] = [
   'carry/mug',
   'carry/bottle',
   'carry/phone',
+  'carry/folder',
   'lanyard',
   'lanyard-card',
 ];
