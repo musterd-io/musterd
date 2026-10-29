@@ -16,7 +16,10 @@ pool is the hub's) and [ADR 376](../decisions/376-the-hub-is-the-machine-the-tea
 The hub resolves every pushed event's actor (a message's `from`, an audit row's `actor`) on its own
 roster before the replay and gap checks (`packages/server/src/sync/log.ts`, `ingestBatch`). A seat that is
 not a service seat and is bound to a different node refuses the **whole batch**, `403 bound_elsewhere`.
-Exempt: a null actor, an actor not on the hub roster, service seats, and the hub's own loopback pushes.
+Exempt: a null actor, an actor not on the hub roster, service seats, the hub's own loopback pushes, and
+(since [ADR 766](../decisions/766-a-detach-is-exempt-from-residence.md), 2026-10-29) a `presence.detached`: the
+fold deletes only the pushing node's own row, so a machine a seat has moved away from can still close its
+stale session as that seat.
 `policy`, `seed` and `record.incident_report` events are refused outright from any other push
 (`403 forbidden`, with no seat in the body, so they never show as `sync.wedged`).
 

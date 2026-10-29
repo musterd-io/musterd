@@ -284,7 +284,14 @@ export async function ingestBatch(
         }
       }
       const seat = actor && !hostActor ? await getMemberByName(t, teamId, actor) : undefined;
-      if (seat && seat.kind !== 'service') {
+      // ADR 766: a `presence.detached` is exempt from residence — it neither binds the seat nor is
+      // refused. The fold applies it as `DELETE FROM presence WHERE id = ? AND node = <origin>`, so
+      // it can only close the pushing node's OWN replicated row and never speaks for the seat
+      // elsewhere. Refusing it wedged a joiner whose seat had just moved away: it detached its
+      // stale local session as that seat, and the hub refused the whole batch (macbook-air-2,
+      // 2026-10-29, ryder → musterd-joiner-1). Attach and reattest keep the check.
+      const detach = event.kind === 'presence' && event.event.action === 'presence.detached';
+      if (seat && seat.kind !== 'service' && !detach) {
         const bound = await bindSeatToNode(t, teamId, seat.id, nodeId, now);
         if (!bound.bound && !loopback) {
           throw new SyncResidenceError(
