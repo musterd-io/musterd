@@ -86,6 +86,7 @@ export function MemberFace({
             <path d="M7.4 14.6a8.6 8.6 0 0 1 17.2 0z" fill={look.hatColor} />
             {look.hat === 'cap' && <rect x="15" y="13.2" width="12" height="2.2" rx="1.1" fill={look.hatColor} />}
             {look.hat === 'beanie' && <rect x="7.2" y="12.8" width="17.6" height="2.4" rx="1.2" fill={look.hatColor} />}
+            {look.hat === 'bucket' && <path d="M4.6 15.6 7.6 13h16.8l3 2.6z" fill={look.hatColor} />}
           </>
         ) : (
           hair && (
