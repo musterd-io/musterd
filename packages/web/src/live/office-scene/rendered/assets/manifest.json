@@ -501,6 +501,116 @@
       "scale": 3.0
     },
     {
+      "id": "desk/mug-0-empty",
+      "file": "office-art-desk-mug-0-empty.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/mug-0-full",
+      "file": "office-art-desk-mug-0-full.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/mug-1-empty",
+      "file": "office-art-desk-mug-1-empty.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/mug-1-full",
+      "file": "office-art-desk-mug-1-full.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/mug-2-empty",
+      "file": "office-art-desk-mug-2-empty.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/mug-2-full",
+      "file": "office-art-desk-mug-2-full.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/mug-3-empty",
+      "file": "office-art-desk-mug-3-empty.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/mug-3-full",
+      "file": "office-art-desk-mug-3-full.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/mug-4-empty",
+      "file": "office-art-desk-mug-4-empty.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/mug-4-full",
+      "file": "office-art-desk-mug-4-full.webp",
+      "w": 34,
+      "h": 38,
+      "anchor": {
+        "x": 16.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
       "id": "desk/note",
       "file": "office-art-desk-note.webp",
       "w": 32,
@@ -508,6 +618,17 @@
       "anchor": {
         "x": -17.0,
         "y": 186.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/plant",
+      "file": "office-art-desk-plant.webp",
+      "w": 48,
+      "h": 71,
+      "anchor": {
+        "x": 24.0,
+        "y": 167.0
       },
       "scale": 3.0
     },
