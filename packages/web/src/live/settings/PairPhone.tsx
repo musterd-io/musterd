@@ -2,11 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { authorityProofForPhone } from '../authorityProof';
 import type { LiveConfig } from '../client';
 import {
+  bindingDeviceName,
   confirmChannelPairing,
+  fetchChannelBindings,
   fetchChannelPairings,
   rejectChannelPairing,
+  revokeChannelBinding,
   startAppPairing,
   type AppPairingStart,
+  type ChannelBinding,
   type ChannelPairing,
 } from '../pairingClient';
 import type { SheetNote } from '../StyleSheet';
@@ -44,6 +48,20 @@ export async function qrSvg(text: string): Promise<string> {
   );
 }
 
+/** "Paired with iPhone · since 29 Oct" — the active app binding, as the panel names it. */
+export function pairedLine(b: ChannelBinding, now: number = Date.now()): { device: string; since: string } {
+  const at = new Date(b.created_at);
+  const sameYear = at.getFullYear() === new Date(now).getFullYear();
+  return {
+    device: bindingDeviceName(b) ?? 'your phone',
+    since: at.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      ...(sameYear ? {} : { year: 'numeric' }),
+    }),
+  };
+}
+
 export function countdown(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -64,10 +82,6 @@ export function PairPhone({
   onChanged: () => void;
 }) {
   const [stage, setStage] = useState<Stage>({ kind: 'idle' });
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<SheetNote>(null);
-  const [now, setNow] = useState(() => Date.now());
-  const pairingId = stage.kind === 'code' ? stage.start.pairing_id : null;
   const mounted = useRef(true);
   useEffect(
     () => () => {
@@ -75,6 +89,25 @@ export function PairPhone({
     },
     [],
   );
+  // The phone already paired (from here or the CLI), so the panel can say so instead of offering
+  // a pairing nobody needs (lane 01M64M4PY5).
+  const [paired, setPaired] = useState<ChannelBinding | null>(null);
+  const [unpairing, setUnpairing] = useState(false);
+  const loadPaired = useCallback(async () => {
+    try {
+      const bs = await fetchChannelBindings(cfg);
+      if (mounted.current) setPaired(bs.find((b) => b.channel === 'app' && b.status === 'active') ?? null);
+    } catch {
+      // An older daemon or a blip: the panel still offers pairing.
+    }
+  }, [cfg]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<SheetNote>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const pairingId = stage.kind === 'code' ? stage.start.pairing_id : null;
+  useEffect(() => {
+    void loadPaired();
+  }, [loadPaired]);
 
   // A phone that sent its request before this panel opened (or from a CLI-started code).
   const staged = waiting.find((p) => p.app);
@@ -132,6 +165,24 @@ export function PairPhone({
       }
       await confirmChannelPairing(cfg, p.id, approval);
       setStage({ kind: 'paired', device: p.app.device_name ?? 'your phone' });
+      void loadPaired();
+      onChanged();
+    } catch (e) {
+      setNote({ tone: 'err', text: message(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unpair = async (b: ChannelBinding) => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await revokeChannelBinding(cfg, b.id);
+      setUnpairing(false);
+      setPaired(null);
+      setStage({ kind: 'idle' });
+      setNote({ tone: 'ok', text: `unpaired ${pairedLine(b).device} — asks no longer reach it` });
       onChanged();
     } catch (e) {
       setNote({ tone: 'err', text: message(e) });
@@ -161,7 +212,60 @@ export function PairPhone({
         Your phone
       </h3>
 
-      {stage.kind === 'idle' && (
+      {stage.kind === 'idle' && paired && (
+        <div className="lc-pair__have">
+          <span className="lc-pair__tick" aria-hidden="true">
+            ✓
+          </span>
+          <span className="lc-pair__havewho">
+            <b>Paired with {pairedLine(paired).device}</b>
+            <span className="lc-set__hint">
+              since {pairedLine(paired).since} · asks reach it while you’re away
+            </span>
+          </span>
+          {unpairing ? (
+            <span className="lc-pair__act" role="group" aria-label="Unpair this phone?">
+              <button
+                type="button"
+                className="lc-set__btn lc-pair__btn--danger"
+                disabled={busy}
+                onClick={() => void unpair(paired)}
+              >
+                {busy ? 'Unpairing…' : 'Unpair'}
+              </button>
+              <button
+                type="button"
+                className="lc-set__btn"
+                disabled={busy}
+                onClick={() => setUnpairing(false)}
+              >
+                Keep it
+              </button>
+            </span>
+          ) : (
+            <span className="lc-pair__act">
+              <button
+                type="button"
+                className="lc-set__btn"
+                disabled={busy}
+                onClick={() => setUnpairing(true)}
+              >
+                Unpair
+              </button>
+              <button
+                type="button"
+                className="lc-set__btn"
+                disabled={busy}
+                onClick={() => void newCode()}
+              >
+                Pair another phone
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
+      {stage.kind === 'idle' && !paired && (
         <div className="lc-pair__idle">
           <p className="lc-set__lede">
             Get asks on your phone while you’re away, and answer them there. Scan a code with the
