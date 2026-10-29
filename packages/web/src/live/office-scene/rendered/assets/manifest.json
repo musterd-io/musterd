@@ -756,11 +756,11 @@
     {
       "id": "nook/island",
       "file": "office-art-nook-island.webp",
-      "w": 219,
-      "h": 204,
+      "w": 346,
+      "h": 268,
       "anchor": {
-        "x": 109.49,
-        "y": 153.8
+        "x": 172.85,
+        "y": 183.45
       },
       "scale": 3.0
     },
