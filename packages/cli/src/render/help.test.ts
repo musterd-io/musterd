@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { GROUPS, START_HERE } from '../help/catalog.js';
+import { CATALOG, GROUPS, START_HERE } from '../help/catalog.js';
 import {
+  detailParagraphs,
   nearestCommand,
   renderCommandHelp,
   renderGroupHelp,
   renderHelp,
   renderHelpJson,
   wantsCommandHelp,
+  wrapIndented,
 } from './help.js';
 import { visibleLen } from './ui.js';
 
@@ -144,5 +146,66 @@ describe('wantsCommandHelp does not eat a free-text argument (#858 follow-up)', 
   it('still ignores a non-sole positional and an uncatalogued command', () => {
     expect(wantsCommandHelp('team', ['add', 'help'])).toBe(false);
     expect(wantsCommandHelp('bogus', ['help'])).toBe(false);
+  });
+});
+
+describe('wrapped detail keeps its shape (journeys review F3)', () => {
+  it('wraps a description in its own column', () => {
+    const line =
+      '  show <id> [--json]            one lane in full: brief, history, merge, the ask to reply_to';
+    expect(wrapIndented(line, 80)).toEqual([
+      '  show <id> [--json]            one lane in full: brief, history, merge, the ask',
+      '                                to reply_to',
+    ]);
+  });
+
+  it('puts the description under a term that leaves its column no room', () => {
+    const out = wrapIndented(
+      '  open "<title>" [--surface …] [--goal <id>] [--claim]   declare it',
+      40,
+    );
+    expect(out[0]).toBe('  open "<title>" [--surface …] [--goal');
+    expect(out.at(-1)).toBe('      declare it');
+  });
+
+  it('hangs a long term-only line two spaces in', () => {
+    const out = wrapIndented(
+      '  add <name> --kind <agent|human> [--role <role>] [--lifecycle forever]',
+      40,
+    );
+    expect(out.every((l, i) => l.startsWith(i === 0 ? '  add' : '    '))).toBe(true);
+  });
+
+  it('joins a sentence and a description the catalog split across lines', () => {
+    expect(detailParagraphs('the issue it came from\n(acme/app#12) on open.')).toEqual([
+      'the issue it came from (acme/app#12) on open.',
+    ]);
+    expect(
+      detailParagraphs(
+        '  create <slug>\n          binds the folder; --switch also\n          points',
+      ),
+    ).toEqual(['  create <slug>', '          binds the folder; --switch also points']);
+    // A sentence that ends stays its own paragraph.
+    expect(detailParagraphs('First.\nSecond.')).toEqual(['First.', 'Second.']);
+  });
+
+  it('no command help overflows or prints an indented line flush left, at 40, 60 and 80', () => {
+    for (const width of [40, 60, 80]) {
+      for (const cmd of CATALOG) {
+        const out = renderCommandHelp(cmd.name, { width })!;
+        for (const line of out.split('\n')) {
+          expect(visibleLen(line), `${cmd.name} @${width}: ${line}`).toBeLessThanOrEqual(width);
+        }
+        // Everything under the rule is indented, up to the "in:" footer (which may wrap).
+        const lines = out.split('\n');
+        const body = lines
+          .slice(
+            1,
+            lines.findIndex((l) => l.startsWith('in: ')),
+          )
+          .filter(Boolean);
+        for (const line of body) expect(line, `${cmd.name} @${width}`).toMatch(/^ |^─|^EXAMPLES/i);
+      }
+    }
   });
 });

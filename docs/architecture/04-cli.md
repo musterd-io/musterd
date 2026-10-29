@@ -114,7 +114,7 @@ src/
     qr.ts             // renderTerminalQr (ADR 690): a QR as upper-half blocks with explicit black-on-white ANSI and a 4-module quiet zone, so it scans on a dark or light theme; encoded by `uqr`
     plainText.ts      // plainTerminalText / plainTerminalLines: strip C0/C1 controls and ESC sequences from text that came from outside (a teammate, a tracker) before it reaches a terminal
     title.ts          // terminal-tab seat title (ADR 160): pure terminalTitleFor decision + best-effort /dev/tty OSC-0 writer, called from the bin.ts postamble
-    help.ts           // the pretty grouped/per-command/JSON help renderers + did-you-mean (ADR 113)
+    help.ts           // the pretty grouped/per-command/JSON help renderers + did-you-mean (ADR 113); a detail line that wraps keeps its indent and its description column (`wrapIndented`), lines the catalog split mid-sentence or mid-description are joined first (`detailParagraphs`), and a long example starts on its `$` line
     credentials.ts    // v0.3 mint/env renderers: credentialEnv (SPEC A.9) + shown-once agent key / human credential / grant / team-create blocks (ADR 075/076; live post-P3 cutover)
   broadcast/          // the hosted half of `musterd broadcast` — run the capture on a rented machine
     channelTitle.ts   // ADR 711: the session title (Coffee & musterd - <tail>) from the one goal being worked, and the Helix read-then-maybe-write that refuses a human-set title. The token stays a Fly secret.
