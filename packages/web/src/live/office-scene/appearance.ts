@@ -121,7 +121,7 @@ const HAIR_COLORS = [
 /** Hair silhouettes. These must read at ~30px, so they differ by *shape*, not by strand detail. */
 export type HairStyle = 'bald' | 'buzz' | 'short' | 'side' | 'bob' | 'long' | 'ponytail' | 'afro' | 'bun';
 
-export type FacialHair = 'none' | 'stubble' | 'moustache' | 'goatee' | 'beard';
+export type FacialHair = 'none' | 'stubble' | 'moustache' | 'goatee' | 'beard' | 'beard-wild';
 
 /**
  * Style, grooming and the spots (office figure v2, spec §2.4–2.5, lane 01M62411D3).
@@ -152,7 +152,8 @@ const RELAXED_HAIR: readonly HairStyle[] = ['long', 'afro', 'short', 'ponytail',
 /** Facial hair by grooming. Weighted toward `none` either way — a floor where everyone has a beard is
  *  as uniform as one where nobody does. The untrimmed beard joins the relaxed pool with v2-3a. */
 const POLISHED_FACIAL: readonly FacialHair[] = ['none', 'none', 'none', 'none', 'none', 'moustache', 'goatee', 'beard'];
-const RELAXED_FACIAL: readonly FacialHair[] = ['none', 'none', 'none', 'none', 'stubble', 'stubble', 'beard', 'goatee'];
+// `beard-wild` is the untrimmed beard (figure v2-3a): relaxed grooming's own, never the polished pool's.
+const RELAXED_FACIAL: readonly FacialHair[] = ['none', 'none', 'none', 'none', 'stubble', 'stubble', 'beard-wild', 'goatee', 'beard'];
 
 export type Hat = 'none' | 'cap' | 'beanie' | 'band';
 /** Hats are the rarest thing on the floor, so they stay a small delight rather than a uniform. */

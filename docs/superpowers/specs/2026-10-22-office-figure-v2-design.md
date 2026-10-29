@@ -227,14 +227,26 @@ directions) with nick, because the figure can only be judged there.
 | --- | --- | --- | --- |
 | v2-1 | The body: proportions, fused surfaces, anatomy, face, materials; skin-only base with legs, bottoms and shoes as pieces; today's wardrobe re-fitted; checked in /live on a few frames first; the build stretch in `figure.ts` | full, ~2 h+ | `01M5JHEEGT55EDJYG51H6ZAQVJ` |
 | v2-2 | Tops upgraded (cuffs, hems, collars, drawstrings, plackets) | tops only | `01M5JHEGY8S4BSJDWS1M6SYZMG` |
-| v2-3 | Hair and facial hair upgraded, with polished and unkempt versions | hair, facial | `01M5JHEK4HNPFY7XC3RKQWJFV9` |
-| v2-4 | Hats and accessories upgraded; earrings, headbands, watches, bracelets, headphones around the neck, more frames | accessories | `01M5JHENHB2ACVDJ767XP0RH8X` |
-| v2-5 | Style, grooming and per-spot accessory picks in `appearance.ts`, `presents` retired; outer layers; the first new pieces of each style. After realism increment 4 | new pieces | `01M5JHERVT03C6VDN13M8FE3NK` |
-| v2-6… | More pieces per style, including the one-piece layer and dresses, a few per PR | new pieces | `01M5JHEV51D8G1FKGSNVK9CJ81` |
+| v2-3a | Facial hair upgraded: stubble, moustache, goatee, beard, with a trimmed and an untrimmed beard | facial only | `01M62401YK6BGN0G03BWTHC98C` |
+| v2-3b | Hair polished, two existing styles per PR | hair, two sheets | `01M6240SJ8Y1QXQ67254QMR9GE` |
+| v2-3c | New hair, one style per PR: slicked back, curly, tousled | one new hair sheet | `01M6240XB57EY09P5F5R75R06W` |
+| v2-4a | Glasses: two more frame shapes | two small sheets | `01M62405HH2HVKRF8NJ9PJH0PB` |
+| v2-4b | Earrings (studs, hoops) and the ears spot | small sheets | `01M62409JACSFFXRMQPX7XNYS8` |
+| v2-4c | Watch and bracelet, the wrist spot | small sheets | `01M6240DAXV1RS7K1TBF7GSCS0` |
+| v2-4d | Headband upgraded, headphones around the neck; the head and neck spots | small sheets | `01M6240HEE81CPYNZ1BZ8DSFF4` |
+| v2-4e | Hats upgraded, one new hat | hats | `01M6240N5CR6MVM0C189BD7NBW` |
+| v2-5a | The appearance refactor: style, grooming, per-spot picks; `presents` retired | none | `01M62411D3D151HHX725TGN831` |
+| v2-5b | Outer layers, one per PR: cardigan, blazer, zip jacket | one top-sized sheet each | `01M62415ZGM6F6TE6WEAY1SM6J` |
+| v2-6a | One dress, proving the one-piece layer; then one piece per PR | one sheet each | `01M62419RESZP833BHDX8SNENE` |
+
+_(Re-sliced 2026-10-28, nick: "ship small increments". The four umbrella lanes v2-3…v2-6 were abandoned
+in favour of these; the per-call render store makes a one-piece PR minutes of render, and the office art
+byte budget — ~8.42 of 8.50 MB on 2026-10-28 — is the real throttle: accessories and facial hair are
+near free, every new hair or top sheet is its own logged raise.)_
 
 Order: v2-1 → nick accepts the rendered people → realism increment 4 (flag off, painters deleted) →
-v2-5. v2-2 to v2-4 can land before or after increment 4; they only upgrade pieces the painted office
-never draws.
+v2-5a. v2-3a…v2-4e land in any order before it (they only add or upgrade sheets and single pool
+entries); v2-5b and v2-6a wait for v2-5a's hue and one-piece rules.
 
 ## 9. Risks
 
