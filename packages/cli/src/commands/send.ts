@@ -225,6 +225,21 @@ export function blockedByFlags(
   };
 }
 
+/**
+ * The teammate a send with no `--to` names as its first word, if any. `musterd send nick "can you
+ * look?"` used to go to @team with the body "nick can you look?" (docs/wiki/cli-journeys-review.md
+ * F2). A bare first word that is a member's name, followed by more words, is a recipient the
+ * caller meant. Null when the first word is no member's name.
+ */
+export function recipientInBody(
+  positionals: readonly string[],
+  members: readonly string[],
+): string | null {
+  if (positionals.length < 2) return null;
+  const first = positionals[0]!.trim().toLowerCase();
+  return members.find((m) => m.toLowerCase() === first) ?? null;
+}
+
 export async function sendCommand(parsed: Parsed): Promise<number> {
   // A flag this command does not know would take the NEXT argument as its value and drop it —
   // `musterd send --to x --act message --body "text"` sends an act with an empty body and reports
@@ -236,6 +251,23 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   );
   const { team, identity, http } = resolve(parsed.flags);
   const to = flagStr(parsed.flags, 'to') ?? '@team';
+  if (flagStr(parsed.flags, 'to') === undefined) {
+    // No --to means @team. A first word that names a teammate means the caller wrote the
+    // recipient positionally: refuse rather than broadcast it with their name in the body.
+    const members = await http
+      .roster(team)
+      .then((r) => r.members.map((m) => m.name))
+      .catch(() => []);
+    const named = recipientInBody(parsed.positionals, members);
+    if (named) {
+      throw new CliError(
+        `"${named}" reads as the recipient, but with no --to this goes to @team. ` +
+          `Send it to ${named} with \`musterd send --to ${named} --act <act> <body…>\`, ` +
+          `or pass --to @team to send it to everyone.`,
+        2,
+      );
+    }
+  }
   // A shared-blocker report supplies its own act (status_update, spec §1), so `--blocked-by` alone is
   // a complete command — which is the whole point: the failing gate prints one line a seat can paste.
   const blocked = blockedByFlags(parsed.flags, flagStr(parsed.flags, 'act') as Act | undefined);

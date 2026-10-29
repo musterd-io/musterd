@@ -239,6 +239,8 @@ describe('musterd claim (v0.3 handshake, ADR 075)', () => {
     const { code, out } = await run(['Ada', '--team', 'dawn', '--grant', g]);
     expect(code).toBe(0);
     expect(out).toContain('Ada');
+    // An agent seat is told its harness occupies it on launch; a human is not (journeys F5).
+    expect(out).toContain('the agent here will occupy it on launch');
     const b = readBinding();
     expect(b.agent_key).toBe(agentKey);
     expect(b.member).toBeUndefined(); // v0.3: no member/token in the binding
