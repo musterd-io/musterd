@@ -119,12 +119,18 @@ for (let i = 1; i <= runs; i++) {
   const { out } = await sweep(`${base}/birth-after-freeze.html`);
   const fails = belowAA(out);
   const excluded = /BORN after the scene froze/.test(out);
-  // Deterministic arm: the post-freeze birth is unmarked every time, so it must be excluded every
-  // time. A run that neither excludes it nor fails is the fix silently not firing.
-  const ok = fails === 0 && excluded;
+  const measured = /live: (\d+) measured/.exec(out);
+  // This arm's original assertion — excluded-as-born every run — went stale when the rect pass
+  // stopped re-walking the tree and took its rows from the walk's own node list instead: a bubble
+  // born after the walk is never in that list, so it cannot be measured OR excluded, and the
+  // born-note stopped firing while the outcome stayed safe (verified 2026-10-29: 0 below AA, no
+  // BORN note, on the pre-lane sweep). The assertion that can still fail is the outcome itself:
+  // no failure, and exactly the two pre-freeze rows measured. A run that measures the born row
+  // again (3 rows, or a failure over the dark patch) is the hole back.
+  const ok = fails === 0 && measured?.[1] === '2';
   if (!ok) failed++;
   console.log(
-    `  ${ok ? '✓' : '✗'} after-freeze  run ${i}: ${fails} below AA, ${excluded ? 'excluded as born' : 'NOT excluded'}`,
+    `  ${ok ? '✓' : '✗'} after-freeze  run ${i}: ${fails} below AA, ${measured?.[1] ?? '?'} measured${excluded ? ', excluded as born' : ', born row never entered the row list'}`,
   );
 }
 
@@ -185,6 +191,27 @@ for (let i = 1; i <= runs; i++) {
   if (!ok) failed++;
   console.log(
     `  ${ok ? '✓' : '✗'} replace-in-place run ${i}: ${fails} below AA${ok ? ' — still measured' : ' — a re-rendered row was excused, and its real failure with it'}`,
+  );
+}
+
+/* ── The remount arm (lane 01M5H404Z, 2026-10-29) ───────────────────────────────────────────────
+ *
+ * The vanish guard's other edge: a row replaced like for like is vouched as "the same paint" —
+ * same class, same text, same place. That vouch is false when the twin RESTARTED an entrance
+ * animation: at shutter time its paper was not painted yet, so the pixel under the glyph belongs
+ * to whatever is underneath. On connected /live the office key remounted mid-sweep and its "×"
+ * measured 4.21 (#4d5462 on the #debb92 floor) against a card that reads ~6:1 on its own paper —
+ * once, then green on re-run. The fixture remounts its card the instant the glyphs hide for the
+ * shutter, so the twin is at fade-start when the pixel is taken, deterministically.
+ * Pre-fix: 1 below AA (4.3x on the floor) every run. It must now be excluded as gone every run. */
+for (let i = 1; i <= runs; i++) {
+  const { out } = await sweep(`${base}/remount-restarts-fade.html`);
+  const fails = belowAA(out);
+  const excluded = /GONE by the shutter/.test(out);
+  const ok = fails === 0 && excluded;
+  if (!ok) failed++;
+  console.log(
+    `  ${ok ? '✓' : '✗'} remount-restarts-fade run ${i}: ${fails} below AA, ${excluded ? 'excluded as gone' : 'NOT excluded — a remounted twin vouched for paint it had not laid down yet'}`,
   );
 }
 

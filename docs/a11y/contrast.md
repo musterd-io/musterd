@@ -323,6 +323,7 @@ not specific to `--motion`, and it was not only a manual gap: the CI gate's floo
 | 2026-08-13 | hero eyebrow + cursor + `--text-faint`    | 1.18 / 2.54 / 4.09 on the landing page; added `--accent-ink`                           |
 | 2026-09-14 | `/office-preview` reduced-motion room     | 0 failures — 49 measured at both lights, identical to the animated room at rest        |
 | 2026-09-30 | connected `/live` flake — rows that leave | `1.1 #fff on #fbf3e6` in 8 of 12 reds: a card unmounting mid-sweep; now excluded `GONE` |
+| 2026-10-29 | connected `/live` flake — rows that remount | office key `×` at 4.21 on the floor: a like-for-like remount restarted its fade, so the replacement vouch sampled unpainted paper; a twin still entering at the rect pass no longer vouches — excluded `GONE`. Arm: `remount-restarts-fade.html` in `birth-falsifier.mjs`, which now runs in CI |
 
 After those three, `/live` and `/broadcast` measure **zero** live AA text-contrast failures — and
 since 2026-08-12 every prerendered route measures zero on every PR, because `pnpm a11y:check` says

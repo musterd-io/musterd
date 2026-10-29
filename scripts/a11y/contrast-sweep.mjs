@@ -768,6 +768,18 @@ function decodePng(buf) {
  * failure in CI.
  */
 const RECTS_IN_PAGE = /* js */ `(() => {
+  /* Snapshot who is mid-animation BEFORE the finish() below jumps them all to their end state:
+     finish() erases exactly the evidence the replaced-row vouch further down needs. A twin that
+     remounted and restarted its entrance fade reads as settled the moment finish() lands, while
+     the shutter — which fired before this pass — sampled it at whatever opacity it had reached.
+     On connected /live that was the office key: remounted mid-sweep, its "×" sampled over the
+     floor at 4.21 (lane 01M5H404Z). */
+  const animatingAtEntry = new Set();
+  for (const a of document.getAnimations()) {
+    if (a.playState === 'finished') continue;
+    const t = a.effect?.target;
+    if (t && t.nodeType === 1) animatingAtEntry.add(t);
+  }
   /* Jump every finite animation to its end state first. Infinite ones (the clock sheen, the runway
      shimmer) throw on finish() and are left alone — they are decorative loops with no end state,
      and reduced-motion emulation has already disabled the ones this project controls. */
@@ -790,12 +802,31 @@ const RECTS_IN_PAGE = /* js */ `(() => {
        Except when the swap was like for like. The office scene rebuilds its nameplate DOM on its
        tick, so a plate's node is replaced by one with the same class and text, painted where the old
        one was. Reported as \`replaced\` (by row index) so the post-shutter check can tell a re-render
-       from a row that actually left the page. \`row.last\` is where the previous reading saw it. */
+       from a row that actually left the page. \`row.last\` is where the previous reading saw it.
+       Like-for-like is not enough on its own: a twin that restarted an entrance animation was NOT
+       the same paint at shutter time (the office key over the floor, lane 01M5H404Z), so the vouch
+       below also requires the twin to have been settled at this pass's entry. */
     if (!node.isConnected) {
       gone.push(key);
       const l = row.last;
+      /* Same class, same text, same place is the same paint ONLY if the twin was settled when
+         the shutter fired. A remounted twin restarts its entrance animation: at shutter time
+         its paper may not be painted at all, and the pixel belongs to whatever is underneath.
+         The snapshot above was taken before finish(), so a twin still entering at this pass
+         cannot vouch for the row — it joins the gone list and is excluded like any vanished row.
+         (Residual: a twin whose fade both started and finished inside the shutter-to-this-pass
+         gap reads finished here and still vouches; that window is one short fade wide.) */
+      const settledTwin = (e) => {
+        let n = e;
+        while (n && n.nodeType === 1) {
+          if (animatingAtEntry.has(n)) return false;
+          n = n.parentElement;
+        }
+        return true;
+      };
       if (l && [...document.getElementsByClassName(l.cls.split(' ')[0] || '_')].some((e) => {
         if (e.className !== l.cls || e.textContent !== l.text) return false;
+        if (!settledTwin(e)) return false;
         const b = e.getBoundingClientRect();
         return Math.abs(b.x - l.x) <= 1 && Math.abs(b.y - l.y) <= 1;
       })) replaced.push(i);
