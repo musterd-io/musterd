@@ -183,7 +183,7 @@ describe('style, grooming and the spots (office figure v2-5a — presents retire
     expect(looks.filter((l) => worn(l) >= 2).length).toBeLessThan(names.length * 0.15);
     // the legacy summary names the most visible worn spot
     for (const l of looks) {
-      if (l.ears !== 'none') expect(l.accessory).toBe('headphones');
+      if (l.ears === 'headphones') expect(l.accessory).toBe('headphones');
       else if (l.eyes !== 'none') expect(l.accessory).toBe('glasses');
       else if (l.neck !== 'none') expect(l.accessory).toBe('scarf');
       else expect(l.accessory).toBe('none');

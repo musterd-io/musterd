@@ -57,7 +57,7 @@ HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun"]
 FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
-ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf"]
+ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
 # every earlier layer keeps its place.
@@ -542,6 +542,13 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     r.torus("headband", "head", "acc/headphones", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.3, R * 1.08, 1.0, (0, math.radians(90), 0))
     for sy in (1, -1):
         r.orb("cup", "head", "acc/headphones", acc, HEAD_X - R * 0.05, sy * R * 0.98, HEAD_C + R * 0.3, R * 0.36, R * 0.2, R * 0.4)
+    # earrings (figure v2-4b, spec §2.4 the ears spot): a stud on each lobe, or a small hoop hanging from
+    # it, the ring turned to face sideways so it reads in profile. Untinted metal, tinted at runtime.
+    lobe_x, lobe_y, lobe_z = HEAD_X - R * 0.05, R * 0.97, HEAD_C + R * 0.1
+    metal = scene.matte("fig-metal", (0.9, 0.9, 0.9), 0.25)
+    for sy in (1, -1):
+        r.orb("stud", "head", "acc/earrings-stud", metal, lobe_x, sy * lobe_y, lobe_z, R * 0.07, R * 0.07, R * 0.07)
+        r.torus("hoop", "head", "acc/earrings-hoop", metal, lobe_x, sy * (lobe_y + 0.2), lobe_z - R * 0.12, R * 0.12, 0.28, (math.radians(90), 0, 0))
     r.torus("scarf", "neck", "acc/scarf", acc, HEAD_X * 0.5, 0, NECK - 1.5 * FIG, 4.4 * FIG, 1.9 * FIG)
     r.box("scarf-tail", "spine", "acc/scarf", acc, 6.2 * FIG, 2, CHEST - 2 * FIG, 2.6, 4.3, 8.6, 0.9)
 

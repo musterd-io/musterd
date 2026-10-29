@@ -1762,6 +1762,7 @@ const RECEPTIONIST_LOOK: Appearance = {
   neck: 'none',
   accessory: 'none',
   accessoryColor: '#2f7f6a',
+  metal: '#cfd3d8',
   smile: 'soft',
   build: 1,
 };
