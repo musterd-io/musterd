@@ -132,7 +132,7 @@ describe('done tells the truth about the close it records', () => {
     expect(JSON.parse(shown.out).lane.state).toBe('awaiting_acceptance');
   });
 
-  it('collects the named human’s approval over the exact submitted merge', async () => {
+  it('collects the named human’s approval over the exact submitted merge, stdout clean under --json', async () => {
     const id = await claimedLane();
     const shown = await capture(() => laneCommand(parseArgs(['show', id, '--json'])));
     const lane = JSON.parse(shown.out).lane;
@@ -153,13 +153,14 @@ describe('done tells the truth about the close it records', () => {
     const update = vi
       .spyOn(HttpClient.prototype, 'updateLane')
       .mockResolvedValue({ lane, warnings: [] } as Awaited<ReturnType<HttpClient['updateLane']>>);
-    expect(
-      (
-        await capture(() =>
-          doneCommand(parseArgs([id, '--pr', '17', '--sha', 'abcdef1', '--authorized-by', 'nick'])),
-        )
-      ).code,
-    ).toBe(0);
+    // Under --json the ceremony's prompts stay on stderr: stdout is the one reply line.
+    const res = await capture(() =>
+      doneCommand(
+        parseArgs([id, '--pr', '17', '--sha', 'abcdef1', '--authorized-by', 'nick', '--json']),
+      ),
+    );
+    expect(res.code).toBe(0);
+    expect(JSON.parse(res.out)).toMatchObject({ lane: { id } });
     expect(descriptorCall).toHaveBeenCalledWith('dawn', {
       act: 'set_authorized_by',
       target: id,
@@ -174,5 +175,47 @@ describe('done tells the truth about the close it records', () => {
     await expect(
       doneCommand(parseArgs([id, '--pr', '17', '--sha', 'abcdef1', '--authorized-by', 'alice'])),
     ).rejects.toThrow(/named human.*alice/);
+  });
+
+  it('--json prints the daemon reply as one line and nothing else', async () => {
+    const id = await claimedLane();
+    const res = await capture(() => doneCommand(parseArgs([id, '--json'])));
+    expect(res.code).toBe(0);
+    expect(res.out.trim().split('\n')).toHaveLength(1);
+    const reply = JSON.parse(res.out) as {
+      lane: { id: string; state: string };
+      warnings: unknown[];
+    };
+    expect(reply.lane).toMatchObject({ id, state: 'done' });
+    expect(Array.isArray(reply.warnings)).toBe(true);
+  });
+
+  it('--json on a submit carries the awaiting_acceptance lane', async () => {
+    const id = await claimedLane();
+    const res = await capture(() =>
+      doneCommand(parseArgs([id, '--pr', '7', '--sha', 'deadbeef', '--json'])),
+    );
+    expect(res.code).toBe(0);
+    const reply = JSON.parse(res.out) as { lane: { state: string } };
+    expect(reply.lane.state).toBe('awaiting_acceptance');
+  });
+
+  it('every lane write prints one parseable JSON line under --json', async () => {
+    const opened = await capture(() => laneCommand(parseArgs(['open', 'json work', '--json'])));
+    const { lane } = JSON.parse(opened.out) as { lane: { id: string; state: string } };
+    expect(lane.state).toBe('open');
+    const steps: [string[], string][] = [
+      [['claim', lane.id], 'claimed'],
+      [['update', lane.id, '--state', 'active'], 'active'],
+      [['release', lane.id], 'open'],
+      [['claim', lane.id], 'claimed'],
+      [['resolve', lane.id], 'done'],
+    ];
+    for (const [args, state] of steps) {
+      const res = await capture(() => laneCommand(parseArgs([...args, '--json'])));
+      expect(res.code).toBe(0);
+      expect(res.out.trim().split('\n')).toHaveLength(1);
+      expect((JSON.parse(res.out) as { lane: { state: string } }).lane.state).toBe(state);
+    }
   });
 });

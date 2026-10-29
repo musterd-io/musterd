@@ -4,7 +4,7 @@ import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { collectApproval } from './authority.js';
 import { resolve } from './helpers.js';
-import { followsUpFlag, readVerdictFlags, renderSubmitReport } from './lane.js';
+import { followsUpFlag, printJson, readVerdictFlags, renderSubmitReport } from './lane.js';
 
 /**
  * `musterd done [<lane-id>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]` — close the unit of
@@ -28,29 +28,6 @@ function laneLine(l: Lane): string {
   return `  ${theme.meta(l.id)} ${l.state} "${l.title}"${goal}`;
 }
 
-/**
- * The flags `musterd done` takes (lane `01M5D907S74XVT5YECNWB5VW5A`).
- *
- * A flag this command does not know takes the NEXT argument as its value and drops it, so a
- * typo silently loses an argument — the lane id, the target, the words of a message. A command
- * knows its own flags, so it refuses the ones it does not, before anything is composed. The
- * global flags every command inherits come from `GLOBAL_FLAGS`; this list is the command's own.
- *
- * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
- * without being declared fails the build instead of working in the field.
- */
-/**
- * The flags `musterd done` takes (lane
- * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
- * its value and drops it, so a typo loses an argument — the lane id, the target, the words of a
- * message. A command knows its own flags, so it refuses the ones it does not, before anything
- * is composed. The global flags every command inherits come from `GLOBAL_FLAGS`; this list is
- * the command's own — and the flags the helpers it calls read, because a helper's read is this
- * command's vocabulary too.
- *
- * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
- * without being declared fails the build instead of working in the field.
- */
 /**
  * The flags `musterd done` takes (lane
  * `01M5D907S74XVT5YECNWB5VW5A`). A flag this command does not know takes the NEXT argument as
@@ -193,6 +170,9 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
     // ADR 644: a lane with `reads_on` needs the read's verdict before it closes done.
     ...readVerdictFlags(parsed.flags),
   });
+  // `--json`: the daemon's reply alone — the lane's new state says done vs submitted, `review`
+  // says who was asked. The what's-next chain is orientation prose and stays out of it.
+  if (parsed.flags['json'] === true) return printJson(res);
   process.stdout.write(
     `${theme.ok('✓')} ${submitting ? 'submitted for acceptance' : 'done'}\n${laneLine(res.lane)}\n`,
   );
