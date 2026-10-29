@@ -249,6 +249,7 @@ it ships.
 
 ```
 src/
+  assets.d.ts              // an imported .png is a Metro asset id for <Image source>
   native/
     answer.ts              // sign, seal, POST an answer: the notification action's, and the app's (listed acts too)
     asks.ts                // the asks list: Notification Center refs, each fetched live by ref; redeliver
@@ -265,13 +266,13 @@ src/
     push.ts                // the musterd block on an APNs payload, and a fetched body
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/
-    theme.ts               // brand.md palette (mustard accent on zinc, light and dark)
+    theme.ts               // brand.md palette (mustard accent on zinc); the app is light only
 ```
 
 The screens are `.tsx` and outside the drift check; kept honest by hand:
 
 ```
-src/app/_layout.tsx   // the Stack, themed from the palette
+src/app/_layout.tsx   // the Stack, themed from the palette; the nameplate wordmark heads Asks
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
 src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, and answering
