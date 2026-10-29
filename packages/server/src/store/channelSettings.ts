@@ -1,4 +1,4 @@
-import type { AskTier } from '@musterd/protocol';
+import type { AskSkipReason, AskTier, LastAskOutcome } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { appendAudit } from './audit.js';
 
@@ -26,6 +26,8 @@ export interface ChannelSettings {
   presenceGating: boolean;
   tierFloor: AskTier | null;
 }
+
+export type { AskSkipReason, LastAskOutcome };
 
 const TIER_RANK: Record<AskTier, number> = { advisory: 0, standard: 1, blocking: 2 };
 
@@ -59,14 +61,90 @@ export async function getChannelSettings(
   };
 }
 
-/** Every channel the human has touched, with the all-off default applied per channel. */
+/**
+ * Every channel the human has touched, with the all-off default applied per channel, and what
+ * became of the last ask on each (`lastAsk`, null when none was routed there yet).
+ */
 export async function listChannelSettings(
   db: Driver,
   teamId: string,
   memberId: string,
   channels: string[],
-): Promise<ChannelSettings[]> {
-  return Promise.all(channels.map((c) => getChannelSettings(db, teamId, memberId, c)));
+): Promise<(ChannelSettings & { lastAsk: LastAskOutcome | null })[]> {
+  const member = await db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [
+    memberId,
+  ]);
+  return Promise.all(
+    channels.map(async (c) => ({
+      ...(await getChannelSettings(db, teamId, memberId, c)),
+      lastAsk: member ? await lastAskOutcome(db, teamId, member.name, c) : null,
+    })),
+  );
+}
+
+/** The latest `channel.ask_outcome` row for this human on this channel. */
+export async function lastAskOutcome(
+  db: Driver,
+  teamId: string,
+  human: string,
+  channel: string,
+): Promise<LastAskOutcome | null> {
+  const rows = await db.all<{ ts: number; detail: string | null }>(
+    `SELECT ts, detail FROM audit
+      WHERE team_id = ? AND action = 'channel.ask_outcome' AND target = ?
+      ORDER BY ts DESC, id DESC LIMIT 20`,
+    [teamId, human],
+  );
+  for (const row of rows) {
+    let d: Record<string, unknown>;
+    try {
+      d = JSON.parse(row.detail ?? '{}') as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (d['channel'] !== channel || typeof d['ask'] !== 'string') continue;
+    return {
+      at: Number(row.ts),
+      ask: d['ask'],
+      outcome: d['outcome'] as LastAskOutcome['outcome'],
+      reason: (d['reason'] as AskSkipReason | undefined) ?? null,
+    };
+  }
+  return null;
+}
+
+/** Record what became of one ask on one human's channel (lane 01M64DSKT3). */
+export async function recordAskOutcome(
+  db: Driver,
+  input: {
+    teamId: string;
+    human: string;
+    channel: string;
+    ask: string;
+    outcome: LastAskOutcome['outcome'];
+    reason?: AskSkipReason;
+  },
+): Promise<void> {
+  await appendAudit(db, input.teamId, {
+    actor: null,
+    action: 'channel.ask_outcome',
+    target: input.human,
+    result: input.outcome === 'sent' ? 'allow' : 'deny',
+    detail: {
+      channel: input.channel,
+      ask: input.ask,
+      outcome: input.outcome,
+      ...(input.reason ? { reason: input.reason } : {}),
+    },
+  });
+}
+
+/** Why these switches would not deliver an ask of this tier, or null when they would. */
+export function deliverRefusal(s: ChannelSettings, askTier: AskTier): AskSkipReason | null {
+  if (!s.deliver) return 'delivery_off';
+  if (s.tierFloor !== null && TIER_RANK[askTier] < TIER_RANK[s.tierFloor])
+    return 'below_tier_floor';
+  return null;
 }
 
 /** Replace one channel's settings (the human's own write, audited as channel.settings.changed). */

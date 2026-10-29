@@ -65,6 +65,7 @@ export * from './authorityRelay.js';
 export * from './seeds.js';
 export * from './relay.js';
 export * from './appChannel.js';
+export * from './channelOutcome.js';
 export * from './autoTarget.js';
 export * from './tool-telemetry.js';
 export * from './ci-telemetry.js';

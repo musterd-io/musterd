@@ -1,4 +1,4 @@
-import { APP_CHANNEL } from '@musterd/protocol';
+import { APP_CHANNEL, lastAskLine } from '@musterd/protocol';
 import { z } from 'zod';
 import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
@@ -72,6 +72,9 @@ async function notifyChannelsCommand(parsed: Parsed): Promise<number> {
         `${s.channel}  deliver ${s.deliver ? 'on' : 'off'}  answer ${answerState(s)}  ` +
           `presence-gating ${s.presenceGating ? 'on' : 'off'}  tier-floor ${s.tierFloor ?? 'none'}\n`,
       );
+      // Lane 01M64DSKT3: what became of the last ask here, so a silent skip is never silent.
+      const last = lastAskLine(s.lastAsk, Date.now());
+      if (last) process.stdout.write(`  ${theme.meta(last)}\n`);
     }
     return 0;
   }

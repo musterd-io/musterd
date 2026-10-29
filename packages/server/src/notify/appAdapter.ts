@@ -35,7 +35,12 @@ import {
 import { appendAudit, listAuditByAction } from '../store/audit.js';
 import { buildDescriptor, getDeviceKey, requireAuthority } from '../store/authority.js';
 import { listBindings, type ChannelBinding } from '../store/channelBindings.js';
-import { deliverAllowed, getChannelSettings } from '../store/channelSettings.js';
+import {
+  deliverRefusal,
+  getChannelSettings,
+  recordAskOutcome,
+  type AskSkipReason,
+} from '../store/channelSettings.js';
 import { getLane } from '../store/lanes.js';
 import { getMemberById, listMembers } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
@@ -187,6 +192,11 @@ async function activeAppBinding(
   if (!binding) return null;
   const keys = await appBindingKeys(db, teamId, binding.id);
   return keys ? { binding, keys } : null;
+}
+
+/** Has this human ever paired a phone? Revoked bindings count: they once expected asks there. */
+async function everPairedApp(db: Driver, teamId: string, memberId: string): Promise<boolean> {
+  return (await listBindings(db, teamId, memberId)).some((b) => b.channel === APP_CHANNEL);
 }
 
 interface AskRow {
@@ -385,8 +395,6 @@ export async function deliverAskToAppChannels(
     if (env.act !== 'ask') return;
     const kind = appAskKind((env.meta as Record<string, unknown> | undefined) ?? null);
     if (!kind) return;
-    const link = relayLinkFor(ctx, team.slug);
-    if (!link) return;
     const ask = await loadAsk(ctx.db, team.id, env.id);
     if (!ask) return;
     const members = await listMembers(ctx.db, team.id);
@@ -395,13 +403,23 @@ export async function deliverAskToAppChannels(
       env.to.kind === 'member'
         ? humans.filter((m) => m.name === (env.to as { name: string }).name)
         : humans.filter((m) => resolveCapabilities(m).is_admin);
+    const link = relayLinkFor(ctx, team.slug);
     for (const human of addressed) {
+      // A human who never paired a phone expected nothing here, so nothing is recorded for them.
+      if (!(await everPairedApp(ctx.db, team.id, human.id))) continue;
+      if (!link) {
+        await noteAppOutcome(ctx, team, human, ask.id, 'skipped', 'relay_not_connected');
+        continue;
+      }
       if (kind.class === 'privileged') {
         await tickVerdictQueue(ctx, team, human, now, ask.id);
         continue;
       }
       const target = await appTargetFor(ctx, team, human, askTierOf(ask));
-      if (!target) continue;
+      if ('skip' in target) {
+        await noteAppOutcome(ctx, team, human, ask.id, 'skipped', target.skip);
+        continue;
+      }
       const sent = await deliverOne(ctx, team, link, ask, target, askExpiry(ask), { now });
       log.info({
         msg: sent ? 'away_app_deliver_queued' : 'away_app_delivery_failed',
@@ -409,6 +427,14 @@ export async function deliverAskToAppChannels(
         ask: env.id,
         reason: sent ? undefined : 'relay_not_connected',
       });
+      await noteAppOutcome(
+        ctx,
+        team,
+        human,
+        ask.id,
+        sent ? 'sent' : 'failed',
+        sent ? undefined : 'relay_not_connected',
+      );
     }
   } catch (err) {
     log.warn({ msg: 'away_app_delivery_failed', team: team.slug, ask: env.id, err: String(err) });
@@ -435,22 +461,48 @@ function askExpiry(ask: AskRow): number {
   );
 }
 
-/** The human's app binding, if the channel's settings and presence gate let this tier through. */
+/**
+ * The human's app binding, if the channel's settings and presence gate let this tier through —
+ * else why not, so the skip is recorded instead of silent (lane 01M64DSKT3).
+ */
 async function appTargetFor(
   ctx: Ctx,
   team: { id: string },
   human: MemberRow,
   tier: ReturnType<typeof askTierOf>,
-): Promise<{ binding: ChannelBinding; keys: AppKeys } | null> {
+): Promise<{ binding: ChannelBinding; keys: AppKeys } | { skip: AskSkipReason }> {
   const settings = await getChannelSettings(ctx.db, team.id, human.id, APP_CHANNEL);
-  if (!deliverAllowed(settings, tier)) return null;
+  const refusal = deliverRefusal(settings, tier);
+  if (refusal) return { skip: refusal };
   if (
     settings.presenceGating &&
     (await humanPresent(ctx.db, team.id, human, ctx.config.presenceTimeoutMs))
   ) {
-    return null;
+    return { skip: 'present' };
   }
-  return activeAppBinding(ctx.db, team.id, human.id);
+  return (await activeAppBinding(ctx.db, team.id, human.id)) ?? { skip: 'no_binding' };
+}
+
+/** Log and record what became of one ask on this human's app channel. */
+async function noteAppOutcome(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  human: MemberRow,
+  ask: string,
+  outcome: 'sent' | 'skipped' | 'failed',
+  reason?: AskSkipReason,
+): Promise<void> {
+  if (outcome === 'skipped') {
+    log.info({ msg: 'away_app_skipped', team: team.slug, ask, human: human.name, reason });
+  }
+  await recordAskOutcome(ctx.db, {
+    teamId: team.id,
+    human: human.name,
+    channel: APP_CHANNEL,
+    ask,
+    outcome,
+    ...(reason ? { reason } : {}),
+  });
 }
 
 const HOUR_MS = 60 * 60_000;
@@ -617,10 +669,17 @@ export async function tickVerdictQueue(
   const link = relayLinkFor(ctx, team.slug);
   if (!link) return;
   const pending = await pendingPrivilegedAsks(ctx, team, human, now);
-  const target = pending.length
+  const found = pending.length
     ? await appTargetFor(ctx, team, human, askTierOf(pending[0]!))
     : null;
-  if (!target) return;
+  if (!found) return;
+  if ('skip' in found) {
+    if (arrived && (await everPairedApp(ctx.db, team.id, human.id))) {
+      await noteAppOutcome(ctx, team, human, arrived, 'skipped', found.skip);
+    }
+    return;
+  }
+  const target = found;
   const open = await openVerdicts(ctx, team, target.binding, now);
   const waiting = pending.filter((a) => !open.includes(a.id));
   const auditOneOpen = async (count: number) => {

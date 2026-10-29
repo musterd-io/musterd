@@ -1,3 +1,4 @@
+import type { LastAskOutcome } from '@musterd/protocol';
 import { apiGet, LiveFetchError, type LiveConfig } from './client';
 
 /**
@@ -60,6 +61,8 @@ export interface ChannelSettings {
   answer: boolean;
   presenceGating: boolean;
   tierFloor: 'advisory' | 'standard' | 'blocking' | null;
+  /** What became of the last ask routed here (lane 01M64DSKT3); absent from an older daemon. */
+  lastAsk?: LastAskOutcome | null;
 }
 
 /** This human's channel settings, one row per channel with the defaults applied. */

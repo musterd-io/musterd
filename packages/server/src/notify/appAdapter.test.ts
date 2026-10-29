@@ -29,7 +29,7 @@ import {
 import { listAuditByAction } from '../store/audit.js';
 import { buildDescriptor, enrollDeviceKey, revokeDeviceKey } from '../store/authority.js';
 import type { ChannelBinding } from '../store/channelBindings.js';
-import { setChannelSettings } from '../store/channelSettings.js';
+import { listChannelSettings, setChannelSettings } from '../store/channelSettings.js';
 import { getLane, openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
@@ -387,6 +387,76 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
     const delivered = await listAuditByAction(s.db, s.team.id, 'channel.sealed_delivered', 10);
     expect(delivered.some((r) => r.target === 'ask-1')).toBe(true);
     expect(JSON.stringify(delivered)).not.toContain(delivery.token);
+  });
+
+  it('records each ask’s outcome, and a skip says why (lane 01M64DSKT3)', async () => {
+    const s = await seed();
+    const lastAsk = async () =>
+      (await listChannelSettings(s.db, s.team.id, s.nick.id, ['app']))[0]!.lastAsk;
+
+    await deliverAskToAppChannels(
+      s.ctx,
+      s.team,
+      await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-1'),
+    );
+    expect(await lastAsk()).toMatchObject({ ask: 'ask-1', outcome: 'sent', reason: null });
+
+    const off = {
+      channel: 'app',
+      deliver: false,
+      answer: false,
+      presenceGating: false,
+      tierFloor: null,
+    };
+    await setChannelSettings(s.db, {
+      teamId: s.team.id,
+      memberId: s.nick.id,
+      actor: 'nick',
+      settings: off,
+    });
+    await deliverAskToAppChannels(
+      s.ctx,
+      s.team,
+      await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-2'),
+    );
+    expect(await lastAsk()).toMatchObject({
+      ask: 'ask-2',
+      outcome: 'skipped',
+      reason: 'delivery_off',
+    });
+
+    const floor = { ...off, deliver: true, answer: true, tierFloor: 'blocking' as const };
+    await setChannelSettings(s.db, {
+      teamId: s.team.id,
+      memberId: s.nick.id,
+      actor: 'nick',
+      settings: floor,
+    });
+    await deliverAskToAppChannels(
+      s.ctx,
+      s.team,
+      await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-3'),
+    );
+    expect(await lastAsk()).toMatchObject({
+      ask: 'ask-3',
+      outcome: 'skipped',
+      reason: 'below_tier_floor',
+    });
+
+    const rows = await listAuditByAction(s.db, s.team.id, 'channel.ask_outcome', 10);
+    expect(rows.every((r) => r.target === 'nick')).toBe(true);
+    expect(JSON.stringify(rows)).not.toContain('ship ask');
+  });
+
+  it('a human who never paired a phone gets no outcome rows', async () => {
+    const s = await seed();
+    await s.db.run('DELETE FROM channel_bindings WHERE team_id = ?', [s.team.id]);
+    await deliverAskToAppChannels(
+      s.ctx,
+      s.team,
+      await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-9'),
+    );
+    expect(await listAuditByAction(s.db, s.team.id, 'channel.ask_outcome', 10)).toEqual([]);
   });
 
   it('a gated privileged ask is delivered with an A2 answer descriptor', async () => {

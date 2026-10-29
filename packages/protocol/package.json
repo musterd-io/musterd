@@ -75,6 +75,10 @@
     "./app-channel": {
       "types": "./dist/appChannel.d.ts",
       "default": "./dist/appChannel.js"
+    },
+    "./channel-outcome": {
+      "types": "./dist/channelOutcome.d.ts",
+      "default": "./dist/channelOutcome.js"
     }
   },
   "files": [

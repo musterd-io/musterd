@@ -140,6 +140,8 @@ withDrivers('channels-http (ADR 618 §7 pairing)', (_o, kind) => {
       answer: false,
       presenceGating: true,
       tierFloor: null,
+      // Lane 01M64DSKT3: what became of the last ask here — none yet.
+      lastAsk: null,
     });
     const saved = await call('PUT', '/teams/dawn/channels/settings/slack', nick, {
       deliver: true,
@@ -155,7 +157,7 @@ withDrivers('channels-http (ADR 618 §7 pairing)', (_o, kind) => {
       tierFloor: 'standard',
     });
     const after = await call('GET', '/teams/dawn/channels/settings', nick);
-    expect(after.json.settings).toContainEqual(saved.json.settings);
+    expect(after.json.settings).toContainEqual({ ...saved.json.settings, lastAsk: null });
     // An agent seat has no channel settings of its own to write.
     const refused = await call('PUT', '/teams/dawn/channels/settings/slack', ada, {
       deliver: true,

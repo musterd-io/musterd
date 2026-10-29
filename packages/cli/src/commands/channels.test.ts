@@ -53,6 +53,12 @@ const h = vi.hoisted(() => ({
     expires_at: 999,
   })),
   collectApproval: vi.fn(async () => ({ proof: 'signed' })),
+  listChannelBindings: vi.fn(async () => ({
+    bindings: [
+      { id: 'b-app', channel: 'app', status: 'active' },
+      { id: 'b-old', channel: 'app', status: 'revoked' },
+    ],
+  })),
 }));
 
 vi.mock('./authority.js', () => ({ collectApproval: h.collectApproval }));
@@ -67,6 +73,7 @@ vi.mock('./helpers.js', () => ({
       listChannelPairings: h.listChannelPairings,
       confirmChannelPairing: h.confirmChannelPairing,
       killChannelSwitch: h.killChannelSwitch,
+      listChannelBindings: h.listChannelBindings,
     },
   }),
 }));
@@ -98,6 +105,20 @@ describe('musterd channels (ADR 618 §7)', () => {
     expect(await channelsCommand(parsed(['pairings']))).toBe(0);
     expect(out.join('')).toContain('tenant T1');
     expect(out.join('')).toContain('user U1');
+    vi.restoreAllMocks();
+  });
+
+  it('pairings after a confirm names the paired phone instead of only an empty list', async () => {
+    h.listChannelPairings.mockResolvedValueOnce({ pairings: [] });
+    const out: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((s) => {
+      out.push(String(s));
+      return true;
+    });
+    expect(await channelsCommand(parsed(['pairings']))).toBe(0);
+    expect(out.join('')).toContain('no pairings waiting for confirmation');
+    expect(out.join('')).toContain('paired: your phone (app, binding b-app)');
+    expect(out.join('')).not.toContain('b-old');
     vi.restoreAllMocks();
   });
 
