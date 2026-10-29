@@ -148,7 +148,11 @@ export const SESSION_FLAGS = [
   'until-lane',
   'until-reply',
   'utf8',
-  'waiting',
+  'audit',
+  'grant',
+  'lane',
+  'sample',
+  'wake-context',
 ] as const;
 
 export async function sessionCommand(
