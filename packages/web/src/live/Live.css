@@ -5927,7 +5927,6 @@
   padding: 0 var(--lc-6) var(--lc-5);
 }
 .lc__phone-door {
-  appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5942,21 +5941,17 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition:
-    transform var(--lc-dur-1) var(--lc-ease-out),
-    background-color var(--lc-dur-1) var(--lc-ease-out);
+  transition: transform var(--lc-dur-1) var(--lc-ease-out);
 }
 .lc__phone-door:active {
   transform: scale(0.97);
-  background: var(--lc-ground);
 }
 .lc__phone-door:focus-visible {
   outline: 2px solid var(--lc-focus);
   outline-offset: 2px;
 }
-/* A small drawn mark for each: a pinned card for the board, a book's spine for the wiki. */
+/* A small drawn mark for each: a card for the board, a book's spine for the wiki. */
 .lc__phone-door-mark {
-  position: relative;
   width: 16px;
   height: 16px;
   flex: none;
@@ -5965,17 +5960,6 @@
 .lc__phone-door-mark--board {
   background: var(--lc-accent-bright);
   box-shadow: inset 0 -5px 0 rgba(0, 0, 0, 0.12);
-}
-.lc__phone-door-mark--board::after {
-  content: '';
-  position: absolute;
-  top: -3px;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  margin-left: -3px;
-  border-radius: 50%;
-  background: var(--lc-danger);
 }
 .lc__phone-door-mark--wiki {
   width: 13px;
