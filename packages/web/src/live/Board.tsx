@@ -24,6 +24,7 @@ import {
   type LaneAction,
   type MovedLanes,
 } from './boardWrite';
+import { CopyId } from './CopyId';
 import { initial, kindOf, memberDisc, hueOf, sourceRefHref } from './format';
 import { GoalGrid } from './GoalGridView';
 import { GoalTable } from './GoalTableView';
@@ -511,11 +512,18 @@ function LaneCard({
       className={classes}
       // The tour's spotlight finds its lane by this (components/tour).
       data-lane={lane.id}
+      // The ID chip's keyboard shortcut finds the card under the pointer or the focus by this.
+      data-cid-host=""
       // The deep link points at this card; say so rather than relying on the ring alone, which a
       // screen reader cannot see and a colour-blind reader may not distinguish.
       {...(focused ? { 'aria-current': 'true' as const } : {})}
       style={enterDelay != null ? { animationDelay: `${enterDelay}ms` } : undefined}
     >
+      {/* The ID as an eyebrow over the title, as on the goal cards: the columns are narrow, and a
+          chip beside the title squeezed it onto a third line. */}
+      <div className="lc-card__eyebrow">
+        <CopyId kind="lane" id={lane.id} title={lane.title} />
+      </div>
       <p className="lc-card__title">{lane.title}</p>
       <div className="lc-card__meta">
         {lane.owner_seat && (
