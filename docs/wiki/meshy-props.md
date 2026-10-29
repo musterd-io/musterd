@@ -17,3 +17,5 @@ The mesh never ships. It is rendered offline into the same WebP sprite as every 
 ## Trap: an imported mesh's origin is not its foot (2026-10-28; falsify: import a Meshy `.glb`, set `location` to the slab top, and see whether the base shows) <!-- claim: other -->
 
 Setting `location` on the imported object put the trophy's origin — mid-height — on the desk, so the wooden base sat under the slab and the cup looked baseless. Seat it by its bounds: subtract the bottom-centre of the world-space vertices from the target point.
+
+**Batch 3 (2026-10-29, lane 01M64XYDWF, 40 credits):** stool, island, meeting table, meeting chair, printer, wastebasket, end table and low table. Each one is fitted to its layout box with `tall=` and the new `deep=`, so the footprint stays exactly where the painter and the hit-boxes expect it. The wastebasket keeps its flat dark mouth disc, because the painted paper pile lands on it. The printer's scripted paper stack is gone, because the mesh has its own trays. The webp total held at 7.3 MB.

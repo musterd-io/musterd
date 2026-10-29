@@ -1,0 +1,18 @@
+{
+  "prompt": "a modern upholstered meeting room chair, padded fabric seat, curved padded backrest, single pedestal with five-star swivel base, no armrests, no wheels",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 3000,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a189df-a996-7546-9061-ff884f6149fa",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 20,
+  "bytes": 57264
+}

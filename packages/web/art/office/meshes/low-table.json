@@ -1,0 +1,18 @@
+{
+  "prompt": "a rectangular low oak wooden coffee table, thick top, four square wooden legs, plain modern",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 3000,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a189e0-03b1-7020-8991-3c8cc6aef140",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 20,
+  "bytes": 57432
+}

@@ -1,0 +1,18 @@
+{
+  "prompt": "a modern cafe bar stool, round padded upholstered seat, single slim metal post, round metal foot ring, round flat base, simple clean design",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 3000,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a189df-a996-772e-9de8-8abfaec8d698",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 20,
+  "bytes": 55344
+}
