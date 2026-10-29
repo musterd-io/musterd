@@ -165,7 +165,7 @@ export function gestureFrame(
  * laptop rides under the arm and the phone needs no grip of its own, so those keep the plain clips.
  */
 function grip(carry: CarryKind | null): 'hold2' | 'hold1' | null {
-  if (carry === 'box' || carry === 'movingBox' || carry === 'plate') return 'hold2';
+  if (carry === 'box' || carry === 'movingBox' || carry === 'plate' || carry === 'folder') return 'hold2';
   if (carry === 'card' || carry === 'mug' || carry === 'bottle') return 'hold1';
   return null;
 }

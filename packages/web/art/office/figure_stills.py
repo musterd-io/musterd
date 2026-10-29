@@ -60,7 +60,7 @@ def layers_for(m: dict) -> list[tuple[str, str | None]]:
     return out
 
 
-CARRIED = ["carry/box", "carry/laptop", "carry/plate", "carry/mug", "carry/card", "carry/bottle", "carry/phone"]
+CARRIED = ["carry/folder", "carry/box", "carry/laptop", "carry/plate", "carry/mug", "carry/card", "carry/bottle", "carry/phone"]
 
 
 def composite(crops: dict, still: tuple[str, str, int], m: dict, fw: int, fh: int, resolve) -> np.ndarray:

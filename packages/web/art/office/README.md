@@ -224,6 +224,12 @@ python3 packages/web/art/office/render_watch.py -- \
 `--clips` and `--only` are gone from the figure (`--only` still re-renders room assets): the store
 does what they did, without having to name what changed.
 
+`--layers carry/folder` (lane 01M62X6FCC) renders only the named layers' calls and merges their sheets
+into the `figure.json` on disk, leaving every other layer's sheet and cells as they are. It is for
+**adding** a layer on a machine whose store is empty: the whole figure is ~19,800 calls, while the
+folder was 100 (23 min). It refuses when the `figure.json` on disk was packed against another frame,
+anchor or clip table; a change to an existing layer still renders the whole figure.
+
 ### Figure v2 (lane 01M5JHEEGT)
 
 The v2 body (spec `docs/superpowers/specs/2026-10-22-office-figure-v2-design.md`) changes the rig, not

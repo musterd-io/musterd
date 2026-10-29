@@ -811,7 +811,7 @@ function OfficePreviewPage() {
         </button>
         <button
           className="lc__pbtn"
-          title="handoff (carry box)"
+          title="handoff (carry folder)"
           onClick={() => fire({ kind: 'walk-handoff', from: 'Eli', to: 'Hana', label: 'floor.ts' })}
         >
           ↦

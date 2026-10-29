@@ -224,7 +224,9 @@ export type CarryKind =
   /** A first-day human's cardboard box, a plant poking out of it (lane 01M3F81DD9). */
   | 'movingBox'
   /** The lane's card, just taken off the wall board by the member who claimed it (2026-10-09). */
-  | 'card';
+  | 'card'
+  /** A handoff's manila folder, carried to the recipient's desk and set down there (lane 01M62X6FCC). */
+  | 'folder';
 
 /** Motion intensity == notification tier (memory: travel-intensity == notification tiers). */
 export type Tier = 'ambient' | 'needs-attn' | 'urgent';

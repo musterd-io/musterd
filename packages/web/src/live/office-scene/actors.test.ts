@@ -374,13 +374,13 @@ describe('walk choreography', () => {
     expect(actors.active()).toBe(false);
   });
 
-  it('carries a box on a handoff outbound leg', () => {
+  it('carries the folder on a handoff outbound leg', () => {
     const { placements, byName } = world([node('Ada'), node('Bo')]);
     const actors = createActors();
     actors.setHomes(placements, byName, true);
     actors.walk('Ada', { kind: 'handoff', to: 'Bo', urgent: false });
     actors.step(0.1);
-    expect(actors.poses().get('Ada')!.carry).toBe('box');
+    expect(actors.poses().get('Ada')!.carry).toBe('folder');
   });
 });
 
@@ -2038,7 +2038,7 @@ describe('the folder and the card are set down, not conjured (lane 01M62JK2JS)',
   it('a handoff reaches Bo’s desk with the folder in hand, then lets go of it there', () => {
     const { at, carry } = setDown((a) => a.walk('Ada', { kind: 'handoff', to: 'Bo', urgent: false }));
     expect(at).toBeLessThan(80);
-    expect(carry).not.toBe('box'); // out of their hands — only their own laptop is left
+    expect(carry).not.toBe('folder'); // out of their hands — only their own laptop is left
   });
 
   it('a review card goes into the tray on the beat it leaves the hand', () => {

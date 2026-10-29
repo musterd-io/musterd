@@ -1289,7 +1289,7 @@ export function createActors(): Actors {
     const start = origin ?? home;
     const a = approach(target, start);
     const speed = req.urgent ? 165 : 100; // logical units / sec — amble over, or hurry when urgent
-    const carry: CarryKind | null = req.kind === 'handoff' ? 'box' : null;
+    const carry: CarryKind | null = req.kind === 'handoff' ? 'folder' : null;
     const holdDur = req.kind === 'help' ? (req.urgent ? 0.5 : 0.75) : 0.6;
     const holdBubble: Bubble = req.kind === 'help' ? (req.urgent ? '!' : '?') : null;
     // Route both trips around furniture and standing teammates; the visitor's stand spot is wherever
@@ -1315,7 +1315,7 @@ export function createActors(): Actors {
     // desk's folder appears on that second beat. Help still just stands and asks.
     const visit: Leg[] =
       req.kind === 'handoff'
-        ? [hold(stand, face, 0.35, { carry: 'box', overlay: GESTURE.reach }), hold(stand, face, 0.35, { overlay: GESTURE.take })]
+        ? [hold(stand, face, 0.35, { carry: 'folder', overlay: GESTURE.reach }), hold(stand, face, 0.35, { overlay: GESTURE.take })]
         : [
             {
               fx: stand.lx,
