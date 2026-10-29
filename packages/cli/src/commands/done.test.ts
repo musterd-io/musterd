@@ -7,6 +7,7 @@ import { parseArgs } from '../args.js';
 import { HttpClient } from '../client.js';
 import { doneCommand } from './done.js';
 import { laneCommand, lanesCommand } from './lane.js';
+import { claimSeams } from './laneClaims.js';
 import { teamCommand } from './team.js';
 
 /**
@@ -25,6 +26,9 @@ describe('done tells the truth about the close it records', () => {
     dir = mkdtempSync(join(tmpdir(), 'musterd-done-'));
     process.env['MUSTERD_CONFIG'] = join(dir, 'config.json');
     vi.spyOn(process, 'cwd').mockReturnValue(dir);
+    // ADR 585: the claim checkers shell out to git and gh; the temp dir is no clone.
+    claimSeams.check = async () => [];
+    claimSeams.label = async () => null;
     await capture(() => teamCommand(parseArgs(['create', 'dawn', '--member', 'nick'])));
   });
 
@@ -217,5 +221,36 @@ describe('done tells the truth about the close it records', () => {
       expect(res.out.trim().split('\n')).toHaveLength(1);
       expect((JSON.parse(res.out) as { lane: { state: string } }).lane.state).toBe(state);
     }
+  });
+
+  it('a submit through done carries the same checked claims and change label as lane submit', async () => {
+    const id = await claimedLane();
+    claimSeams.check = async (refs, _cwd, by) => [
+      {
+        kind: 'commit_landed',
+        ref: refs.sha!,
+        verdict: 'unconfirmed',
+        checked_by: by,
+        checked_at: 1,
+        evidence: 'not in this clone',
+      },
+    ];
+    const labelled: string[] = [];
+    claimSeams.label = async (sha) => {
+      labelled.push(sha);
+      return null;
+    };
+    const res = await capture(() => doneCommand(parseArgs([id, '--pr', '1', '--sha', 'deadbeef'])));
+    expect(res.code).toBe(0);
+    // The SHA was not confirmed here, so the label is never read and the claim says so.
+    expect(labelled).toEqual([]);
+    expect(res.out).toContain('commit_landed');
+    const shown = await capture(() => laneCommand(parseArgs(['show', id, '--json'])));
+    const { lane } = JSON.parse(shown.out) as {
+      lane: { claims?: { kind: string; verdict: string }[] };
+    };
+    expect(lane.claims?.map((c) => [c.kind, c.verdict])).toEqual([
+      ['commit_landed', 'unconfirmed'],
+    ]);
   });
 });
