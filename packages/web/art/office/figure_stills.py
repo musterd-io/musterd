@@ -85,7 +85,7 @@ def composite(crops: dict, still: tuple[str, str, int], m: dict, fw: int, fh: in
     layers = layers_for(m)
     held = next((l for l in CARRIED if crops.get(l, {}).get(resolve(l, clip, d, f)) is not None), None)
     if held:
-        at = next(i for i, (l, _) in enumerate(layers) if l.startswith("top/")) + 1
+        at = max(i for i, (l, _) in enumerate(layers) if l.startswith(("top/", "dress/", "outer/"))) + 1  # after the clothes
         layers.insert(at, (held, None))
     for layer, tint in layers:
         c = crops.get(layer, {}).get(resolve(layer, clip, d, f))
