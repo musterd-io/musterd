@@ -51,7 +51,7 @@ describe('layersFor (office realism Task 11)', () => {
   });
 
   it('an agent wears no visor: its eyes and a collar light glow in its identity colour (figure v2)', () => {
-    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', eyes: 'none', ears: 'none', neck: 'none', accessory: 'none', cut: 'tee' };
+    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', eyes: 'none', ears: 'none', neck: 'none', wrist: 'none', accessory: 'none', cut: 'tee' };
     const layers = layersFor(agent, 'agent', '#5b8def');
     expect(layers.map((l) => l.id)).toEqual(['skin', 'eyes', 'tell/eyes', `mouth/${agent.smile}`, 'shoes', 'bottom', 'top/tee', 'tell/collar', 'hair/short']);
     expect(layers.find((l) => l.id === 'tell/eyes')?.color).toBe('#5b8def');

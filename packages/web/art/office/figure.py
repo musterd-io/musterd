@@ -57,7 +57,7 @@ HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun"]
 FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
-ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop"]
+ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
 # every earlier layer keeps its place.
@@ -93,7 +93,8 @@ def layer_id_byte(layer: str) -> int:
 # rest ON it. For the seated clips, these layers also store just their arm pixels (`<layer>@arms`
 # cells) — every mesh on a shoulder, elbow or wrist joint, plus the whole of a prop held at the desk —
 # which `drawFigureFrame(part: 'arms')` draws again over the slab.
-ARM_LAYERS = ["skin"] + [f"top/{t}" for t in TOPS] + ["carry/mug", "carry/plate"]
+# the wrist pieces (v2-4c) ride the forearm, so the seated overlay and the carrying poses keep them
+ARM_LAYERS = ["skin"] + [f"top/{t}" for t in TOPS] + ["carry/mug", "carry/plate", "acc/watch", "acc/bracelet"]
 
 
 # ── materials ──────────────────────────────────────────────────────────────────────────────
@@ -549,6 +550,13 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     for sy in (1, -1):
         r.orb("stud", "head", "acc/earrings-stud", metal, lobe_x, sy * lobe_y, lobe_z, R * 0.07, R * 0.07, R * 0.07)
         r.torus("hoop", "head", "acc/earrings-hoop", metal, lobe_x, sy * (lobe_y + 0.2), lobe_z - R * 0.12, R * 0.12, 0.28, (math.radians(90), 0, 0))
+    # the wrist spot (figure v2-4c): a watch on the left wrist — a band round the forearm just above the
+    # hand, a round face on the back of the wrist — or a thin bracelet on the right. On the elbow joint,
+    # so the seated overlay keeps them over the desk with the forearm.
+    wz = WRIST + 0.7 * FIG
+    r.torus("watch-band", "elbowL", "acc/watch", metal, 0, SHOULDER_W, wz, 2.2 * FIG, 0.45)
+    r.orb("watch-face", "elbowL", "acc/watch", metal, 0, SHOULDER_W + 2.25 * FIG, wz, 1.0 * FIG, 0.45 * FIG, 1.0 * FIG)
+    r.torus("bracelet", "elbowR", "acc/bracelet", metal, 0, -SHOULDER_W, wz, 2.25 * FIG, 0.35)
     r.torus("scarf", "neck", "acc/scarf", acc, HEAD_X * 0.5, 0, NECK - 1.5 * FIG, 4.4 * FIG, 1.9 * FIG)
     r.box("scarf-tail", "spine", "acc/scarf", acc, 6.2 * FIG, 2, CHEST - 2 * FIG, 2.6, 4.3, 8.6, 0.9)
 
@@ -997,7 +1005,7 @@ CARRY_BASE = {"walk-hold2": "walk", "walk-hold1": "walk", "walk-call": "walk", "
               "sit-hand": "sit-idle",
               # office v3-6: the lap arms over the seated idle
               "sit-lap": "sit-idle"}
-CARRY_OWN = ("skin", "top/", "carry/", "lanyard")
+CARRY_OWN = ("skin", "top/", "carry/", "lanyard", "acc/watch", "acc/bracelet")
 # Layers a carrying clip stores beyond CARRY_OWN: the lap arms lie across the trousers, so sit-lap's
 # `bottom` cells are its own (spec §8); every other carrying clip keeps the base clip's.
 CARRY_OWN_EXTRA = {"sit-lap": ("bottom",)}
