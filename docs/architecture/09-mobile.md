@@ -62,7 +62,9 @@ small change.
   the binding from the signed `paired` delivery. A phone with no push token pairs, and stays on
   that screen, because nothing else can deliver the binding.
 - **Reconcile.** On open the app asks the daemon, through the relay, to re-deliver what is pending
-  (ADR 659): the daemon is the source of truth and the relay stores no sealed body.
+  (ADR 659): the daemon is the source of truth and the relay stores no sealed body. It asks at most
+  once a minute, because each request re-pushes every pending ask. A re-pushed ask that is already
+  in Notification Center lands in the list with no banner and no sound; only a new one alerts.
 - **The list.** Notification Center says which asks reached the phone, not which are still open, so
   each ref there is fetched by ref through the relay. The daemon answers only for an ask still live
   on this binding, re-issued with a fresh token (the old one is spent), so a decided or expired ask

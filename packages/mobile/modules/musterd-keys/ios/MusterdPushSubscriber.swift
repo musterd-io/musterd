@@ -78,6 +78,11 @@ enum DeliveredPushes {
     }
   }
 
+  /// The ask a push carries, by its ref; nil for anything that is not a musterd push.
+  static func ref(_ userInfo: [AnyHashable: Any]) -> String? {
+    (userInfo["musterd"] as? [String: Any])?["ref"] as? String
+  }
+
   /// Tell a running app that a delivery landed, so an open list refreshes.
   static func announce(_ userInfo: [AnyHashable: Any]) {
     guard userInfo["musterd"] != nil else { return }
@@ -157,7 +162,17 @@ public final class MusterdPushSubscriber: BaseExpoAppDelegateSubscriber,
     ) != nil {
       return
     }
-    completionHandler([.banner, .list, .sound])
+    // Opening the app asks the daemon to re-push what is pending (ADR 676 decision 9). An ask
+    // already in Notification Center is a repeat: it goes to the list without a banner or a
+    // sound. A new ask alerts as usual (nick, 2026-10-29: opening the app re-alerted asks).
+    guard let ref = DeliveredPushes.ref(notification.request.content.userInfo) else {
+      completionHandler([.banner, .list, .sound])
+      return
+    }
+    center.getDeliveredNotifications { delivered in
+      let seen = delivered.contains { DeliveredPushes.ref($0.request.content.userInfo) == ref }
+      completionHandler(seen ? [.list] : [.banner, .list, .sound])
+    }
   }
 
   public func userNotificationCenter(
