@@ -474,14 +474,14 @@ export type StyleSelfRead = z.infer<typeof StyleSelfReadSchema>;
 
 function parseStyleSelfRead(json: unknown): StyleSelfRead {
   const parsed = StyleSelfReadSchema.safeParse(json);
-  if (!parsed.success) throw schemaError('style', parsed.error);
+  if (!parsed.success) throw schemaError(parsed.error, 'style');
   return parsed.data;
 }
 
 function parseDoorbellView(json: unknown): DoorbellView {
   const parsed = DoorbellViewSchema.safeParse(json);
   if (!parsed.success) {
-    throw schemaError('doorbell', parsed.error);
+    throw schemaError(parsed.error, 'doorbell');
   }
   return parsed.data;
 }
@@ -932,7 +932,7 @@ export class HttpClient {
       kinds: [...HostProvisionKindSchema.options],
     });
     const parsed = HostProvisionsClaimResponseSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('provision claim', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'provision claim');
     return parsed.data;
   }
   /** ADR 463 §3: `musterd host provisions` — the rows this host key may see; claims nothing. */
@@ -942,7 +942,7 @@ export class HttpClient {
       `/teams/${encodeURIComponent(slug)}/host/provisions?host=${encodeURIComponent(host)}`,
     );
     const parsed = HostProvisionsClaimResponseSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('provision list', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'provision list');
     return parsed.data;
   }
   /** ADR 463 §2: report a claimed provision `ready` or `failed {reason}`. */
@@ -957,7 +957,7 @@ export class HttpClient {
       body,
     );
     const parsed = z.object({ provision: HostProvisionSchema }).safeParse(json);
-    if (!parsed.success) throw schemaError('provision report', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'provision report');
     return parsed.data;
   }
   // ADR 450: team invites. The secret comes back once from mint and is never listed.
@@ -1312,7 +1312,7 @@ export class HttpClient {
       throw new CliError('wake context requires exactly one act_id or lane_id', 2);
     const json = await this.request('POST', `/teams/${slug}/wake-context`, target.data);
     const response = WakeContextResponseSchema.safeParse(json);
-    if (!response.success) throw schemaError('wake-context', response.error);
+    if (!response.success) throw schemaError(response.error, 'wake-context');
     return response.data.context;
   }
   /** Goal dreaming, lane 2 — `GET /teams/:slug/dream`: the caller's own dream packet, never another seat's. */
@@ -1673,7 +1673,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/audit${qs ? `?${qs}` : ''}`);
     const parsed = AuditResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('audit', parsed.error);
+      throw schemaError(parsed.error, 'audit');
     }
     return parsed.data;
   }
@@ -1690,7 +1690,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/grants`, body);
     const parsed = GrantMintSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('grant', parsed.error);
+      throw schemaError(parsed.error, 'grant');
     }
     return parsed.data;
   }
@@ -1706,7 +1706,7 @@ export class HttpClient {
       throw new CliError('grant list response did not match the protocol schema', 1);
     const grants = raw.map((item) => GrantSchema.safeParse(item));
     if (grants.some((item) => !item.success))
-      throw schemaError('grant list', grants.find((item) => !item.success)?.error);
+      throw schemaError(grants.find((item) => !item.success)?.error, 'grant list');
     return grants
       .map((item) => (item.success ? item.data : null))
       .filter((item): item is Grant => item !== null);
@@ -1727,7 +1727,7 @@ export class HttpClient {
   async openLane(slug: string, body: OpenLane): Promise<LaneResult> {
     const json = await this.request('POST', `/teams/${slug}/lanes`, body);
     const parsed = LaneResultSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('lane', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'lane');
     return parsed.data;
   }
 
@@ -1738,7 +1738,7 @@ export class HttpClient {
       patch,
     );
     const parsed = LaneResultSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('lane', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'lane');
     return parsed.data;
   }
 
@@ -1750,7 +1750,7 @@ export class HttpClient {
       body,
     );
     const parsed = SampleResultSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('sample', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'sample');
     return parsed.data;
   }
 
@@ -1758,7 +1758,7 @@ export class HttpClient {
   async laneShow(slug: string, id: string): Promise<LaneDetail> {
     const json = await this.request('GET', `/teams/${slug}/lanes/${encodeURIComponent(id)}`);
     const parsed = LaneDetailSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('lane', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'lane');
     return parsed.data;
   }
 
@@ -1788,14 +1788,14 @@ export class HttpClient {
     const qs = params.toString();
     const json = await this.request('GET', `/teams/${slug}/lanes${qs ? `?${qs}` : ''}`);
     const parsed = LaneBoardSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('lanes', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'lanes');
     return parsed.data;
   }
 
   // ── Shared Seeds (ADR 319). Every wire response is parsed at this boundary.
   async seeds(slug: string): Promise<Seed[]> {
     const parsed = SeedListSchema.safeParse(await this.request('GET', `/teams/${slug}/seeds`));
-    if (!parsed.success) throw schemaError('Seeds', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'Seeds');
     return parsed.data.seeds;
   }
 
@@ -1803,7 +1803,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('GET', `/teams/${slug}/seeds/${encodeURIComponent(id)}`),
     );
-    if (!parsed.success) throw schemaError('Seed', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'Seed');
     return parsed.data.seed;
   }
 
@@ -1811,7 +1811,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/${encodeURIComponent(id)}/claim`, {}),
     );
-    if (!parsed.success) throw schemaError('Seed', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'Seed');
     return parsed.data.seed;
   }
 
@@ -1821,7 +1821,7 @@ export class HttpClient {
         body,
       }),
     );
-    if (!parsed.success) throw schemaError('Seed', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'Seed');
     return parsed.data.seed;
   }
 
@@ -1829,7 +1829,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/${encodeURIComponent(id)}/answer`, { body }),
     );
-    if (!parsed.success) throw schemaError('Seed', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'Seed');
     return parsed.data.seed;
   }
 
@@ -1837,7 +1837,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/${encodeURIComponent(id)}/brief`, body),
     );
-    if (!parsed.success) throw schemaError('Seed', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'Seed');
     return parsed.data.seed;
   }
 
@@ -1845,7 +1845,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/${encodeURIComponent(id)}/promote`, body),
     );
-    if (!parsed.success) throw schemaError('Seed', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'Seed');
     return parsed.data.seed;
   }
 
@@ -1854,7 +1854,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/repo`, body),
     );
-    if (!parsed.success) throw schemaError('Seed', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'Seed');
     return parsed.data.seed;
   }
 
@@ -1862,7 +1862,7 @@ export class HttpClient {
   async next(slug: string): Promise<NextBrief> {
     const json = await this.request('GET', `/teams/${slug}/next`);
     const parsed = NextBriefSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('next', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'next');
     return parsed.data;
   }
 
@@ -1879,7 +1879,7 @@ export class HttpClient {
       throw err;
     }
     const parsed = ReviewPromisesResponseSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('review-promises', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'review-promises');
     return parsed.data;
   }
 
@@ -1888,7 +1888,7 @@ export class HttpClient {
   async nextSummary(slug: string): Promise<NextSummary> {
     const json = await this.request('GET', `/teams/${slug}/next/summary`);
     const parsed = NextSummarySchema.safeParse(json);
-    if (!parsed.success) throw schemaError('next/summary', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'next/summary');
     return parsed.data;
   }
 
@@ -1896,7 +1896,7 @@ export class HttpClient {
   async declareGoal(slug: string, body: DeclareGoal): Promise<Goal> {
     const json = await this.request('POST', `/teams/${slug}/goals`, body);
     const parsed = GoalSchema.safeParse((json as { goal: unknown }).goal);
-    if (!parsed.success) throw schemaError('goal', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'goal');
     return parsed.data;
   }
 
@@ -1909,7 +1909,7 @@ export class HttpClient {
     const raw = (json as { goal: unknown }).goal;
     if (raw === null) return null;
     const parsed = GoalSchema.safeParse(raw);
-    if (!parsed.success) throw schemaError('goal', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'goal');
     return parsed.data;
   }
 
@@ -1919,7 +1919,7 @@ export class HttpClient {
     const raw = (json as { goal: unknown }).goal;
     if (raw === null) return null;
     const parsed = GoalSchema.safeParse(raw);
-    if (!parsed.success) throw schemaError('goal', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'goal');
     return parsed.data;
   }
 
@@ -1927,7 +1927,7 @@ export class HttpClient {
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';
     const json = await this.request('GET', `/teams/${slug}/goals${qs}`);
     const parsed = GoalListSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('goals', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'goals');
     return parsed.data;
   }
 
@@ -1937,7 +1937,7 @@ export class HttpClient {
   async nodeInvite(slug: string, label: string): Promise<NodeInviteMint> {
     const json = await this.request('POST', `/teams/${slug}/nodes/invite`, { label });
     const parsed = NodeInviteMintSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('invite', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'invite');
     return parsed.data;
   }
 
@@ -1987,7 +1987,7 @@ export class HttpClient {
   async nodeTrust(slug: string, nodeId: string): Promise<SeatNodeTrusted> {
     const json = await this.request('POST', `/teams/${slug}/nodes/trust`, { node_id: nodeId });
     const parsed = SeatNodeTrustedSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('trust', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'trust');
     return parsed.data;
   }
 
@@ -2002,7 +2002,7 @@ export class HttpClient {
       body,
     );
     const parsed = SeatMovedSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('move', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'move');
     return parsed.data;
   }
 
@@ -2016,7 +2016,7 @@ export class HttpClient {
       `/teams/${encodeURIComponent(slug)}/provisions/${encodeURIComponent(id)}/status`,
     );
     const parsed = MoveProvisionStatusSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('provision status', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'provision status');
     return parsed.data;
   }
 
@@ -2031,7 +2031,7 @@ export class HttpClient {
   async nodes(slug: string): Promise<NodeList> {
     const json = await this.request('GET', `/teams/${slug}/nodes`);
     const parsed = NodeListSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('nodes', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'nodes');
     return parsed.data;
   }
 
@@ -2039,7 +2039,7 @@ export class HttpClient {
   async delivery(slug: string, messageId: string): Promise<ActDelivery> {
     const json = await this.request('GET', `/teams/${slug}/messages/${messageId}/delivery`);
     const parsed = ActDeliverySchema.safeParse(json);
-    if (!parsed.success) throw schemaError('delivery', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'delivery');
     return parsed.data;
   }
 
@@ -2071,7 +2071,7 @@ export class HttpClient {
   async report(slug: string): Promise<Report> {
     const json = await this.request('GET', `/teams/${slug}/report`);
     const parsed = ReportSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('report', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'report');
     return parsed.data;
   }
 
@@ -2084,7 +2084,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/requests${qs}`);
     const parsed = RequestsResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('requests', parsed.error);
+      throw schemaError(parsed.error, 'requests');
     }
     return parsed.data;
   }
@@ -2103,7 +2103,7 @@ export class HttpClient {
     );
     const parsed = DecideResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('decide', parsed.error);
+      throw schemaError(parsed.error, 'decide');
     }
     return parsed.data;
   }
@@ -2117,7 +2117,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/enroll`, body);
     const parsed = EnrollResidencyResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('residency enroll', parsed.error);
+      throw schemaError(parsed.error, 'residency enroll');
     }
     return parsed.data;
   }
@@ -2139,7 +2139,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/wake-leases`, { host });
     const parsed = WakeLeasesResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('wake-leases', parsed.error);
+      throw schemaError(parsed.error, 'wake-leases');
     }
     return parsed.data;
   }
@@ -2153,7 +2153,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/pull`, { host });
     const parsed = PullPollResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('residency/pull', parsed.error);
+      throw schemaError(parsed.error, 'residency/pull');
     }
     return parsed.data;
   }
@@ -2189,7 +2189,7 @@ export class HttpClient {
       await this.request('GET', `/teams/${slug}/style-block`),
     );
     if (!parsed.success) {
-      throw schemaError('style-block', parsed.error);
+      throw schemaError(parsed.error, 'style-block');
     }
     return parsed.data;
   }
@@ -2203,7 +2203,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/doorbell/rings`, { host });
     const parsed = DoorbellRingsResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('doorbell rings', parsed.error);
+      throw schemaError(parsed.error, 'doorbell rings');
     }
     return parsed.data;
   }
@@ -2277,7 +2277,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/wake-transcript`, body);
     const parsed = WakeTranscriptResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('wake-transcript', parsed.error);
+      throw schemaError(parsed.error, 'wake-transcript');
     }
     return parsed.data;
   }
@@ -2295,7 +2295,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/session`, body);
     const parsed = SessionAttestationResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('session attestation', parsed.error);
+      throw schemaError(parsed.error, 'session attestation');
     }
     return parsed.data;
   }
@@ -2305,7 +2305,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/residency`);
     const parsed = ResidencyListResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('residency', parsed.error);
+      throw schemaError(parsed.error, 'residency');
     }
     return parsed.data;
   }
@@ -2329,7 +2329,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/governed/policy`);
     const parsed = GovernedPolicyReadResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('governed policy', parsed.error);
+      throw schemaError(parsed.error, 'governed policy');
     }
     return parsed.data;
   }
@@ -2340,7 +2340,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/governed/policy`, body);
     const parsed = GovernedPolicyResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('governed policy', parsed.error);
+      throw schemaError(parsed.error, 'governed policy');
     }
     return parsed.data;
   }
@@ -2354,7 +2354,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/governed/launches`, body);
     const parsed = GovernedLaunchAuthorizationMintSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('governed launch', parsed.error);
+      throw schemaError(parsed.error, 'governed launch');
     }
     return parsed.data;
   }
@@ -2367,7 +2367,7 @@ export class HttpClient {
     );
     const parsed = GovernedLaunchRevokeResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('governed launch revoke', parsed.error);
+      throw schemaError(parsed.error, 'governed launch revoke');
     }
     return parsed.data;
   }
@@ -2441,7 +2441,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/trace/events`, body);
     const parsed = TraceIngestResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('trace ingest', parsed.error);
+      throw schemaError(parsed.error, 'trace ingest');
     }
     return parsed.data;
   }
@@ -2457,7 +2457,7 @@ export class HttpClient {
     );
     const parsed = HuddleTraceSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('huddle trace', parsed.error);
+      throw schemaError(parsed.error, 'huddle trace');
     }
     return parsed.data;
   }
@@ -2472,7 +2472,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/trace/sessions/${digest}`);
     const parsed = TraceSessionResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw schemaError('trace session', parsed.error);
+      throw schemaError(parsed.error, 'trace session');
     }
     return parsed.data;
   }
@@ -2482,7 +2482,7 @@ export class HttpClient {
     const q = days === undefined ? '' : `?days=${encodeURIComponent(String(days))}`;
     const json = await this.request('GET', `/teams/${slug}/report/trace${q}`);
     const parsed = TraceReportSchema.safeParse(json);
-    if (!parsed.success) throw schemaError('trace report', parsed.error);
+    if (!parsed.success) throw schemaError(parsed.error, 'trace report');
     return parsed.data;
   }
 
