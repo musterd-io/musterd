@@ -3,6 +3,7 @@ import {
   describeHubLink,
   describeSyncPullStop,
   describeSyncWedge,
+  eligibleOf,
   type Hold,
 } from '@musterd/protocol';
 import type { Parsed } from '../args.js';
@@ -11,6 +12,7 @@ import { findBinding } from '../config.js';
 import { huddleMarks, TIMELINE_WINDOW } from '../render/huddles.js';
 import {
   type DailyWarning,
+  hubWarning,
   renderDailyView,
   renderMachineLine,
   renderPendingSummary,
@@ -50,6 +52,11 @@ import { renderMemoryLine } from './memory.js';
  * without being declared fails the build instead of working in the field.
  */
 export const STATUS_FLAGS = ['resumable', 'session', 'wakeable', 'all', 'verbose'] as const;
+
+/** An ask to a set of seats that includes you: how many others may answer it (ADR 254). */
+function othersIn(set: string[] | null, me: string | undefined): number | undefined {
+  return set && me && set.includes(me) && set.length > 1 ? set.length - 1 : undefined;
+}
 
 /**
  * The daily view's width: the terminal's columns, or `COLUMNS` when output is piped (so a seat can
@@ -111,7 +118,10 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
     res.members.find((m) => m.name === name)?.kind ?? ('agent' as const);
   const warnings: DailyWarning[] = [];
   if (hubDown)
-    warnings.push({ line: describeHubLink(hubLink, Date.now()).line, fix: 'musterd node list' });
+    warnings.push({
+      line: hubWarning(describeHubLink(hubLink, Date.now()).line),
+      fix: 'musterd node list',
+    });
   // ADR 135 self-check: build skew is a diagnostic, so it surfaces even in the daily view.
   const cli = cliBuild();
   if (cli && health?.build && !sameCommit(cli, health.build)) {
@@ -148,6 +158,7 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
               act: a.act ?? 'message',
               body: a.body ?? '',
               ts: a.ts,
+              others: othersIn(eligibleOf(a.meta), identity?.name),
             })),
           }
         : undefined,

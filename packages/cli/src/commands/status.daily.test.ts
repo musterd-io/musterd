@@ -1,5 +1,6 @@
+import { describeHubLink } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { type DailyView, renderDailyView } from '../render/rows.js';
+import { type DailyView, hubWarning, renderDailyView } from '../render/rows.js';
 import { visibleLen } from '../render/ui.js';
 
 /**
@@ -38,6 +39,7 @@ const busy: DailyView = {
         fromKind: 'agent',
         act: 'request_help',
         body: 'daily view layout',
+        others: 2,
         ts: NOW - 10_000,
       },
     ],
@@ -77,7 +79,9 @@ describe('musterd status — daily view frames', () => {
     expect(rowEnding(out, '1h')).toMatch(
       /^ {2}Lin · hands you: lane 01ARZ3ND · the new inbox empty states +1h$/,
     );
-    expect(rowEnding(out, 'now')).toMatch(/^ {2}Lin · needs help: daily view layout +now$/);
+    expect(rowEnding(out, 'now')).toMatch(
+      /^ {2}Lin · needs help: daily view layout \(you \+ 2 others\) +now$/,
+    );
     expect(out).toContain('◆ your work  2');
     const active = rowEnding(out, 'PR merged · submit')!;
     expect(active).toMatch(
@@ -173,7 +177,7 @@ describe('musterd status — daily view frames', () => {
           crew: { here: 3, working: 2, blocked: [], asOf: new Date(2026, 9, 29, 20, 22).getTime() },
           warnings: [
             {
-              line: '⚠ hub dawn-hub unreachable since 12m ago — the hub did not answer in time; last sync 14m ago',
+              line: '⚠ hub dawn-hub unreachable since 12m — the hub did not answer in time; last sync 14m ago',
               fix: 'musterd node list',
             },
             {
@@ -198,6 +202,57 @@ describe('musterd status — daily view frames', () => {
     expect(out).not.toContain('All quiet. musterd next shows open work.');
   });
 
+  // ADR 757: the settled layout, line for line — a fixed right column per section, so a cut row and
+  // its age or hint land where the frames put them. A change here is a change to the frames.
+  it('busy · 80 (27-2), exactly', () => {
+    expect(plain(renderDailyView(busy, NOW, 80))).toEqual([
+      'musterd · dawn · 16:12',
+      'you are Ada · backend · claude-opus-5-5',
+      '',
+      '⚑ 3 waiting on you',
+      '  nick · asks: ship the roster render?                                       14m',
+      '  Lin · hands you: lane 01ARZ3ND · the new inbox empty states                 1h',
+      '  Lin · needs help: daily view layout (you + 2 others)                       now',
+      '  → musterd inbox',
+      '',
+      '◆ your work  2',
+      '  active · Wire the roster render to the new presence model…  PR merged · submit',
+      '  claimed · Backfill the auth audit rows for the September…       ready to start',
+      '',
+      '○ up next',
+      '  Desk-level presence for the auth module — 01M6ABCD12',
+      '  Retire the v1 inbox cursor — 01M6ABCE7Q',
+      '  +1 more · musterd next',
+      '  → musterd next',
+      '',
+      'team  3 here · 2 working · 1 blocked (Lin: waiting on CI)',
+    ]);
+  });
+
+  it('busy · 40 (27-4), exactly', () => {
+    expect(plain(renderDailyView(busy, NOW, 40))).toEqual([
+      'musterd · dawn · 16:12',
+      'you are Ada · backend',
+      '',
+      '⚑ 3 waiting on you',
+      '  nick · asks: ship the roste…       14m',
+      '  Lin · hands you: lane 01ARZ…        1h',
+      '  Lin · needs help: daily vie…       now',
+      '  → musterd inbox',
+      '',
+      '◆ your work  2',
+      '  active · Wire the roster rend…',
+      '  claimed · Backfill the auth a…',
+      '',
+      '○ up next',
+      '  Desk-level presence for… — 01M6ABCD12',
+      '  +2 more · musterd next',
+      '  → musterd next',
+      '',
+      '3 here · 2 working · 1 blocked',
+    ]);
+  });
+
   it('a lane with its acceptor says so instead of asking for a submit', () => {
     const out = plain(
       renderDailyView(
@@ -214,5 +269,20 @@ describe('musterd status — daily view frames', () => {
   it('falls back to the member kind when the seat has no role or model', () => {
     const out = plain(renderDailyView({ ...busy, me: { name: 'Ada', kind: 'agent' } }, NOW, 80));
     expect(out[1]).toBe('you are Ada · agent');
+  });
+
+  it("words the hub's ⚠ line as the frame does, from the shared helper's line", () => {
+    const line = describeHubLink(
+      {
+        hub: 'dawn-hub',
+        last_ok_at: NOW - 14 * MIN,
+        failing_since: NOW - 12 * MIN,
+        failure: { kind: 'timeout', code: null, tailscale: null },
+      },
+      NOW,
+    ).line;
+    expect(hubWarning(line)).toBe(
+      '⚠ hub dawn-hub unreachable since 12m — the hub did not answer in time; last sync 14m ago',
+    );
   });
 });
