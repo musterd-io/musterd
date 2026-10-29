@@ -35,6 +35,9 @@ export default function RootLayout() {
           name="index"
           options={{
             title: 'Asks',
+            // Transparent, so the home screen's warm glow runs up behind the wordmark.
+            headerTransparent: true,
+            headerStyle: { backgroundColor: 'transparent' },
             // The nameplate wordmark (ADR 704), rendered from docs/design/assets/wordmark.svg.
             headerTitle: () => (
               <Image

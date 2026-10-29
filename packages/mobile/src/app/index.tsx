@@ -8,7 +8,7 @@ import { showOffer } from '../native/offer';
 import type { PairingPin } from '../native/pairingPin';
 import { Backdrop, Glass } from '../ui/glass';
 import { Icon } from '../ui/icon';
-import { Breathe, Halo, Rise, Squish } from '../ui/motion';
+import { Halo, Rise, Squish } from '../ui/motion';
 import { ago, Seat } from '../ui/seat';
 import { font, radius, space, usePalette } from '../ui/theme';
 
@@ -95,11 +95,38 @@ export default function AsksScreen() {
   );
 
   const paired = Boolean(pin?.binding);
-  const asks = view?.asks ?? [];
-  const pairLabel = paired ? null : pin ? 'Finish pairing' : 'Pair this phone';
+  const asks = paired ? (view?.asks ?? []) : [];
+  const team = pin?.team ?? null;
+  const headline = !pin
+    ? 'Pair this phone'
+    : !paired
+      ? 'Almost there'
+      : asks.length === 0
+        ? 'All clear'
+        : asks.length === 1
+          ? '1 ask needs you'
+          : `${asks.length} asks need you`;
+  const status: { tone: 'on' | 'wait' | 'off'; text: string } = paired
+    ? { tone: 'on', text: `Paired with ${team}` }
+    : pin
+      ? { tone: 'wait', text: 'Waiting for approval' }
+      : { tone: 'off', text: 'Not paired' };
+  const dot = { on: p.success, wait: p.accent, off: p.placeholder }[status.tone];
 
-  const banners = (
-    <>
+  const header = (
+    <View style={styles.header}>
+      <Rise>
+        <Text style={[styles.greeting, { color: p.muted }]}>{greeting(new Date())}</Text>
+        <Text accessibilityRole="header" style={[styles.headline, { color: p.text }]}>
+          {headline}
+        </Text>
+      </Rise>
+      <Rise index={1}>
+        <View style={[styles.pill, { backgroundColor: p.surface, borderColor: p.border }]}>
+          <View style={[styles.pillDot, { backgroundColor: dot }]} />
+          <Text style={[styles.pillText, { color: p.text }]}>{status.text}</Text>
+        </View>
+      </Rise>
       {note ? (
         <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
           <Text style={[styles.bannerText, { color: p.text }]}>{note}</Text>
@@ -111,105 +138,90 @@ export default function AsksScreen() {
             {heldBody(view.held.count)}
           </Text>
           <Text style={[styles.bannerText, { color: p.text }]}>
-            To keep things calm, they reach this phone as the hour allows. /live has them now.
+            They come here as the hour allows. /live has them now.
           </Text>
         </Rise>
       ) : null}
-    </>
+    </View>
   );
 
-  if (!paired || asks.length === 0) {
-    return (
-      <View style={[styles.empty, { backgroundColor: p.bg }]}>
-        <Backdrop />
-        {banners}
-        <Rise>
-          <Halo color={p.tint}>
-            <Image source={mark} style={styles.mark} accessibilityIgnoresInvertColors />
-          </Halo>
-        </Rise>
-        <View style={styles.rollCall} accessible={false}>
-          <Breathe>
-            <View style={[styles.rollDot, { backgroundColor: p.success }]} />
-          </Breathe>
-          <Breathe delay={300}>
-            <View style={[styles.rollDot, { backgroundColor: p.accent }]} />
-          </Breathe>
-          <Breathe delay={600}>
-            <View style={[styles.rollDot, { backgroundColor: p.teal }]} />
-          </Breathe>
-        </View>
-        <Rise index={1}>
-          <Text style={[styles.title, { color: p.text }]}>
-            {paired ? 'You’re all caught up' : 'No asks yet'}
+  const empty = paired ? (
+    <View style={styles.calm}>
+      <Rise index={2}>
+        <Halo color={p.tint}>
+          <Image source={mark} style={styles.mark} accessibilityIgnoresInvertColors />
+        </Halo>
+      </Rise>
+      <Rise index={3}>
+        <Text style={[styles.calmText, { color: p.muted }]}>
+          New asks land here while you’re away from your desk.
+        </Text>
+      </Rise>
+      <Rise index={4}>
+        <Squish
+          accessibilityRole="button"
+          accessibilityLabel="Check now"
+          onPress={() => void refresh(true)}
+          style={styles.textButton}
+        >
+          <Text style={[styles.textButtonText, { color: p.accentText }]}>
+            {loading ? 'Checking…' : 'Check now'}
           </Text>
-        </Rise>
-        <Rise index={2}>
-          <Text style={[styles.copy, { color: p.muted }]}>
-            {paired
-              ? `While you’re away from your computer, asks from ${pin?.team ?? 'your team'} land here — sealed so only this phone can read them, and answered with Face ID. At your desk, they stay on the computer; change that in /live under Settings, You, Away channels.`
-              : 'Asks addressed to you arrive on this phone — sealed so only this phone can read them — and are answered with Face ID.'}
+        </Squish>
+      </Rise>
+    </View>
+  ) : (
+    <Rise index={2}>
+      <Glass style={styles.start}>
+        {['Show the code on your computer', 'Scan it here', 'Approve with your passkey'].map(
+          (step, i) => (
+            <View key={step} style={styles.step}>
+              <View style={[styles.stepNumber, { backgroundColor: p.tint }]}>
+                <Text style={[styles.stepNumberText, { color: p.accentText }]}>{i + 1}</Text>
+              </View>
+              <Text style={[styles.stepText, { color: p.text }]}>{step}</Text>
+            </View>
+          ),
+        )}
+        <Squish
+          accessibilityRole="button"
+          accessibilityLabel={pin ? 'Finish pairing' : 'Scan pairing code'}
+          onPress={() => router.push('/pair')}
+          style={[styles.primary, { backgroundColor: p.accent }]}
+        >
+          <Icon name="qrcode.viewfinder" color={p.onAccent} size={19} />
+          <Text style={[styles.primaryText, { color: p.onAccent }]}>
+            {pin ? 'Finish pairing' : 'Scan pairing code'}
           </Text>
-        </Rise>
-        <Rise index={3}>
-          {pairLabel ? (
-            <Squish
-              accessibilityRole="button"
-              accessibilityLabel={pairLabel}
-              onPress={() => router.push('/pair')}
-              style={[styles.primary, { backgroundColor: p.accent }]}
-            >
-              <Icon name="qrcode.viewfinder" color={p.onAccent} size={19} />
-              <Text style={[styles.primaryText, { color: p.onAccent }]}>{pairLabel}</Text>
-            </Squish>
-          ) : (
-            <Squish
-              accessibilityRole="button"
-              accessibilityLabel="Check again"
-              onPress={() => void refresh(true)}
-              style={[styles.quiet, { backgroundColor: p.raised }]}
-            >
-              <Text style={[styles.quietText, { color: p.text }]}>
-                {loading ? 'Checking…' : 'Check again'}
-              </Text>
-            </Squish>
-          )}
-        </Rise>
-      </View>
-    );
-  }
+        </Squish>
+      </Glass>
+    </Rise>
+  );
 
   return (
-    <FlatList
-      style={{ backgroundColor: p.bg }}
-      contentContainerStyle={styles.list}
-      data={asks}
-      keyExtractor={(entry) => entry.delivery.ask.id}
-      ListHeaderComponent={
-        <View style={styles.header}>
-          <Backdrop />
-          <Rise>
-            <Text style={[styles.greeting, { color: p.muted }]}>{greeting(new Date())}</Text>
-            <Text style={[styles.count, { color: p.text }]}>
-              {asks.length === 1 ? '1 ask needs you' : `${asks.length} asks need you`}
-            </Text>
+    <View style={[styles.screen, { backgroundColor: p.bg }]}>
+      <Backdrop />
+      <FlatList
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.list}
+        data={asks}
+        keyExtractor={(entry) => entry.delivery.ask.id}
+        ListHeaderComponent={header}
+        ListEmptyComponent={empty}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            tintColor={p.accent}
+            onRefresh={() => void refresh(true)}
+          />
+        }
+        renderItem={({ item, index }) => (
+          <Rise index={index + 2}>
+            <AskRow entry={item} />
           </Rise>
-          {banners}
-        </View>
-      }
-      refreshControl={
-        <RefreshControl
-          refreshing={loading}
-          tintColor={p.accent}
-          onRefresh={() => void refresh(true)}
-        />
-      }
-      renderItem={({ item, index }) => (
-        <Rise index={index + 1}>
-          <AskRow entry={item} />
-        </Rise>
-      )}
-    />
+        )}
+      />
+    </View>
   );
 }
 
@@ -264,7 +276,7 @@ function AskRow({ entry }: { entry: AskEntry }) {
             </View>
           ) : null}
         </View>
-        <Text numberOfLines={3} style={[styles.headline, { color: p.text }]}>
+        <Text numberOfLines={3} style={[styles.askText, { color: p.text }]}>
           {headline}
         </Text>
         {waiting ? (
@@ -279,51 +291,52 @@ function AskRow({ entry }: { entry: AskEntry }) {
 }
 
 const styles = StyleSheet.create({
-  empty: {
-    flex: 1,
+  screen: { flex: 1 },
+  list: { padding: space.lg, paddingTop: space.md, gap: space.md, paddingBottom: space.xl * 2 },
+  header: { gap: space.md, marginBottom: space.sm },
+  greeting: { fontFamily: font.medium, fontSize: 15 },
+  headline: { fontFamily: font.display, fontSize: 32, lineHeight: 38, letterSpacing: -0.8 },
+  pill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 6,
+  },
+  pillDot: { width: 8, height: 8, borderRadius: radius.pill },
+  pillText: { fontFamily: font.medium, fontSize: 13 },
+  banner: { borderRadius: radius.md, padding: space.lg, gap: space.xs },
+  bannerTitle: { fontFamily: font.bold, fontSize: 15 },
+  bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
+  calm: { alignItems: 'center', gap: space.md, paddingTop: space.xl * 2 },
+  mark: { width: 88, height: 88, marginVertical: space.lg },
+  calmText: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  textButton: { minHeight: 44, paddingHorizontal: space.lg, justifyContent: 'center' },
+  textButtonText: { fontFamily: font.semibold, fontSize: 15 },
+  start: { padding: space.lg, gap: space.lg },
+  step: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  stepNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: space.xl,
-    gap: space.md,
   },
-  mark: { width: 88, height: 88, marginVertical: space.lg },
-  rollCall: { flexDirection: 'row', gap: space.sm, marginBottom: space.sm },
-  rollDot: { width: 8, height: 8, borderRadius: radius.pill },
-  title: { fontSize: 22, fontFamily: font.bold, textAlign: 'center', letterSpacing: -0.3 },
-  copy: {
-    fontFamily: font.regular,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    maxWidth: 320,
-  },
-  banner: { borderRadius: radius.md, padding: space.lg, gap: space.xs, alignSelf: 'stretch' },
-  bannerTitle: { fontSize: 15, fontFamily: font.bold },
-  bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
+  stepNumberText: { fontFamily: font.bold, fontSize: 14 },
+  stepText: { flex: 1, fontFamily: font.medium, fontSize: 16, lineHeight: 22 },
   primary: {
     flexDirection: 'row',
     gap: space.sm,
-    minHeight: 50,
-    marginTop: space.sm,
+    minHeight: 52,
     borderRadius: radius.md,
     paddingHorizontal: space.xl,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryText: { fontSize: 17, fontFamily: font.bold },
-  quiet: {
-    minHeight: 44,
-    marginTop: space.sm,
-    borderRadius: radius.pill,
-    paddingHorizontal: space.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quietText: { fontSize: 15, fontFamily: font.semibold },
-  list: { padding: space.lg, gap: space.md, paddingBottom: space.xl * 2 },
-  header: { gap: space.md, marginBottom: space.xs },
-  greeting: { fontSize: 15, fontFamily: font.medium },
-  count: { fontSize: 28, fontFamily: font.bold, letterSpacing: -0.5 },
+  primaryText: { fontFamily: font.bold, fontSize: 17 },
   row: { padding: space.lg, gap: space.md },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   rowWho: { flex: 1, gap: 1 },
@@ -338,7 +351,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   chipText: { fontSize: 12, fontFamily: font.bold },
-  headline: { fontSize: 17, lineHeight: 24, fontFamily: font.medium },
+  askText: { fontSize: 17, lineHeight: 24, fontFamily: font.medium },
   waitingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   waitingDot: { width: 6, height: 6, borderRadius: radius.pill },
 });

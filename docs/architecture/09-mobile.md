@@ -81,7 +81,7 @@ small change.
 
 | Route | What it is |
 | --- | --- |
-| `/` | The asks list: every open ask that reached this phone, newest first, with who asked, the app's own wording for a listed act, a Face ID chip, and "N more waiting". A held summary shows as a banner while its hour lasts. Pull to refresh re-delivers. An advisory notification action is answered from here, and the screen says so only when the answer did not leave. While this phone has no binding, the screen links to pairing. |
+| `/` | Home. One header in every state: a greeting, one headline ("2 asks need you", "All clear", "Pair this phone") and a status pill (paired with the team, waiting for approval, not paired). Below it, every open ask that reached this phone, newest first, with who asked, the app's own wording for a listed act, a Face ID chip, and "N more waiting"; or, with none, the mark and one line; or, unpaired, three pairing steps and Scan. A held summary shows as a banner while its hour lasts. Pull to refresh re-delivers. An advisory notification action is answered from here, and the screen says so only when the answer did not leave. |
 | `/ask/[ref]` | One ask. A listed act is the descriptor screen (spec §7): the act in fixed wording, who asked, target, authority, requested at, expires in, and only below a rule, labelled as theirs, the asker's words and the lane title. Approve, Decline, and "Decline — I did not expect this". A sent answer says it is sent, not approved: only the daemon's receipt decides. |
 | `/pair` | Scan the daemon page's QR (or paste it), compare the fingerprint, send the sealed pair request, and wait. The phone does not approve itself. |
 
