@@ -28,7 +28,7 @@ SAMPLE = {
     "eli": {"hatOverride": "bucket", "wrist": "bracelet", "metal": "#e2b85c", "smile": "wide", "kind": "human", "top": "hsl(328,68,62)", "skin": "#f7d9b8", "hair": "bun", "hairColor": "#4f8a3a", "facialHair": "beard", "hat": "cap", "hatColor": "#e07a3f", "cut": "tee", "bottom": "#4a5a3a", "shoes": "#d1503f", "accessory": "none", "accessoryColor": "#d1503f"},
     "fay": {"smile": "soft", "kind": "agent", "top": "hsl(168,68,62)", "skin": "#9db8c9", "hair": "afro", "hairColor": "#8a3a2e", "facialHair": "none", "hat": "none", "hatColor": "#2f8fa3", "cut": "vest", "bottom": "#3f5570", "shoes": "#a9683a", "accessory": "headphones", "accessoryColor": "#2f8fa3"},
     "gus": {"neck": "headphones-neck", "smile": "wide", "kind": "human", "top": "hsl(20,68,62)", "skin": "#f5cf6e", "hair": "bald", "hairColor": "#3f6fa8", "facialHair": "beard-wild", "hat": "cap", "hatColor": "#d1503f", "cut": "long", "bottom": "#7d6b8f", "shoes": "#e1ad01", "accessory": "none", "accessoryColor": "#d1503f"},
-    "hana": {"smile": "wide", "kind": "human", "top": "hsl(340,68,62)", "skin": "#f5cf6e", "hair": "long", "hairColor": "#4f8a3a", "facialHair": "moustache", "hat": "none", "hatColor": "#2f8fa3", "cut": "vest", "bottom": "#8a4a32", "shoes": "#2f8f7a", "accessory": "glasses-browline", "accessoryColor": "#4f8a3a"},
+    "hana": {"outer": "cardigan", "smile": "wide", "kind": "human", "top": "hsl(340,68,62)", "skin": "#f5cf6e", "hair": "long", "hairColor": "#4f8a3a", "facialHair": "moustache", "hat": "none", "hatColor": "#2f8fa3", "cut": "vest", "bottom": "#8a4a32", "shoes": "#2f8f7a", "accessory": "glasses-browline", "accessoryColor": "#4f8a3a"},
 }
 # hana's hair is `bob` today; `long` here so a long-hair silhouette is always in the check (Review Focus 2).
 
@@ -46,7 +46,10 @@ def layers_for(m: dict) -> list[tuple[str, str | None]]:
     agent = m["kind"] == "agent"
     out = [("skin", m["skin"]), ("eyes", None)] + ([("tell/eyes", m["top"])] if agent else [])
     out.append((f"mouth/{m['smile']}", m["skin"]))
-    out += [("shoes", m["shoes"]), ("bottom", m["bottom"]), (f"top/{m['cut']}", m["top"])]
+    outer = m.get("outer", "none")
+    out += [("shoes", m["shoes"]), ("bottom", m["bottom"]), (f"top/{m['cut']}", m.get("under", "#f2eee6") if outer != "none" else m["top"])]
+    if outer != "none":  # the outer layer carries the hue (v2-5b)
+        out.append((f"outer/{outer}", m["top"]))
     if agent:
         out.append(("tell/collar", m["top"]))
     if m["hair"] != "bald":

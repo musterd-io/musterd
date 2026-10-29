@@ -177,6 +177,20 @@ const CUTS_BY_STYLE: Record<Style, readonly TopCut[]> = {
   athletic: ['tee', 'hoodie', 'tee'],
 };
 
+/**
+ * The outer layer (v2-5b, spec §2.4): a cardigan, blazer or zip jacket worn over the top. When one is
+ * worn it carries the identity hue and the top under it takes a plain shirt colour (§2.5).
+ */
+export type Outer = 'none' | 'cardigan';
+const OUTERS_BY_STYLE: Record<Style, readonly Outer[]> = {
+  formal: ['none', 'none', 'cardigan'],
+  smart: ['none', 'none', 'cardigan'],
+  casual: ['none', 'none', 'none', 'cardigan'],
+  athletic: ['none'],
+};
+/** What a shirt under an outer layer is: plain, so the hue on the outside is the one you find them by. */
+const UNDER_COLORS = ['#f2eee6', '#c9d6e3', '#9aa0a6', '#2b3038', '#e8dcc4'] as const;
+
 const BOTTOMS = {
   denim: '#3f5570',
   charcoal: '#2b3038',
@@ -264,6 +278,10 @@ export interface Appearance {
   hatColor: string;
   /** The cut of the top. The *hue* is not here — it is the member's identity colour (see the file docs). */
   cut: TopCut;
+  /** An outer layer over the top, or 'none'. */
+  outer: Outer;
+  /** The top's own colour when an outer layer carries the hue; null when the top carries it. */
+  underColor: string | null;
   /** True when the forearms are bare (short sleeves) — the strongest small-scale variation we have. */
   bareArms: boolean;
   bottom: string;
@@ -304,6 +322,8 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
   const grooming = pick(GROOMING, name, 17);
   const hair = pick(grooming === 'polished' ? POLISHED_HAIR : RELAXED_HAIR, name, 3);
   const cut = pick(CUTS_BY_STYLE[style], name, 8);
+  // a hood does not go under a jacket: a hoodie is its own outermost layer
+  const outer = cut === 'hoodie' ? 'none' : pick(OUTERS_BY_STYLE[style], name, 23);
   const skin = pick(SKINS, name, 1);
   // Agents never wear glasses — the eye glow is their tell, and frames would sit on it.
   const eyes = kind === 'agent' ? 'none' : pick(EYES, name, 18);
@@ -326,7 +346,10 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
     hat: pick(HATS, name, 6),
     hatColor: pickContrasting(HAT_COLORS, name, 7, skin),
     cut,
-    bareArms: cut === 'tee' || cut === 'vest',
+    outer,
+    underColor: outer === 'none' ? null : pick(UNDER_COLORS, name, 24),
+    // an outer layer's long sleeves cover the arms whatever the top under it
+    bareArms: outer === 'none' && (cut === 'tee' || cut === 'vest'),
     bottom: pick(BOTTOMS_BY_STYLE[style], name, 9),
     shoes: pick(SHOES_BY_STYLE[style], name, 10),
     eyes,
