@@ -20,6 +20,7 @@ import {
   type Pairing,
   type PairingRefusal,
 } from './channelBindings.js';
+import { getChannelSettings, setChannelSettings } from './channelSettings.js';
 
 /**
  * Pairing the musterd app (ADR 676 §5). The daemon's own page starts it and shows a QR code with
@@ -326,6 +327,17 @@ export async function confirmAppPairing(
       environment: keys.environment,
       attestation: 'verified',
     },
+  });
+  // ADR 759: the human's passkey approval of this phone is the opt-in. Delivery and answering turn
+  // on here, so an ask reaches the phone without a second trip to the settings. Presence gating
+  // and a tier floor the human already chose are kept; a first pairing gets the gating default.
+  const prior = await getChannelSettings(db, input.teamId, input.member.id, APP_CHANNEL);
+  await setChannelSettings(db, {
+    teamId: input.teamId,
+    memberId: input.member.id,
+    actor: input.member.name,
+    settings: { ...prior, deliver: true, answer: true },
+    now,
   });
   return { ok: true, binding: confirmed.binding, deviceKeyId: enrolled.key.id };
 }

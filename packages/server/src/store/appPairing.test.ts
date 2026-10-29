@@ -22,6 +22,7 @@ import {
 import { listAuditByAction } from './audit.js';
 import { buildDescriptor, enrollDeviceKey, listDeviceKeys, requireAuthority } from './authority.js';
 import { confirmPairing, recordPairingIdentity } from './channelBindings.js';
+import { getChannelSettings } from './channelSettings.js';
 import { addMember } from './members.js';
 import { createTeam } from './teams.js';
 
@@ -195,6 +196,16 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
       (k) => k.id === done.deviceKeyId,
     );
     expect(phoneKey?.kind).toBe('phone');
+
+    // ADR 759: confirming is the opt-in, so the app channel delivers and answers from here on,
+    // still only while the human is away.
+    expect(await getChannelSettings(db, team.id, nick.id, 'app')).toEqual({
+      channel: 'app',
+      deliver: true,
+      answer: true,
+      presenceGating: true,
+      tierFloor: null,
+    });
 
     const rows = (await listAuditByAction(db, team.id, 'channel.app_paired', 100)).reverse();
     expect(rows).toHaveLength(1);
