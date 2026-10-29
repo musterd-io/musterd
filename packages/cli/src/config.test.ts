@@ -847,3 +847,18 @@ describe('identity resolution is by real path (reach spec §6 — symlink + nest
     );
   });
 });
+
+describe('saveConfig on a new machine', () => {
+  afterEach(() => delete process.env['MUSTERD_CONFIG']);
+
+  it('creates the config directory instead of failing on the lock file', () => {
+    // A fresh HOME has no ~/.musterd: `team create` made the team, then died on ENOENT for
+    // config.json.lock and left the team orphaned (cli-journeys-review.md F1).
+    const dir = mkdtempSync(join(tmpdir(), 'musterd-cfg-fresh-'));
+    process.env['MUSTERD_CONFIG'] = join(dir, 'not-yet', 'config.json');
+    const cfg = loadConfig();
+    cfg.identities['alpha'] = { name: 'Ada', key: 'mskey_a', surface: 'cli' };
+    saveConfig(cfg);
+    expect(loadConfig().identities['alpha']?.name).toBe('Ada');
+  });
+});
