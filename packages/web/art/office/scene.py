@@ -562,7 +562,7 @@ def rug(asset_id: str, lx: float, ly: float, w: float, d: float, fill: str, mark
     return finish(asset_id, parts, lx, ly, col)
 
 
-def plant(asset_id: str, lx: float, ly: float, species: str, zs: float, col) -> bpy.types.Object:
+def plant_scripted(asset_id: str, lx: float, ly: float, species: str, zs: float, col) -> bpy.types.Object:
     """A potted plant (rebuilt for office v3-4 — nick: "some of the plants are kind of messed up"):
     `snake` — thin upright blades with a light rim; `fiddle` — a trunk with seven broad leaves on
     visible stems, not a ball canopy; `pothos` — a pot on a tall stand with heart leaves trailing down
@@ -655,6 +655,19 @@ def plant(asset_id: str, lx: float, ly: float, species: str, zs: float, col) -> 
     return finish(asset_id, parts, lx, ly, col)
 
 
+def plant(asset_id: str, lx: float, ly: float, species: str, zs: float, col) -> bpy.types.Object:
+    """A potted floor plant — a Meshy mesh per species (ADR 755, `meshes/plant-<species>.json`):
+    `snake` — upright sword leaves; `fiddle` — a thin trunk with broad violin leaves. The room's
+    terracotta and leaf green, split at the pot's rim. `pothos` stays scripted (`plant_scripted`)."""
+    if species == "pothos":  # the Meshy pothos lost its stand to the vines (2026-10-29): scripted stays
+        return plant_scripted(asset_id, lx, ly, species, zs, col)
+    pot = paint("pot", srgb("#b9603a"), rough=0.7)
+    leaf = paint("fiddle-leaf", srgb("#5f944a"), rough=0.5)
+    across, pot_top = {"snake": (34, 0.3), "fiddle": (46, 0.22)}[species]
+    m = meshy(asset_id, f"plant-{species}", lx, ly, across, "S", [pot, leaf], lambda z, p: 0 if z < pot_top else 1, zs)
+    return finish(asset_id, [m, shadow(f"{asset_id}/shadow", lx, ly, across * 0.6, across * 0.45, zs)], lx, ly, col)
+
+
 def bookshelf(asset_id: str, lx: float, ly: float, d: str, long: float, deep: float, high: float, rows: int, tone: float, zs: float, col) -> bpy.types.Object:
     """A shelf unit against a wall: carcass, shelves, books in rows (their fronts toward the room)."""
     sn = d in ("S", "N")
@@ -717,17 +730,15 @@ def entrance(asset_id: str, zs: float, col) -> bpy.types.Object:
 
 
 def nook_fridge(asset_id: str, zs: float, col) -> bpy.types.Object:
+    """The nook fridge — a Meshy retro two-door (ADR 755, `meshes/fridge.json`) in the room's appliance
+    cream, its chrome handles darker; facing the room (+y), at the layout's footprint."""
     f = LOUNGE["fridge"]
     lx, ly = NOOK[0] + f["dx"], NOOK[1] + f["dy"]
     body = paint("appliance", APPLIANCE, 0.45)
-    front = ly + f["d"] / 2
-    fr = box(f"{asset_id}/body", lx, ly, 0, f["w"], f["d"], f["h"], body, zs)
-    bevel(fr, 0.8, 2)
-    parts = [fr, box(f"{asset_id}/seam", lx, front, 34, f["w"] - 4, 1.5, 1.5, paint("seam", srgb("#c3b9a8"), 0.5), zs)]
-    for up in (38, 18):
-        parts.append(box(f"{asset_id}/handle", lx + 11, front + 0.5, up, 2.5, 2.5, 12, paint("handle", srgb("#6e6558"), 0.4), zs))
-    parts.append(box(f"{asset_id}/note", lx - 6, front + 0.4, 24, 7, 0.8, 8, paint("note", srgb("#f4cf52"), 0.9), zs))
-    parts.append(box(f"{asset_id}/crate", lx - 5, ly - 2, f["h"], 15, 13, 9, wood("crate", srgb("#c9744a"), grain=0.12), zs))
+    chrome = paint("handle", srgb("#6e6558"), 0.4)
+    m = meshy(asset_id, "fridge", lx, ly, f["w"], "S", [body, chrome], lambda z, p: 0, zs, tall=f["h"])
+    # the room's own touch stays scripted: the fruit crate on top (the door's bulge swallows a note)
+    parts = [m, box(f"{asset_id}/crate", lx - 5, ly - 2, f["h"] - 1, 15, 13, 9, wood("crate", srgb("#c9744a"), grain=0.12), zs)]
     parts.append(shadow(f"{asset_id}/shadow", lx, ly, f["w"] * 0.65, f["d"] * 0.7, zs))
     return finish(asset_id, parts, lx, ly, col)
 
@@ -766,27 +777,21 @@ def nook_counter(asset_id: str, zs: float, col) -> bpy.types.Object:
 
 
 def nook_cooler(asset_id: str, zs: float, col) -> bpy.types.Object:
+    """The water cooler — a Meshy cabinet with its upturned bottle (ADR 755, `meshes/cooler.json`): the
+    room's appliance cream below, the bottle in the faintly glowing water above."""
     c = LOUNGE["cooler"]
     lx, ly = NOOK[0] + c["dx"], NOOK[1] + c["dy"]
     body = paint("appliance", APPLIANCE, 0.45)
     water = glow("water", srgb("#8fd0e6"), strength=0.25)
-    parts = [
-        box(f"{asset_id}/body", lx, ly, 0, c["w"], c["d"], c["h"], body, zs),
-        box(f"{asset_id}/tap", lx, ly + c["d"] / 2 + 1, 26, 8, 3, 5, paint("tap-block", srgb("#5f6b70"), 0.4), zs),
-        box(f"{asset_id}/cups", lx - 7, ly + c["d"] / 2 + 1, 30, 3, 2, 10, paint("cup-tube", srgb("#cfd6d8"), 0.5), zs),
-        cyl(f"{asset_id}/neck", lx, ly, c["h"], 4, 7, 5, water, zs),
-        cyl(f"{asset_id}/bottle", lx, ly, c["h"] + 5, 7, 7.5, 12, water, zs),
-        cyl(f"{asset_id}/bottle-top", lx, ly, c["h"] + 17, 7.5, 6, 5, water, zs),
-    ]
-    parts.append(shadow(f"{asset_id}/shadow", lx, ly, c["w"] * 0.7, c["d"] * 0.7, zs))
-    return finish(asset_id, parts, lx, ly, col)
+    m = meshy(asset_id, "cooler", lx, ly, c["w"], "S", [body, water], lambda z, p: 1 if z > 0.62 else 0, zs, tall=c["h"] + 22)
+    return finish(asset_id, [m, shadow(f"{asset_id}/shadow", lx, ly, c["w"] * 0.7, c["d"] * 0.7, zs)], lx, ly, col)
 
 
-def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing: str, mats: list, split, zs: float, up: float = 0.0) -> bpy.types.Object:
+def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing: str, mats: list, split, zs: float, up: float = 0.0, tall: float | None = None) -> bpy.types.Object:
     """A Meshy prop (ADR 755): `meshes/<name>.glb` imported, turned to `facing` (the meshes face -y as
     generated), scaled so its width across the facing axis is `across`, re-materialed with the room's
     own `mats` — `split(z_frac, poly)` picks each face's index — smooth-shaded, and seated by its bounds at
-    height `up`:
+    height `up` (and, given `tall`, stretched to that height):
     an imported mesh's origin is not its foot (docs/wiki/meshy-props.md)."""
     bpy.ops.object.select_all(action="DESELECT")
     bpy.ops.import_scene.gltf(filepath=os.path.join(os.path.dirname(os.path.abspath(__file__)), "meshes", f"{name}.glb"))
@@ -804,7 +809,8 @@ def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing:
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
     vs = [m.matrix_world @ Vector(v.co) for v in m.data.vertices]
     k = across / ((max(v.x for v in vs) - min(v.x for v in vs)) if facing in ("S", "N") else (max(v.y for v in vs) - min(v.y for v in vs)))
-    m.scale = (k, k, k * zs)
+    kz = tall / (max(v.z for v in vs) - min(v.z for v in vs)) if tall else k  # `tall`: fit the layout's height too
+    m.scale = (k, k, kz * zs)
     bpy.ops.object.transform_apply(scale=True)
     m.data.materials.clear()
     for mt in mats:

@@ -1,0 +1,18 @@
+{
+  "prompt": "a snake plant in a round terracotta floor pot: tall upright sword-shaped leaves with pointed tips, simple clean shapes",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 4000,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a1895b-4609-74e3-9782-356feaec7957",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 20,
+  "bytes": 66816
+}

@@ -910,11 +910,11 @@
     {
       "id": "nook/cooler",
       "file": "office-art-nook-cooler.webp",
-      "w": 117,
-      "h": 260,
+      "w": 115,
+      "h": 265,
       "anchor": {
-        "x": 58.84,
-        "y": 228.41
+        "x": 57.26,
+        "y": 233.65
       },
       "scale": 3.0
     },
@@ -943,11 +943,11 @@
     {
       "id": "nook/fridge",
       "file": "office-art-nook-fridge.webp",
-      "w": 145,
-      "h": 299,
+      "w": 143,
+      "h": 297,
       "anchor": {
-        "x": 72.28,
-        "y": 261.07
+        "x": 68.83,
+        "y": 258.93
       },
       "scale": 3.0
     },
@@ -987,11 +987,11 @@
     {
       "id": "plant/fiddle",
       "file": "office-art-plant-fiddle.webp",
-      "w": 124,
-      "h": 221,
+      "w": 152,
+      "h": 245,
       "anchor": {
-        "x": 62.0,
-        "y": 188.0
+        "x": 75.0,
+        "y": 204.0
       },
       "scale": 3.0
     },
@@ -1009,11 +1009,11 @@
     {
       "id": "plant/snake",
       "file": "office-art-plant-snake.webp",
-      "w": 112,
-      "h": 281,
+      "w": 116,
+      "h": 275,
       "anchor": {
-        "x": 55.0,
-        "y": 251.0
+        "x": 58.0,
+        "y": 244.0
       },
       "scale": 3.0
     },

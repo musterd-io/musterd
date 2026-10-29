@@ -1,0 +1,18 @@
+{
+  "prompt": "a fiddle leaf fig in a round terracotta floor pot: a thin trunk with large broad violin-shaped leaves, simple clean shapes",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 5000,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a1895b-4609-74df-9ecc-dc897edfeb50",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 20,
+  "bytes": 88860
+}
