@@ -5084,6 +5084,7 @@ export async function handleHttp(
               member,
               pairingId,
               proof: body.approval,
+              expectedOrigins: webauthnExpectedOrigins(ctx),
             });
             if (!result.ok) {
               throw new MusterdError(
@@ -5464,6 +5465,7 @@ export async function handleHttp(
             publicKey: body.public_key,
             kind: body.kind,
             proof: body.approval,
+            expectedOrigins: webauthnExpectedOrigins(ctx),
           });
           if (!result.ok) {
             throw new MusterdError(
@@ -5489,6 +5491,7 @@ export async function handleHttp(
             member,
             keyId: decodeURIComponent(revokeMatch[1]!),
             proof: body.approval,
+            expectedOrigins: webauthnExpectedOrigins(ctx),
           });
           if (!result.ok) {
             throw new MusterdError(

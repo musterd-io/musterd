@@ -1,4 +1,4 @@
-import { generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
 import { descriptorSigningBytes, type ApprovalDescriptor } from '@musterd/protocol';
 import { beforeEach, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
@@ -225,6 +225,86 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
       now: NOW,
     });
     expect(check.ok).toBe(true);
+  });
+
+  it('a passkey standing key confirms when the caller supplies WebAuthn origins', async () => {
+    const { db, team, nick, daemon } = await setup();
+    const passkey = generateKeyPairSync('ed25519');
+    const credentialRaw = Buffer.from('nick-passkey-credential');
+    const standing = await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: nick.id,
+      publicKey: passkey.publicKey.export({ format: 'der', type: 'spki' }).toString('base64url'),
+      kind: 'passkey',
+      credentialId: credentialRaw.toString('base64url'),
+      now: NOW,
+    });
+    const { pairing, qr } = await startAppPairing(db, {
+      teamId: team.id,
+      teamSlug: team.slug,
+      memberId: nick.id,
+      actor: 'nick',
+      relayUrl: 'https://relay.example',
+      keys: daemon,
+      now: NOW,
+    });
+    const p = await phone();
+    const { sealed, root } = await pairRequest(daemon, qr, p);
+    const staged = await stageAppPairing(db, {
+      teamId: team.id,
+      teamSlug: team.slug,
+      pairingId: pairing.id,
+      sealed,
+      keys: daemon,
+      appId: APP_ID,
+      now: NOW,
+      attestRoots: [root],
+    });
+    expect(staged.ok).toBe(true);
+    const keys = (await stagedAppKeys(db, team.id, pairing.id))!;
+    const descriptor = await buildDescriptor(db, {
+      teamId: team.id,
+      audience: team.slug,
+      memberId: nick.id,
+      actor: 'nick',
+      act: 'device_key_admin',
+      target: 'nick',
+      payload: appEnrollPayload(keys),
+      now: NOW,
+    });
+    const origin = 'https://example.com';
+    const rpIdHash = createHash('sha256').update('example.com').digest();
+    const flags = Buffer.from([0x01]);
+    const signCount = Buffer.alloc(4);
+    const authenticatorData = Buffer.concat([rpIdHash, flags, signCount]);
+    const clientDataJson = JSON.stringify({
+      type: 'webauthn.get',
+      challenge: descriptor.nonce,
+      origin,
+      crossOrigin: false,
+    });
+    const clientHash = createHash('sha256').update(clientDataJson).digest();
+    const signature = cryptoSign(
+      null,
+      Buffer.concat([authenticatorData, clientHash]),
+      passkey.privateKey,
+    ).toString('base64url');
+    const done = await confirmAppPairing(db, {
+      teamId: team.id,
+      audience: team.slug,
+      member: nick,
+      pairingId: pairing.id,
+      now: NOW,
+      expectedOrigins: [origin],
+      proof: {
+        key_id: standing.id,
+        nonce: descriptor.nonce,
+        signature,
+        authenticator_data: authenticatorData.toString('base64url'),
+        client_data_json: clientDataJson,
+      },
+    });
+    expect(done).toEqual(expect.objectContaining({ ok: true }));
   });
 
   it('a phone cannot be the first key: a human with none standing gets passkey_first', async () => {
