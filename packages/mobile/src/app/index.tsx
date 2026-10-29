@@ -64,7 +64,17 @@ export default function AsksScreen() {
         const { watchNotificationAnswers } = await import('../native/notificationAnswers');
         const { phoneKeys } = await import('../native/phoneKeys');
         if (!alive.current) return;
-        answers = watchNotificationAnswers(setNote);
+        answers = watchNotificationAnswers(setNote, (route) =>
+          router.push({
+            pathname: '/ask/[ref]',
+            params: {
+              ref: route.ref,
+              team: route.team,
+              binding: route.binding,
+              expires_at: String(route.expires_at),
+            },
+          }),
+        );
         deliveries = phoneKeys.addListener('onDelivery', () => void refresh(false));
       } catch {
         // The shell still opens. A dev build or TestFlight has the module.

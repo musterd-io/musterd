@@ -13,6 +13,7 @@ enum Notice {
   static let title = "musterd"
   static let unverifiedText = "an ask could not be verified"
   static let staleText = "This ask is no longer available."
+  static let answerHint = "Press and hold to answer"
   static let advisoryCategory = "musterd.ask.advisory"
   static let actionApprove = "musterd.answer.approve"
   static let actionReject = "musterd.answer.reject"
@@ -66,10 +67,13 @@ enum Notice {
     case .ask(let text, let actionClass, let hasApproval, let waiting, _):
       if text.isEmpty { return unverified() }
       let category = actionClass == "advisory" && !hasApproval ? advisoryCategory : nil
+      let more = waitingSubtitle(waiting)
+      // Lock-screen actions only show on a press and hold (nick, 2026-10-29).
+      let subtitle = category == nil ? more : more.map { "\(answerHint) · \($0)" } ?? answerHint
       return Rendered(
         title: title,
         body: text,
-        subtitle: waitingSubtitle(waiting),
+        subtitle: subtitle,
         category: category,
         sound: true
       )

@@ -16,7 +16,7 @@
  */
 
 import { AppCallbackSchema, type AppDelivery } from '@musterd/protocol/app-channel';
-import { fetchBody, relayUrl, samePlace } from './answer';
+import { fetchBody, relayUrl, samePlace, type FetchMiss } from './answer';
 import { openDelivery } from './delivery';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys } from './phoneKeys';
@@ -59,14 +59,31 @@ export async function fetchAsk(input: {
   now?: number;
   fetchImpl?: typeof fetch;
 }): Promise<AskEntry | null> {
+  const got = await fetchAskOrMiss(input);
+  return 'miss' in got ? null : got;
+}
+
+/**
+ * {@link fetchAsk}, saying why it came back empty: `gone` when the daemon has no live ask by that
+ * ref, `unreachable` when this phone could not reach it (worth a retry, never "already settled").
+ * A body that does not open or does not match is `gone`: it is not an ask this phone can show.
+ */
+export async function fetchAskOrMiss(input: {
+  pin: PairingPin;
+  route: PushRoute;
+  now?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<AskEntry | FetchMiss> {
   const now = input.now ?? Date.now();
-  if (!samePlace(input.pin, input.route)) return null;
+  const gone: FetchMiss = { miss: 'gone' };
+  if (!samePlace(input.pin, input.route)) return gone;
   const fetched = await fetchBody(input.pin.relay, input.route, input.fetchImpl ?? fetch);
-  if (!fetched?.sealed) return null;
+  if ('miss' in fetched) return fetched;
+  if (!fetched.sealed) return gone;
   const delivery = await open(input.pin, fetched.route, fetched.sealed, now);
-  if (!delivery || delivery.kind !== 'ask') return null;
-  if (delivery.ask.id !== fetched.route.ref || delivery.ask.id !== input.route.ref) return null;
-  if (delivery.expires_at !== fetched.route.expires_at) return null;
+  if (!delivery || delivery.kind !== 'ask') return gone;
+  if (delivery.ask.id !== fetched.route.ref || delivery.ask.id !== input.route.ref) return gone;
+  if (delivery.expires_at !== fetched.route.expires_at) return gone;
   return { route: fetched.route, delivery };
 }
 

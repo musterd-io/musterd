@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  ANSWER_HINT,
   ACTION_APPROVE,
   ACTION_REJECT,
   ADVISORY_CATEGORY,
@@ -22,6 +23,7 @@ describe('the Swift extension matches the TypeScript sentences', () => {
     for (const sentence of [
       UNVERIFIED_TEXT,
       STALE_TEXT,
+      ANSWER_HINT,
       ADVISORY_CATEGORY,
       ACTION_APPROVE,
       ACTION_REJECT,

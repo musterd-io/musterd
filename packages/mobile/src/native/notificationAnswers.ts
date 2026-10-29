@@ -8,11 +8,16 @@
  * dynamically and ignores the rejection.
  */
 
-import { answerNotification, outcomeNote, type AnswerOutcome } from './answer';
+import { answerNotification, outcomeNote, samePlace, type AnswerOutcome } from './answer';
+import { openDelivery } from './delivery';
+import { ACTION_OPEN } from './notice';
 import { loadPairingPin } from './pairingPin';
 import { phoneKeys } from './phoneKeys';
+import { readPush, routeOf, type PushRoute } from './push';
 
-export async function takeNotificationAnswer(): Promise<AnswerOutcome | null> {
+export type NotificationTap = { answered: AnswerOutcome } | { open: PushRoute } | null;
+
+export async function takeNotificationAnswer(): Promise<NotificationTap> {
   const pending = await phoneKeys.takePendingAnswer();
   if (!pending) return null;
   let userInfo: unknown = null;
@@ -22,15 +27,45 @@ export async function takeNotificationAnswer(): Promise<AnswerOutcome | null> {
     userInfo = null;
   }
   const pin = await loadPairingPin();
-  return answerNotification({ action: pending.action, userInfo, pin });
+  if (pending.action === ACTION_OPEN) {
+    const push = readPush(userInfo);
+    if (!push || !pin || !samePlace(pin, push)) return null;
+    // An inline body says what it is; only an ask opens the ask screen. A body fetched by ref is
+    // always an ask (held summaries and the paired notice ride inline).
+    if (push.sealed) {
+      try {
+        const route = routeOf(push);
+        const delivery = await openDelivery({
+          sealed: push.sealed,
+          route,
+          pinnedIdentity: pin.identity,
+        });
+        if (delivery.kind !== 'ask') return null;
+      } catch {
+        return null;
+      }
+    }
+    return { open: routeOf(push) };
+  }
+  return { answered: await answerNotification({ action: pending.action, userInfo, pin }) };
 }
 
-/** Subscribe, drain anything already waiting, and report a sentence only when one is owed. */
-export function watchNotificationAnswers(onNote: (note: string) => void): { remove(): void } {
+/**
+ * Subscribe, drain anything already waiting, report a sentence only when one is owed, and hand a
+ * plain tap's route to `onOpen`.
+ */
+export function watchNotificationAnswers(
+  onNote: (note: string) => void,
+  onOpen: (route: PushRoute) => void,
+): { remove(): void } {
   let alive = true;
-  const report = (outcome: AnswerOutcome | null) => {
-    if (!alive || !outcome) return;
-    const note = outcomeNote(outcome);
+  const report = (tap: NotificationTap) => {
+    if (!alive || !tap) return;
+    if ('open' in tap) {
+      onOpen(tap.open);
+      return;
+    }
+    const note = outcomeNote(tap.answered);
     if (note) onNote(note);
   };
   const subscription = phoneKeys.addListener('onPendingAnswer', () => {

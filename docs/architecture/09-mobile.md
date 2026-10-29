@@ -65,6 +65,10 @@ small change.
   (ADR 659): the daemon is the source of truth and the relay stores no sealed body. It asks at most
   once a minute, because each request re-pushes every pending ask. A re-pushed ask that is already
   in Notification Center lands in the list with no banner and no sound; only a new one alerts.
+- **A tap opens the ask.** Tapping a notification takes it out of Notification Center, and so
+  off the list; the app opens that ask's screen instead. An ask with lock-screen actions says
+  "Press and hold to answer". On the ask screen a relay 404 is "Already settled"; a 503, 504 or
+  no network is retried once and then "Couldn't reach your team", with Try again.
 - **The list.** Notification Center says which asks reached the phone, not which are still open, so
   each ref there is fetched by ref through the relay. The daemon answers only for an ask still live
   on this binding, re-issued with a fresh token (the old one is spent), so a decided or expired ask
@@ -269,7 +273,7 @@ src/
     delivery.ts            // the delivery composition — route AAD, inner {p,s}, the daemon's Ed25519 check
     nonceStore.ts          // seen-nonce verdicts; the extension's Swift copy follows this
     notice.ts              // lock-screen copy and which asks get actions
-    notificationAnswers.ts // take a pending action once the app is open
+    notificationAnswers.ts // take a pending action once the app is open; a plain tap opens its ask
     offer.ts               // a listed act's offer as shown and signed: digest checked on the phone
     pair.ts                // after the fingerprint matches: keys, attestation, seal, POST, pin
     pairingPin.ts          // the keychain pin pairing writes and the extension reads

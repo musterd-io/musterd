@@ -181,7 +181,12 @@ public final class MusterdPushSubscriber: BaseExpoAppDelegateSubscriber,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
     let action = response.actionIdentifier
-    if action == Notice.actionApprove || action == Notice.actionReject {
+    // A plain tap is kept too, so the app opens the ask it was tapped for: the tap takes the
+    // notification out of Notification Center, and with it the ask from the list (nick,
+    // 2026-10-29).
+    if action == Notice.actionApprove || action == Notice.actionReject
+      || action == UNNotificationDefaultActionIdentifier
+    {
       PendingAnswers.store(action: action, userInfo: response.notification.request.content.userInfo)
     }
     if Self.previousDelegate?.userNotificationCenter?(
