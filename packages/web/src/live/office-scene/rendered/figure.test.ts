@@ -50,8 +50,16 @@ describe('layersFor (office realism Task 11)', () => {
     expect(top?.color).toBe('#3366cc');
   });
 
+  it('the outermost top carries the hue: under a cardigan the shirt takes its own plain colour (v2-5b)', () => {
+    const look: Appearance = { ...femme, cut: 'long', outer: 'cardigan', underColor: '#f2eee6' };
+    const layers = layersFor(look, 'human', '#3366cc');
+    expect(layers.find((l) => l.id === 'top/long')?.color).toBe('#f2eee6');
+    expect(layers.find((l) => l.id === 'outer/cardigan')?.color).toBe('#3366cc');
+    expect(layers.findIndex((l) => l.id === 'outer/cardigan')).toBe(layers.findIndex((l) => l.id === 'top/long') + 1);
+  });
+
   it('an agent wears no visor: its eyes and a collar light glow in its identity colour (figure v2)', () => {
-    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', eyes: 'none', ears: 'none', neck: 'none', wrist: 'none', accessory: 'none', cut: 'tee' };
+    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', eyes: 'none', ears: 'none', neck: 'none', wrist: 'none', outer: 'none', accessory: 'none', cut: 'tee' };
     const layers = layersFor(agent, 'agent', '#5b8def');
     expect(layers.map((l) => l.id)).toEqual(['skin', 'eyes', 'tell/eyes', `mouth/${agent.smile}`, 'shoes', 'bottom', 'top/tee', 'tell/collar', 'hair/short']);
     expect(layers.find((l) => l.id === 'tell/eyes')?.color).toBe('#5b8def');
