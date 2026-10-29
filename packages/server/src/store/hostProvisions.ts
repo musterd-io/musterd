@@ -112,6 +112,44 @@ export async function getProvision(
   );
 }
 
+/**
+ * ADR 762: a `move` row pinned to this host label whose author (`sponsor_id`, the human the hub
+ * authorized under ADR 696 when the move was made) is the host key's creator. The row is the
+ * authority: a host key reaches an unsponsored seat only through one of these, never by scope.
+ */
+export function moveRowServes(
+  row: Pick<HostProvisionRow, 'kind' | 'host' | 'sponsor_id'>,
+  host: string,
+  scope: HostScope,
+): boolean {
+  return (
+    (row.kind ?? 'mint') === 'move' &&
+    row.host === host &&
+    scope.creatorId !== null &&
+    row.sponsor_id === scope.creatorId
+  );
+}
+
+/**
+ * ADR 762: the claimed `move` row that lets host `host` finish standing `memberId` up — claimed by
+ * that host, pinned to it, authored by `sponsorId`. Undefined when there is none, and the caller
+ * falls back to refusing as before.
+ */
+export async function claimedMoveFor(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+  host: string,
+  sponsorId: string,
+): Promise<HostProvisionRow | undefined> {
+  return await db.get<HostProvisionRow>(
+    `SELECT * FROM host_provisions WHERE team_id = ? AND member_id = ? AND kind = 'move'
+       AND state = 'claimed' AND host = ? AND claimed_by = ? AND sponsor_id = ?
+     ORDER BY claimed_at DESC LIMIT 1`,
+    [teamId, memberId, host, host, sponsorId],
+  );
+}
+
 /** Host labels this sponsor's host keys polled from within `withinMs` — newest first. */
 export async function sponsorHostsSeen(
   db: Driver,
@@ -181,7 +219,8 @@ export async function claimProvisions(
       if (!kinds.includes(row.kind ?? 'mint')) continue;
       if (row.host !== null && row.host !== host) continue;
       const agent = await getMemberById(t, row.member_id);
-      if (!agent || agent.left_at !== null || !hostMayServe(scope, agent)) continue;
+      if (!agent || agent.left_at !== null) continue;
+      if (!hostMayServe(scope, agent) && !moveRowServes(row, host, scope)) continue;
       const took = await t.run(
         `UPDATE host_provisions SET state = 'claimed', host = ?, claimed_by = ?, claimed_at = ?
            WHERE id = ? AND state = 'pending'`,

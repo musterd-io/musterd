@@ -1,5 +1,6 @@
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
+import { claimedMoveFor } from '../store/hostProvisions.js';
 import { getMemberByName, memberStandingRefusal } from '../store/members.js';
 import {
   type MemberRow,
@@ -53,5 +54,39 @@ export async function assertSponsorOf(
     throw new MusterdError('not_found', `no live agent "${agentName}" in "${team.slug}"`);
   if (agent.sponsored_by !== member.id)
     throw new MusterdError('forbidden', `"${agentName}" is not an agent you sponsor`);
+  return agent;
+}
+
+/**
+ * ADR 762: a host key's authority over a seat it is MOVING — the same live-agent and live-sponsor
+ * checks as {@link assertSponsorOf}, but the seat need not be sponsored: what authorizes it is a
+ * claimed `move` row pinned to the key's own label and authored by the key's creator. Never
+ * widens a mint, never reaches a seat with no such row.
+ */
+export async function assertMoverOf(
+  db: Driver,
+  team: TeamRow,
+  creator: MemberRow,
+  agentName: string,
+  host: string,
+  now = Date.now(),
+): Promise<MemberRow> {
+  assertSponsorCaller(creator, now);
+  const agent = await getMemberByName(db, team.id, agentName);
+  const status = agent ? resolveAccountStatus(agent) : null;
+  if (
+    !agent ||
+    agent.kind !== 'agent' ||
+    agent.left_at !== null ||
+    status === 'disabled' ||
+    status === 'banned' ||
+    status === 'archived'
+  )
+    throw new MusterdError('not_found', `no live agent "${agentName}" in "${team.slug}"`);
+  if (!(await claimedMoveFor(db, team.id, agent.id, host, creator.id)))
+    throw new MusterdError(
+      'forbidden',
+      `"${agentName}" is not an agent you sponsor, and no move of it to host "${host}" is claimed by this key`,
+    );
   return agent;
 }

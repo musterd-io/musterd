@@ -663,7 +663,7 @@ import {
 } from '../telemetry.js';
 import { RELEASE_VERSION } from '../version.js';
 import { passkeyApprovePage, passkeyEnrollPage } from './authorityPages.js';
-import { assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
+import { assertMoverOf, assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
 import { scrubForReader } from './broadcastScrub.js';
 import { isReloadOf } from './hub.js';
 import { handleMcpRoute } from './mcpHttp.js';
@@ -2165,7 +2165,8 @@ async function authAdminOrSponsorCaller(
  * {@link hostKeyScope} (a creator who left, lost standing or lost `can_create_agents` fails
  * closed), and the target must satisfy {@link assertSponsorOf} against the creator, so the
  * key's reach is exactly its sponsor's sponsored seats — never team-wide, never another
- * sponsor's. `hostLabel`, when given, must equal the key's own label (the enroll rule).
+ * sponsor's — plus, under ADR 762, a seat it holds a claimed move row for (pinned to its label,
+ * authored by its creator). `hostLabel`, when given, must equal the key's own label (the enroll rule).
  */
 async function authProvisionCaller(
   ctx: Ctx,
@@ -2191,7 +2192,13 @@ async function authProvisionCaller(
     const scope = await hostKeyScope(ctx, team, credential);
     const creator = scope.creatorId ? await getMemberById(ctx.db, scope.creatorId) : null;
     if (!creator) throw new MusterdError('unauthorized', 'this host credential’s creator is gone');
-    await assertSponsorOf(ctx.db, team, creator, agentName);
+    // ADR 762: a seat the creator does not sponsor is reachable only through a claimed move row
+    // pinned to this key's label and authored by the creator — the row is the authority.
+    await assertSponsorOf(ctx.db, team, creator, agentName).catch(async (err: unknown) => {
+      if (!(err instanceof MusterdError) || err.code !== 'forbidden' || !credential.target)
+        throw err;
+      await assertMoverOf(ctx.db, team, creator, agentName, credential.target);
+    });
     await assertHubFresh(ctx, team);
     await recordBootstrapCredentialUse(ctx.db, credential.id);
     return {
