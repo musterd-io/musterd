@@ -1,0 +1,18 @@
+{
+  "prompt": "a small round wire mesh office wastebasket, slightly flared, metal rim, empty",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 3000,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a189e0-03a2-74b4-8710-b129dc98a002",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 20,
+  "bytes": 55560
+}

@@ -1,0 +1,18 @@
+{
+  "prompt": "a kitchen breakfast island, pale painted cabinet base with shaker panel doors, thick solid oak wood countertop overhanging slightly, simple rectangular, no stools",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 3000,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a189df-a994-73c9-9a89-bd8e9f21fab1",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 20,
+  "bytes": 56052
+}

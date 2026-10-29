@@ -20,10 +20,10 @@
       "id": "bin",
       "file": "office-art-bin.webp",
       "w": 60,
-      "h": 80,
+      "h": 79,
       "anchor": {
         "x": 30.0,
-        "y": 60.0
+        "y": 59.0
       },
       "scale": 3.0
     },
@@ -690,76 +690,76 @@
     {
       "id": "meeting/chair-0",
       "file": "office-art-meeting-chair-0.webp",
-      "w": 126,
-      "h": 183,
+      "w": 114,
+      "h": 174,
       "anchor": {
-        "x": 62.94,
-        "y": 152.45
+        "x": 56.94,
+        "y": 143.45
       },
       "scale": 3.0
     },
     {
       "id": "meeting/chair-1",
       "file": "office-art-meeting-chair-1.webp",
-      "w": 125,
-      "h": 183,
+      "w": 114,
+      "h": 174,
       "anchor": {
-        "x": 62.63,
-        "y": 152.39
+        "x": 56.63,
+        "y": 143.39
       },
       "scale": 3.0
     },
     {
       "id": "meeting/chair-2",
       "file": "office-art-meeting-chair-2.webp",
-      "w": 126,
-      "h": 183,
+      "w": 114,
+      "h": 175,
       "anchor": {
-        "x": 63.04,
-        "y": 152.31
+        "x": 57.04,
+        "y": 144.31
       },
       "scale": 3.0
     },
     {
       "id": "meeting/chair-3",
       "file": "office-art-meeting-chair-3.webp",
-      "w": 126,
-      "h": 164,
+      "w": 114,
+      "h": 148,
       "anchor": {
-        "x": 63.08,
-        "y": 133.22
+        "x": 57.08,
+        "y": 117.22
       },
       "scale": 3.0
     },
     {
       "id": "meeting/chair-4",
       "file": "office-art-meeting-chair-4.webp",
-      "w": 125,
-      "h": 164,
+      "w": 113,
+      "h": 148,
       "anchor": {
-        "x": 62.5,
-        "y": 133.14
+        "x": 56.5,
+        "y": 117.14
       },
       "scale": 3.0
     },
     {
       "id": "meeting/chair-5",
       "file": "office-art-meeting-chair-5.webp",
-      "w": 125,
-      "h": 165,
+      "w": 114,
+      "h": 148,
       "anchor": {
-        "x": 62.19,
-        "y": 134.08
+        "x": 57.19,
+        "y": 117.08
       },
       "scale": 3.0
     },
     {
       "id": "meeting/table",
       "file": "office-art-meeting-table.webp",
-      "w": 494,
-      "h": 349,
+      "w": 461,
+      "h": 343,
       "anchor": {
-        "x": 247.06,
+        "x": 230.06,
         "y": 237.77
       },
       "scale": 3.0
@@ -954,11 +954,11 @@
     {
       "id": "nook/island",
       "file": "office-art-nook-island.webp",
-      "w": 346,
-      "h": 268,
+      "w": 330,
+      "h": 264,
       "anchor": {
-        "x": 172.85,
-        "y": 183.45
+        "x": 163.85,
+        "y": 179.45
       },
       "scale": 3.0
     },
@@ -966,21 +966,21 @@
       "id": "nook/stool",
       "file": "office-art-nook-stool.webp",
       "w": 84,
-      "h": 118,
+      "h": 115,
       "anchor": {
         "x": 42.0,
-        "y": 95.0
+        "y": 92.0
       },
       "scale": 3.0
     },
     {
       "id": "nook/table",
       "file": "office-art-nook-table.webp",
-      "w": 152,
-      "h": 120,
+      "w": 154,
+      "h": 123,
       "anchor": {
-        "x": 76.02,
-        "y": 84.0
+        "x": 76.84,
+        "y": 85.12
       },
       "scale": 3.0
     },
@@ -1020,11 +1020,11 @@
     {
       "id": "printer",
       "file": "office-art-printer.webp",
-      "w": 172,
-      "h": 187,
+      "w": 163,
+      "h": 191,
       "anchor": {
-        "x": 85.89,
-        "y": 143.06
+        "x": 80.89,
+        "y": 147.06
       },
       "scale": 3.0
     },
@@ -1053,11 +1053,11 @@
     {
       "id": "reception/endtable",
       "file": "office-art-reception-endtable.webp",
-      "w": 115,
-      "h": 105,
+      "w": 117,
+      "h": 106,
       "anchor": {
-        "x": 57.25,
-        "y": 75.32
+        "x": 58.25,
+        "y": 76.32
       },
       "scale": 3.0
     },

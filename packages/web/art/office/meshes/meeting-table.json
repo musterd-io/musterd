@@ -1,0 +1,18 @@
+{
+  "prompt": "a rectangular solid oak conference meeting table for six, thick wooden top with rounded edges, four sturdy square wooden legs, plain, nothing on it",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 3000,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a189df-a994-7357-b5cd-93e190e2fd42",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 20,
+  "bytes": 57708
+}

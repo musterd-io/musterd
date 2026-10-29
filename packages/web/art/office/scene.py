@@ -787,11 +787,11 @@ def nook_cooler(asset_id: str, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, [m, shadow(f"{asset_id}/shadow", lx, ly, c["w"] * 0.7, c["d"] * 0.7, zs)], lx, ly, col)
 
 
-def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing: str, mats: list, split, zs: float, up: float = 0.0, tall: float | None = None) -> bpy.types.Object:
+def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing: str, mats: list, split, zs: float, up: float = 0.0, tall: float | None = None, deep: float | None = None) -> bpy.types.Object:
     """A Meshy prop (ADR 755): `meshes/<name>.glb` imported, turned to `facing` (the meshes face -y as
     generated), scaled so its width across the facing axis is `across`, re-materialed with the room's
     own `mats` — `split(z_frac, poly)` picks each face's index — smooth-shaded, and seated by its bounds at
-    height `up` (and, given `tall`, stretched to that height):
+    height `up` (and, given `tall` or `deep`, stretched to that height or that depth along `facing`):
     an imported mesh's origin is not its foot (docs/wiki/meshy-props.md)."""
     bpy.ops.object.select_all(action="DESELECT")
     bpy.ops.import_scene.gltf(filepath=os.path.join(os.path.dirname(os.path.abspath(__file__)), "meshes", f"{name}.glb"))
@@ -808,9 +808,12 @@ def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing:
     m.rotation_euler = (0, 0, {"N": 0.0, "S": math.pi, "E": math.pi / 2, "W": -math.pi / 2}[facing])
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
     vs = [m.matrix_world @ Vector(v.co) for v in m.data.vertices]
-    k = across / ((max(v.x for v in vs) - min(v.x for v in vs)) if facing in ("S", "N") else (max(v.y for v in vs) - min(v.y for v in vs)))
+    sx, sy = (max(v.x for v in vs) - min(v.x for v in vs)), (max(v.y for v in vs) - min(v.y for v in vs))
+    sn = facing in ("S", "N")
+    k = across / (sx if sn else sy)
+    kd = deep / (sy if sn else sx) if deep else k  # `deep`: fit the layout's footprint, not just its width
     kz = tall / (max(v.z for v in vs) - min(v.z for v in vs)) if tall else k  # `tall`: fit the layout's height too
-    m.scale = (k, k, kz * zs)
+    m.scale = (k, kd, kz * zs) if sn else (kd, k, kz * zs)
     bpy.ops.object.transform_apply(scale=True)
     m.data.materials.clear()
     for mt in mats:
@@ -836,14 +839,11 @@ def couch(asset_id: str, lx: float, ly: float, L: float, Dp: float, zs: float, c
 
 
 def island(asset_id: str, lx: float, ly: float, w: float, d: float, h: float, zs: float, col) -> bpy.types.Object:
-    """The café's breakfast island (office v3-3): a pale base, a wood slab overhanging it by 4 all
-    round, a mug and a fruit bowl left on top."""
+    """The café's breakfast island (office v3-3) — a Meshy mesh (ADR 755, `meshes/island.json`): a pale
+    panelled base under an oak slab, a mug and a fruit bowl left on top."""
     oak = wood("oak", OAK)
     base = paint("island-base", srgb("#d9d3c7"), 0.8)
-    parts = [box(f"{asset_id}/base", lx, ly, 0, w - 8, d - 8, h - 3, base, zs)]
-    top = box(f"{asset_id}/top", lx, ly, h - 3, w, d, 3, oak, zs)
-    bevel(top, 0.8)
-    parts.append(top)
+    parts = [meshy(asset_id, "island", lx, ly, w, "S", [base, oak], lambda z, p: 1 if z > 1 - 4 / h else 0, zs, tall=h, deep=d)]
     parts.append(cyl(f"{asset_id}/bowl", lx - w / 4, ly - 2, h, 7, 9, 3.5, paint("bowl", srgb("#e8c17d"), 0.5), zs, 16))
     parts.append(cyl(f"{asset_id}/mug", lx + w / 4, ly + 4, h, 3.2, 3.2, 5, paint("mug", srgb("#5e7a8c"), 0.5), zs, 12))
     parts.append(shadow(f"{asset_id}/shadow", lx, ly, w * 0.58, d * 0.6, zs))
@@ -851,29 +851,21 @@ def island(asset_id: str, lx: float, ly: float, w: float, d: float, h: float, zs
 
 
 def stool(asset_id: str, lx: float, ly: float, zs: float, col) -> bpy.types.Object:
-    """A café stool (office v3-3): a round padded seat on a post with a foot ring. Rendered once at
+    """A café stool (office v3-3) — a Meshy mesh (ADR 755, `meshes/stool.json`): a round padded seat on a
+    post with a foot ring. Rendered once at
     the floor centre and blitted at each stool's spot."""
     post = paint("stool-post", srgb("#4a4642"), 0.5)
     seat = fabric("stool-seat", srgb("#c9744a"))
-    r = STOOL / 2 - 1
-    parts = [cyl(f"{asset_id}/foot", lx, ly, 0, 9, 9, 1.2, post, zs, 20)]
-    parts.append(cyl(f"{asset_id}/post", lx, ly, 0, 1.8, 1.8, 22, post, zs, 12))
-    parts.append(cyl(f"{asset_id}/ring", lx, ly, 8, 7, 7, 1.0, post, zs, 20))
-    top = cyl(f"{asset_id}/seat", lx, ly, 22, r, r, 3.5, seat, zs, 24)
-    bevel(top, 1.2)
-    parts.append(top)
+    parts = [meshy(asset_id, "stool", lx, ly, STOOL - 2, "S", [seat, post], lambda z, p: 0 if z > 0.84 else 1, zs, tall=25.5)]
     parts.append(shadow(f"{asset_id}/shadow", lx, ly, STOOL * 0.5, STOOL * 0.5, zs))
     return finish(asset_id, parts, lx, ly, col)
 
 
 def low_table(asset_id: str, lx: float, ly: float, w: float, d: float, h: float, zs: float, col, dress: bool = True) -> bpy.types.Object:
+    """A low oak table — a Meshy mesh (ADR 755, `meshes/low-table.json`) on darker legs."""
     oak = wood("oak", OAK)
-    top = box(f"{asset_id}/top", lx, ly, h - 3, w, d, 3, oak, zs)
-    bevel(top, 0.8)
-    parts = [top]
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            parts.append(box(f"{asset_id}/leg", lx + sx * (w / 2 - 4), ly + sy * (d / 2 - 4), 0, 4, 4, h - 3, wood("oak-dark", OAK_DARK, grain=0.1), zs))
+    dark = wood("oak-dark", OAK_DARK, grain=0.1)
+    parts = [meshy(asset_id, "low-table", lx, ly, w, "S", [oak, dark], lambda z, p: 0 if z > 1 - 4 / h else 1, zs, tall=h, deep=d)]
     if dress:
         parts.append(box(f"{asset_id}/book-a", lx - 13, ly + 3, h, 22, 15, 1.2, paint("book-cover", srgb("#b98a5e"), 0.8), zs))
         parts.append(box(f"{asset_id}/book-b", lx - 13, ly + 3, h + 1.2, 18, 12, 2.4, paint("book-3", srgb(BOOK_COLORS[3]), 0.8), zs))
@@ -915,12 +907,8 @@ def meeting_table(asset_id: str, zs: float, col) -> bpy.types.Object:
     lx, ly = M["lx"], M["ly"]
     oak = wood("oak", OAK)
     dark = wood("oak-dark", OAK_DARK, grain=0.1)
-    top = box(f"{asset_id}/top", lx, ly, M["h"] - 6, M["w"], M["d"], 6, oak, zs)
-    bevel(top, 2.0, 4)
-    parts = [top]
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            parts.append(box(f"{asset_id}/leg", lx + sx * (M["w"] / 2 - 8), ly + sy * (M["d"] / 2 - 8), 0, 8, 8, M["h"] - 6, dark, zs))
+    # a Meshy mesh (ADR 755, `meshes/meeting-table.json`): an oak top on darker legs
+    parts = [meshy(asset_id, "meeting-table", lx, ly, M["w"], "S", [oak, dark], lambda z, p: 0 if z > 1 - 7 / M["h"] else 1, zs, tall=M["h"], deep=M["d"])]
     hub = lx + 30
     parts.append(box(f"{asset_id}/puck", hub, ly, M["h"], 17, 17, 4.5, paint("puck", srgb("#2c2c30"), 0.35), zs))
     parts.append(cyl(f"{asset_id}/vase", lx, ly, M["h"], 6, 7, 9, paint("vase", srgb("#efe2c6"), 0.4), zs, 16))
@@ -935,18 +923,8 @@ def meeting_chair(asset_id: str, lx: float, ly: float, facing: str, zs: float, c
     S = MEETING["chair"]
     fab = fabric("chair-fab", srgb("#5e6e7e"))
     dark = paint("chair-frame", srgb("#3a3a3e"), 0.4)
-    f = {"S": (0, 1), "N": (0, -1), "E": (1, 0), "W": (-1, 0)}[facing]
-    sn = facing in ("S", "N")
-    parts = [
-        box(f"{asset_id}/seat", lx, ly, 15, S - 8, S - 8, 5, fab, zs),
-        cyl(f"{asset_id}/stem", lx, ly, 2, 1.6, 1.6, 13, dark, zs, 10),
-    ]
-    # the back curves round the sitter and leans back a touch (v3-4), set a half-seat behind the centre
-    parts += curved_back(asset_id, lx - f[0] * (S / 2 - 8), ly - f[1] * (S / 2 - 8), facing, 20, S - 10, 22, 4.0, fab, zs,
-                         recline_deg=5.0, lumbar=False, arc_deg=50.0, slats=7)
-    for i in range(5):
-        a = i / 5 * math.tau
-        parts.append(box(f"{asset_id}/spoke", lx + math.cos(a) * 7, ly + math.sin(a) * 7, 0, 3, 3, 2, dark, zs))
+    # a Meshy mesh (ADR 755, `meshes/meeting-chair.json`): padded seat and curved back on a swivel star
+    parts = [meshy(asset_id, "meeting-chair", lx, ly, S - 6, facing, [fab, dark], lambda z, p: 1 if z < 0.3 else 0, zs, tall=42)]
     parts.append(shadow(f"{asset_id}/shadow", lx, ly, S * 0.5, S * 0.5, zs))
     return finish(asset_id, parts, lx, ly, col)
 
@@ -1315,9 +1293,9 @@ def wastebasket(asset_id: str, lx: float, ly: float, zs: float, col) -> bpy.type
     mouth = matte("bin-mouth", srgb("#23292b"), 0.95)
     rim = paint("bin-rim", srgb("#6b777b"), 0.45)
     parts = [
-        cyl(f"{asset_id}/body", lx, ly, 0, 6.0, 7.4, 15.0, wire, zs, 32),
+        # a Meshy mesh (ADR 755, `meshes/wastebasket.json`); the mouth stays a flat disc for the paper to land on
+        meshy(asset_id, "wastebasket", lx, ly, 15.4, "S", [wire, rim], lambda z, p: 1 if z > 0.94 else 0, zs, tall=15.6),
         cyl(f"{asset_id}/mouth", lx, ly, 14.6, 6.9, 6.9, 0.5, mouth, zs, 32),
-        cyl(f"{asset_id}/rim", lx, ly, 14.8, 7.7, 7.7, 0.8, rim, zs, 32),
         shadow(f"{asset_id}/shadow", lx + 1.5, ly + 1.5, 9, 9, zs),
     ]
     return finish(asset_id, parts, lx, ly, col)
@@ -1369,8 +1347,7 @@ def wall_hanger(asset_id: str, zs: float, col) -> bpy.types.Object:
 def end_table(asset_id: str, zs: float, col) -> bpy.types.Object:
     lx, ly = RECEPTION["end_table"]
     oak = wood("oak", OAK)
-    t = box(f"{asset_id}/top", lx, ly, 0, END_TABLE, END_TABLE, 16, oak, zs)
-    bevel(t, 1.0)
+    t = meshy(asset_id, "end-table", lx, ly, END_TABLE, "S", [oak, wood("oak-dark", OAK_DARK, grain=0.1)], lambda z, p: 0 if z > 0.8 else 1, zs, tall=16, deep=END_TABLE)
     parts = [t,
              box(f"{asset_id}/mag-a", lx - 2, ly + 1, 16, 15, 11, 1.1, paint("mag-a", srgb("#d9c7a8"), 0.9), zs),
              box(f"{asset_id}/mag-b", lx + 1, ly - 1, 17.1, 15, 11, 1.1, paint("mag-b", srgb("#c98f6a"), 0.9), zs)]
@@ -1381,11 +1358,9 @@ def end_table(asset_id: str, zs: float, col) -> bpy.types.Object:
 def printer(asset_id: str, zs: float, col) -> bpy.types.Object:
     P = PRINTER
     lx, ly = P["lx"], P["ly"]
-    body = box(f"{asset_id}/body", lx, ly, 0, P["w"], P["d"], P["h"], paint("printer", srgb("#9aa3ab"), 0.5), zs)
-    bevel(body, 1.5)
-    parts = [body,
-             box(f"{asset_id}/tray", lx, ly, P["h"], P["w"] - 12, P["d"] - 10, 5, paint("printer-dark", srgb("#6d757d"), 0.5), zs),
-             box(f"{asset_id}/paper", lx, ly, P["h"] + 5, P["w"] - 20, P["d"] - 16, 4, paint("paper", srgb("#f2ecd9"), 0.9), zs)]
+    # a Meshy mesh (ADR 755, `meshes/printer.json`): a grey body, its trays darker
+    mats = [paint("printer", srgb("#9aa3ab"), 0.5), paint("printer-dark", srgb("#6d757d"), 0.5)]
+    parts = [meshy(asset_id, "printer", lx, ly, P["w"], "S", mats, lambda z, p: 1 if z > 0.86 or p.normal.y < -0.6 and z < 0.4 else 0, zs, tall=P["h"] + 9, deep=P["d"])]
     parts.append(shadow(f"{asset_id}/shadow", lx, ly, P["w"] * 0.62, P["d"] * 0.7, zs))
     return finish(asset_id, parts, lx, ly, col)
 
