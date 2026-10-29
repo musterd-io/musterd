@@ -7,7 +7,7 @@ cd "$RUNTIME"
 git fetch -q origin main
 git merge -q --ff-only origin/main
 head="$(git rev-parse HEAD)"
-built="$(node -p 'try{require(process.argv[1]).ref||""}catch(e){""}' packages/cli/dist/build.json 2>/dev/null || true)"
+built="$(node -p 'try{require(process.argv[1]).ref||""}catch(e){""}' "$RUNTIME/packages/cli/dist/build.json" 2>/dev/null || true)"
 [ "$built" = "$head" ] && exit 0
 echo "$(date -u +%FT%TZ) building ${head:0:8} (was ${built:0:8})"
 pnpm install --frozen-lockfile
