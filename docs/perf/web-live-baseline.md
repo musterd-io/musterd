@@ -2578,3 +2578,21 @@ The daemon now renders each page once per commit and serves the HTML (ADR 754), 
 overlay. The provider-logo rounding (#3486, ~1 KB) lands separately.
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 380,000 B.
+
+## 2026-10-28 — figure v2-3a facial hair; Office art RAISED 8,500,000 → 8,650,000 B (lane 01M62401YK)
+
+| Budget     | Before (main)           | This branch (laptop)  | Ceiling                          |
+| ---------- | ----------------------- | --------------------- | -------------------------------- |
+| office art | 8,420,218 B (41 sheets) | ~8,620,000 B (42)     | RAISED 8,500,000 → 8,650,000 B |
+
+The first figure slice (spec §8, re-sliced 2026-10-28): stubble, moustache, goatee and beard rebuilt
+as jaw-following fused shapes with a finer strand grain, plus `facial/beard-wild`, the untrimmed
+beard, as a new layer. Facial sheets 69 KB → 268 KB: the new beard is 136 KB, the trimmed beard and
+the stubble doubled (27 → 60, 26 → 44 KB) because they now cover the jaw and the sideburns. Only the
+facial layers rendered (the per-call store kept the rest; ~4,000 calls over ~4 h on a busy laptop).
+Not measured locally with `perf:check` (no local full builds on the shared laptop); the figure is
+the sum of the sheets, so the number above is arithmetic on the files. A re-baseline to measured +
+15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 8,650,000 B with this lane in.
+

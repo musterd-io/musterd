@@ -54,7 +54,7 @@ CROWN = HEAD_C + HEAD_R * 1.04
 
 # ── layers ─────────────────────────────────────────────────────────────────────────────────
 HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun"]
-FACIAL = ["stubble", "moustache", "goatee", "beard"]
+FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
 ACCS = ["glasses", "headphones", "scarf"]
@@ -111,8 +111,9 @@ def skin_mat(name: str, v: float) -> bpy.types.Material:
     return m
 
 
-def hair_mat(name: str, v: float) -> bpy.types.Material:
-    """Neutral hair with strands: a stretched wave bump the key light catches."""
+def hair_mat(name: str, v: float, strands: float = 1.6) -> bpy.types.Material:
+    """Neutral hair with strands: a stretched wave bump the key light catches. `strands` is the wave
+    scale — 1.6 reads as hair on the head, ~4 as the finer grain of facial hair (v2-3a)."""
     m = bpy.data.materials.new(name)
     nt, nodes, links, bsdf = scene._nodes(m)
     bsdf.inputs["Base Color"].default_value = (v, v, v, 1)
@@ -120,7 +121,7 @@ def hair_mat(name: str, v: float) -> bpy.types.Material:
     bsdf.inputs["Specular IOR Level"].default_value = 0.35
     tc = nodes.new("ShaderNodeTexCoord")
     wave = nodes.new("ShaderNodeTexWave")
-    wave.inputs["Scale"].default_value = 1.6
+    wave.inputs["Scale"].default_value = strands
     wave.inputs["Distortion"].default_value = 6
     wave.inputs["Detail"].default_value = 4
     wave.bands_direction = "Z"
@@ -264,6 +265,9 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     cloth_dark = scene.fabric("fig-cloth-dark", (0.55, 0.55, 0.55), 1.4)
     denim = scene.fabric("fig-denim", (0.78, 0.78, 0.78), 3.0)
     hair = hair_mat("fig-hair", 0.75)
+    # facial hair: finer strands than the head, and stubble darker and sparser still (v2-3a)
+    facial = hair_mat("fig-facial", 0.7, strands=4.2)
+    stubble_mat = hair_mat("fig-stubble", 0.58, strands=9.0)
     shoe = grey("fig-shoe", 0.7, 0.6)
     acc = grey("fig-acc", 0.72, 0.5)
     eye = scene.matte("fig-eye", (0.03, 0.025, 0.02), 0.15)  # the iris: gloss, so it catches the light
@@ -380,14 +384,47 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     cap("hair/bun")
     clump("hair/bun", "bun", HEAD_X - R * 0.75, 0, HEAD_C + R * 0.95, R * 0.42, R * 0.42, R * 0.42)
 
-    # ── facial hair, following the jaw
-    stub = lambda name, *a: r.orb(name, "head", "facial/stubble", hair, *a, "facial/stubble")  # noqa: E731
-    stub("jaw", HEAD_X + R * 0.25, 0, HEAD_C - R * 0.3, R * 0.7, R * 0.74, R * 0.42)
-    stub("chin", HEAD_X + R * 0.55, 0, HEAD_C - R * 0.55, R * 0.3, R * 0.4, R * 0.2)
-    r.orb("moustache", "head", "facial/moustache", hair, HEAD_X + R * 0.8, 0, HEAD_C - R * 0.24, R * 0.1, R * 0.3, R * 0.07)
-    r.orb("goatee", "head", "facial/goatee", hair, HEAD_X + R * 0.62, 0, HEAD_C - R * 0.6, R * 0.22, R * 0.24, R * 0.2)
-    r.orb("beard", "head", "facial/beard", hair, HEAD_X + R * 0.32, 0, HEAD_C - R * 0.5, R * 0.6, R * 0.66, R * 0.36, "facial/beard")
-    r.orb("tache", "head", "facial/beard", hair, HEAD_X + R * 0.8, 0, HEAD_C - R * 0.24, R * 0.1, R * 0.3, R * 0.07, "facial/beard")
+    # ── facial hair (v2-3a, spec §2.4): each style is one fused group that follows the jaw, with a
+    # trimmed and an untrimmed beard. Every piece is tinted with the hair colour at draw time; the
+    # materials only set the grain — fine strands on a beard, a darker, sparser grain on stubble.
+    def fh(layer, name, mat, x, y, zc, rx, ry, rz, rot=None):
+        o = r.orb(name, "head", layer, mat, x, y, zc, rx, ry, rz, layer)
+        return r.turn(o, rot) if rot else o
+
+    def jaw_shell(layer, mat, k=1.0, drop=0.0):
+        """Two cheek-to-jaw lobes and a chin, hugging the jawline; `k` fattens, `drop` lowers the chin."""
+        for sy in (1, -1):
+            fh(layer, f"jaw{'L' if sy > 0 else 'R'}", mat, HEAD_X + R * 0.18, sy * R * 0.5, HEAD_C - R * (0.34 + drop * 0.5), R * 0.5 * k, R * 0.36 * k, R * 0.3 * k, (0, 0, sy * math.radians(18)))
+        fh(layer, "chin", mat, HEAD_X + R * 0.5, 0, HEAD_C - R * (0.56 + drop), R * 0.34 * k, R * 0.42 * k, R * 0.22 * k)
+
+    def lip(layer, mat, k=1.0, droop=14):
+        """A moustache as two lobes either side of the philtrum, drooping outward."""
+        for sy in (1, -1):
+            fh(layer, f"lip{'L' if sy > 0 else 'R'}", mat, HEAD_X + R * 0.8, sy * R * 0.17, HEAD_C - R * 0.25, R * 0.11 * k, R * 0.2 * k, R * 0.075 * k, (sy * math.radians(droop), 0, 0))
+
+    # stubble: a shadow along the jaw and lip, thin, in the sparse grain
+    jaw_shell("facial/stubble", stubble_mat, k=1.02)  # at k 0.92 it vanished into the skin at office size
+    lip("facial/stubble", stubble_mat, k=1.0, droop=8)
+    # moustache: the lobes alone, a touch fuller
+    lip("facial/moustache", facial, k=1.5, droop=16)  # alone it has to carry the face: fuller than the beards' lip
+    # goatee: chin tuft, a soul patch under the lip, and the moustache that frames the mouth
+    fh("facial/goatee", "tuft", facial, HEAD_X + R * 0.58, 0, HEAD_C - R * 0.62, R * 0.24, R * 0.26, R * 0.24)
+    fh("facial/goatee", "patch", facial, HEAD_X + R * 0.76, 0, HEAD_C - R * 0.42, R * 0.1, R * 0.1, R * 0.07)
+    lip("facial/goatee", facial, k=1.1)
+    # beard, trimmed: the jaw shell at the jawline, sideburns to the ear, the moustache joined to it
+    jaw_shell("facial/beard", facial)
+    for sy in (1, -1):
+        fh("facial/beard", f"burn{'L' if sy > 0 else 'R'}", facial, HEAD_X - R * 0.08, sy * R * 0.8, HEAD_C + R * 0.05, R * 0.2, R * 0.14, R * 0.38)
+    lip("facial/beard", facial, k=1.15)
+    # beard, untrimmed: fuller and lumpier, the chin reaching down the neck, cheeks higher, and a
+    # couple of stray clumps so the silhouette is not a shape anyone combed
+    jaw_shell("facial/beard-wild", facial, k=1.3, drop=0.3)
+    for sy in (1, -1):
+        fh("facial/beard-wild", f"burn{'L' if sy > 0 else 'R'}", facial, HEAD_X - R * 0.05, sy * R * 0.82, HEAD_C + R * 0.1, R * 0.26, R * 0.2, R * 0.46)
+        fh("facial/beard-wild", f"cheek{'L' if sy > 0 else 'R'}", facial, HEAD_X + R * 0.35, sy * R * 0.62, HEAD_C - R * 0.1, R * 0.3, R * 0.26, R * 0.28)
+        fh("facial/beard-wild", f"stray{'L' if sy > 0 else 'R'}", facial, HEAD_X + R * 0.42, sy * R * 0.3, HEAD_C - R * 1.0, R * 0.16, R * 0.18, R * 0.22, (sy * math.radians(20), math.radians(-10), 0))
+    fh("facial/beard-wild", "tip", facial, HEAD_X + R * 0.4, 0, HEAD_C - R * 1.12, R * 0.22, R * 0.26, R * 0.26)
+    lip("facial/beard-wild", facial, k=1.45, droop=22)
 
     # ── tops (v2): a torso with a waist that comes down over the trouser top, shoulders, sleeves —
     # all one fused garment per cut, so the sleeve flows out of the shoulder (spec §2.1)
