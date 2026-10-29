@@ -180,15 +180,17 @@ def crop_alpha(path: str, down: int = 1) -> tuple[int, int, int, int]:
     return (int(x0), int(y0), int(x1 - x0), int(y1 - y0))
 
 
-def quantize(path: str) -> None:
+def quantize(path: str, colours: int = 256) -> None:
     """Palette-quantize the PNG in place with pngquant when it is on PATH (brew install pngquant).
     A rendered asset is soft-shaded, so 256 colours with dithering is invisible at the panel's
-    scale and cuts the file by two-thirds or more; `officeArtBytes` is measured on the result."""
+    scale and cuts the file by two-thirds or more; `officeArtBytes` is measured on the result.
+    A figure sheet is neutral grey tinted at runtime, so it takes 64: no visible change at office
+    size, and the sheets ~30% smaller (6.7 → 4.7 MB, 2026-10-29)."""
     exe = shutil.which("pngquant")
     if not exe:
         print("render.py: pngquant not on PATH — assets left unquantized (bigger than they need be)")
         return
-    subprocess.run([exe, "--force", "--ext", ".png", "--speed", "1", "--quality", "70-95", "256", path], check=False)
+    subprocess.run([exe, "--force", "--ext", ".png", "--speed", "1", *(("--quality", "70-95") if colours == 256 else ()), str(colours), path], check=False)
 
 
 def to_webp(path: str) -> str:
@@ -690,7 +692,7 @@ def render_figure(a: dict) -> None:
             cells.extend([x, y, w, h, ox, oy])
         path = os.path.join(a["out"], "office-art-fig-" + layer.replace("/", "-") + ".png")
         write_pixels(path, atlas)
-        quantize(path)
+        quantize(path, 64)
         path = to_webp(path)
         file = os.path.basename(path)
         spec["layers"].append({"id": layer, "file": file})
