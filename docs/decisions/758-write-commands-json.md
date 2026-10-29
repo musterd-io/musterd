@@ -44,6 +44,11 @@ and `lane`'s help lists it on its writes.
 - Other commands that accept `--json` but print prose on some paths are not covered here. Each
   of them should either honour this contract or refuse the flag before it writes.
   Follows-up: 01M64CN3VYYFP05BHBDCC07SHA
+- _2026-10-29:_ the follow-up audited every command word. Eighteen commands never print JSON, and
+  eight more have subcommands that print prose. Those are listed in
+  `packages/cli/src/jsonOutput.ts`. `bin.ts` refuses `--json` on them with exit 2 before the command
+  loads, so nothing is sent. `jsonOutput.test.ts` fails if a whole-command entry starts reading the
+  flag. Subcommand entries are checked by audit only.
 
 ## Observability & Evaluation
 
