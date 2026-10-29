@@ -4,6 +4,7 @@ import { openDb } from '../db/open.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { insertProvision } from '../store/hostProvisions.js';
 import { addMember } from '../store/members.js';
+import { bindSeatToNode } from '../store/nodes.js';
 import { createTeam } from '../store/teams.js';
 import {
   hubHead,
@@ -13,6 +14,7 @@ import {
   SyncDuplicateIdError,
   SyncGapError,
   SyncOriginError,
+  SyncResidenceError,
 } from './log.js';
 
 withDrivers('log', (_o, kind) => {
@@ -396,6 +398,57 @@ withDrivers('log', (_o, kind) => {
       expect(await laneGenesis(db, team.id)).toBe('01Z');
       expect(await laneGenesis(db, other.id)).toBeNull();
       await db.close();
+    });
+  });
+  describe('ADR 766: a presence detach is exempt from residence', () => {
+    const presenceEv = (node: string, seq: number, action: string) => ({
+      kind: 'presence' as const,
+      team: 'revive',
+      origin_node: node,
+      origin_seq: seq,
+      event: {
+        id: `${node}-${seq}`,
+        ts: 1000 + seq,
+        actor: 'ryder',
+        action,
+        target: `presence-${node}`,
+        result: 'allow',
+        detail: { surface: 'claude-code' },
+      },
+    });
+
+    /** ryder lives on node-b now; node-a is the machine it moved away from. */
+    async function movedAway() {
+      const { db, team } = await seed();
+      const { row: ryder } = await addMember(db, team, { name: 'ryder', kind: 'agent' });
+      await bindSeatToNode(db, team.id, ryder.id, 'node-b');
+      return { db, team, ryder };
+    }
+
+    it("accepts the old machine's detach of its own stale session, and binds nobody", async () => {
+      // macbook-air-2, 2026-10-29: ryder moved to musterd-joiner-1, the Air detached its local
+      // session as ryder, and the hub refused the batch — the Air's whole tail wedged behind it.
+      const { db, team, ryder } = await movedAway();
+      const res = await ingestBatch(db, team.id, 'node-a', [
+        presenceEv('node-a', 1, 'presence.detached'),
+        await ev('node-a', 2),
+      ]);
+      expect(res.accepted).toBe(2);
+      expect(await highestContiguousSeq(db, 'node-a')).toBe(2);
+      expect(
+        await db.get('SELECT node_id FROM seat_nodes WHERE member_id = ?', [ryder.id]),
+      ).toEqual({ node_id: 'node-b' });
+      await db.close();
+    });
+
+    it('still refuses an attach or a reattest as a seat bound elsewhere', async () => {
+      for (const action of ['presence.attached', 'presence.reattested']) {
+        const { db, team } = await movedAway();
+        await expect(
+          ingestBatch(db, team.id, 'node-a', [presenceEv('node-a', 1, action)]),
+        ).rejects.toThrow(SyncResidenceError);
+        await db.close();
+      }
     });
   });
 });
