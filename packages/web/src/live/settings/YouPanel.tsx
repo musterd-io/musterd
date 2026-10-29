@@ -1,4 +1,6 @@
-import { lastAskLine, type DoorbellPrefs, type MemberSummary, type WorkingHours } from '@musterd/protocol';
+import type { DoorbellPrefs, MemberSummary, WorkingHours } from '@musterd/protocol';
+// The subpath, not the barrel: the barrel carries zod into /live's bundle.
+import { lastAskLine } from '@musterd/protocol/channel-outcome';
 import type { DoorbellSink } from '@musterd/protocol/wire';
 import { useCallback, useEffect, useState } from 'react';
 import {
