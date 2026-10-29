@@ -93,7 +93,8 @@ def layer_id_byte(layer: str) -> int:
 # rest ON it. For the seated clips, these layers also store just their arm pixels (`<layer>@arms`
 # cells) — every mesh on a shoulder, elbow or wrist joint, plus the whole of a prop held at the desk —
 # which `drawFigureFrame(part: 'arms')` draws again over the slab.
-ARM_LAYERS = ["skin"] + [f"top/{t}" for t in TOPS] + ["carry/mug", "carry/plate"]
+# the wrist pieces (v2-4c) ride the forearm, so the seated overlay and the carrying poses keep them
+ARM_LAYERS = ["skin"] + [f"top/{t}" for t in TOPS] + ["carry/mug", "carry/plate", "acc/watch", "acc/bracelet"]
 
 
 # ── materials ──────────────────────────────────────────────────────────────────────────────
@@ -1004,7 +1005,7 @@ CARRY_BASE = {"walk-hold2": "walk", "walk-hold1": "walk", "walk-call": "walk", "
               "sit-hand": "sit-idle",
               # office v3-6: the lap arms over the seated idle
               "sit-lap": "sit-idle"}
-CARRY_OWN = ("skin", "top/", "carry/", "lanyard")
+CARRY_OWN = ("skin", "top/", "carry/", "lanyard", "acc/watch", "acc/bracelet")
 # Layers a carrying clip stores beyond CARRY_OWN: the lap arms lie across the trousers, so sit-lap's
 # `bottom` cells are its own (spec §8); every other carrying clip keeps the base clip's.
 CARRY_OWN_EXTRA = {"sit-lap": ("bottom",)}
