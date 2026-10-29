@@ -46,7 +46,7 @@ import { renderMemoryLine } from './memory.js';
  * `pnpm cli-flags:check` proves this list covers every flag the file reads, so a flag added
  * without being declared fails the build instead of working in the field.
  */
-export const STATUS_FLAGS = ['resumable', 'session', 'wakeable', 'all'] as const;
+export const STATUS_FLAGS = ['resumable', 'session', 'wakeable', 'all', 'verbose'] as const;
 
 export async function statusCommand(parsed: Parsed): Promise<number> {
   // A flag this command does not know would take the NEXT argument as its value and drop it
@@ -82,6 +82,8 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
       : undefined;
   const mine = identity ? res.members.find((m) => m.name === identity.name) : undefined;
   const brief = explicit && identity ? await http.next(team).catch(() => undefined) : undefined;
+  const memory =
+    explicit && identity ? await http.getMemoryEnvelope(team).catch(() => undefined) : undefined;
   const daily: string[] = [];
   if (identity) {
     const now = new Date();
@@ -89,6 +91,7 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
     const mm = String(now.getMinutes()).padStart(2, '0');
     daily.push(theme.meta(`musterd · ${team} · ${hh}:${mm}`));
     daily.push(`you are ${theme.accent(identity.name)} · ${mine?.kind ?? 'agent'}`);
+    if (memory) daily.push(theme.dim(renderMemoryLine(memory, Date.now(), { compact: true })));
   }
   const ACT_WORD: Record<string, string> = {
     ask: 'asks',
@@ -151,37 +154,42 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
   if (inFlight.length === 0 && (pending?.count ?? 0) === 0 && upNext.length === 0) {
     daily.push(theme.dim('All quiet. musterd next shows open work.'));
   }
+  // ADR 135 self-check: build skew is a diagnostic, so it surfaces even in the daily view
+  // (sloane: ⚠ lines only when something is wrong, ending with the fix command).
+  if (cliBuild() && health?.build && cliBuild() !== health.build) {
+    // sameCommit logic from rows.ts: ignore -dirty suffix
+    const cli = cliBuild()!;
+    const daemon = health.build;
+    const same = cli.replace(/-dirty$/, '') === daemon.replace(/-dirty$/, '');
+    if (!same) {
+      daily.push('');
+      daily.push(
+        theme.warn(
+          `⚠ your CLI build (${cli.slice(0, 7)}) differs from the daemon (${daemon.slice(0, 7)}) — rebuild your checkout (pnpm build)`,
+        ),
+      );
+    }
+  }
   process.stdout.write(daily.join('\n') + '\n\n');
-  // The continuity one-liner (ADR 093 §3): the envelope read — headline + age, never the body. Seat-
-  // authed and best-effort: an ambient identity, a seat with nothing saved (not_found), or any read
-  // failure all stay silent. Compact here — the header has five other things to say.
-  const memory =
-    explicit && identity ? await http.getMemoryEnvelope(team).catch(() => undefined) : undefined;
-  // Two reads that do not need each other, so they do not queue: `health` surfaces which daemon +
-  // db we are on (a wrong-db "everyone offline" is otherwise a mystery), and the timeline carries
-  // who is in a room (ADR 378) — a huddle is derived, never stored, so the mark
-  // costs the one thing the roster read does not already carry: the recent envelope window. Paid
-  // deliberately, and only when it can be spent — that route is seat-authed and recipient-scoped, so
-  // an ambient identity gets no huddles rather than a failed command, exactly like `pending` and
-  // `memory` above.
+  // `Identity` carries no kind — the roster is the authority on it, so read it back from there.
+  const me = identity ? { name: identity.name, kind: mine?.kind ?? 'agent' } : undefined;
+  if (parsed.flags['all'] || parsed.flags['verbose']) {
+    process.stdout.write(
+      renderStatusHeader({
+        team,
+        server: config.server,
+        health,
+        members: res.members,
+        me,
+        pending: pending ? renderPendingSummary(pending.count, pending.since) : undefined,
+        memory: memory ? renderMemoryLine(memory, Date.now(), { compact: true }) : undefined,
+        cliBuild: cliBuild(),
+      }) + '\n',
+    );
+  }
   const marks = timeline
     ? huddleMarks(deriveHuddles(timeline.messages, identity?.name ?? ''))
     : undefined;
-
-  // `Identity` carries no kind — the roster is the authority on it, so read it back from there.
-  const me = identity ? { name: identity.name, kind: mine?.kind ?? 'agent' } : undefined;
-  process.stdout.write(
-    renderStatusHeader({
-      team,
-      server: config.server,
-      health,
-      members: res.members,
-      me,
-      pending: pending ? renderPendingSummary(pending.count, pending.since) : undefined,
-      memory: memory ? renderMemoryLine(memory, Date.now(), { compact: true }) : undefined,
-      cliBuild: cliBuild(),
-    }) + '\n',
-  );
   if (parsed.flags['all']) {
     process.stdout.write(
       '\n' + renderRoster(res.members, undefined, undefined, health?.build, marks) + '\n',
@@ -211,14 +219,14 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
   const holds =
     explicit && identity ? await http.listHolds(team).catch(() => [] as Hold[]) : ([] as Hold[]);
   if (holds.length > 0) process.stdout.write('\n' + renderHolds(holds, Date.now()) + '\n');
-  // The machine cost line (ADR 242): the footprint sampler's latest tick, best-effort — an older
-  // daemon, an unbound folder, or a non-darwin host all read as null and render as absence.
+  // The machine cost line: only when --all/--verbose (silent when healthy per the daily view).
   const machineLine = renderMachineLine(await http.footprint(team).catch(() => null));
-  if (machineLine) process.stdout.write('\n' + machineLine + '\n');
+  if (machineLine && (parsed.flags['all'] || parsed.flags['verbose']))
+    process.stdout.write('\n' + machineLine + '\n');
   // ADR 445 §4: a seat can see that it is being traced, and how deep. Printed only when the tap would
   // actually record — absence is the honest rendering of "not traced", never a `traced: off` line.
   const depth =
-    explicit && identity
+    explicit && identity && (parsed.flags['all'] || parsed.flags['verbose'])
       ? traceDepth(findBinding(), health, process.env, findWorkspaceDir() ?? undefined)
       : null;
   if (depth) process.stdout.write('\n' + theme.meta(tracedLine(depth, health)) + '\n');
