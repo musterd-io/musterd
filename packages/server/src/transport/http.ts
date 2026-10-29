@@ -341,6 +341,7 @@ import {
 import { applyHaltLocally, applyResumeLocally, mintHaltEvent } from '../store/halt.js';
 import { liftHold, listActiveHolds, listAllHolds, setHold } from '../store/holds.js';
 import {
+  claimedMoveFor,
   claimProvisions,
   failProvision,
   getProvision,
@@ -404,6 +405,7 @@ import {
   newSecret,
   rotateToken,
   setAvailability,
+  setCredentialHash,
   setMemberCeiling,
   setMemberGovernance,
   setMemberHue,
@@ -4468,6 +4470,43 @@ export async function handleHttp(
             ...(viaHostKey ? { via: 'host_key', host } : {}),
           },
         });
+        // ADR 765: a host key finishing a MOVE reissues the seat's credential. An existing seat's
+        // credential is minted only on its first claim, so the new machine's claim would otherwise
+        // get none and be left holding a key that can only claim; clearing the hash makes that
+        // claim mint a fresh one, and the old machine's credential and session leases die here.
+        if (viaHostKey && host !== null && body.use === 'claim_seat') {
+          const seat = await getMemberByName(ctx.db, team.id, body.target);
+          const move = seat
+            ? await claimedMoveFor(ctx.db, team.id, seat.id, host, member.id)
+            : undefined;
+          // Once per move row: a second claim_seat mint under the same row (a retried provision
+          // step) must not keep killing the credential the first one's claim just minted.
+          const already =
+            seat && move
+              ? await ctx.db.get<{ id: string }>(
+                  `SELECT id FROM audit WHERE team_id = ? AND action = 'agent_seat_credential.rotated'
+                     AND target = ? AND detail LIKE ? LIMIT 1`,
+                  [team.id, seat.name, `%"provision":"${move.id}"%`],
+                )
+              : undefined;
+          if (seat && move && !already) {
+            await setCredentialHash(ctx.db, seat.id, null);
+            const revoked = await revokeMemberSessionLeases(ctx.db, seat.id);
+            await appendAudit(ctx.db, team.id, {
+              actor: member.name,
+              action: 'agent_seat_credential.rotated',
+              target: seat.name,
+              result: 'allow',
+              detail: {
+                reason: 'move',
+                via: 'host_key',
+                host,
+                provision: move.id,
+                leases_revoked: revoked.length,
+              },
+            });
+          }
+        }
         // ADR 689 decision 1: a sponsor's host key, or a sponsored seat's `claim_seat`, crosses to
         // the team's joiners as the hub's own fact, so the sponsor-scoped host key is honoured at
         // a joiner's daemon. A team-wide `claim_role` and an unsponsored `claim_seat` never cross.
