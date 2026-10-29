@@ -203,6 +203,8 @@ describe('style, grooming and the spots (office figure v2-5a — presents retire
     expect(on.ears).toBe('headphones');
     expect(on.neck).toBe('none');
     expect(lookFor({ name, kind: 'human', dnd: false }).neck).toBe('headphones-neck');
+    const names = Array.from({ length: 2000 }, (_, i) => `p${i}`);
+    expect(names.some((n) => { const a = appearanceOf({ name: n, kind: 'human' }); return a.ears === 'headphones' && a.neck === 'headphones-neck'; })).toBe(false);
   });
 
   it('keeps beards on the floor', () => {

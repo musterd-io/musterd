@@ -514,11 +514,12 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     r.box("brim", "head", "hat/cap", acc, HEAD_X + R * 0.95, 0, HEAD_C + R * 0.66, R * 0.75, R * 0.95, 1.0, 0.4)
     r.orb("beanie", "head", "hat/beanie", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 0.42, R * 1.06, R * 1.08, R * 0.95)
     # the headband (v2-4d): a soft fabric band, taller than it is thick and following the head's slope —
-    # higher at the back — with a small tied knot behind one ear, not the old round cord
-    band = r.torus("band", "head", "hat/band", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.6, R * 0.99, 1.1, (0, math.radians(-10), 0))
+    # higher at the back, low on the brow so it hugs the hair instead of floating over it like the old one —
+    # with a small tied knot behind one ear, not the old round cord
+    band = r.torus("band", "head", "hat/band", acc, HEAD_X - R * 0.12, 0, HEAD_C + R * 0.5, R * 1.04, 1.1, (0, math.radians(-14), 0))
     band.scale = (1, 1, 1.9)
     for dy, dz in ((0.18, 0.06), (0.34, -0.05)):
-        r.orb("band-knot", "head", "hat/band", acc, HEAD_X - R * 0.92, R * dy, HEAD_C + R * (0.68 + dz), R * 0.1, R * 0.13, R * 0.09)
+        r.orb("band-knot", "head", "hat/band", acc, HEAD_X - R * 1.08, R * dy, HEAD_C + R * (0.72 + dz), R * 0.1, R * 0.13, R * 0.09)
 
     # ── accessories: thin frames on the nose, cups over the ears, a scarf at the neck
     frame = scene.matte("fig-frame", (0.72, 0.72, 0.72), 0.3)

@@ -305,7 +305,8 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
   // Agents never wear glasses — the eye glow is their tell, and frames would sit on it.
   const eyes = kind === 'agent' ? 'none' : pick(EYES, name, 18);
   const ears = pick(EARS, name, 19);
-  const neck = pick(NECK, name, 20);
+  // one pair of headphones a person: on the ears already means none resting round the neck
+  const neck = ears === 'headphones' && pick(NECK, name, 20) === 'headphones-neck' ? 'none' : pick(NECK, name, 20);
   const wrist = pick(WRIST, name, 22);
   return {
     skin,
