@@ -2,6 +2,9 @@ import {
   AppCallbackSchema,
   classifyAskAction,
   makeEnvelope,
+  RELAY_PING,
+  RELAY_PING_INTERVAL_MS,
+  RELAY_SILENT_MS,
   RelayServerFrameSchema,
   type RelayAppBodyFrame,
   type RelayCallbackFrame,
@@ -33,6 +36,9 @@ import { parseSlackCallback } from './slackAdapter.js';
  * Durable Object, reconnect with the sync stream's backoff (ADR 552), and a `reconcile` frame on
  * every open carrying the daemon's live pending set — the relay's rows are a cache, this daemon
  * is the source of truth, so a restart kills every button the daemon no longer stands behind.
+ * The socket carries a heartbeat (ADR 756): a ping every `RELAY_PING_INTERVAL_MS`, and a socket
+ * that has heard nothing for `RELAY_SILENT_MS` is dropped and redialed, so an idle half-open
+ * socket cannot swallow callbacks for long.
  *
  * A team with `away_relay_url` / `away_relay_token` unset (the default) never connects: no
  * outbound call, the ADR 149 posture. Callbacks are forwarded raw by the relay; parsing a
@@ -249,6 +255,41 @@ function parseAppCallback(body: string) {
   }
 }
 
+export interface RelayHeartbeat {
+  /** Any frame from the relay arrived (the pong included). */
+  heard(): void;
+  stop(): void;
+}
+
+/**
+ * The socket's heartbeat (ADR 756): `ping` every `RELAY_PING_INTERVAL_MS`; once nothing has been
+ * heard for longer than `RELAY_SILENT_MS`, `silent` fires once and the heartbeat stops. A socket
+ * can read OPEN long after its path died (an idle NAT or proxy drop leaves it half-open), so
+ * silence, not the socket's own state, is what says it is gone.
+ */
+export function startRelayHeartbeat(io: {
+  ping: () => void;
+  silent: (silentMs: number) => void;
+}): RelayHeartbeat {
+  let heardAt = Date.now();
+  const handle = setInterval(() => {
+    const silentMs = Date.now() - heardAt;
+    if (silentMs > RELAY_SILENT_MS) {
+      clearInterval(handle);
+      io.silent(silentMs);
+      return;
+    }
+    io.ping();
+  }, RELAY_PING_INTERVAL_MS);
+  if (typeof handle.unref === 'function') handle.unref();
+  return {
+    heard: () => {
+      heardAt = Date.now();
+    },
+    stop: () => clearInterval(handle),
+  };
+}
+
 export interface RelayLink {
   /** Queue one daemon frame; false when no socket is live (the caller keeps its own retry). */
   send(frame: RelayDaemonFrame): boolean;
@@ -283,6 +324,12 @@ export function startAwayRelay(ctx: Ctx): () => void {
     let attempt = 0;
     let down = false;
     let closed = false;
+    let heartbeat: RelayHeartbeat | null = null;
+
+    const stopHeartbeat = () => {
+      heartbeat?.stop();
+      heartbeat = null;
+    };
 
     const schedule = () => {
       if (closed || stopped) return;
@@ -313,6 +360,17 @@ export function startAwayRelay(ctx: Ctx): () => void {
         attempt = 0;
         down = false;
         log.info({ msg: 'away_relay_up', team: team.slug });
+        stopHeartbeat();
+        heartbeat = startRelayHeartbeat({
+          ping: () => {
+            if (socket.readyState === WebSocket.OPEN) socket.send(RELAY_PING);
+          },
+          silent: (silentMs) => {
+            // The close handler redials on the usual backoff.
+            log.warn({ msg: 'away_relay_silent', team: team.slug, silent_ms: silentMs });
+            socket.terminate();
+          },
+        });
         // Reconcile on every open: the relay drops whatever this daemon no longer stands behind.
         void buildRelayPending(ctx.db, team.id)
           .then((pending) => {
@@ -341,6 +399,7 @@ export function startAwayRelay(ctx: Ctx): () => void {
           );
       });
       socket.on('message', (data) => {
+        heartbeat?.heard();
         let parsed: unknown;
         try {
           parsed = JSON.parse(data.toString());
@@ -426,7 +485,10 @@ export function startAwayRelay(ctx: Ctx): () => void {
         }
       });
       const lost = (reason: string) => {
-        if (ws === socket) ws = null;
+        if (ws === socket) {
+          ws = null;
+          stopHeartbeat();
+        }
         if (closed || stopped) return;
         if (!down) {
           down = true;
@@ -450,6 +512,7 @@ export function startAwayRelay(ctx: Ctx): () => void {
       stop() {
         closed = true;
         if (timer) clearTimeout(timer);
+        stopHeartbeat();
         ws?.terminate();
       },
     };

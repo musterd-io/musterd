@@ -1,5 +1,5 @@
-import { makeEnvelope } from '@musterd/protocol';
-import { beforeEach, expect, it } from 'vitest';
+import { makeEnvelope, RELAY_PING_INTERVAL_MS, RELAY_SILENT_MS } from '@musterd/protocol';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
@@ -7,7 +7,12 @@ import { askDigest, issueAskChannelToken } from '../store/askChannelTokens.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
-import { buildRelayPending, handleRelayCallback, relaySocketUrl } from './relay.js';
+import {
+  buildRelayPending,
+  handleRelayCallback,
+  relaySocketUrl,
+  startRelayHeartbeat,
+} from './relay.js';
 
 const NOW = 1_800_000_000_000;
 
@@ -129,5 +134,46 @@ withDrivers('away relay client (ADR 659)', (o) => {
     expect(() => relaySocketUrl('ws://relay.example/base', 'revive')).toThrow(
       /refusing to send the relay credential/,
     );
+  });
+});
+
+describe('relay heartbeat (ADR 756)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('pings on the interval while the relay answers, and never calls the socket silent', () => {
+    vi.useFakeTimers();
+    const ping = vi.fn();
+    const silent = vi.fn();
+    const beat = startRelayHeartbeat({ ping, silent });
+    for (let i = 0; i < 10; i++) {
+      vi.advanceTimersByTime(RELAY_PING_INTERVAL_MS);
+      beat.heard();
+    }
+    expect(ping).toHaveBeenCalledTimes(10);
+    expect(silent).not.toHaveBeenCalled();
+    beat.stop();
+  });
+
+  it('a socket that hears nothing past the window is called silent once, then pings stop', () => {
+    vi.useFakeTimers();
+    const ping = vi.fn();
+    const silent = vi.fn();
+    startRelayHeartbeat({ ping, silent });
+    vi.advanceTimersByTime(RELAY_SILENT_MS + RELAY_PING_INTERVAL_MS * 3);
+    expect(silent).toHaveBeenCalledTimes(1);
+    expect(silent.mock.calls[0]![0]).toBeGreaterThan(RELAY_SILENT_MS);
+    const pingsAtSilence = ping.mock.calls.length;
+    vi.advanceTimersByTime(RELAY_PING_INTERVAL_MS * 5);
+    expect(ping).toHaveBeenCalledTimes(pingsAtSilence);
+  });
+
+  it('stop ends the heartbeat: no ping, no silence', () => {
+    vi.useFakeTimers();
+    const ping = vi.fn();
+    const silent = vi.fn();
+    startRelayHeartbeat({ ping, silent }).stop();
+    vi.advanceTimersByTime(RELAY_SILENT_MS * 3);
+    expect(ping).not.toHaveBeenCalled();
+    expect(silent).not.toHaveBeenCalled();
   });
 });

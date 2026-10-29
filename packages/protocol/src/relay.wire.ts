@@ -17,6 +17,18 @@ export const RELAY_MAX_PENDING = 1_000;
 /** The relay's one provider POST attempt times out here; retries are the daemon's decision. */
 export const RELAY_PROVIDER_TIMEOUT_MS = 5_000;
 
+/**
+ * Socket liveness (ADR 756): the daemon sends exactly `RELAY_PING` every
+ * `RELAY_PING_INTERVAL_MS`; the relay answers exactly `RELAY_PONG` through the Durable Object's
+ * hibernation auto-response, without waking. A daemon that hears nothing for `RELAY_SILENT_MS`
+ * drops the socket and redials; a relay whose socket last pinged longer ago than that treats it
+ * as dead. The strings are matched byte-for-byte, so they are fixed here, not built.
+ */
+export const RELAY_PING = '{"protocol":1,"type":"ping"}';
+export const RELAY_PONG = '{"protocol":1,"type":"pong"}';
+export const RELAY_PING_INTERVAL_MS = 30_000;
+export const RELAY_SILENT_MS = 90_000;
+
 /** One pending delivery as the relay stores it: metadata only, never content (ADR 659 §3). */
 export interface RelayPendingRow {
   ask_ref: string;

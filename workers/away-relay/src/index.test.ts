@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import worker, { TeamRelay, type Env } from './index.js';
 
+// The Workers runtime's hibernation auto-response pair (ADR 756), absent under node. Assigned,
+// not stubbed: the tests below `unstubAllGlobals` after each fetch stub.
+(globalThis as Record<string, unknown>)['WebSocketRequestResponsePair'] = class {
+  constructor(
+    readonly request: string,
+    readonly response: string,
+  ) {}
+};
+
 /**
  * The callback route's missing-config refusals (ADR 668 §1/§2): a Slack-shaped callback is
  * forwarded only with a verified signature and a mapping. Each test stops before the Durable
@@ -636,7 +645,7 @@ describe('away-relay app routes (ADR 676 §2, §9)', () => {
 });
 
 /** A TeamRelay over an in-memory stand-in for its state, with one live daemon socket. */
-async function relayWithSocket(extraEnv: Partial<Env> = {}) {
+async function relayWithSocket(extraEnv: Partial<Env> = {}, lastPingAt: Date | null = null) {
   const credentialHash = 'f'.repeat(64);
   const sent: Record<string, unknown>[] = [];
   const holder: { relay: TeamRelay | null } = { relay: null };
@@ -667,6 +676,8 @@ async function relayWithSocket(extraEnv: Partial<Env> = {}) {
     blockConcurrencyWhile: (fn: () => unknown) => fn(),
     storage: { sql: { exec: () => ({ toArray: () => [] }) } },
     getWebSockets: () => [socket],
+    setWebSocketAutoResponse: vi.fn(),
+    getWebSocketAutoResponseTimestamp: () => lastPingAt,
   };
   const relay = new TeamRelay(
     state as unknown as DurableObjectState,
@@ -734,6 +745,8 @@ describe('TeamRelay delivery quota (lane 01M50ZQCTW)', () => {
         deleteAlarm: async () => {},
       },
       getWebSockets: () => [socket],
+      setWebSocketAutoResponse: vi.fn(),
+      getWebSocketAutoResponseTimestamp: () => null,
     };
     const relay = new TeamRelay(
       state as unknown as DurableObjectState,
@@ -854,5 +867,37 @@ describe('TeamRelay app half (ADR 676 §2, §9)', () => {
       status: 200,
       provider_ref: 'apns-9',
     });
+  });
+});
+
+describe('TeamRelay socket liveness (ADR 756)', () => {
+  const callback = () =>
+    new Request('https://relay.example/callback/revive/ask-1', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"app":1}',
+    });
+
+  it('a socket that stopped pinging is closed and the callback refused 503, not 202', async () => {
+    const { relay, socket, sent } = await relayWithSocket({}, new Date(Date.now() - 120_000));
+    const res = await relay.fetch(callback());
+    expect(res.status).toBe(503);
+    expect(await res.text()).toBe('daemon socket silent');
+    expect(socket.close).toHaveBeenCalledWith(1011, 'heartbeat silent');
+    expect(sent).toEqual([]);
+  });
+
+  it('a socket that pinged within the window takes the callback', async () => {
+    const { relay, socket, sent } = await relayWithSocket({}, new Date(Date.now() - 10_000));
+    const res = await relay.fetch(callback());
+    expect(res.status).toBe(202);
+    expect(socket.close).not.toHaveBeenCalled();
+    expect(sent[0]?.['type']).toBe('callback');
+  });
+
+  it('a socket that never pinged (a daemon before the heartbeat) keeps the ADR 659 rule', async () => {
+    const { relay, sent } = await relayWithSocket({}, null);
+    expect((await relay.fetch(callback())).status).toBe(202);
+    expect(sent[0]?.['type']).toBe('callback');
   });
 });
