@@ -59,6 +59,8 @@ HATS = ["cap", "beanie", "band", "bucket"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
 # outer layers (v2-5b): worn over a top; the outermost carries the identity hue
 OUTERS = ["cardigan", "blazer", "zip"]
+# one-pieces (v2-6a): worn instead of a top and a bottom
+DRESSES = ["shift"]
 ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet", "headphones-neck"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
@@ -70,6 +72,7 @@ LAYERS = (
     + [f"facial/{f}" for f in FACIAL]
     + [f"top/{t}" for t in TOPS]
     + [f"outer/{o}" for o in OUTERS]
+    + [f"dress/{d}" for d in DRESSES]
     + ["bottom", "shoes"]
     + [f"hat/{h}" for h in HATS]
     + [f"acc/{a}" for a in ACCS]
@@ -570,6 +573,17 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     for side, sy in (("L", 1), ("R", -1)):
         r.torus("armhole", "spine", "top/vest", rib, 0.3, sy * (SHOULDER_W - 1.0 * FIG), SHOULDER - 2.6 * FIG,
                 3.5 * FIG, 0.8, (math.radians(90), 0, 0))
+
+    # ── the dress (v2-6a, spec §2.4): a one-piece worn instead of a top and a bottom — a fitted bodice
+    # with short sleeves and a skirt that flares from the hips to just below the knee, the legs bare
+    # under it. The skirt rides the hips joint; seated, the thighs come forward out of it.
+    torso("dress/shift")
+    sleeves("dress/shift", False)
+    neck_rib("dress/shift")
+    hem_z = KNEE - 2.0 * FIG
+    r.frustum("skirt", "hips", "dress/shift", cloth, 0.3, 0, hem_z, 7.6 * FIG, 5.6 * FIG, HIP + 2.0 * FIG - hem_z, sy=1.55)["fuse"] = "dress/shift"
+    o = r.torus("hemline", "hips", "dress/shift", rib, 0.3, 0, hem_z + 0.3 * FIG, 7.5 * FIG, 0.7)
+    o.scale = (1.0, 1.55, o.scale.z)
 
     # ── outer layers (v2-5b, spec §2.4): a size up over any top — a fuller body that reaches past the
     # trouser top, long sleeves over the top's — with each garment's own finishing. One layer each.

@@ -24,7 +24,7 @@ SAMPLE = {
     "ada": {"outer": "blazer", "ears": "earrings-stud", "metal": "#cfd3d8", "smile": "soft", "kind": "human", "top": "hsl(334,68,62)", "skin": "#c68642", "hair": "short", "hairColor": "#221a14", "facialHair": "none", "hat": "none", "hatColor": "#2a2118", "cut": "tee", "bottom": "#8a4a32", "shoes": "#2f8f7a", "accessory": "none", "accessoryColor": "#2f8fa3"},
     "bo": {"ears": "earrings-hoop", "metal": "#e2b85c", "smile": "soft", "kind": "human", "top": "hsl(341,68,62)", "skin": "#f2a6a6", "hair": "afro", "hairColor": "#3d2a1c", "facialHair": "stubble", "hat": "band", "hatColor": "#2f8fa3", "cut": "hoodie", "bottom": "#3f5570", "shoes": "#2f4a70", "accessory": "scarf", "accessoryColor": "#e1ad01"},
     "cy": {"smile": "soft", "kind": "agent", "top": "hsl(219,68,62)", "skin": "#8ed1c9", "hair": "short", "hairColor": "#2f8f7a", "facialHair": "none", "hat": "band", "hatColor": "#d1503f", "cut": "tee", "bottom": "#8a4a32", "shoes": "#2f8f7a", "accessory": "headphones", "accessoryColor": "#3f6fa8"},
-    "dee": {"wrist": "watch", "metal": "#cfd3d8", "smile": "soft", "kind": "human", "top": "hsl(21,68,62)", "skin": "#4e2c14", "hair": "bun", "hairColor": "#e8dcc8", "facialHair": "goatee", "hat": "none", "hatColor": "#e8dcc8", "cut": "hoodie", "bottom": "#8a4a32", "shoes": "#e1ad01", "accessory": "glasses-square", "accessoryColor": "#e1ad01"},
+    "dee": {"dress": "shift", "wrist": "watch", "metal": "#cfd3d8", "smile": "soft", "kind": "human", "top": "hsl(21,68,62)", "skin": "#4e2c14", "hair": "bun", "hairColor": "#e8dcc8", "facialHair": "goatee", "hat": "none", "hatColor": "#e8dcc8", "cut": "hoodie", "bottom": "#8a4a32", "shoes": "#e1ad01", "accessory": "glasses-square", "accessoryColor": "#e1ad01"},
     "eli": {"hatOverride": "bucket", "wrist": "bracelet", "metal": "#e2b85c", "smile": "wide", "kind": "human", "top": "hsl(328,68,62)", "skin": "#f7d9b8", "hair": "bun", "hairColor": "#4f8a3a", "facialHair": "beard", "hat": "cap", "hatColor": "#e07a3f", "cut": "tee", "bottom": "#4a5a3a", "shoes": "#d1503f", "accessory": "none", "accessoryColor": "#d1503f"},
     "fay": {"smile": "soft", "kind": "agent", "top": "hsl(168,68,62)", "skin": "#9db8c9", "hair": "afro", "hairColor": "#8a3a2e", "facialHair": "none", "hat": "none", "hatColor": "#2f8fa3", "cut": "vest", "bottom": "#3f5570", "shoes": "#a9683a", "accessory": "headphones", "accessoryColor": "#2f8fa3"},
     "gus": {"outer": "zip", "neck": "headphones-neck", "smile": "wide", "kind": "human", "top": "hsl(20,68,62)", "skin": "#f5cf6e", "hair": "bald", "hairColor": "#3f6fa8", "facialHair": "beard-wild", "hat": "cap", "hatColor": "#d1503f", "cut": "long", "bottom": "#7d6b8f", "shoes": "#e1ad01", "accessory": "none", "accessoryColor": "#d1503f"},
@@ -47,7 +47,11 @@ def layers_for(m: dict) -> list[tuple[str, str | None]]:
     out = [("skin", m["skin"]), ("eyes", None)] + ([("tell/eyes", m["top"])] if agent else [])
     out.append((f"mouth/{m['smile']}", m["skin"]))
     outer = m.get("outer", "none")
-    out += [("shoes", m["shoes"]), ("bottom", m["bottom"]), (f"top/{m['cut']}", m.get("under", "#f2eee6") if outer != "none" else m["top"])]
+    inner = m.get("under", "#f2eee6") if outer != "none" else m["top"]
+    if m.get("dress"):  # a one-piece instead of the top and the bottom (v2-6a)
+        out += [("shoes", m["shoes"]), (f"dress/{m['dress']}", inner)]
+    else:
+        out += [("shoes", m["shoes"]), ("bottom", m["bottom"]), (f"top/{m['cut']}", inner)]
     if outer != "none":  # the outer layer carries the hue (v2-5b)
         out.append((f"outer/{outer}", m["top"]))
     if agent:
