@@ -32,6 +32,9 @@ const femme: Appearance = {
   eyes: 'glasses',
   ears: 'none',
   neck: 'none',
+  wrist: 'none',
+  outer: 'none',
+  underColor: null,
   accessory: 'glasses',
 };
 

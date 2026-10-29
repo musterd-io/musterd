@@ -58,7 +58,7 @@ FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band", "bucket"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
 # outer layers (v2-5b): worn over a top; the outermost carries the identity hue
-OUTERS = ["cardigan", "blazer"]
+OUTERS = ["cardigan", "blazer", "zip"]
 ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet", "headphones-neck"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
@@ -612,6 +612,18 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.box("pocket", "hips", "outer/blazer", cloth, 0.5 + 5.6 * FIG, sy * 5.2 * FIG, HIP - 0.5 * FIG, 0.8, 3.6 * FIG, 0.9 * FIG)
     for i in range(2):
         r.orb("button", "spine", "outer/blazer", rib, front, 0, HIP + 3.5 * FIG - i * 3.0 * FIG, 0.6, 0.6, 0.6)
+
+    # the zip jacket: a stand collar, a zip pulled two-thirds up with its pull, a gathered waistband and
+    # elastic cuffs
+    outer_body("outer/zip", drop=1.0)
+    zipper = grey("fig-zip", 0.85, 0.3)
+    r.cyl("zip", "spine", "outer/zip", zipper, front + 0.1, 0, HIP - 2.2 * FIG, 0.3, 0.3, SHOULDER - HIP - 2 * FIG)
+    r.orb("pull", "spine", "outer/zip", zipper, front + 0.4, 0, SHOULDER - 4.5 * FIG, 0.45, 0.6, 1.1)
+    r.torus("collar", "spine", "outer/zip", cloth, HEAD_X * 0.4, 0, NECK - 2.0 * FIG, 4.6 * FIG, 1.4)
+    o = r.torus("waist", "hips", "outer/zip", rib, 0.45, 0, HIP - 2.2 * FIG, 6.0 * FIG, 1.3)
+    o.scale = (1.0, 1.5, o.scale.z)
+    for side, sy in (("L", 1), ("R", -1)):
+        r.cyl("cuffrib", f"elbow{side}", "outer/zip", rib, 0, sy * SHOULDER_W, WRIST + 0.9 * FIG, 2.9 * FIG, 2.9 * FIG, 1.4 * FIG)
 
     # ── bottom: a pelvis with a seat and trouser legs that taper to the ankle, one fused shape
     r.orb("pelvis", "hips", "bottom", denim, 0, 0, HIP + 2.5 * FIG, 5.6 * FIG, 8.2 * FIG, 5.0 * FIG, "bottom")
