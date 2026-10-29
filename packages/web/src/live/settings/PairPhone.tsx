@@ -27,7 +27,8 @@ import type { SheetNote } from '../StyleSheet';
 type Stage =
   | { kind: 'idle' }
   | { kind: 'code'; start: AppPairingStart; svg: string }
-  | { kind: 'phone'; pairing: ChannelPairing }
+  // `daemonFingerprint` rides along from the code stage: it is the one value the phone also shows.
+  | { kind: 'phone'; pairing: ChannelPairing; daemonFingerprint?: string }
   | { kind: 'paired'; device: string };
 
 const POLL_MS = 2_000;
@@ -105,6 +106,7 @@ export function PairPhone({
   const [note, setNote] = useState<SheetNote>(null);
   const [now, setNow] = useState(() => Date.now());
   const pairingId = stage.kind === 'code' ? stage.start.pairing_id : null;
+  const shownFingerprint = stage.kind === 'code' ? stage.start.daemon_fingerprint : null;
   useEffect(() => {
     void loadPaired();
   }, [loadPaired]);
@@ -139,7 +141,13 @@ export function PairPhone({
       void fetchChannelPairings(cfg)
         .then((ps) => {
           const hit = ps.find((p) => p.id === pairingId && p.app);
-          if (hit && mounted.current) setStage({ kind: 'phone', pairing: hit });
+          if (hit && mounted.current) {
+            setStage({
+              kind: 'phone',
+              pairing: hit,
+              ...(shownFingerprint ? { daemonFingerprint: shownFingerprint } : {}),
+            });
+          }
         })
         .catch(() => undefined);
     }, POLL_MS);
@@ -147,7 +155,7 @@ export function PairPhone({
       clearInterval(tick);
       clearInterval(poll);
     };
-  }, [cfg, stage.kind, pairingId]);
+  }, [cfg, stage.kind, pairingId, shownFingerprint]);
   useEffect(() => {
     if (stage.kind === 'code' && now >= stage.start.expires_at && !busy) void newCode();
   }, [stage, now, busy, newCode]);
@@ -311,10 +319,24 @@ export function PairPhone({
       {stage.kind === 'phone' && stage.pairing.app && (
         <div className="lc-pair__phone">
           <p className="lc-pair__device">{stage.pairing.app.device_name ?? 'A phone'} wants to pair</p>
+          {/* The phone shows the DAEMON's fingerprint, never its own key, so that is the one thing
+              a person can compare (big-body's review of #3571). The phone key is shown as what
+              this confirm enrolls, not as something to match. */}
+          {stage.daemonFingerprint ? (
+            <p className="lc-set__hint">
+              Your phone should have shown this fingerprint after you scanned:
+              <span className="lc-pair__fp">{stage.daemonFingerprint}</span>
+              If it did, and this is the phone you just scanned with, confirm.
+            </p>
+          ) : (
+            <p className="lc-set__hint">
+              Confirm only if you just scanned a pairing code with this phone, and the fingerprint
+              it showed matched the one printed beside that code.
+            </p>
+          )}
           <p className="lc-set__hint">
-            Phone key
+            Confirming enrolls this phone’s key
             <span className="lc-pair__fp">{stage.pairing.app.fingerprint}</span>
-            Check it matches what the app shows. Confirm only if this is your phone.
           </p>
           <span className="lc-pair__act">
             <button

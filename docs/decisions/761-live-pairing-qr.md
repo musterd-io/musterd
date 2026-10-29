@@ -45,6 +45,11 @@ into the server, and the server would need the dependency instead.
 - The phone's own check of the daemon fingerprint and receive key is unchanged here. big-body's
   2026-10-29 review asked for that binding to be verified before TestFlight, and it stays tracked on
   the phone side.
+- _2026-10-29:_ big-body sent #3571 back because the confirm step told people to match the
+  phone key against the app, but the app shows the daemon's identity fingerprint, not its own key.
+  The confirm step now points at that daemon fingerprint and shows the phone key only as what
+  confirming enrolls. The receive-key binding is tracked in its own lane.
+  Follows-up: 01M64P9V5AWABTCYGNYPCH0YRD
 
 ## Observability & Evaluation
 
