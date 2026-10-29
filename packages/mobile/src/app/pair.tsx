@@ -23,7 +23,7 @@ type Phase =
   | { name: 'confirm'; scanned: ScannedPairing }
   | { name: 'sending' }
   | { name: 'waiting'; fingerprint: string }
-  | { name: 'paired'; fingerprint: string | null }
+  | { name: 'paired'; fingerprint: string | null; team: string }
   | { name: 'error'; text: string };
 
 function refusalText(reason: QrRefusal): string {
@@ -73,7 +73,7 @@ export default function PairScreen() {
         const fingerprint = daemonFingerprint(pin.identity);
         setPhase(
           pin.binding
-            ? { name: 'paired', fingerprint }
+            ? { name: 'paired', fingerprint, team: pin.team }
             : { name: 'waiting', fingerprint: fingerprint ?? '' },
         );
       } catch {
@@ -94,7 +94,11 @@ export default function PairScreen() {
           const { loadPairingPin } = await import('../native/pairingPin');
           const pin = await loadPairingPin();
           if (!alive || !pin?.binding) return;
-          setPhase({ name: 'paired', fingerprint: daemonFingerprint(pin.identity) });
+          setPhase({
+            name: 'paired',
+            fingerprint: daemonFingerprint(pin.identity),
+            team: pin.team,
+          });
         } catch {
           // Still waiting. A later poll retries.
         }
@@ -200,7 +204,15 @@ export default function PairScreen() {
 
       {phase.name === 'paired' ? (
         <View style={styles.block}>
-          <Text style={[styles.title, { color: p.text }]}>This phone is paired</Text>
+          <Text style={[styles.title, { color: p.text }]}>Paired with {phase.team}</Text>
+          <Text style={[styles.copy, { color: p.text }]}>
+            Asks for you come to this phone while you’re away from your computer. At your desk,
+            they stay on the computer.
+          </Text>
+          <Text style={[styles.copy, { color: p.muted }]}>
+            To change which asks come here, and when, open /live on your computer: Settings, then
+            You, then Away channels.
+          </Text>
           {phase.fingerprint ? <Fingerprint value={phase.fingerprint} color={p.text} /> : null}
           <Text style={[styles.copy, { color: p.muted }]}>
             The fingerprint is the daemon that approved this phone.
