@@ -218,11 +218,14 @@ const SHOES_BY_STYLE: Record<Style, readonly string[]> = {
 export type Eyes = 'none' | 'glasses' | 'glasses-square' | 'glasses-browline';
 export type Ears = 'none' | 'headphones' | 'earrings-stud' | 'earrings-hoop';
 export type Neck = 'none' | 'scarf';
+export type Wrist = 'none' | 'watch' | 'bracelet';
 // Three frame shapes (v2-4a): round, square rims, a browline — about one in four wear any, as before.
 const EYES: readonly Eyes[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'glasses', 'glasses-square', 'glasses-browline'];
 // Studs and hoops (v2-4b) beside the headphones: about one in four wear something on the ears.
 const EARS: readonly Ears[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'earrings-stud', 'earrings-hoop', 'headphones'];
-/** Earring metals — gold, silver, rose gold: jewellery reads as metal, not as the cosy accessory set. */
+// A watch on the left wrist or a bracelet on the right (v2-4c): one in four, agents too.
+const WRIST: readonly Wrist[] = ['none', 'none', 'none', 'none', 'none', 'none', 'watch', 'watch', 'bracelet'];
+/** Jewellery metals — gold, silver, rose gold, for earrings and the wrist: metal, not the cosy accessory set. */
 const METALS = ['#e2b85c', '#cfd3d8', '#dca48c'] as const;
 const NECK: readonly Neck[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'scarf'];
 /** The one legacy summary the painters still read (`character.ts`, the portrait): the most visible
@@ -264,11 +267,12 @@ export interface Appearance {
   eyes: Eyes;
   ears: Ears;
   neck: Neck;
+  wrist: Wrist;
   /** The most visible worn spot, for the painters that draw one thing — see `Accessory`. */
   accessory: Accessory;
   /** The accessories' own cosy colour — never the identity hue. */
   accessoryColor: string;
-  /** The metal of their earrings. */
+  /** The metal of their earrings and wrist piece. */
   metal: string;
   /** How a human smiles. */
   smile: Smile;
@@ -300,6 +304,7 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
   const eyes = kind === 'agent' ? 'none' : pick(EYES, name, 18);
   const ears = pick(EARS, name, 19);
   const neck = pick(NECK, name, 20);
+  const wrist = pick(WRIST, name, 22);
   return {
     skin,
     style,
@@ -321,6 +326,7 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
     eyes,
     ears,
     neck,
+    wrist,
     accessory: summaryOf(eyes, ears, neck),
     accessoryColor: pick(ACCESSORY_COLORS, name, 12),
     metal: pick(METALS, name, 21),
