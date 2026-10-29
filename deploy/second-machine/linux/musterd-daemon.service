@@ -1,0 +1,16 @@
+# The joiner's daemon (loopback; it dials the hub, nothing dials in). The Linux twin of the
+# studio.sandrise.musterd LaunchAgent that `musterd service install` writes on macOS.
+[Unit]
+Description=musterd daemon (joiner)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/.musterd/runtime
+ExecStart=/usr/bin/node %h/.musterd/runtime/packages/cli/dist/bin.js serve
+Restart=always
+RestartSec=5
+StandardOutput=append:%h/.musterd/daemon.log
+StandardError=append:%h/.musterd/daemon.err.log
+
+[Install]
+WantedBy=default.target

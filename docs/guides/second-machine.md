@@ -111,6 +111,31 @@ Every step is a no-op once done, so a failure is fixed and the script re-run. In
    (cloud-seat findings 2 and 14): the wake endpoints check the bearer against the _local_ team
    row, and a joiner holding no seats invalidates nothing by rotating.
 
+## A Linux VM as the joiner (lane `01M64AYDSZ`, 2026-10-29)
+
+The Air going back to other work leaves its seats without a machine, and the hub laptop cannot take
+them (the Why above). The replacement is one rented Ubuntu 24.04 VM doing the joiner's job — the same
+`bootstrap.sh machine`, with two differences. `musterd service` is launchd-only, so the daemon, the
+wake actuator and the refresher run as the systemd `--user` units in `deploy/second-machine/linux/`,
+which step 2 installs on Linux. And a VPS has no app installers, so the "Before the script" steps
+are a root script:
+
+```sh
+# as root on the fresh VM (the repo is private: scp the file over, or fetch it with gh)
+read -rs TS_AUTHKEY; export TS_AUTHKEY          # single-use tailnet key; unset → `tailscale up` by hand
+bash prep-ubuntu.sh                             # Node 22, gh, tailscale, bubblewrap, a `musterd` user with lingering, claude + codex
+# as the musterd user (ssh musterd@<box>) — the sign-ins, once:
+gh auth login
+claude          # then /login — writes ~/.claude/.credentials.json, the file `residency on` checks
+codex login --device-auth                       # writes ~/.codex/auth.json; the wake strips OPENAI_API_KEY
+bash bootstrap.sh machine                       # then the hub-side invite and trust, exactly as below
+```
+
+The refresher (`musterd-refresh.timer`, every 2 minutes) fast-forwards `~/.musterd/runtime` to
+`main`, rebuilds when `dist/build.json` is behind, and restarts the daemon and the actuator. The
+actuator unit uses `KillMode=process`, so a restart never kills a seat mid-wake. Seats then arrive by
+`musterd move <seat> --to <the VM's node label>`, one at a time, as on the Air.
+
 ## The drain — what to expect before the joiner can act
 
 A joiner folds the **whole** hub log before it can see a new act or wake a seat. On 2026-10-02
