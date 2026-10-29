@@ -104,6 +104,47 @@ export function connectionNeverEstablished(err: unknown): boolean {
   return (err as { cause?: { code?: string } } | null | undefined)?.cause?.code === 'ECONNREFUSED';
 }
 
+/** Connect-phase codes: the request never left this machine, so the server cannot have acted. */
+const NEVER_SENT = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+]);
+
+/**
+ * The transport failure a request ended in, as the human should read it. A WRITE that lost its
+ * connection after it was established (a reset, a timeout, a socket the daemon dropped mid-reply)
+ * may already have been processed, so "can't reach the server" would be a lie that invites a
+ * duplicate re-run: say the outcome is unknown and how to check before trying again. A read, or a
+ * write that never connected, is the plain unreachable error. Exit 7 either way — the connection
+ * class. Undefined when `err` is not a transport failure; the caller rethrows it. Only the route's
+ * path is named, never its query or body.
+ */
+export function transportError(
+  err: unknown,
+  method: string,
+  server: string,
+  path: string,
+): CliError | undefined {
+  const code = (err as { cause?: { code?: string } } | null | undefined)?.cause?.code;
+  const transport = isConnRefused(err) || code !== undefined;
+  if (!transport) return undefined;
+  if (worthRetrying(method) && !(code !== undefined && NEVER_SENT.has(code))) {
+    const route = path.split('?')[0];
+    return new CliError(
+      `${method} ${route} lost its connection to ${server} before the reply — the write may or may not have happened. ` +
+        'Check before re-running it: `musterd status`, `musterd inbox --all`, or `musterd lane show <id>`.',
+      7,
+    );
+  }
+  return new CliError(
+    `can't reach team server at ${server} — is the daemon running? (musterd serve)`,
+    7,
+  );
+}
+
 /**
  * A server response did not match the protocol schema. Names the operation and, when available,
  * the first failing field path (safe — no values, no secrets) so a stale client or a daemon skew
