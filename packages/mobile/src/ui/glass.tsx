@@ -45,18 +45,37 @@ export function Glass({
 }
 
 /**
- * The warm light behind the glass: two soft mustard and sand discs at the top of a screen, so
- * the glass has colour to bend. Decoration only, hidden from VoiceOver.
+ * The warm light behind a whole screen: one soft mustard glow at the top corner, built from
+ * stacked faint rings so it fades without a blur, and gives the glass colour to bend. It sits
+ * behind the screen's content, never inside a scrolling header. Decoration only, hidden from
+ * VoiceOver.
  */
 export function Backdrop() {
   const p = usePalette();
   return (
     <View pointerEvents="none" accessible={false} style={StyleSheet.absoluteFill}>
-      <View style={[styles.disc, styles.discA, { backgroundColor: p.tint }]} />
-      <View style={[styles.disc, styles.discB, { backgroundColor: p.sand, opacity: 0.45 }]} />
+      {GLOW.map((ring) => (
+        <View
+          key={ring.size}
+          style={[
+            styles.ring,
+            {
+              width: ring.size,
+              height: ring.size,
+              top: -ring.size / 2 + 40,
+              left: -ring.size / 2 + 60,
+              opacity: ring.opacity,
+              backgroundColor: p.accent,
+            },
+          ]}
+        />
+      ))}
     </View>
   );
 }
+
+/** Twelve rings, each a little smaller and stronger, so no edge reads on its own. */
+const GLOW = Array.from({ length: 12 }, (_, i) => ({ size: 760 - i * 52, opacity: 0.012 }));
 
 const styles = StyleSheet.create({
   shape: { borderRadius: 22, overflow: 'hidden' },
@@ -67,7 +86,5 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
   },
-  disc: { position: 'absolute', borderRadius: 999 },
-  discA: { width: 340, height: 340, top: -140, left: -90 },
-  discB: { width: 280, height: 280, top: -60, right: -120 },
+  ring: { position: 'absolute', borderRadius: 999 },
 });
