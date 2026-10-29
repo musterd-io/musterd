@@ -92,6 +92,35 @@ withDrivers('move-provision-host-key-http', (_o, kind) => {
       expect(minted.status).toBe(201);
     });
 
+    it('ADR 765: finishing a move reissues the seat credential, so the new claim gets one', async () => {
+      await movedTo('ryder', 'box');
+      const team = await requireTeam(server.store, 'mv-t');
+      const ryder = (await getMemberByName(server.store, team.id, 'ryder'))!;
+      await server.store.run('UPDATE members SET credential_hash = ? WHERE id = ?', [
+        'old-machine',
+        ryder.id,
+      ]);
+      const key = await hostKey('box');
+      await post('/teams/mv-t/host/provisions', { host: 'box', kinds: ['move'] }, key);
+      const minted = await mintSeatCredential('ryder', key);
+      expect(minted.status).toBe(201);
+      // Cleared, so the new machine's first claim mints the seat credential (agentAuthorityFor).
+      expect((await getMemberByName(server.store, team.id, 'ryder'))!.credential_hash).toBeNull();
+    });
+
+    it('a sponsored mint never reissues: only a claimed move row does', async () => {
+      await movedTo('ryder', 'box', 'mint');
+      const team = await requireTeam(server.store, 'mv-t');
+      const ryder = (await getMemberByName(server.store, team.id, 'ryder'))!;
+      await server.store.run('UPDATE members SET credential_hash = ? WHERE id = ?', [
+        'kept',
+        ryder.id,
+      ]);
+      // nick's admin credential mints the claim_seat directly (not via a host key): no reissue.
+      await mintSeatCredential('ryder', nick);
+      expect((await getMemberByName(server.store, team.id, 'ryder'))!.credential_hash).toBe('kept');
+    });
+
     it('refuses before the row is claimed', async () => {
       await movedTo('ryder', 'box');
       const key = await hostKey('box');
