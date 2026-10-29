@@ -80,10 +80,20 @@ Everything else follows from that one rule:
 
 ## Observability & Evaluation
 
-- **Eval:** the lane's acceptance check, taken on this machine — after a wake settles,
-  `pgrep -f 'opencode serve'` shows no process the wake started (baseline: before this change a
-  plain wake's serve stayed up until killed), and a `--session` resume from the private server
-  restores the captured conversation. Interactive `musterd <seat> opencode` must still open.
+- **Eval:** measured on this machine 2026-10-29 (opencode 2.2.2), three samples against the
+  baseline the wiki page records (a 2026-10-14 wake delegating to the shared daemon, and that
+  daemon still holding a deleted 4.9 GB `opencode.db` open on 2026-10-29):
+  1. a `--standalone` run spawned `opencode.exe serve --stdio --port 0` as **its own child**
+     (ppid = the run), and that child was gone from the process table when the run exited —
+     while the machine's pre-existing `serve --service` (started 13:54 by an interactive TUI)
+     was untouched, and no new `--service` daemon appeared;
+  2. `run --standalone --session <captured id>` resumed the captured conversation from the
+     private server — exit 0, the same session id streamed back;
+  3. the lane's standing bar, unverified until the first real wake: after a wake ends, no
+     `opencode serve` it started remains, and interactive `musterd <seat> opencode` still opens.
+     Not measured: whether a plain run *creates* the shared daemon or only joins it — the
+     delegation itself is the 2026-10-14 process tree on the wiki page, not this lane's own
+     observation.
 - **Traces:** none — argv and a local file write; the lease write and `settleProvenance` (ADR 494
   §4) remain the observable trail, and `spawner_pid` on the lease is the per-wake evidence.
 - **Experiment:** n/a — one wake on one machine decides it. The unit suite pins the argv
