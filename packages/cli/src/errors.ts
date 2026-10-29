@@ -112,7 +112,12 @@ export function connectionNeverEstablished(err: unknown): boolean {
  */
 export function schemaError(operation: string, err: unknown): CliError {
   let detail = '';
-  if (err && typeof err === 'object' && 'issues' in err && Array.isArray((err as { issues: unknown }).issues)) {
+  if (
+    err &&
+    typeof err === 'object' &&
+    'issues' in err &&
+    Array.isArray((err as { issues: unknown }).issues)
+  ) {
     const issues = (err as { issues: Array<{ path?: unknown[]; message?: string }> }).issues;
     const first = issues[0];
     if (first) {

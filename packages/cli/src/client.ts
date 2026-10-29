@@ -932,8 +932,7 @@ export class HttpClient {
       kinds: [...HostProvisionKindSchema.options],
     });
     const parsed = HostProvisionsClaimResponseSchema.safeParse(json);
-    if (!parsed.success)
-      throw schemaError('provision claim', parsed.error);
+    if (!parsed.success) throw schemaError('provision claim', parsed.error);
     return parsed.data;
   }
   /** ADR 463 §3: `musterd host provisions` — the rows this host key may see; claims nothing. */
@@ -943,8 +942,7 @@ export class HttpClient {
       `/teams/${encodeURIComponent(slug)}/host/provisions?host=${encodeURIComponent(host)}`,
     );
     const parsed = HostProvisionsClaimResponseSchema.safeParse(json);
-    if (!parsed.success)
-      throw schemaError('provision list', parsed.error);
+    if (!parsed.success) throw schemaError('provision list', parsed.error);
     return parsed.data;
   }
   /** ADR 463 §2: report a claimed provision `ready` or `failed {reason}`. */
@@ -959,8 +957,7 @@ export class HttpClient {
       body,
     );
     const parsed = z.object({ provision: HostProvisionSchema }).safeParse(json);
-    if (!parsed.success)
-      throw schemaError('provision report', parsed.error);
+    if (!parsed.success) throw schemaError('provision report', parsed.error);
     return parsed.data;
   }
   // ADR 450: team invites. The secret comes back once from mint and is never listed.
@@ -1315,8 +1312,7 @@ export class HttpClient {
       throw new CliError('wake context requires exactly one act_id or lane_id', 2);
     const json = await this.request('POST', `/teams/${slug}/wake-context`, target.data);
     const response = WakeContextResponseSchema.safeParse(json);
-    if (!response.success)
-      throw schemaError('wake-context', response.error);
+    if (!response.success) throw schemaError('wake-context', response.error);
     return response.data.context;
   }
   /** Goal dreaming, lane 2 — `GET /teams/:slug/dream`: the caller's own dream packet, never another seat's. */
@@ -1883,8 +1879,7 @@ export class HttpClient {
       throw err;
     }
     const parsed = ReviewPromisesResponseSchema.safeParse(json);
-    if (!parsed.success)
-      throw schemaError('review-promises', parsed.error);
+    if (!parsed.success) throw schemaError('review-promises', parsed.error);
     return parsed.data;
   }
 
@@ -1893,8 +1888,7 @@ export class HttpClient {
   async nextSummary(slug: string): Promise<NextSummary> {
     const json = await this.request('GET', `/teams/${slug}/next/summary`);
     const parsed = NextSummarySchema.safeParse(json);
-    if (!parsed.success)
-      throw schemaError('next/summary', parsed.error);
+    if (!parsed.success) throw schemaError('next/summary', parsed.error);
     return parsed.data;
   }
 
@@ -2022,8 +2016,7 @@ export class HttpClient {
       `/teams/${encodeURIComponent(slug)}/provisions/${encodeURIComponent(id)}/status`,
     );
     const parsed = MoveProvisionStatusSchema.safeParse(json);
-    if (!parsed.success)
-      throw schemaError('provision status', parsed.error);
+    if (!parsed.success) throw schemaError('provision status', parsed.error);
     return parsed.data;
   }
 
@@ -2046,8 +2039,7 @@ export class HttpClient {
   async delivery(slug: string, messageId: string): Promise<ActDelivery> {
     const json = await this.request('GET', `/teams/${slug}/messages/${messageId}/delivery`);
     const parsed = ActDeliverySchema.safeParse(json);
-    if (!parsed.success)
-      throw schemaError('delivery', parsed.error);
+    if (!parsed.success) throw schemaError('delivery', parsed.error);
     return parsed.data;
   }
 
@@ -2490,8 +2482,7 @@ export class HttpClient {
     const q = days === undefined ? '' : `?days=${encodeURIComponent(String(days))}`;
     const json = await this.request('GET', `/teams/${slug}/report/trace${q}`);
     const parsed = TraceReportSchema.safeParse(json);
-    if (!parsed.success)
-      throw schemaError('trace report', parsed.error);
+    if (!parsed.success) throw schemaError('trace report', parsed.error);
     return parsed.data;
   }
 
