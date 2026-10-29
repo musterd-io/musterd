@@ -3,8 +3,18 @@ import {
   reconcileRelayPending,
   RelayDaemonFrameSchema,
   RelayServerFrameSchema,
+  RELAY_PING,
+  RELAY_PONG,
   RELAY_PROTOCOL_VERSION,
 } from './relay.js';
+
+describe('away relay heartbeat (ADR 756)', () => {
+  it('the fixed ping and pong texts are the schema frames at this protocol version', () => {
+    expect(RelayDaemonFrameSchema.parse(JSON.parse(RELAY_PING)).type).toBe('ping');
+    expect(RelayServerFrameSchema.parse(JSON.parse(RELAY_PONG)).type).toBe('pong');
+    expect(JSON.parse(RELAY_PING).protocol).toBe(RELAY_PROTOCOL_VERSION);
+  });
+});
 
 describe('away relay frames (ADR 659)', () => {
   it('parses each daemon frame and refuses a wrong version or shape', () => {

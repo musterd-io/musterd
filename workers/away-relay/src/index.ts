@@ -41,10 +41,13 @@ import {
   reconcileRelayPending,
   secondSocketVerdict,
   slackDispatchAllowed,
+  socketSilent,
   slackSignatureValid,
   slackTeamIdFromBody,
   socketCredentialLive,
   RELAY_MAX_FRAME_BYTES,
+  RELAY_PING,
+  RELAY_PONG,
   RELAY_PROVIDER_TIMEOUT_MS,
   appCallbackRef,
   apnsPayload,
@@ -591,6 +594,9 @@ export class TeamRelay implements DurableObject {
     private readonly state: DurableObjectState,
     private readonly env: Env,
   ) {
+    // The daemon's heartbeat (ADR 756) is answered by the runtime without waking this object;
+    // the runtime's timestamp of the last answer is what `silent` reads.
+    this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair(RELAY_PING, RELAY_PONG));
     this.state.blockConcurrencyWhile(async () => {
       this.state.storage.sql.exec(
         `CREATE TABLE IF NOT EXISTS pending (
@@ -692,7 +698,9 @@ export class TeamRelay implements DurableObject {
       // is refused 409. The one exception is rotation (§4, amended 2026-10-19): a socket
       // presenting the operator map's current credential replaces a live socket still holding
       // the rotated-away one, instead of locking the daemon out until the stale socket dies.
-      const live = this.state.getWebSockets();
+      // A socket that stopped pinging is dead (ADR 756): close it, so the daemon redialing after
+      // its own silence check is not refused 409 by the half-open socket it just gave up on.
+      const live = this.state.getWebSockets().filter((ws) => !this.closeIfSilent(ws));
       if (live.length > 0) {
         const attachment = live[0]!.deserializeAttachment() as SocketAttachment | null;
         const verdict = secondSocketVerdict(
@@ -716,6 +724,9 @@ export class TeamRelay implements DurableObject {
         return new Response('callback too large', { status: 413 });
       const socket = this.state.getWebSockets()[0];
       if (!socket) return new Response('daemon not connected', { status: 503 });
+      // A silent socket would take the frame and answer nothing (ADR 756): refuse 503 so the
+      // provider or the phone hears "not delivered" instead of a 202 that went nowhere.
+      if (this.closeIfSilent(socket)) return new Response('daemon socket silent', { status: 503 });
       // The §4 re-check applies to what a socket RECEIVES, not only what it sends: a rotated or
       // revoked socket that stays silent must not keep receiving callbacks (their bodies carry
       // ask tokens). Refuse with 503 so the provider retries against the legitimate daemon.
@@ -794,9 +805,17 @@ export class TeamRelay implements DurableObject {
    * The team's daemon socket, when one is live and its credential still current (§4). A socket
    * whose credential was rotated or revoked is closed here, so it never receives a phone's request.
    */
+  /** Close and report a socket whose heartbeat stopped (ADR 756). */
+  private closeIfSilent(ws: WebSocket): boolean {
+    const at = this.state.getWebSocketAutoResponseTimestamp(ws);
+    if (!socketSilent(at ? at.getTime() : null, Date.now())) return false;
+    ws.close(1011, 'heartbeat silent');
+    return true;
+  }
+
   private liveSocket(slug: string): WebSocket | null {
     const socket = this.state.getWebSockets()[0];
-    if (!socket) return null;
+    if (!socket || this.closeIfSilent(socket)) return null;
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
     if (
       !socketCredentialLive(

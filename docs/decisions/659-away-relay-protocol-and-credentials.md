@@ -43,6 +43,8 @@ replaces a live socket still holding a rotated-away credential, closing it with 
 it, §4's "the daemon reconnects with the new credential" deadlocked against this section's 409
 until the stale socket died on its own. A second socket with the same credential is still refused
 409, and a credential the map does not name never replaces anything.)_
+_(Amended 2026-10-28: "live" means still pinging — a socket whose heartbeat went silent is
+closed rather than counted, so the daemon's redial is not refused 409. ADR 756.)_
 
 ### 2. Relay protocol v1 — small, versioned, parsed at both ends
 
@@ -121,6 +123,8 @@ ADR 147/153).
 
 ## Consequences
 
+- 2026-10-28 — an idle socket died half-open on the hub and the relay answered the phone's
+  pairing request 202 into it; ADR 756 adds a heartbeat and treats a silent socket as dead.
 - 2026-10-19 — acceptance of the first landing (PR #2882) was declined on review: four places
   where the code did not do what this ADR says. All four are fixed in the follow-up landing, with
   no Decision change except the dated §1 amendment above: (1) the daemon's socket-URL mapping

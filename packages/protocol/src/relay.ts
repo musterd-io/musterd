@@ -12,8 +12,12 @@ import { RELAY_MAX_FRAME_BYTES, RELAY_PROTOCOL_VERSION } from './relay.wire.js';
 export {
   RELAY_MAX_FRAME_BYTES,
   RELAY_MAX_PENDING,
+  RELAY_PING,
+  RELAY_PING_INTERVAL_MS,
+  RELAY_PONG,
   RELAY_PROVIDER_TIMEOUT_MS,
   RELAY_PROTOCOL_VERSION,
+  RELAY_SILENT_MS,
   reconcileRelayPending,
   type RelayPendingRow,
 } from './relay.wire.js';
@@ -155,7 +159,15 @@ export const RelayResolveFrameSchema = z.object({
 });
 export type RelayResolveFrame = z.infer<typeof RelayResolveFrameSchema>;
 
+/** Daemon → relay: the heartbeat (ADR 756), sent as the exact text `RELAY_PING`. */
+export const RelayPingFrameSchema = z.object({
+  protocol: version,
+  type: z.literal('ping'),
+});
+export type RelayPingFrame = z.infer<typeof RelayPingFrameSchema>;
+
 export const RelayDaemonFrameSchema = z.discriminatedUnion('type', [
+  RelayPingFrameSchema,
   RelayReconcileFrameSchema,
   RelayDeliverFrameSchema,
   RelayAppDeliverFrameSchema,
@@ -222,7 +234,15 @@ export const RelayErrorFrameSchema = z.object({
 });
 export type RelayErrorFrame = z.infer<typeof RelayErrorFrameSchema>;
 
+/** Relay → daemon: the heartbeat's answer (ADR 756), the exact text `RELAY_PONG`. */
+export const RelayPongFrameSchema = z.object({
+  protocol: version,
+  type: z.literal('pong'),
+});
+export type RelayPongFrame = z.infer<typeof RelayPongFrameSchema>;
+
 export const RelayServerFrameSchema = z.discriminatedUnion('type', [
+  RelayPongFrameSchema,
   RelayReconciledFrameSchema,
   RelayDeliveredFrameSchema,
   RelayCallbackFrameSchema,

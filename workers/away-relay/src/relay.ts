@@ -12,6 +12,24 @@ export const RELAY_MAX_PENDING = 1_000;
 export const RELAY_PROVIDER_TIMEOUT_MS = 5_000;
 
 /**
+ * Socket liveness (ADR 756), the same fixed texts the daemon's copy names: the daemon sends
+ * `RELAY_PING`, the object auto-responds `RELAY_PONG` without waking, and the runtime stamps when
+ * it last did. Matched byte-for-byte by the runtime, so never rebuilt from parts.
+ */
+export const RELAY_PING = '{"protocol":1,"type":"ping"}';
+export const RELAY_PONG = '{"protocol":1,"type":"pong"}';
+export const RELAY_SILENT_MS = 90_000;
+
+/**
+ * Is the team's daemon socket dead (ADR 756)? Only a socket that has pinged can fall silent: one
+ * that never pinged is a daemon from before the heartbeat, kept on the ADR 659 rule (live until
+ * it closes) so deploying this relay first does not cut those daemons off.
+ */
+export function socketSilent(lastPingAt: number | null, now: number): boolean {
+  return lastPingAt !== null && now - lastPingAt > RELAY_SILENT_MS;
+}
+
+/**
  * Per-team delivery quota (lane 01M50ZQCTWM5QBZ083782J9N6R, spec scale amendment):
  * every team has its own rate limits, including against Slack's per-workspace send
  * limits. One Durable Object serves one team, so the counters are per-team by

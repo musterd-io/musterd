@@ -15,6 +15,8 @@ import {
   slackSignatureValid,
   slackTeamIdFromBody,
   socketCredentialLive,
+  socketSilent,
+  RELAY_SILENT_MS,
 } from './relay.js';
 
 describe('away relay pure rules (ADR 659)', () => {
@@ -199,5 +201,14 @@ describe('away relay pure rules (ADR 659)', () => {
         1_000,
       ),
     ).toEqual({ kept: ['keep'], dropped: ['drop'] });
+  });
+});
+
+describe('socket liveness (ADR 756)', () => {
+  it('only a socket that has pinged can fall silent, and only past the window', () => {
+    const now = 1_000_000;
+    expect(socketSilent(null, now)).toBe(false);
+    expect(socketSilent(now - RELAY_SILENT_MS, now)).toBe(false);
+    expect(socketSilent(now - RELAY_SILENT_MS - 1, now)).toBe(true);
   });
 });
