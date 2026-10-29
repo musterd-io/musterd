@@ -31,6 +31,19 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/DMSans-Regular.ttf",
+            "./assets/fonts/DMSans-Medium.ttf",
+            "./assets/fonts/DMSans-SemiBold.ttf",
+            "./assets/fonts/DMSans-Bold.ttf",
+            "./assets/fonts/DMSans-ExtraBold.ttf",
+            "./assets/fonts/JetBrainsMono-Regular.ttf"
+          ]
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "musterd uses the camera to scan the pairing code shown on your computer.",

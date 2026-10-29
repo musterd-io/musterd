@@ -240,6 +240,13 @@ module. The seen-nonce store, the token and the pairing pin are keychain items o
 first. Read-modify-write of the nonce item is not atomic across processes; the extension is the
 writer when a delivery is displayed. A store that cannot be read fails closed.
 
+The app is light only and set in the brand's faces (ADR 760). `expo-font`'s config plugin embeds
+static DM Sans and JetBrains Mono TTFs from `assets/fonts/`, instanced from the web's variable
+files, and styles name them through `font` in `src/ui/theme.ts`. `expo-haptics` gives a press a
+light tick and an answer sent or a phone paired a success buzz. The icon is `assets/icon.svg`
+(the ADR 702 mark, full-bleed) rendered to `icon.png`; `wordmark.png` and `mark.png` are the
+ADR 704 nameplate and the mark, rendered from `docs/design/assets/`.
+
 `aps-environment` is `production`. A debug install will not get a token. Locked open, a real
 push, the replay drop and the Face ID action are not run here — they need a device, and an EAS
 build is what produces one. The Swift in this increment is on the security review path before
@@ -266,7 +273,8 @@ src/
     push.ts                // the musterd block on an APNs payload, and a fetched body
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/
-    theme.ts               // brand.md palette (mustard accent on zinc); the app is light only
+    haptics.ts             // a light tick under a press, a success buzz when something lands (ADR 760)
+    theme.ts               // brand.md palette (mustard accent on zinc), light only; DM Sans faces (ADR 760)
 ```
 
 The screens are `.tsx` and outside the drift check; kept honest by hand:
@@ -276,6 +284,6 @@ src/app/_layout.tsx   // the Stack, themed from the palette; the nameplate wordm
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
 src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, and answering
-src/ui/motion.tsx     // Rise, Squish, Breathe, Pop — RN Animated, off under Reduce Motion
+src/ui/motion.tsx     // Rise, Squish, Breathe, Pop, Halo — RN Animated, off under Reduce Motion
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```

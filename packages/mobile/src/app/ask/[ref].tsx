@@ -6,9 +6,10 @@ import type { AskEntry } from '../../native/asks';
 import { STALE_TEXT, UNVERIFIED_TEXT, waitingSubtitle } from '../../native/notice';
 import { showOffer, type ShownOffer } from '../../native/offer';
 import type { PairingPin } from '../../native/pairingPin';
+import { success } from '../../ui/haptics';
 import { Breathe, Pop, Rise, Squish } from '../../ui/motion';
 import { ago, Seat } from '../../ui/seat';
-import { radius, space, usePalette } from '../../ui/theme';
+import { font, radius, space, usePalette } from '../../ui/theme';
 
 /**
  * One ask (ADR 676 decisions 6–8, spec §7). Opening it fetches the ask by ref through the relay,
@@ -150,6 +151,7 @@ export default function AskScreen() {
       now: Date.now(),
     });
     if (outcome === 'sent') {
+      success();
       setPhase({ kind: 'sent' });
       return;
     }
@@ -364,7 +366,13 @@ const styles = StyleSheet.create({
     padding: space.xl,
     gap: space.md,
   },
-  centerCopy: { fontSize: 15, lineHeight: 22, textAlign: 'center', maxWidth: 320 },
+  centerCopy: {
+    fontFamily: font.regular,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    maxWidth: 320,
+  },
   dots: { flexDirection: 'row', gap: space.sm },
   dot: { width: 10, height: 10, borderRadius: radius.pill },
   done: {
@@ -375,12 +383,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: space.sm,
   },
-  doneMark: { fontSize: 34, fontWeight: '800' },
-  title: { fontSize: 22, fontWeight: '700', textAlign: 'center', letterSpacing: -0.3 },
+  doneMark: { fontSize: 34, fontFamily: font.display },
+  title: { fontSize: 22, fontFamily: font.bold, textAlign: 'center', letterSpacing: -0.3 },
   page: { padding: space.lg, gap: space.lg, paddingBottom: space.xl * 2 },
   who: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   whoText: { flex: 1, gap: 2 },
-  from: { fontSize: 17, fontWeight: '600' },
+  from: { fontSize: 17, fontFamily: font.semibold },
   card: {
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
@@ -400,20 +408,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm + 2,
     paddingVertical: 3,
   },
-  chipText: { fontSize: 12, fontWeight: '700' },
-  headline: { fontSize: 22, lineHeight: 28, fontWeight: '700', letterSpacing: -0.3 },
+  chipText: { fontSize: 12, fontFamily: font.bold },
+  headline: { fontSize: 22, lineHeight: 28, fontFamily: font.bold, letterSpacing: -0.3 },
   fields: { gap: space.md },
   field: { gap: 2 },
-  label: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  value: { fontSize: 15, lineHeight: 21 },
+  label: {
+    fontSize: 12,
+    fontFamily: font.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  value: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
   rule: { height: StyleSheet.hairlineWidth, marginBottom: space.xs },
   theirs: { gap: space.sm },
   quote: { borderLeftWidth: 3, paddingLeft: space.md },
-  body: { fontSize: 16, lineHeight: 23 },
-  bodyLarge: { fontSize: 20, lineHeight: 28, fontWeight: '500' },
-  muted: { fontSize: 13, lineHeight: 18 },
+  body: { fontFamily: font.regular, fontSize: 16, lineHeight: 23 },
+  bodyLarge: { fontSize: 20, lineHeight: 28, fontFamily: font.medium },
+  muted: { fontFamily: font.regular, fontSize: 13, lineHeight: 18 },
   banner: { borderRadius: radius.md, padding: space.lg },
-  bannerText: { fontSize: 15, lineHeight: 21 },
+  bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
   actions: { gap: space.sm, marginTop: space.sm },
   primary: {
     minHeight: 52,
@@ -422,7 +435,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryText: { fontSize: 17, fontWeight: '700' },
+  primaryText: { fontSize: 17, fontFamily: font.bold },
   secondary: {
     minHeight: 48,
     borderRadius: radius.md,
@@ -430,7 +443,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryText: { fontSize: 17, fontWeight: '600' },
+  secondaryText: { fontSize: 17, fontFamily: font.semibold },
   link: {
     minHeight: 44,
     alignItems: 'center',
@@ -438,5 +451,5 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingTop: space.sm,
   },
-  linkText: { fontSize: 15, fontWeight: '600' },
+  linkText: { fontSize: 15, fontFamily: font.semibold },
 });

@@ -1,7 +1,7 @@
 import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { Image } from 'react-native';
 import wordmark from '../../assets/wordmark.png';
-import { usePalette } from '../ui/theme';
+import { font, usePalette } from '../ui/theme';
 
 export default function RootLayout() {
   const p = usePalette();
@@ -25,7 +25,7 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerTintColor: p.accentText,
-          headerTitleStyle: { color: p.text },
+          headerTitleStyle: { color: p.text, fontFamily: font.semibold },
           headerStyle: { backgroundColor: p.bg },
           headerShadowVisible: false,
           contentStyle: { backgroundColor: p.bg },

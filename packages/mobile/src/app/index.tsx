@@ -1,13 +1,14 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { AppState, FlatList, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import mark from '../../assets/mark.png';
 import type { AskEntry, AsksView } from '../native/asks';
 import { heldBody, waitingSubtitle } from '../native/notice';
 import { showOffer } from '../native/offer';
 import type { PairingPin } from '../native/pairingPin';
-import { Breathe, Rise, Squish } from '../ui/motion';
+import { Breathe, Halo, Rise, Squish } from '../ui/motion';
 import { ago, Seat } from '../ui/seat';
-import { radius, space, usePalette } from '../ui/theme';
+import { font, radius, space, usePalette } from '../ui/theme';
 
 /**
  * The asks list (ADR 676 decisions 7–9). Every open ask addressed to you that reached this phone,
@@ -119,6 +120,11 @@ export default function AsksScreen() {
     return (
       <View style={[styles.empty, { backgroundColor: p.bg }]}>
         {banners}
+        <Rise>
+          <Halo color={p.tint}>
+            <Image source={mark} style={styles.mark} accessibilityIgnoresInvertColors />
+          </Halo>
+        </Rise>
         <View style={styles.rollCall} accessible={false}>
           <Breathe>
             <View style={[styles.rollDot, { backgroundColor: p.success }]} />
@@ -273,13 +279,20 @@ const styles = StyleSheet.create({
     padding: space.xl,
     gap: space.md,
   },
+  mark: { width: 88, height: 88, marginVertical: space.lg },
   rollCall: { flexDirection: 'row', gap: space.sm, marginBottom: space.sm },
-  rollDot: { width: 12, height: 12, borderRadius: radius.pill },
-  title: { fontSize: 22, fontWeight: '700', textAlign: 'center', letterSpacing: -0.3 },
-  copy: { fontSize: 15, lineHeight: 22, textAlign: 'center', maxWidth: 320 },
+  rollDot: { width: 8, height: 8, borderRadius: radius.pill },
+  title: { fontSize: 22, fontFamily: font.bold, textAlign: 'center', letterSpacing: -0.3 },
+  copy: {
+    fontFamily: font.regular,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    maxWidth: 320,
+  },
   banner: { borderRadius: radius.md, padding: space.lg, gap: space.xs, alignSelf: 'stretch' },
-  bannerTitle: { fontSize: 15, fontWeight: '700' },
-  bannerText: { fontSize: 15, lineHeight: 21 },
+  bannerTitle: { fontSize: 15, fontFamily: font.bold },
+  bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
   primary: {
     minHeight: 50,
     marginTop: space.sm,
@@ -288,7 +301,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryText: { fontSize: 17, fontWeight: '700' },
+  primaryText: { fontSize: 17, fontFamily: font.bold },
   quiet: {
     minHeight: 44,
     marginTop: space.sm,
@@ -297,11 +310,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  quietText: { fontSize: 15, fontWeight: '600' },
+  quietText: { fontSize: 15, fontFamily: font.semibold },
   list: { padding: space.lg, gap: space.md, paddingBottom: space.xl * 2 },
   header: { gap: space.md, marginBottom: space.xs },
-  greeting: { fontSize: 15, fontWeight: '500' },
-  count: { fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },
+  greeting: { fontSize: 15, fontFamily: font.medium },
+  count: { fontSize: 28, fontFamily: font.bold, letterSpacing: -0.5 },
   row: {
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
@@ -314,11 +327,11 @@ const styles = StyleSheet.create({
   },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   rowWho: { flex: 1, gap: 1 },
-  from: { fontSize: 15, fontWeight: '600' },
-  meta: { fontSize: 13 },
+  from: { fontSize: 15, fontFamily: font.semibold },
+  meta: { fontFamily: font.regular, fontSize: 13 },
   chip: { borderRadius: radius.pill, paddingHorizontal: space.sm + 2, paddingVertical: 3 },
-  chipText: { fontSize: 12, fontWeight: '700' },
-  headline: { fontSize: 17, lineHeight: 24, fontWeight: '500' },
+  chipText: { fontSize: 12, fontFamily: font.bold },
+  headline: { fontSize: 17, lineHeight: 24, fontFamily: font.medium },
   waitingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   waitingDot: { width: 6, height: 6, borderRadius: radius.pill },
 });
