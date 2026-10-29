@@ -57,7 +57,7 @@ HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun"]
 FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
-ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet"]
+ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet", "headphones-neck"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
 # every earlier layer keeps its place.
@@ -513,7 +513,13 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     r.orb("cap", "head", "hat/cap", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 0.6, R * 1.04, R * 1.08, R * 0.7)
     r.box("brim", "head", "hat/cap", acc, HEAD_X + R * 0.95, 0, HEAD_C + R * 0.66, R * 0.75, R * 0.95, 1.0, 0.4)
     r.orb("beanie", "head", "hat/beanie", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 0.42, R * 1.06, R * 1.08, R * 0.95)
-    r.torus("band", "head", "hat/band", acc, HEAD_X - R * 0.1, 0, HEAD_C + R * 0.62, R * 0.98, 1.3)
+    # the headband (v2-4d): a soft fabric band, taller than it is thick and following the head's slope —
+    # higher at the back, low on the brow so it hugs the hair instead of floating over it like the old one —
+    # with a small tied knot behind one ear, not the old round cord
+    band = r.torus("band", "head", "hat/band", acc, HEAD_X - R * 0.12, 0, HEAD_C + R * 0.5, R * 1.04, 1.1, (0, math.radians(-14), 0))
+    band.scale = (1, 1, 1.9)
+    for dy, dz in ((0.18, 0.06), (0.34, -0.05)):
+        r.orb("band-knot", "head", "hat/band", acc, HEAD_X - R * 1.08, R * dy, HEAD_C + R * (0.72 + dz), R * 0.1, R * 0.13, R * 0.09)
 
     # ── accessories: thin frames on the nose, cups over the ears, a scarf at the neck
     frame = scene.matte("fig-frame", (0.72, 0.72, 0.72), 0.3)
@@ -557,6 +563,11 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     r.torus("watch-band", "elbowL", "acc/watch", metal, 0, SHOULDER_W, wz, 2.2 * FIG, 0.45)
     r.orb("watch-face", "elbowL", "acc/watch", metal, 0, SHOULDER_W + 2.25 * FIG, wz, 1.0 * FIG, 0.45 * FIG, 1.0 * FIG)
     r.torus("bracelet", "elbowR", "acc/bracelet", metal, 0, -SHOULDER_W, wz, 2.25 * FIG, 0.35)
+    # headphones around the neck (v2-4d): the band rests round the back of the neck, the cups lie on the
+    # collarbones facing up. On the spine, so they ride the torso; on dnd they move up onto the ears.
+    r.torus("neck-band", "spine", "acc/headphones-neck", acc, HEAD_X * 0.4, 0, NECK - 1.2 * FIG, 4.7 * FIG, 0.9, (0, math.radians(-18), 0))
+    for sy in (1, -1):
+        r.orb("neck-cup", "spine", "acc/headphones-neck", acc, HEAD_X * 0.4 + 3.4 * FIG, sy * 3.8 * FIG, NECK - 3.4 * FIG, R * 0.3, R * 0.34, R * 0.18)
     r.torus("scarf", "neck", "acc/scarf", acc, HEAD_X * 0.5, 0, NECK - 1.5 * FIG, 4.4 * FIG, 1.9 * FIG)
     r.box("scarf-tail", "spine", "acc/scarf", acc, 6.2 * FIG, 2, CHEST - 2 * FIG, 2.6, 4.3, 8.6, 0.9)
 

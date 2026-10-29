@@ -217,17 +217,19 @@ const SHOES_BY_STYLE: Record<Style, readonly string[]> = {
  */
 export type Eyes = 'none' | 'glasses' | 'glasses-square' | 'glasses-browline';
 export type Ears = 'none' | 'headphones' | 'earrings-stud' | 'earrings-hoop';
-export type Neck = 'none' | 'scarf';
+export type Neck = 'none' | 'scarf' | 'headphones-neck';
 export type Wrist = 'none' | 'watch' | 'bracelet';
 // Three frame shapes (v2-4a): round, square rims, a browline — about one in four wear any, as before.
 const EYES: readonly Eyes[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'glasses', 'glasses-square', 'glasses-browline'];
-// Studs and hoops (v2-4b) beside the headphones: about one in four wear something on the ears.
-const EARS: readonly Ears[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'earrings-stud', 'earrings-hoop', 'headphones'];
+// Studs and hoops (v2-4b) beside the headphones: under one in four wear something on the ears, so with
+// the neck's second piece (v2-4d) most people still wear no spot at all.
+const EARS: readonly Ears[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'earrings-stud', 'earrings-hoop', 'headphones'];
 // A watch on the left wrist or a bracelet on the right (v2-4c): one in four, agents too.
 const WRIST: readonly Wrist[] = ['none', 'none', 'none', 'none', 'none', 'none', 'watch', 'watch', 'bracelet'];
 /** Jewellery metals — gold, silver, rose gold, for earrings and the wrist: metal, not the cosy accessory set. */
 const METALS = ['#e2b85c', '#cfd3d8', '#dca48c'] as const;
-const NECK: readonly Neck[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'scarf'];
+// A scarf or headphones resting round the neck (v2-4d).
+const NECK: readonly Neck[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'scarf', 'headphones-neck'];
 /** The one legacy summary the painters still read (`character.ts`, the portrait): the most visible
  *  of the worn spots. The rendered figure draws every spot (`layersFor`). */
 export type Accessory = 'none' | 'glasses' | 'headphones' | 'scarf';
@@ -283,7 +285,7 @@ export interface Appearance {
 function summaryOf(eyes: Eyes, ears: Ears, neck: Neck): Accessory {
   if (ears === 'headphones') return ears; // earrings are too small for the painters to draw
   if (eyes !== 'none') return 'glasses'; // whatever the frame, the painters draw one pair
-  if (neck !== 'none') return neck;
+  if (neck === 'scarf') return neck; // headphones round the neck: the painters draw no single thing for it
   return 'none';
 }
 
@@ -303,7 +305,8 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
   // Agents never wear glasses — the eye glow is their tell, and frames would sit on it.
   const eyes = kind === 'agent' ? 'none' : pick(EYES, name, 18);
   const ears = pick(EARS, name, 19);
-  const neck = pick(NECK, name, 20);
+  // one pair of headphones a person: on the ears already means none resting round the neck
+  const neck = ears === 'headphones' && pick(NECK, name, 20) === 'headphones-neck' ? 'none' : pick(NECK, name, 20);
   const wrist = pick(WRIST, name, 22);
   return {
     skin,
@@ -336,8 +339,9 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
 }
 
 /** The look a member wears this frame: their hashed one, with headphones on the ears while they are
- *  dnd — the room-readable signal (§4) — whatever that spot held. */
+ *  dnd — the room-readable signal (§4) — whatever that spot held; a pair round the neck moves up. */
 export function lookFor(node: Pick<OfficeNode, 'name' | 'kind' | 'dnd'>): Appearance {
   const a = appearanceOf(node);
-  return node.dnd ? { ...a, ears: 'headphones', accessory: 'headphones' } : a;
+  // headphones resting round the neck are the same pair: on dnd they move up, not double
+  return node.dnd ? { ...a, ears: 'headphones', neck: a.neck === 'headphones-neck' ? 'none' : a.neck, accessory: 'headphones' } : a;
 }

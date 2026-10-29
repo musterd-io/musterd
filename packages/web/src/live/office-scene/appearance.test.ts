@@ -185,7 +185,7 @@ describe('style, grooming and the spots (office figure v2-5a — presents retire
     for (const l of looks) {
       if (l.ears === 'headphones') expect(l.accessory).toBe('headphones');
       else if (l.eyes !== 'none') expect(l.accessory).toBe('glasses');
-      else if (l.neck !== 'none') expect(l.accessory).toBe('scarf');
+      else if (l.neck === 'scarf') expect(l.accessory).toBe('scarf');
       else expect(l.accessory).toBe('none');
     }
   });
@@ -195,6 +195,16 @@ describe('style, grooming and the spots (office figure v2-5a — presents retire
     expect(on.ears).toBe('headphones');
     expect(on.accessory).toBe('headphones');
     expect(lookFor({ name: 'person7', kind: 'human', dnd: false })).toEqual(appearanceOf({ name: 'person7', kind: 'human' }));
+  });
+
+  it('moves headphones worn round the neck up onto the ears on dnd, never two pairs', () => {
+    const name = Array.from({ length: 400 }, (_, i) => `person${i}`).find((n) => appearanceOf({ name: n, kind: 'human' }).neck === 'headphones-neck')!;
+    const on = lookFor({ name, kind: 'human', dnd: true });
+    expect(on.ears).toBe('headphones');
+    expect(on.neck).toBe('none');
+    expect(lookFor({ name, kind: 'human', dnd: false }).neck).toBe('headphones-neck');
+    const names = Array.from({ length: 2000 }, (_, i) => `p${i}`);
+    expect(names.some((n) => { const a = appearanceOf({ name: n, kind: 'human' }); return a.ears === 'headphones' && a.neck === 'headphones-neck'; })).toBe(false);
   });
 
   it('keeps beards on the floor', () => {
