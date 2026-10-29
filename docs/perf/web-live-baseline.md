@@ -2637,3 +2637,15 @@ and `acc/glasses-browline` (61 KB). No other layer re-rendered. Arithmetic on th
 loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,950,000 B with this lane in.
+
+## 2026-10-29 — figure v2-4d headband and neck headphones; Office art RAISED 8,950,000 → 9,050,000 B (lane 01M6240HEE)
+
+| Budget     | Before (ceiling)    | This branch (CI/files) | Ceiling                          |
+| ---------- | ------------------- | ---------------------- | -------------------------------- |
+| office art | 8,950,000 B          | ~8,982,300 B (150)  | RAISED 8,950,000 → 9,050,000 B |
+
+The headband re-rendered as a knotted fabric band (`hat/band` 122 KB → 164 KB) and a new `acc/headphones-neck` sheet (51 KB); +93 KB. Figure sheets load only for the layers a member wears (`loadFigureLayers`, `wornLayers`), so
+what a viewer downloads grows with the roster's wardrobe, not with this total. A re-baseline to
+measured + 15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 9,050,000 B with this lane in.
