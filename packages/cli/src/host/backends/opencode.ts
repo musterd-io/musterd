@@ -1,8 +1,4 @@
-import {
-  execFile as nodeExecFile,
-  spawn as nodeSpawn,
-  type ChildProcess,
-} from 'node:child_process';
+import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import type { LocalServing, WakeUsage } from '@musterd/protocol';
 import { z } from 'zod';
 import { findBinding, saveBinding } from '../../config.js';
@@ -38,10 +34,15 @@ export function buildOpencodeResumeArgs(line: string, sessionId: string): string
 }
 
 /**
- * ADR 583 note (2026-10-19): a metered wake runs `--standalone`. Plain `opencode run` hands the
- * prompt to the user's background `opencode serve`, whose provider config the wake cannot touch;
- * a private server reads the wake's own environment, and so the override below. Resume by
- * `--session` works the same from a private server (sessions live in OpenCode's shared store).
+ * EVERY wake runs `--standalone` (ADR 768): a private server that starts with the run and exits
+ * with it, so no `opencode serve` outlives the wake — the shared one outlives every session, and
+ * on 2026-10-29 it held a deleted 4.9 GB `opencode.db` open until killed. Two consequences the
+ * backend relies on: the private server reads the wake's own environment, which is what makes
+ * ADR 583's `OPENCODE_CONFIG_CONTENT` override reachable (plain `opencode run` delegates to the
+ * user's background `opencode serve`, whose provider config a wake cannot touch); and the
+ * adapter descends from the run itself, so the ADR 354 lease file names a pid its ancestry
+ * actually includes. Resume by `--session` works the same from a private server (sessions live
+ * in OpenCode's shared store). Cost: one server cold start per wake.
  */
 export function opencodeStandaloneArgs(args: string[]): string[] {
   return args[0] === 'run' ? ['run', '--standalone', ...args.slice(1)] : args;
@@ -180,44 +181,8 @@ export interface OpencodeDeps {
   resumeVerifyWindowMs?: number;
   /** Injectable pinned-shim write; wake PATH must resolve this actuator's CLI before Homebrew. */
   ensurePinned?: (opts: { node: string; binJs: string }) => string | undefined;
-  /** Injectable process-table scan for {@link opencodeServePid} (ADR 613): `ps -ax -o pid=,uid=,args=`. */
-  ps?: () => Promise<string>;
   /** ADR 663: the three-part `local` read, taken once at spawn (tests inject the answer). */
   readLocalServing?: (workspace: string) => LocalServing | null;
-}
-
-/**
- * The pid of the persistent `opencode serve` daemon the wake's `opencode run` delegates to — the
- * pid the MCP adapter's ancestry actually includes, since the adapter is serve's child, not the
- * run's (ADR 613; docs/wiki/dream-opencode-session-provenance.md has the measured tree). Exactly
- * one serve daemon owned by this user, or undefined (unreadable table, none, or several): the
- * caller falls back to the run child's pid — the pre-ADR-613 behavior, never worse.
- */
-async function opencodeServePid(deps: { ps?: () => Promise<string> }): Promise<number | undefined> {
-  const ps =
-    deps.ps ??
-    (() =>
-      new Promise<string>((resolve, reject) => {
-        nodeExecFile(
-          'ps',
-          ['-ax', '-o', 'pid=,uid=,args='],
-          { maxBuffer: 4 * 1024 * 1024 },
-          (err, stdout) => (err ? reject(err) : resolve(stdout)),
-        );
-      }));
-  let table: string;
-  try {
-    table = await ps();
-  } catch {
-    return undefined;
-  }
-  const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
-  const pids = new Set<number>();
-  for (const line of table.split('\n')) {
-    const m = /^\s*(\d+)\s+(\d+)\s+\S*opencode(?:\.exe)?\s+serve\b/.exec(line);
-    if (m !== null && (uid === undefined || Number(m[2]) === uid)) pids.add(Number(m[1]));
-  }
-  return pids.size === 1 ? [...pids][0] : undefined;
 }
 
 function recordFreshSession(workspace: string, id: string, startedAt: number): void {
@@ -260,9 +225,10 @@ async function attempt(
 ): Promise<Attempt> {
   const startedAt = Date.now();
   // A local model is no provider call to meter (ADR 663); everything else on a gateway wake runs
-  // on a private server that reads the override.
+  // on a private server that reads the override. ADR 768: the private server is unconditional —
+  // a wake must never leave a background `opencode serve` behind.
   const origin = local === null ? spec.gateway?.origin : undefined;
-  const runArgs = origin !== undefined ? opencodeStandaloneArgs(args) : args;
+  const runArgs = opencodeStandaloneArgs(args);
   const gatewayEnv =
     origin !== undefined
       ? { ...spec.gateway?.env, OPENCODE_CONFIG_CONTENT: opencodeGatewayConfig(origin) }
@@ -284,11 +250,10 @@ async function attempt(
     };
   }
   // ADR 546: the lease file, so `musterd <seat>` finds this wake; rewritten when the session id
-  // is learned from stdout (a resumed run knows it already). ADR 613: the pid that reaches the
-  // adapter is the serve daemon's — the adapter is serve's child, never the run's.
-  // A standalone run's adapter descends from the run itself, not from the background serve.
-  const servePid =
-    child.pid !== undefined && origin === undefined ? await opencodeServePid(deps) : undefined;
+  // is learned from stdout (a resumed run knows it already). ADR 768: the pid is the run child's.
+  // With no background serve to delegate to, the adapter descends from the run itself, so the
+  // ADR 354 ancestry check holds on this harness too — and ADR 613's process-table scan, which
+  // existed only to find that daemon, is gone with it.
   const lease =
     child.pid !== undefined
       ? holdWakeLease(
@@ -296,7 +261,7 @@ async function attempt(
           {
             lease_id: spec.order.lease_id,
             harness: 'opencode',
-            pid: servePid ?? child.pid,
+            pid: child.pid,
             startedAt,
             timeoutMs,
             session_id: expectedId,

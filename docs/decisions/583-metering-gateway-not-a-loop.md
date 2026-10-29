@@ -160,7 +160,8 @@ the agent loop, and without holding or reading any credential.
   upstreams from models.dev) at `<gateway origin>/<id>`. OpenCode merges that over the seat's own
   `opencode.json`, which is never edited. `--session` resume works the same from a private server.
   The lease names the run's pid, because the adapter descends from it and not from `serve`
-  (ADR 613's fallback). A local model (ADR 663) is not re-pointed. Other OpenCode providers
+  (ADR 613's fallback) — and since ADR 768 (2026-10-29) that is every opencode wake's shape, not
+  only a metered one's. A local model (ADR 663) is not re-pointed. Other OpenCode providers
   (anthropic, openai, xai) are not re-pointed either, since their SDK base paths differ from the
   gateway's upstreams, and they stay on the artifact. Checked live on 2026-10-19: one free-model
   wake on this machine metered 2 calls, 0 unmetered. A model with no row in the price table is

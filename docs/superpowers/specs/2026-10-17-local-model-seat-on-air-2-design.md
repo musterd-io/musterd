@@ -112,8 +112,10 @@ the rule is still fixed before the run.
   after the first acts (#172). G2: the `accept` answering a challenge had `reply_to` null. Run 13
   says confirm or clear, not rediscover. An OpenCode wake is a fresh `opencode run` that exits
   when the session idles (the MCP adapter under `opencode serve` persists, ADR 613, but the run
-  does not), so for G1 this is the **fire-and-exit** class and G1 is expected to reproduce; the
-  readout says what the stamps show.
+  does not — corrected 2026-10-29: since ADR 768 the wake runs `--standalone`, so the adapter is
+  the run's descendant and exits with it, which puts opencode wakes further into the
+  fire-and-exit class), so for G1 this is the **fire-and-exit** class and G1 is expected to
+  reproduce; the readout says what the stamps show.
 - **Speed.** Finding 003 measured 50–60 s per act on a 4B model. An hour of team traffic may be
   more inbox than the seat can drain; run 13 treats "never catches up" as its own failure class.
 
