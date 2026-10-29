@@ -370,6 +370,16 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     cap("hair/side")
     for i, (y, dz) in enumerate(((-0.55, 0.15), (-0.2, 0.25), (0.15, 0.32), (0.5, 0.28))):
         clump("hair/side", f"sweep{i}", HEAD_X + R * 0.45, y * R, HEAD_C + R * (0.76 + dz * 0.4), R * 0.4, R * 0.35, R * 0.26, (math.radians(25), math.radians(-15), 0))
+    # (v2-3b) polished: short gets a tapered nape and neat sideburns; side gets a real parting — a lifted
+    # mass on the heavy side swept across, a flatter one on the other — and a tidy back
+    for sy in (1, -1):
+        clump("hair/short", "sideburn", HEAD_X + R * 0.2, sy * R * 0.86, HEAD_C + R * 0.05, R * 0.16, R * 0.12, R * 0.3)
+        clump("hair/side", "sideburn", HEAD_X + R * 0.2, sy * R * 0.86, HEAD_C + R * 0.05, R * 0.16, R * 0.12, R * 0.3)
+    for i, y in enumerate((-0.3, 0.3)):
+        clump("hair/short", f"nape{i}", HEAD_X - R * 0.78, y * R, HEAD_C - R * 0.3, R * 0.32, R * 0.36, R * 0.42)
+    clump("hair/side", "heavy", HEAD_X + R * 0.1, -R * 0.35, HEAD_C + R * 0.98, R * 0.62, R * 0.55, R * 0.34, (math.radians(-12), 0, 0))
+    clump("hair/side", "light", HEAD_X + R * 0.1, R * 0.55, HEAD_C + R * 0.9, R * 0.5, R * 0.36, R * 0.26)
+    clump("hair/side", "back", HEAD_X - R * 0.7, 0, HEAD_C - R * 0.1, R * 0.45, R * 0.85, R * 0.6)
     cap("hair/bob", 1.04)
     for sy in (1, -1):
         clump("hair/bob", "side", HEAD_X - R * 0.1, sy * R * 0.78, HEAD_C - R * 0.25, R * 0.62, R * 0.32, R * 0.62)
