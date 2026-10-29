@@ -85,40 +85,41 @@ small change.
 
 ## Running it on a phone (TestFlight)
 
-The app reaches the phone through **TestFlight**, built in Expo's cloud (EAS Build) and uploaded by EAS
-Submit, so no Xcode runs on the laptop that hosts the seats (nick, 2026-10-05: local Xcode builds bog
-the shared laptop down). It needs the Apple Developer Program membership. `eas.json` holds one
-`production` profile: Node and pnpm pinned to the repo's, the build number kept by EAS
-(`appVersionSource: remote`, `autoIncrement`), and an `eas-build-post-install` hook that builds
-`@musterd/protocol` so Metro can read its `dist`. The Expo project is `@nas4146/musterd`. The config plugin
-also declares the `MusterdNotify` extension (`io.musterd.app.notify`) under
+The app reaches the phone through **TestFlight**. It needs the Apple Developer Program membership.
+`eas.json` holds one `production` profile: Node and pnpm pinned to the repo's, the build number kept
+by EAS (`appVersionSource: remote`, `autoIncrement`), and an `eas-build-post-install` hook that
+builds `@musterd/protocol` so Metro can read its `dist`. The Expo project is `@nas4146/musterd`. The
+config plugin also declares the `MusterdNotify` extension (`io.musterd.app.notify`) under
 `extra.eas.build.experimental.ios.appExtensions`, which is how EAS knows to make its provisioning
 profile; an undeclared extension target fails to sign.
 
+**Build locally, upload with fastlane** (nick, 2026-10-29). EAS's cloud builds took about 20 minutes
+on the free plan, most of it queue, so the build runs on the Mac that ships: `eas build --local`,
+which uses the same EAS-managed signing and remote build number and is free. It needs Xcode (27.1)
+and CocoaPods on that Mac, and the Expo login. fastlane then uploads the `.ipa`:
+
 ```bash
 cd packages/mobile
-npx eas-cli@latest build --platform ios --profile production --auto-submit
+npx eas-cli@latest build --platform ios --profile production --local --non-interactive --output /tmp/musterd.ipa
+scripts/upload-testflight.sh /tmp/musterd.ipa
 ```
 
-The first run asks for the Apple ID, with 2FA, and creates the signing certificate, the provisioning
-profile and the App Store Connect app. A human has to run it, because those credentials are the
-Apple account holder's. Every later run is non-interactive. A build appears in TestFlight after Apple
-processes it (10–15 minutes); add yourself as an internal tester once in App Store Connect, and each
-later build arrives on the phone by itself.
+This reverses nick's 2026-10-05 ruling that no Xcode runs on the laptop that hosts the seats. The
+build takes that Mac's CPU for its length. The cloud path still works when it should not:
+`npx eas-cli@latest build --platform ios --profile production --non-interactive`, then
+`scripts/upload-testflight.sh` with no argument (the latest finished cloud build) or an EAS build
+id. Avoid `--auto-submit`: EAS Submit's free queue held build 3 for more than 40 minutes on
+2026-10-06.
 
-**Skipping EAS Submit's queue.** On Expo's free plan, `--auto-submit` waits in a shared queue. Build
-3 sat there more than 40 minutes on 2026-10-06. The faster path is to build without
-`--auto-submit` and upload the finished `.ipa` with fastlane:
-
-```bash
-npx eas-cli@latest build --platform ios --profile production --non-interactive
-packages/mobile/scripts/upload-testflight.sh        # latest finished build; or pass a build id
-```
+The first EAS build asked for the Apple ID, with 2FA, and created the signing certificate, the
+provisioning profile and the App Store Connect app; every later build is non-interactive. A build
+appears in TestFlight after Apple processes it (10–15 minutes); add yourself as an internal tester
+once in App Store Connect, and each later build arrives on the phone by itself.
 
 The script needs an App Store Connect API key config at `~/.appstoreconnect/fastlane-musterd.json`
 (`key_id`, `issuer_id`, and `key`, the `.p8` contents). fastlane refuses a `key_filepath` in that
-file. It stays on the account holder's machine, so the upload is a command the human runs, not a
-seat.
+file, and its upload needs Xcode, not only the Command Line Tools. The key stays on the Mac that
+ships.
 
 Then on the phone: Tailscale on, open musterd. Pairing from the laptop is the app's pairing screen.
 

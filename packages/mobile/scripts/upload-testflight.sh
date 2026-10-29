@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
-# Upload a finished EAS build to TestFlight with fastlane, skipping EAS Submit's queue
-# (docs/architecture/09-mobile.md). Run it yourself: it reads the App Store Connect API key
-# config at ~/.appstoreconnect/fastlane-musterd.json, which stays on this machine.
+# Upload a build to TestFlight with fastlane, skipping EAS Submit's queue
+# (docs/architecture/09-mobile.md). It reads the App Store Connect API key config at
+# ~/.appstoreconnect/fastlane-musterd.json, which stays on this machine, and needs Xcode.
 #
-#   packages/mobile/scripts/upload-testflight.sh            # the latest iOS build
-#   packages/mobile/scripts/upload-testflight.sh <build-id>
+#   packages/mobile/scripts/upload-testflight.sh path/to/musterd.ipa  # a local `eas build --local`
+#   packages/mobile/scripts/upload-testflight.sh                      # the latest EAS cloud build
+#   packages/mobile/scripts/upload-testflight.sh <build-id>           # one EAS cloud build
 set -euo pipefail
 cd "$(dirname "$0")/.."
 key="${ASC_API_KEY_JSON:-$HOME/.appstoreconnect/fastlane-musterd.json}"
 [ -f "$key" ] || { echo "no API key config at $key (see 09-mobile.md)" >&2; exit 1; }
+if [ $# -ge 1 ] && [ -f "$1" ]; then
+  if [ -n "${DRY_RUN:-}" ]; then echo "dry run: would upload $1 ($(du -h "$1" | cut -f1))"; exit 0; fi
+  FASTLANE_SKIP_UPDATE_CHECK=1 fastlane run upload_to_testflight api_key_path:"$key" ipa:"$1" skip_waiting_for_build_processing:true
+  exit 0
+fi
 if [ $# -ge 1 ]; then
   json=$(npx -y eas-cli@latest build:view "$1" --json)
 else
