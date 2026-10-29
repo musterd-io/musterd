@@ -252,6 +252,7 @@ export const CATALOG: readonly CommandEntry[] = [
     detail:
       'Run the daemon in the foreground. For a background service that survives logout, use ' +
       '`musterd service install` instead.',
+    examples: ['musterd serve'],
   },
   {
     name: 'broadcast',
@@ -275,6 +276,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'sound from a PulseAudio sink instead of muxing silence — hosted Linux only; the sink must ' +
       'already exist, which the hosted entrypoint guarantees (ADR 228). This runs the capture on ' +
       'THIS machine — to run it on a rented one instead, see `musterd stream`.',
+    examples: ['musterd broadcast'],
   },
   {
     name: 'stream',
@@ -385,6 +387,7 @@ export const CATALOG: readonly CommandEntry[] = [
     group: 'setup',
     detail:
       'Canonicalize the git-tracked .musterd/ roster files (ADR 058). `--check` verifies without writing.',
+    examples: ['musterd fmt', 'musterd fmt --check'],
   },
   {
     name: 'reload',
@@ -393,6 +396,7 @@ export const CATALOG: readonly CommandEntry[] = [
     group: 'setup',
     detail:
       'Send the daemon a SIGHUP so it re-reads the .musterd/ roster files — run after `team export`.',
+    examples: ['musterd reload'],
   },
   {
     name: 'reset',
@@ -401,6 +405,7 @@ export const CATALOG: readonly CommandEntry[] = [
     group: 'setup',
     detail:
       'Wipe the local database and identities back to a clean slate. The daemon must be stopped first.',
+    examples: ['musterd reset'],
   },
   {
     name: 'uninstall',
@@ -408,6 +413,7 @@ export const CATALOG: readonly CommandEntry[] = [
     summary: 'remove what musterd added to this folder’s harness',
     group: 'setup',
     detail: 'Remove the servers, permissions, and primer musterd wrote into this folder’s harness.',
+    examples: ['musterd uninstall'],
   },
 
   // ── Team & seats ───────────────────────────────────────────────────────────────────────────
@@ -721,6 +727,7 @@ export const CATALOG: readonly CommandEntry[] = [
       '`msnode_` to ~/.musterd/node.json at 0600. `rotate` re-keys a machine without changing its ' +
       'identity, so every event it has already stamped still names it. `revoke` cuts it off ' +
       'immediately and leaves its history alone.',
+    examples: ['musterd node'],
   },
   {
     name: 'move',
