@@ -1,0 +1,18 @@
+{
+  "prompt": "a plain ceramic coffee mug full of coffee, a simple rounded handle, smooth glaze, no text, no logo",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 1500,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a1892a-3101-77c7-bd38-372fe7249866",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 20,
+  "bytes": 29156
+}
