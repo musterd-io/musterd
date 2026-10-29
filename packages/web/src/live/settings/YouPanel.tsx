@@ -24,6 +24,7 @@ import {
 import { MyStylePart, StyleNote, useStyleEdit, type SheetNote } from '../StyleSheet';
 import { statusLineDraft, visibleStatusLine } from '../statusLine';
 import { Row, Segmented, Switch } from './controls';
+import { PairPhone } from './PairPhone';
 
 /**
  * The You side of settings: everything here is the viewer's own, and the daemon answers each route
@@ -43,11 +44,20 @@ export function YouPanel({
   onPairingsChanged: () => void;
 }) {
   const style = useStyleEdit(cfg, false);
+  // An app pairing is confirmed with a passkey over the phone's key, in the phone panel; the
+  // compact list keeps the channels confirmed by their workspace and user (Slack).
+  const others = pairings.filter((p) => !p.app);
   return (
     <>
-      {pairings.length > 0 && (
-        <Pairings cfg={cfg} pairings={pairings} onChanged={onPairingsChanged} />
+      {others.length > 0 && (
+        <Pairings cfg={cfg} pairings={others} onChanged={onPairingsChanged} />
       )}
+      <PairPhone
+        cfg={cfg}
+        me={me?.name ?? null}
+        waiting={pairings.filter((p) => p.app)}
+        onChanged={onPairingsChanged}
+      />
       <Presence cfg={cfg} me={me} />
       <Doorbell cfg={cfg} />
       <AwayChannels cfg={cfg} />
