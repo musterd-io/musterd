@@ -30,38 +30,52 @@ has to make "this really is them asking" a deliberate check, not a reflex.
 
 ## Decision
 
-Proposed, pending design (slippy) and a security read (big-body). Nothing is built yet.
+Proposed, revised 2026-10-29 after big-body's security read. Pending slippy's design and a second
+security read. Nothing is built yet.
 
-1. **The member asks.** In Your passkeys, past genesis, "Ask an admin to vouch" lists the team's
-   human admins who have a standing key. Picking one makes the member's browser create the
-   descriptor with that admin as its actor (`POST /authority/descriptors {actor: admin, act:
-   'device_key_admin', target: member, payload: {action: 'enroll', kind: 'passkey', member}}`), an
-   existing route. The browser then sends a `request_help` to that admin carrying the descriptor
-   nonce. The member's sheet shows a **check code** derived from the nonce (for example six digits
-   of its sha256) and "tell <admin> this code".
-2. **The admin vouches.** The admin's /live shows the request under Waiting for you: who is asking,
-   the same check code, and "confirm this code with <member> in person or on a call before you
-   vouch". **Vouch with passkey** signs that exact descriptor with the admin's passkey and parks the
-   proof (`POST /authority/approvals`), the same path every in-page approval already uses.
-3. **The member finishes.** The member's sheet polls `GET /authority/approvals/:nonce`. When the
-   proof is parked, it shows "<admin> vouched — finish enrolling". That click runs the ADR 767
-   ceremony with `countersign: {confirmer: admin, approval: proof}`. A click is needed because
-   browsers require one before `credentials.create`.
+The read found two gaps in the first proposal. The countersign payload named the member but not the
+key, so a parked proof would enroll any registration for that member until it expired. And a check
+code shared by both screens proves they show the same request, not who started it. So the vouch now
+signs the exact key, and the code is described as a same-request check only.
 
-No route, schema or guard changes. `enrollPasskeyGuarded` still verifies the countersign: a
-different human admin, a standing key, current admin capability.
+1. **The member enrolls first, and the daemon holds the key.** Past genesis, the member's ADR 767
+   ceremony runs as before. `enrollPasskeyGuarded` verifies the registration, then refuses with
+   `countersign_required` as it does today. It now also records the verified key against the
+   enrollment code (new columns on `enrollment_codes`: the public key, the credential id and the
+   key digest, sha256 of the SPKI). It returns the digest in the refusal. The code expires in ten
+   minutes as it does now, and the held key expires with it. Nothing is enrolled.
+2. **The member asks.** The sheet says "an admin must vouch for this passkey" and lists the team's
+   human admins with a standing key. Picking one sends a `request_help` to that admin carrying
+   `{vouch: {member, key_digest}}`. Both screens show a **check code**: six digits taken from the
+   digest.
+3. **The admin vouches.** The admin's /live shows the request under Waiting for you: who is asking
+   and the check code. The card says "this code only shows you're looking at the same request.
+   Before you vouch, confirm on a call or in person that <member> started it". **Vouch with
+   passkey** makes the admin's browser create its own descriptor (`device_key_admin`, target the
+   member, payload `{action: 'enroll', kind: 'passkey', member, key: <digest>}`) and sign it. A new
+   route, `POST /authority/passkeys/vouch {member, key_digest, approval}`, then completes the
+   enrollment. It verifies the admin's proof through `requireAuthority`, re-runs the countersign
+   rules (a different human admin with a standing key and current admin capability), finds the held
+   key whose digest matches, and in one statement spends the code and enrolls the key. Because the
+   admin mints the descriptor when they act, the request lasts as long as the code (ten minutes),
+   not the five-minute descriptor.
+4. **The member sees it land.** The member's sheet polls its own keys and shows "<admin> vouched,
+   your passkey is enrolled". The member does not click again, because the key was created in step 1.
 
-Open questions:
+Guard changes, which fail closed:
 
-- **Time box.** A descriptor lives five minutes (`DESCRIPTOR_TTL_MS`), so both people must be
-  online together. Is that the right shape for vouching ("on a call together"), or should the
-  request outlive the descriptor, with a fresh descriptor minted when the admin opens it? The
-  second option needs a server-side request record.
-- **Binding.** The countersign payload names the member but not the credential being enrolled, so a
-  parked proof enrolls any registration for that member until it expires. Should the payload also
-  commit to the member's enrollment challenge? That would be a server and guard change.
-- **Joiners.** ADR 728 §4 and §9 serve the countersign from the hub's origin. An admin vouching
-  from a joiner's /live would be refused, so the admin side should say so and link to the hub.
+- The countersign payload must include `key`, and it must equal the digest of the verified
+  registration. A countersign without `key` is refused. This covers the existing
+  `POST /authority/passkeys` countersign path and the authority relay as well.
+- The terminal path follows the same order: `musterd authority enroll --confirmed-by <admin>` runs
+  the ceremony first, then prints the `musterd authority approve … --payload` line with the key
+  digest, and the admin's approve finishes it via the vouch route. `--countersign-proof` is
+  retired.
+- Wrong member, wrong admin, a digest with no held key, an expired code and a replayed proof each
+  fail with their own reason. Two concurrent vouches enroll at most one key.
+
+**Joiners.** ADR 728 §4 and §9 serve the countersign from the hub's origin. An admin vouching from
+a joiner's /live would be refused, so the card says so and links to the hub's /live.
 
 ## Consequences
 
