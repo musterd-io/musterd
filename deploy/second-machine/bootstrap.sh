@@ -92,7 +92,7 @@ step_runtime() {
     # A plain shim in pnpm's global bin dir, not `pnpm link --global`: pnpm 12 removed that flag
     # (second-machine run, 2026-10-02), and the shim is all the link ever amounted to.
     local bin="${PNPM_HOME:-$HOME/Library/pnpm}"
-    [ "$OS" = Linux ] && bin="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+    [ "$OS" = Linux ] && bin="${PNPM_HOME:-$HOME/.local/share/pnpm}/bin"   # pnpm 12 keeps its shims under bin/
     mkdir -p "$bin"
     printf '#!/bin/sh\nexec node "%s/packages/cli/dist/bin.js" "$@"\n' "$RUNTIME" >"$bin/musterd"
     chmod +x "$bin/musterd"

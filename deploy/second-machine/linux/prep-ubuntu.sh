@@ -56,7 +56,7 @@ loginctl enable-linger "$USER_NAME"
 # two harnesses into ~/.npm-global (one of the paths the host's claude/codex lookup already tries).
 sudo -iu "$USER_NAME" bash -s <<'EOF'
 set -euo pipefail
-command -v pnpm >/dev/null || [ -x "$HOME/.local/share/pnpm/pnpm" ] || curl -fsSL https://get.pnpm.io/install.sh | sh -
+command -v pnpm >/dev/null || [ -x "$HOME/.local/share/pnpm/bin/pnpm" ] || curl -fsSL https://get.pnpm.io/install.sh | sh -
 npm config set prefix "$HOME/.npm-global"
 npm install -g @anthropic-ai/claude-code @openai/codex
 grep -q npm-global "$HOME/.bashrc" || echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >>"$HOME/.bashrc"
