@@ -241,7 +241,7 @@ withDrivers('hostProvisions', (o) => {
     });
 
     it('a claim that does not name move leaves a move row pending', async () => {
-      const { db, team, dana, scopeOf } = await teamWithHumans();
+      const { db, team, dana, eve, scopeOf } = await teamWithHumans();
       const { row: wallow } = await addMember(db, team, { name: 'wallow', kind: 'agent' });
       const now = Date.now();
       const moveJson = JSON.stringify({ harness: 'claude-code', policy: null });
@@ -256,9 +256,10 @@ withDrivers('hostProvisions', (o) => {
         'move',
         moveJson,
       );
-      // A sponsor-scoped key cannot serve an unsponsored seat, even when it asks for moves.
+      // Another sponsor's key cannot serve an unsponsored seat, even when it asks for moves (ADR 762:
+      // only the move's own author reaches it, through the row).
       expect(
-        await claimProvisions(db, team.id, 'shared', scopeOf(dana.id), 5, now, ['mint', 'move']),
+        await claimProvisions(db, team.id, 'shared', scopeOf(eve.id), 5, now, ['mint', 'move']),
       ).toEqual([]);
       // The default claim is mint-only, so a host that has not opted in never sees the row.
       expect(await claimProvisions(db, team.id, 'shared', TEAM_WIDE_HOST, 5, now)).toEqual([]);
@@ -268,6 +269,29 @@ withDrivers('hostProvisions', (o) => {
       ]);
       expect(claimed.map((r) => r.id)).toEqual([move.id]);
       expect(claimed[0]?.kind).toBe('move');
+    });
+
+    it("ADR 762: the move's author claims a move row pinned to its own label, never another label's", async () => {
+      const { db, team, dana, scopeOf } = await teamWithHumans();
+      const { row: wallow } = await addMember(db, team, { name: 'wallow', kind: 'agent' });
+      const now = Date.now();
+      const moveJson = JSON.stringify({ harness: 'claude-code', policy: null });
+      const move = await insertProvision(
+        db,
+        team.id,
+        wallow.id,
+        dana.id,
+        now,
+        null,
+        'box',
+        'move',
+        moveJson,
+      );
+      expect(
+        await claimProvisions(db, team.id, 'shared', scopeOf(dana.id), 5, now, ['mint', 'move']),
+      ).toEqual([]);
+      const claimed = await claimProvisions(db, team.id, 'box', scopeOf(dana.id), 5, now, ['move']);
+      expect(claimed.map((r) => r.id)).toEqual([move.id]);
     });
 
     it('takeProvisionedWake ignores a ready move row', async () => {
