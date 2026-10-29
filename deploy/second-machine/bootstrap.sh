@@ -167,7 +167,9 @@ step_team() {
   if [ -z "$(human_ws)" ]; then
     # From the admin folder `team create` bound as the human: a folder acts only as the member it is
     # bound to (ADR 442), and the runtime checkout is bound to no one (Linux VM run, 2026-10-29).
-    ( cd "$ADMIN_DIR" && musterd human "$MUSTERD_HUMAN" --team "$MUSTERD_TEAM" --rotate ) 2>&1 | tee -a "$LOG"
+    # `--home` because outside a checkout `human` cannot derive the member worktree (ADR 447).
+    ( cd "$ADMIN_DIR" && musterd human "$MUSTERD_HUMAN" --team "$MUSTERD_TEAM" --rotate \
+      --home "$TEAM_HOME/musterd/$MUSTERD_HUMAN" ) 2>&1 | tee -a "$LOG"
   fi
   [ -n "$(human_ws)" ] || die "no Workspace for $MUSTERD_HUMAN under $TEAM_HOME/*/ — read the output above"
   log "human Workspace: $(human_ws)"
