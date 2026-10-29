@@ -5,7 +5,7 @@
  * A layer whose sheet is missing is skipped, so a new hair style or hat added to `appearance.ts`
  * before its sheet is rendered draws the figure without it, never nothing (Review Focus 2).
  */
-import { type Accessory, type Appearance, type Eyes, type FacialHair, type Hat, type HairStyle, lookFor, type Smile, type TopCut } from '../appearance';
+import { type Accessory, type Appearance, type Ears, type Eyes, type FacialHair, type Hat, type HairStyle, lookFor, type Smile, type TopCut } from '../appearance';
 import { project, type Fit } from '../iso';
 import type { CarryKind, OfficeNode } from '../types';
 import { type Anim, type Dir8, frameCell, type SheetSpec } from './figureSheet';
@@ -23,6 +23,7 @@ export type LayerId =
   | 'shoes'
   | `acc/${Accessory}`
   | `acc/${Eyes}`
+  | `acc/${Ears}`
   | 'tell/eyes'
   | 'tell/collar'
   | `carry/${CarryLayer}`
@@ -113,7 +114,7 @@ export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: str
   if (a.hat !== 'none') out.push({ id: `hat/${a.hat}`, color: a.hatColor });
   // every worn spot, in its own colour (v2-5a): glasses on the eyes, headphones on the ears, a scarf
   if (a.eyes !== 'none') out.push({ id: `acc/${a.eyes}`, color: a.accessoryColor });
-  if (a.ears !== 'none') out.push({ id: `acc/${a.ears}`, color: a.accessoryColor });
+  if (a.ears !== 'none') out.push({ id: `acc/${a.ears}`, color: a.ears === 'headphones' ? a.accessoryColor : a.metal });
   if (a.neck !== 'none') out.push({ id: `acc/${a.neck}`, color: a.accessoryColor });
   return out;
 }
