@@ -136,11 +136,10 @@ export function renderCommandHelp(name: string, opts: { width?: number } = {}): 
 
   if (cmd.detail) {
     out.push('');
-    for (const para of cmd.detail.split('\n')) {
+    for (const para of detailParagraphs(cmd.detail)) {
       // Preserve the intentional indented sub-command blocks; wrap only free-flowing prose.
       if (/^\s{2,}/.test(para)) {
-        if (visibleLen(para) <= width) out.push(theme.meta(para));
-        else for (const line of wrapText(para, width)) out.push(theme.meta(line));
+        for (const line of wrapIndented(para, width)) out.push(theme.meta(line));
       } else for (const line of wrapText(para, width - 2)) out.push('  ' + line);
     }
   }
@@ -152,8 +151,10 @@ export function renderCommandHelp(name: string, opts: { width?: number } = {}): 
       if (visibleLen(exLine) <= width) {
         out.push(exLine);
       } else {
-        out.push(`  ${theme.meta('$')}`);
-        for (const line of wrapText(ex, width - 2)) out.push('  ' + theme.meta(line));
+        // The command starts on the `$` line; its continuation hangs under it.
+        const [first, ...rest] = wrapText(ex, Math.max(20, width - 4));
+        out.push(`  ${theme.meta('$')} ${first ?? ''}`);
+        for (const line of rest) out.push('    ' + theme.meta(line));
       }
     }
   }
@@ -186,6 +187,64 @@ export function renderCommandHelp(name: string, opts: { width?: number } = {}): 
  * and `--act request_help` with a one-word body of "help" is the most plausible message on the
  * system. A guard that eats it would break the verb it was meant to protect.
  */
+/** Where a detail line's description starts: after a term's run of spaces, else at its indent. */
+function descColumn(line: string): number {
+  const indent = line.length - line.trimStart().length;
+  const gap = /\S( {2,})(?=\S)/.exec(line.slice(indent));
+  return gap ? indent + gap.index + 1 + gap[1]!.length : indent;
+}
+
+/**
+ * A detail's lines, with what the catalog split across lines joined back up: a prose sentence
+ * that runs on into the next unindented line, and a description continued on a line indented to
+ * its column. Without this each piece wrapped on its own and a single word could sit on a line by
+ * itself (journeys review F3).
+ */
+export function detailParagraphs(detail: string): string[] {
+  const out: string[] = [];
+  for (const line of detail.split('\n')) {
+    const prev = out[out.length - 1];
+    const indent = line.length - line.trimStart().length;
+    const prose = line !== '' && indent === 0;
+    const runsOn = prev !== undefined && prev !== '' && !/[.:;!?]$/.test(prev.trimEnd());
+    const continuation =
+      prev !== undefined &&
+      /^\s/.test(prev) &&
+      indent >= 8 &&
+      descColumn(line) === indent &&
+      descColumn(prev) === indent;
+    if ((prose && runsOn && !/^\s/.test(prev)) || continuation) {
+      out[out.length - 1] = `${prev!.trimEnd()} ${line.trim()}`;
+    } else out.push(line);
+  }
+  return out;
+}
+
+/**
+ * Wrap one indented detail line without losing its shape (journeys review F3). The leading indent
+ * stays, and a description wraps in its own column. When that column leaves under 20 cells, the
+ * term wraps with a two-space hang and the description follows on its own lines, four in.
+ */
+export function wrapIndented(line: string, width: number): string[] {
+  if (visibleLen(line) <= width) return [line];
+  const indent = line.length - line.trimStart().length;
+  const col = descColumn(line);
+  // A description column (past the indent) that leaves room keeps its alignment.
+  if (col > indent && width - col >= 20) {
+    const [first, ...rest] = wrapText(line.slice(col), width - col);
+    return [line.slice(0, col) + (first ?? ''), ...rest.map((l) => ' '.repeat(col) + l)];
+  }
+  const lead = Math.min(indent, Math.max(0, width - 22));
+  const hang = (n: number, text: string, first = n): string[] =>
+    wrapText(text, width - n).map((l, i) => ' '.repeat(i === 0 ? first : n) + l);
+  // A line that is all term, or all description (a block indented to its column), hangs.
+  if (col === indent) return hang(indent >= 8 ? lead : lead + 2, line.trim(), lead);
+  return [
+    ...hang(lead + 2, line.slice(indent, col).trim(), lead),
+    ...hang(lead + 4, line.slice(col)),
+  ];
+}
+
 export function wantsCommandHelp(command: string, positionals: readonly string[]): boolean {
   if (positionals.length !== 1 || positionals[0] !== 'help') return false;
   const cmd = entry(command);
