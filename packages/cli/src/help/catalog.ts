@@ -585,7 +585,11 @@ export const CATALOG: readonly CommandEntry[] = [
       '`notify channels` is away-channel settings (spec: Channel settings — nothing is on by ' +
       'default): your per-channel deliver/answer switches, presence gating (deliver only while ' +
       'you are away), and an optional tier floor, stored in the daemon with your bindings.',
-    examples: ['musterd notify', 'musterd notify channels'],
+    examples: [
+      'musterd notify',
+      'musterd notify channels',
+      'musterd notify channels set app --deliver on --answer on',
+    ],
   },
 
   // ── Work & lanes ───────────────────────────────────────────────────────────────────────────
