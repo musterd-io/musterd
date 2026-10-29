@@ -140,10 +140,10 @@ describe('zone rugs', () => {
 });
 
 describe('LEISURE_SPOTS', () => {
-  it('offers five lounge seats to idle members and four standing spots to away ones (2026-10-27)', () => {
-    // Three stools at the island, one couch cushion, one armchair. Away members stand small at the
-    // island's east end and the café's south threshold — idle sits, away stands (spec §2.9).
-    expect(LEISURE_SPOTS.filter((s) => s.zone === 'lounge' && s.sit === 1)).toHaveLength(5);
+  it('offers six lounge seats to idle members and four standing spots to away ones (2026-10-28)', () => {
+    // Two stools at the island (one → two on 2026-10-28), one couch cushion, three armchairs. Away
+    // members stand small on the café's open west half — idle sits, away stands (spec §2.9).
+    expect(LEISURE_SPOTS.filter((s) => s.zone === 'lounge' && s.sit === 1)).toHaveLength(6);
     expect(NOOK_SPOTS).toHaveLength(4);
     expect(NOOK_CAP).toBe(4);
   });

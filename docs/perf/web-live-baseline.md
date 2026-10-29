@@ -2596,3 +2596,17 @@ the sum of the sheets, so the number above is arithmetic on the files. A re-base
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,650,000 B with this lane in.
 
+## 2026-10-28 — the café island grows; Office art RAISED 8,650,000 → 8,800,000 B (lane 01M627J46T)
+
+| Budget     | Before (main)       | This branch (laptop) | Ceiling                          |
+| ---------- | ------------------- | -------------------- | -------------------------------- |
+| office art | ~8,620,000 B (42)   | ~8,706,000 B (42)    | RAISED 8,650,000 → 8,800,000 B |
+
+nick: a second stool at the kitchen island, with the tile and the fridge moving left to make room.
+The three room shells (`room/light-*`) and `nook/island` re-rendered: +86 KB in all (day +31, night
++48, island +9, evening −1) — the wider tile is more café-tile texture under every light state. No
+figure change. Arithmetic on the files, not a local `perf:check` (no local full builds on the shared
+laptop). A re-baseline to measured + 15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 8,800,000 B with this lane in.
+

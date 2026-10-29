@@ -140,7 +140,7 @@ const STATIC_IDS: Record<string, number> = {
   'nook/couch': 1,
   'nook/table': 1,
   'nook/island': 1,
-  'nook/stool': 1, // one since the island shrank for the armchairs (2026-10-27)
+  'nook/stool': 2, // one → two (2026-10-28): the island grew west with the tile and the fridge
   'nook/armchair': 3, // two in the café, one reading chair on the right flank (2026-10-27)
   'reception/desk': 1,
   'reception/endtable': 1,
