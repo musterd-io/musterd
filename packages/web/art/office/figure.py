@@ -400,6 +400,15 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     cap("hair/ponytail")
     clump("hair/ponytail", "tie", HEAD_X - R * 1.0, 0, HEAD_C + R * 0.2, R * 0.28, R * 0.28, R * 0.28)
     clump("hair/ponytail", "tail", HEAD_X - R * 1.2, 0, HEAD_C - R * 0.55, R * 0.3, R * 0.3, R * 0.85)
+    # (v2-3b) polished: the ponytail is gathered — strands pulled back over the crown into a band — and
+    # the tail tapers in two pieces; the bun sits in a band with a wisp loose at the nape
+    for sy in (1, -1):
+        clump("hair/ponytail", "pull", HEAD_X - R * 0.45, sy * R * 0.42, HEAD_C + R * 0.62, R * 0.62, R * 0.3, R * 0.3, (0, math.radians(18), 0))
+    r.torus("pony-band", "head", "hair/ponytail", hair, HEAD_X - R * 1.05, 0, HEAD_C + R * 0.08, R * 0.24, 0.5, (0, math.radians(80), 0))
+    clump("hair/ponytail", "tip", HEAD_X - R * 1.28, 0, HEAD_C - R * 1.25, R * 0.2, R * 0.2, R * 0.45)
+    r.torus("bun-band", "head", "hair/bun", hair, HEAD_X - R * 0.68, 0, HEAD_C + R * 0.66, R * 0.3, 0.5, (0, math.radians(-35), 0))
+    for sy in (1, -1):
+        clump("hair/bun", "wisp", HEAD_X - R * 0.62, sy * R * 0.5, HEAD_C - R * 0.42, R * 0.14, R * 0.12, R * 0.3)
     # centred well back of the face, so the face stands in front of it (it covered the face at -0.25)
     clump("hair/afro", "afro", HEAD_X - R * 0.5, 0, HEAD_C + R * 0.3, R * 1.15, R * 1.42, R * 1.32)
     cap("hair/bun")
