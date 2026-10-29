@@ -1503,6 +1503,98 @@ def desk_fan(asset_id: str, frame: int, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, C, C, col)
 
 
+# ── what is waiting at a desk (deskWaiting.ts, lane 01M62HJR15) ────────────────────────────
+def desk_note(asset_id: str, ky: float, zs: float, col) -> bpy.types.Object:
+    """A sticky note on the monitor's top corner — the owner is blocked. Square to the camera, a touch
+    askew, with a glued strip and two scribbled lines; drawn where `deskStickyNote` paints it: 11
+    units right of the monitor's floor point and DESK_UP + 22 up."""
+    C = FLOOR / 2
+    up = DESK_UP
+    # A faint glow of its own: it faces the camera, away from the key light, and matte paper there
+    # reads olive, not sticky-note yellow.
+    note = glow("note-paper", srgb("#f4d35e"), strength=0.5)
+    strip = glow("note-strip", srgb("#e0bb3c"), strength=0.5)
+    ink = matte("note-ink", srgb("#8a4a26"), 0.9)
+    elev = elevation(ky)
+    toward = Vector((math.cos(elev) * math.cos(math.radians(45)), math.cos(elev) * math.sin(math.radians(45)), math.sin(elev) * zs)).normalized()
+    # Right 11 on screen is +x −y in the floor (x = (lx − ly)·KX); the height is the projected lift.
+    dx = 11 / (2 * KX)
+    centre = Vector((C + dx, C - dx, (up + 22) * zs))
+    face = toward.to_track_quat("Z", "Y").to_matrix().to_4x4() @ Matrix.Rotation(-0.12, 4, "Z")
+
+    def leaf(name: str, x: float, y: float, w: float, h: float, depth: float, mat) -> bpy.types.Object:
+        # A flat block in the note's own plane (x across, y up, z toward the camera), then stood on it.
+        bpy.ops.mesh.primitive_cube_add(size=1)
+        o = bpy.context.active_object
+        o.name = f"{asset_id}/{name}"
+        o.scale = (w, h, 0.25)
+        o.location = (x, y, depth)
+        bpy.ops.object.transform_apply(location=True, scale=True)
+        o.data.materials.append(mat)
+        o.matrix_world = Matrix.Translation(centre) @ face
+        return o
+
+    parts = [
+        leaf("paper", 0, 0, 7.6, 7.6, 0, note),
+        leaf("strip", 0, 3.0, 7.6, 1.6, 0.05, strip),
+        leaf("line0", -0.1, 0.1, 4.6, 0.5, 0.2, ink),
+        leaf("line1", -0.7, -1.8, 3.4, 0.5, 0.2, ink),
+    ]
+    return finish(asset_id, parts, C, C, col)
+
+
+def desk_folder(asset_id: str, sn: bool, zs: float, col) -> bpy.types.Object:
+    """A manila folder lying on the desk's front lip — a handoff waits for this member. The papers
+    peek out past the cover on the room side; the tab past the back edge says folder, not pad."""
+    C = FLOOR / 2
+    up = DESK_UP
+    w, d = 22, 15
+    paper = matte("folder-paper", srgb("#fbf8f1"), 0.9)
+    cover = matte("folder-cover", srgb("#e6b862"), 0.8)
+    tab = matte("folder-tab", srgb("#d4a04c"), 0.8)
+
+    def flat(name, ox, oy, a, b, z0, h, mat):
+        return box(f"{asset_id}/{name}", C + ox, C + oy, z0, a if sn else b, b if sn else a, h, mat, zs)
+
+    parts = [
+        flat("papers", 1, 1, w - 2, d - 2, up, 1.2, paper),
+        flat("cover", 0, 0, w, d, up + 1.2, 1, cover),
+        # The tab sticks out past the cover's back edge (away from the viewer), flush with it.
+        flat("tab", -5 if sn else -d / 2 - 1.2, -d / 2 - 1.2 if sn else -5, 9, 2.6, up + 1.2, 1, tab),
+        shadow(f"{asset_id}/shadow", C, C, w * 0.55 if sn else d * 0.55, d * 0.55 if sn else w * 0.55, zs, 0.6),
+    ]
+    parts[-1].location.z += up * zs  # the shadow lies on the worktop, not the floor
+    bevel(parts[0], 0.3, 2)  # the first part's modifier is the one the join keeps: it softens them all
+    return finish(asset_id, parts, C, C, col)
+
+
+def desk_tray(asset_id: str, sn: bool, cards: int, zs: float, col) -> bpy.types.Object:
+    """A low desk tray with a card in it — two when more than one review waits. A hollow dark rim,
+    the cards lying in it with their tops just over the rim."""
+    C = FLOOR / 2
+    up = DESK_UP
+    w, d = (17, 13) if sn else (13, 17)
+    rim = matte("tray-rim", srgb("#3f4652"), 0.45)
+    card = matte("tray-card", srgb("#fbf6ea"), 0.9)
+    card2 = matte("tray-card-2", srgb("#efe6d2"), 0.9)
+    t = 1.0
+    parts = [
+        box(f"{asset_id}/floor", C, C, up, w, d, 0.8, rim, zs),
+        box(f"{asset_id}/wall-n", C, C - d / 2 + t / 2, up, w, t, 4, rim, zs),
+        box(f"{asset_id}/wall-s", C, C + d / 2 - t / 2, up, w, t, 4, rim, zs),
+        box(f"{asset_id}/wall-w", C - w / 2 + t / 2, C, up, t, d, 4, rim, zs),
+        box(f"{asset_id}/wall-e", C + w / 2 - t / 2, C, up, t, d, 4, rim, zs),
+        box(f"{asset_id}/card", C, C, up + 0.8, w - 4, d - 4, 3.6, card, zs),
+    ]
+    if cards > 1:
+        parts.append(box(f"{asset_id}/card-2", C - 1, C + 1, up + 4.4, w - 4, d - 4, 0.8, card2, zs))
+    bevel(parts[0], 0.25, 2)  # kept by the join, so it softens every part
+    s = shadow(f"{asset_id}/shadow", C, C, w * 0.6, d * 0.6, zs, 0.7)
+    s.location.z += up * zs
+    parts.append(s)
+    return finish(asset_id, parts, C, C, col)
+
+
 # ── the shell ──────────────────────────────────────────────────────────────────────────────
 def floor_slab(asset_id: str, zs: float, col) -> bpy.types.Object:
     """The floor (office v3-2): planks across the room, the café corner tiled on a box inset 0.2 above
@@ -1762,6 +1854,11 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     a["desk/lamp-on"] = desk_lamp("desk/lamp-on", True, zs, export)
     for frame in range(4):
         a[f"desk/fan-{frame}"] = desk_fan(f"desk/fan-{frame}", frame, zs, export)
+    a["desk/note"] = desk_note("desk/note", ky, zs, export)
+    for axis, sn in (("sn", True), ("ew", False)):
+        a[f"desk/folder-{axis}"] = desk_folder(f"desk/folder-{axis}", sn, zs, export)
+        a[f"desk/tray-{axis}"] = desk_tray(f"desk/tray-{axis}", sn, 1, zs, export)
+        a[f"desk/tray2-{axis}"] = desk_tray(f"desk/tray2-{axis}", sn, 2, zs, export)
     lights("day", "off", zs)
     camera(ky, px_per_unit, zs)
     return a
