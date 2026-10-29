@@ -19,6 +19,7 @@ import {
   lanesForGoal,
   listLanes,
   openLane,
+  storedClaims,
   pathGlobMatches,
   releaseDepartedSeatClaims,
   releaseInFlightClaimsForSeat,
@@ -207,6 +208,29 @@ withDrivers('lanes', (o) => {
         }),
       ).toBeLessThan(50);
     });
+  });
+
+  it('a claims write merges into the full stored list, never the capped served view (lane 01M5ZFZBCD)', async () => {
+    const { db, team } = await seed();
+    const lane = await openLane(db, team.id, 'bravo', 'June', {
+      title: 'many checks',
+      claim: true,
+    });
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      kind: 'ci_green' as const,
+      ref: 'gates',
+      verdict: 'confirmed' as const,
+      checked_by: `seat-${i}`,
+      checked_at: i + 1,
+    }));
+    await db.run('UPDATE lanes SET claims_json = ? WHERE id = ?', [JSON.stringify(many), lane.id]);
+    const served = await updateLane(db, team.id, lane.id, 'bravo', {
+      claims: [
+        { kind: 'pr_merged', ref: '7', verdict: 'confirmed', checked_by: 'June', checked_at: 99 },
+      ],
+    });
+    expect(served!.claims!.length).toBeLessThanOrEqual(16);
+    expect(await storedClaims(db, team.id, lane.id)).toHaveLength(21);
   });
 
   it('laneCoveringPath reads a pathological scope without hanging the edit gate', async () => {

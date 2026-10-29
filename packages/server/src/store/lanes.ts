@@ -222,20 +222,43 @@ function metricRecord(
  * keeps every checker's reading (`mergeClaims`, up to four times that). A lane several seats
  * checked (revive 01M5ASVF3G: 17) then failed the board schema for EVERY reader, which looked like
  * version skew. Served view: one claim per (kind, ref), the newest reading, then the newest
- * LANE_CLAIMS_MAX, in the stored order. Storage is untouched.
+ * LANE_CLAIMS_MAX, in the stored order. A READ view only: the write path merges into, and the
+ * close summary counts, the full stored list (`storedClaims`), never this.
  */
 export function servedClaims(claims: readonly LaneClaim[]): LaneClaim[] {
   if (claims.length <= LANE_CLAIMS_MAX) return [...claims];
+  // One per (kind, ref). The most severe reading wins — a seat's refutation is never hidden behind
+  // another seat's later confirmation — and among equals, the newest.
+  const severity = (c: LaneClaim) =>
+    c.verdict === 'unconfirmed' ? 2 : c.verdict === 'unverifiable' ? 1 : 0;
   const newest = new Map<string, LaneClaim>();
   for (const c of claims) {
     const key = `${c.kind}\u0000${c.ref}`;
     const seen = newest.get(key);
-    if (!seen || c.checked_at > seen.checked_at) newest.set(key, c);
+    if (
+      !seen ||
+      severity(c) > severity(seen) ||
+      (severity(c) === severity(seen) && c.checked_at > seen.checked_at)
+    )
+      newest.set(key, c);
   }
   const kept = new Set(
     [...newest.values()].sort((a, b) => b.checked_at - a.checked_at).slice(0, LANE_CLAIMS_MAX),
   );
   return claims.filter((c) => kept.has(c));
+}
+
+/** The full stored claim list — what `mergeClaims` and the close summary must read. */
+export async function storedClaims(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<LaneClaim[]> {
+  const row = await db.get<{ claims_json: string | null }>(
+    'SELECT claims_json FROM lanes WHERE team_id = ? AND id = ?',
+    [teamId, laneId],
+  );
+  return row?.claims_json ? (JSON.parse(row.claims_json) as LaneClaim[]) : [];
 }
 
 function rowToLane(row: LaneRow, teamSlug: string, nowMs: number = Date.now()): Lane {
@@ -935,10 +958,14 @@ async function updateLaneInTx(
   // (kind, ref) is replaced, other seats' readings stay — so an acceptor's re-check sits beside the
   // submitter's, never over it. `checked_by` was stamped by the transport from the authenticated
   // sender before this write; the store trusts the patch it is handed.
+  // Merged against the full stored list, never the served (capped) view (lane 01M5ZFZBCD).
+  const stored = await storedClaims(db, teamId, id);
   const claims =
     patch.claims !== undefined
-      ? mergeClaims(existing.claims ?? [], patch.claims)
-      : (existing.claims ?? null);
+      ? mergeClaims(stored, patch.claims)
+      : stored.length > 0
+        ? stored
+        : null;
   const declaredAreas =
     patch.areas !== undefined
       ? normalizeDeclaredAreas(patch.areas)

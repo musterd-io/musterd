@@ -7,6 +7,7 @@ import {
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { appendAudit, appendLaneEventRequired, peerReviewGradeOf, reviewRouting } from './audit.js';
+import { storedClaims } from './lanes.js';
 import { memberIsHuman, memberModelByName, workerFamily } from './review.js';
 
 /**
@@ -78,6 +79,7 @@ export async function recordLaneClose(
   // time (pinned in this row so post-close handoffs can't flip the verdict). reason distinguishes
   // the counterpart confirm from the two honest self-close shapes.
   const ownerAtClose = before.owner_seat;
+  const closeClaims = await storedClaims(db, teamId, lane.id);
   // ADR 229: the system is excluded EXPLICITLY, and this is the whole reason `kind: 'system'` exists.
   // "A seat other than the owner closed it" is satisfied trivially by a daemon sweep, so without
   // this clause every swept lane would record `verified: true` and a `counterpart_confirm` reason —
@@ -255,7 +257,8 @@ export async function recordLaneClose(
       // ADR 585: what the rail recorded about this lane's claims by the time it closed — the
       // submitter's checks and, on a verified close, the acceptor's independent re-check. Counts
       // only; the claims themselves stay on the lane row.
-      ...(lane.claims && lane.claims.length > 0 ? { claims: summariseClaims(lane.claims) } : {}),
+      // Counted from the full stored list, not the served (capped) view (lane 01M5ZFZBCD).
+      ...(closeClaims.length > 0 ? { claims: summariseClaims(closeClaims) } : {}),
       worker_family: ownerAtClose ? await workerFamily(db, teamId, ownerAtClose) : null,
       ...(verified ? { reviewer_family: await workerFamily(db, teamId, closer.name) } : {}),
       // ADR 188 two-stage: which peer review a RISKY lane actually got — the newest

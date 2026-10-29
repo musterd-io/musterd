@@ -28,6 +28,16 @@ describe('servedClaims (lane 01M5ZFZBCD)', () => {
     expect(served.every((x) => x.checked_by === 'cider')).toBe(true);
   });
 
+  it("never hides a seat's refutation behind another seat's later confirmation", () => {
+    const stored = Array.from({ length: LANE_CLAIMS_MAX + 1 }, (_, i) =>
+      c('commit_landed', 'abc', `seat-${i}`, i + 10),
+    );
+    stored[3] = { ...stored[3]!, verdict: 'unconfirmed', checked_at: 1 };
+    const served = servedClaims(stored);
+    expect(served).toHaveLength(1);
+    expect(served[0]!.verdict).toBe('unconfirmed');
+  });
+
   it('keeps the newest LANE_CLAIMS_MAX when distinct claims alone exceed the cap', () => {
     const stored = Array.from({ length: LANE_CLAIMS_MAX + 4 }, (_, i) =>
       c('ci_green', `check-${i}`, 'a', i),
