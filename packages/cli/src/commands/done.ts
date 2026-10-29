@@ -4,6 +4,7 @@ import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { collectApproval } from './authority.js';
 import { resolve } from './helpers.js';
+import { claimSeams, renderClaims } from './laneClaims.js';
 import { followsUpFlag, printJson, readVerdictFlags, renderSubmitReport } from './lane.js';
 
 /**
@@ -137,6 +138,21 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
   };
   const submitting = Object.keys(merged).length > 0;
 
+  // ADR 585/612: a submit here is the same act as `lane submit`, so it carries the same evidence —
+  // the SHA and PR checked in this clone, and the landed diff's change label.
+  const claimRefs = {
+    ...(sha !== undefined ? { sha } : {}),
+    ...(pr !== undefined ? { pr } : {}),
+  };
+  const claims =
+    submitting && Object.keys(claimRefs).length > 0
+      ? await claimSeams.check(claimRefs, process.cwd(), identity.name)
+      : [];
+  const landed = claims.some((c) => c.kind === 'commit_landed' && c.verdict === 'confirmed');
+  const changeLabel =
+    landed && sha !== undefined ? await claimSeams.label(sha, process.cwd()) : null;
+  if (changeLabel) Object.assign(merged, changeLabel);
+
   let approval;
   if (authorizedBy !== undefined) {
     if (authorizedBy !== identity.name) {
@@ -163,7 +179,7 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
   const res = await http.updateLane(team, id, {
     ...(approval ? { approval } : {}),
     ...(submitting
-      ? { state: 'awaiting_acceptance' as const, merged }
+      ? { state: 'awaiting_acceptance' as const, merged, ...(claims.length > 0 ? { claims } : {}) }
       : { state: 'done' as const }),
     // ADR 487 §5.1: what is left — required only when the lane declares itself one part of several.
     ...followsUpFlag(flagStr(parsed.flags, 'follows-up')),
@@ -177,6 +193,8 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
     `${theme.ok('✓')} ${submitting ? 'submitted for acceptance' : 'done'}\n${laneLine(res.lane)}\n`,
   );
   if (submitting) {
+    const claimsText = renderClaims(res.lane.claims);
+    if (claimsText) process.stdout.write(`${claimsText}\n`);
     renderSubmitReport(res);
   } else if (res.review?.acceptance_exempt) {
     process.stdout.write(
