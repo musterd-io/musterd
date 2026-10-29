@@ -920,9 +920,10 @@ export class RoomTone {
 
   /** A mug, a stapler, something set down on a desk. `body` picks how heavy it lands. */
   private tap(ctx: AudioContext, out: AudioNode, body: number): void {
-    // 0.12 → 0.05 (sound identity inc 3): at 0.108 a pen tap sat 4× a keystroke, the level the
-    // keystroke itself was cut from. Twice a keystroke, like a step or a sip.
-    this.click(ctx, out, ctx.currentTime + 0.02, 260 + Math.random() * 420, 0.05 * body, 0.13);
+    // 0.12 → 0.05 → 0.086 (sound identity inc 3): at 0.108 a pen tap sat 4× a keystroke, the level
+    // the keystroke itself was cut from; 0.05 measured only +1.3 dB over keys, so ×1.72 (+4.7 dB)
+    // brings it to +6 dB — twice a keystroke, like a step or a sip.
+    this.click(ctx, out, ctx.currentTime + 0.02, 260 + Math.random() * 420, 0.086 * body, 0.13);
   }
 
 

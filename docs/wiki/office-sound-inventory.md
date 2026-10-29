@@ -75,7 +75,7 @@ Rendered through an `OfflineAudioContext` on the dev server (mono, 44.1 kHz, six
 
 | Voice | Over a keystroke | Role |
 | --- | --- | --- |
-| `tap` / `softTap` | +1.3 / −5.9 dB | desk foley, at or under keys |
+| `tap` / `softTap` | +6.0 / −1.2 dB | desk foley, 2× keys (gain 0.05 → 0.086 on 2026-10-28: +4.7 dB on the +1.3 measured; `softTap` is the same voice at a lighter body) |
 | `stapler` | +6.4 dB | foreground action, 2× keys |
 | `drawer` | +3.2 dB | foreground action |
 | `door` (foley) | −0.8 dB | under the arrive/leave cousin |
