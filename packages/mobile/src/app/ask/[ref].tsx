@@ -28,6 +28,7 @@ import { font, radius, space, usePalette } from '../../ui/theme';
 type Phase =
   | { kind: 'loading' }
   | { kind: 'gone' }
+  | { kind: 'unreachable' }
   | { kind: 'unverified' }
   | { kind: 'ready'; entry: AskEntry; offers: { approve: ShownOffer; reject: ShownOffer } | null }
   | { kind: 'sending' }
@@ -80,7 +81,7 @@ export default function AskScreen() {
     setPhase({ kind: 'loading' });
     try {
       const { loadPairingPin } = await import('../../native/pairingPin');
-      const { fetchAsk } = await import('../../native/asks');
+      const { fetchAskOrMiss } = await import('../../native/asks');
       const current = await loadPairingPin();
       setPin(current);
       const expiresAt = Number(params.expires_at);
@@ -94,17 +95,21 @@ export default function AskScreen() {
         setPhase({ kind: 'unverified' });
         return;
       }
-      const entry = await fetchAsk({
-        pin: current,
-        route: {
-          team: params.team,
-          binding: params.binding,
-          ref: params.ref,
-          expires_at: expiresAt,
-        },
-      });
-      if (!entry) {
-        setPhase({ kind: 'gone' });
+      const route = {
+        team: params.team,
+        binding: params.binding,
+        ref: params.ref,
+        expires_at: expiresAt,
+      };
+      // A first fetch after the app wakes can miss a sleeping daemon (the relay's 503/504): try
+      // once more before saying anything, and never call an unreachable ask settled.
+      let entry = await fetchAskOrMiss({ pin: current, route });
+      if ('miss' in entry && entry.miss === 'unreachable') {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        entry = await fetchAskOrMiss({ pin: current, route });
+      }
+      if ('miss' in entry) {
+        setPhase({ kind: entry.miss });
         return;
       }
       if (!entry.delivery.approval) {
@@ -210,21 +215,36 @@ export default function AskScreen() {
   }
   if (phase.kind !== 'ready') {
     const gone = phase.kind === 'gone';
+    const unreachable = phase.kind === 'unreachable';
     return (
       <View style={[styles.center, { backgroundColor: p.bg }]}>
         <Rise>
           <Text style={[styles.title, { color: p.text }]}>
-            {gone ? 'Already settled' : 'Not shown'}
+            {gone ? 'Already settled' : unreachable ? 'Couldn’t reach your team' : 'Not shown'}
           </Text>
         </Rise>
         <Rise index={1}>
           <Text style={[styles.centerCopy, { color: p.muted }]}>
             {gone
               ? 'This ask is no longer open. It was answered somewhere else, or it expired.'
-              : (note ?? UNVERIFIED_TEXT)}
+              : unreachable
+                ? 'The ask may still be open. Check your connection and try again.'
+                : (note ?? UNVERIFIED_TEXT)}
           </Text>
         </Rise>
-        <Rise index={2}>
+        {unreachable ? (
+          <Rise index={2}>
+            <Squish
+              accessibilityRole="button"
+              accessibilityLabel="Try again"
+              onPress={() => void load()}
+              style={[styles.primary, { backgroundColor: p.accent }]}
+            >
+              <Text style={[styles.primaryText, { color: p.onAccent }]}>Try again</Text>
+            </Squish>
+          </Rise>
+        ) : null}
+        <Rise index={3}>
           <Squish
             accessibilityRole="button"
             accessibilityLabel="Back to asks"

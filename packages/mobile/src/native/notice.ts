@@ -27,9 +27,14 @@ export const STALE_TEXT = 'This ask is no longer available.';
 
 export const NOTICE_TITLE = 'musterd';
 
+/** On an ask with lock-screen actions: they only show on a press and hold (nick, 2026-10-29). */
+export const ANSWER_HINT = 'Press and hold to answer';
+
 export const ADVISORY_CATEGORY = 'musterd.ask.advisory';
 export const ACTION_APPROVE = 'musterd.answer.approve';
 export const ACTION_REJECT = 'musterd.answer.reject';
+/** A plain tap on the notification (Apple's own identifier): open that ask, answer nothing. */
+export const ACTION_OPEN = 'com.apple.UNNotificationDefaultActionIdentifier';
 
 export interface Notice {
   title: string;
@@ -78,7 +83,8 @@ export function noticeFor(
       delivery.ask.action_class === 'advisory' && delivery.approval === undefined
         ? ADVISORY_CATEGORY
         : undefined;
-    const subtitle = waitingSubtitle(delivery.waiting ?? 0);
+    const waiting = waitingSubtitle(delivery.waiting ?? 0);
+    const subtitle = category ? (waiting ? `${ANSWER_HINT} · ${waiting}` : ANSWER_HINT) : waiting;
     return {
       title: NOTICE_TITLE,
       body: delivery.ask.body,

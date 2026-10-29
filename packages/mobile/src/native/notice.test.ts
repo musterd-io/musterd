@@ -33,15 +33,16 @@ const ask = (over: Partial<AppDelivery & { kind: 'ask' }> = {}): AppDelivery => 
 describe('noticeFor', () => {
   const now = 1_000;
 
-  it('gives an advisory ask its actions, and a count when more are waiting', () => {
+  it('gives an advisory ask its actions and says to press and hold, with a count when more wait', () => {
     const notice = noticeFor({ ...ask(), waiting: 2 }, 'fresh', 5_000, now);
     expect(notice).toEqual({
       title: 'musterd',
       body: 'Ship it?',
-      subtitle: '2 more waiting',
+      subtitle: 'Press and hold to answer · 2 more waiting',
       category: ADVISORY_CATEGORY,
       sound: true,
     });
+    expect(noticeFor(ask(), 'fresh', 5_000, now).subtitle).toBe('Press and hold to answer');
   });
 
   it('gives a listed act no actions', () => {

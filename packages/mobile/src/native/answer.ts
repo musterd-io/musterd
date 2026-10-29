@@ -86,19 +86,29 @@ export function relayUrl(relay: string, path: string): string | null {
   return url.toString();
 }
 
+/**
+ * Why a fetch came back empty: the relay's 404 means the daemon holds no live ask by that ref
+ * (answered, expired, or not this phone's); anything else — a 503 or 504 while the daemon is
+ * away or slow, a timeout, no network — means this phone could not reach it, and a retry may.
+ */
+export type FetchMiss = { miss: 'gone' | 'unreachable' };
+
 export async function fetchBody(
   relay: string,
   route: PushRoute,
   fetchImpl: typeof fetch,
-): Promise<{
-  route: PushRoute;
-  sealed: NonNullable<ReturnType<typeof readPush>>['sealed'];
-} | null> {
+): Promise<
+  | {
+      route: PushRoute;
+      sealed: NonNullable<ReturnType<typeof readPush>>['sealed'];
+    }
+  | FetchMiss
+> {
   const url = relayUrl(
     relay,
     `app/${encodeURIComponent(route.team)}/body/${encodeURIComponent(route.binding)}/${encodeURIComponent(route.ref)}`,
   );
-  if (!url) return null;
+  if (!url) return { miss: 'unreachable' };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -108,12 +118,12 @@ export async function fetchBody(
       cache: 'no-store',
       signal: controller.signal,
     });
-    if (!response.ok) return null;
+    if (!response.ok) return { miss: response.status === 404 ? 'gone' : 'unreachable' };
     const body = readFetchedBody(await response.json());
-    if (!body) return null;
+    if (!body) return { miss: 'unreachable' };
     return { route: routeOf(body), sealed: body.sealed };
   } catch {
-    return null;
+    return { miss: 'unreachable' };
   } finally {
     clearTimeout(timer);
   }
@@ -136,7 +146,7 @@ export async function answerNotification(input: {
   const resolved = push.sealed
     ? { route: routeOf(push), sealed: push.sealed }
     : await fetchBody(pin.relay, routeOf(push), input.fetchImpl ?? fetch);
-  if (!resolved?.sealed) return 'unverified';
+  if ('miss' in resolved || !resolved.sealed) return 'unverified';
   if (!samePlace(pin, resolved.route)) return 'unverified';
 
   const now = input.now ?? Date.now();
