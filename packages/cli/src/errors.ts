@@ -103,3 +103,29 @@ export function worthRetrying(method: string): boolean {
 export function connectionNeverEstablished(err: unknown): boolean {
   return (err as { cause?: { code?: string } } | null | undefined)?.cause?.code === 'ECONNREFUSED';
 }
+
+/**
+ * A server response did not match the protocol schema. Names the operation and, when available,
+ * the first failing field path (safe — no values, no secrets) so a stale client or a daemon skew
+ * is diagnosable instead of "did not match the protocol schema". Exit 1: the read failed; the
+ * caller decides whether to retry. The error comes first: `fn('lanes', …)` is the shape
+ * `cli-flags:check` reads as a flag read, and would hand every operation name to its callers.
+ */
+export function schemaError(err: unknown, operation: string): CliError {
+  let detail = '';
+  if (
+    err &&
+    typeof err === 'object' &&
+    'issues' in err &&
+    Array.isArray((err as { issues: unknown }).issues)
+  ) {
+    const issues = (err as { issues: Array<{ path?: unknown[]; message?: string }> }).issues;
+    const first = issues[0];
+    if (first) {
+      const path = Array.isArray(first.path) && first.path.length ? first.path.join('.') : '';
+      const msg = first.message ? `: ${first.message}` : '';
+      detail = path ? ` (field: ${path}${msg})` : msg;
+    }
+  }
+  return new CliError(`${operation} response did not match the protocol schema${detail}`, 1);
+}
