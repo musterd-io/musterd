@@ -35,7 +35,7 @@ describe('MemberFace', () => {
       const look = appearanceOf({ name, kind: 'human' });
       const worn = [look.eyes, look.ears, look.neck].filter((x) => x !== 'none').length;
       expect(spots(name)).toBe(worn);
-      if (look.eyes === 'glasses') expect(html(name)).toContain(`stroke="${look.accessoryColor}"`);
+      if (look.eyes !== 'none') expect(html(name)).toContain(`stroke="${look.accessoryColor}"`);
     }
     expect(names.some((n) => spots(n) >= 2)).toBe(true);
   });
