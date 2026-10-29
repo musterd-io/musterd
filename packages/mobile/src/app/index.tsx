@@ -138,7 +138,7 @@ export default function AsksScreen() {
         <Rise index={2}>
           <Text style={[styles.copy, { color: p.muted }]}>
             {paired
-              ? 'When a teammate needs you, it lands here — sealed so only this phone can read it, and answered with Face ID.'
+              ? `While you’re away from your computer, asks from ${pin?.team ?? 'your team'} land here — sealed so only this phone can read them, and answered with Face ID. At your desk, they stay on the computer; change that in /live under Settings, You, Away channels.`
               : 'Asks addressed to you arrive on this phone — sealed so only this phone can read them — and are answered with Face ID.'}
           </Text>
         </Rise>
