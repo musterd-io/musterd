@@ -1,7 +1,17 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  AppState,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import mark from '../../assets/mark.png';
 import type { PairOutcome } from '../native/pair';
 import {
   daemonFingerprint,
@@ -9,7 +19,9 @@ import {
   type QrRefusal,
   type ScannedPairing,
 } from '../native/pairingQr';
-import { radius, space, usePalette } from '../ui/theme';
+import { success } from '../ui/haptics';
+import { Halo, Pop } from '../ui/motion';
+import { font, radius, space, usePalette } from '../ui/theme';
 
 /**
  * Pairing (ADR 676 §5, ADR 727). The camera reads the QR on the daemon's page. The fingerprint
@@ -94,6 +106,7 @@ export default function PairScreen() {
           const { loadPairingPin } = await import('../native/pairingPin');
           const pin = await loadPairingPin();
           if (!alive || !pin?.binding) return;
+          success();
           setPhase({
             name: 'paired',
             fingerprint: daemonFingerprint(pin.identity),
@@ -204,10 +217,15 @@ export default function PairScreen() {
 
       {phase.name === 'paired' ? (
         <View style={styles.block}>
+          <Pop style={styles.hero}>
+            <Halo color={p.tint}>
+              <Image source={mark} style={styles.mark} accessibilityIgnoresInvertColors />
+            </Halo>
+          </Pop>
           <Text style={[styles.title, { color: p.text }]}>Paired with {phase.team}</Text>
           <Text style={[styles.copy, { color: p.text }]}>
-            Asks for you come to this phone while you’re away from your computer. At your desk,
-            they stay on the computer.
+            Asks for you come to this phone while you’re away from your computer. At your desk, they
+            stay on the computer.
           </Text>
           <Text style={[styles.copy, { color: p.muted }]}>
             To change which asks come here, and when, open /live on your computer: Settings, then
@@ -327,10 +345,13 @@ const styles = StyleSheet.create({
     gap: space.lg,
   },
   block: { gap: space.md },
-  title: { fontSize: 20, fontWeight: '600', textAlign: 'center' },
-  copy: { fontSize: 15, lineHeight: 21, textAlign: 'center' },
+  title: { fontSize: 20, fontFamily: font.semibold, textAlign: 'center' },
+  copy: { fontFamily: font.regular, fontSize: 15, lineHeight: 21, textAlign: 'center' },
+  hero: { alignItems: 'center', marginVertical: space.lg },
+  mark: { width: 88, height: 88 },
   fingerprint: {
-    fontSize: 22,
+    fontFamily: font.mono,
+    fontSize: 20,
     lineHeight: 28,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
@@ -342,6 +363,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.md,
     padding: space.md,
+    fontFamily: font.regular,
     fontSize: 15,
     lineHeight: 21,
     textAlignVertical: 'top',
@@ -354,5 +376,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
   },
-  buttonText: { fontSize: 17, fontWeight: '600', textAlign: 'center' },
+  buttonText: { fontSize: 17, fontFamily: font.semibold, textAlign: 'center' },
 });

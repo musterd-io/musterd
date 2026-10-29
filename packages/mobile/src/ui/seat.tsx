@@ -1,5 +1,5 @@
 import { Text, View } from 'react-native';
-import { usePalette } from './theme';
+import { font, usePalette } from './theme';
 
 /** "just now", "4m ago", "2h ago", "yesterday", then a date. */
 export function ago(ts: number, now: number): string {
@@ -30,7 +30,7 @@ export function Seat({ name, agent, size = 36 }: { name: string; agent: boolean;
         style={{
           color: agent ? p.teal : p.accentText,
           fontSize: size * 0.42,
-          fontWeight: '700',
+          fontFamily: font.bold,
         }}
       >
         {(name[0] ?? '?').toUpperCase()}

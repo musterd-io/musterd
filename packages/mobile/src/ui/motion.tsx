@@ -8,6 +8,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { tap } from './haptics';
 
 /**
  * The app's motion, on React Native's own `Animated` (no animation dependency). Everything here
@@ -71,7 +72,7 @@ export function Rise({
   );
 }
 
-/** A Pressable that gives a little under the finger and springs back. */
+/** A Pressable that gives a little under the finger, with a light tick, and springs back. */
 export function Squish({
   children,
   style,
@@ -86,7 +87,14 @@ export function Squish({
       useNativeDriver: true,
     }).start();
   return (
-    <Pressable {...props} onPressIn={() => to(0.97)} onPressOut={() => to(1)}>
+    <Pressable
+      {...props}
+      onPressIn={() => {
+        tap();
+        to(0.97);
+      }}
+      onPressOut={() => to(1)}
+    >
       <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   );
@@ -157,6 +165,23 @@ export function Pop({ children, style }: { children: ReactNode; style?: StylePro
   }, [reduce, t]);
   return (
     <Animated.View style={[style, { opacity: t, transform: [{ scale: t }] }]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/**
+ * The mark in a slow mustard halo: the app's calm, alive centre on an empty screen and the
+ * picture on a success moment.
+ */
+export function Halo({ children, color }: { children: ReactNode; color: string }) {
+  return (
+    <Animated.View style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <Breathe style={{ position: 'absolute' }}>
+        <Animated.View
+          style={{ width: 132, height: 132, borderRadius: 66, backgroundColor: color }}
+        />
+      </Breathe>
       {children}
     </Animated.View>
   );
