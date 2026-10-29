@@ -575,15 +575,17 @@ def build_figure(zs: float, origin: Vector) -> Rig:
                 3.5 * FIG, 0.8, (math.radians(90), 0, 0))
 
     # ── the dress (v2-6a, spec §2.4): a one-piece worn instead of a top and a bottom — a fitted bodice
-    # with short sleeves and a skirt that flares from the hips to just below the knee, the legs bare
-    # under it. The skirt rides the hips joint; seated, the thighs come forward out of it.
+    # with short sleeves and a skirt to just above the knee, the legs bare under it. The skirt is three
+    # panels fused into one: a flared panel on each thigh that follows the leg (seated, it lies over the
+    # lap instead of hanging through the chair like a rigid tube) and a centre panel on the hips that
+    # closes the gap between them and drapes between the knees when sitting.
     torso("dress/shift")
     sleeves("dress/shift", False)
     neck_rib("dress/shift")
-    hem_z = KNEE - 2.0 * FIG
-    r.frustum("skirt", "hips", "dress/shift", cloth, 0.3, 0, hem_z, 7.6 * FIG, 5.6 * FIG, HIP + 2.0 * FIG - hem_z, sy=1.55)["fuse"] = "dress/shift"
-    o = r.torus("hemline", "hips", "dress/shift", rib, 0.3, 0, hem_z + 0.3 * FIG, 7.5 * FIG, 0.7)
-    o.scale = (1.0, 1.55, o.scale.z)
+    hem_z = KNEE + 1.5 * FIG
+    r.frustum("skirt-mid", "hips", "dress/shift", cloth, 0.3, 0, hem_z, 4.4 * FIG, 5.6 * FIG, HIP + 2.0 * FIG - hem_z, sy=1.3)["fuse"] = "dress/shift"
+    for side, sy in (("L", 1), ("R", -1)):
+        r.cyl("skirt-leg", f"hip{side}", "dress/shift", cloth, 0.2, sy * HIP_W * 0.85, hem_z, 4.9 * FIG, 4.3 * FIG, HIP + 1.0 * FIG - hem_z)["fuse"] = "dress/shift"
 
     # ── outer layers (v2-5b, spec §2.4): a size up over any top — a fuller body that reaches past the
     # trouser top, long sleeves over the top's — with each garment's own finishing. One layer each.
