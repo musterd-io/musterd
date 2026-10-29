@@ -1,0 +1,18 @@
+{
+  "prompt": "a modern upholstered armchair: wide low seat with one cushion, rounded arms, a tall back, short tapered wooden legs, simple clean shapes",
+  "settings": {
+    "mode": "preview",
+    "ai_model": "meshy-t2.5",
+    "model_type": "smart-topology",
+    "target_polycount": 4000,
+    "origin_at": "bottom",
+    "target_formats": [
+      "glb"
+    ]
+  },
+  "task": "01a1892a-3104-723a-a505-8b6b813c97a7",
+  "date": "2026-10-29",
+  "credits": 5,
+  "seconds": 30,
+  "bytes": 75240
+}

@@ -19,6 +19,7 @@ changes `KY` only; `camera()` takes the ratio.
 from __future__ import annotations
 
 import math
+import os
 
 import bpy
 from mathutils import Matrix, Vector
@@ -781,29 +782,48 @@ def nook_cooler(asset_id: str, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, lx, ly, col)
 
 
+def meshy(asset_id: str, name: str, lx: float, ly: float, across: float, facing: str, mats: list, split, zs: float) -> bpy.types.Object:
+    """A Meshy prop (ADR 755): `meshes/<name>.glb` imported, turned to `facing` (the meshes face -y as
+    generated), scaled so its width across the facing axis is `across`, re-materialed with the room's
+    own `mats` — `split(z_frac, poly)` picks each face's index — smooth-shaded, and seated by its bounds:
+    an imported mesh's origin is not its foot (docs/wiki/meshy-props.md)."""
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.ops.import_scene.gltf(filepath=os.path.join(os.path.dirname(os.path.abspath(__file__)), "meshes", f"{name}.glb"))
+    objs = [o for o in bpy.context.selected_objects if o.type == "MESH"]
+    bpy.context.view_layer.objects.active = objs[0]
+    if len(objs) > 1:
+        bpy.ops.object.join()
+    m = bpy.context.active_object
+    m.name = f"{asset_id}/mesh"
+    for o in [o for o in bpy.context.selected_objects if o.type != "MESH"]:
+        bpy.data.objects.remove(o)
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    m.rotation_mode = "XYZ"
+    m.rotation_euler = (0, 0, {"N": 0.0, "S": math.pi, "E": math.pi / 2, "W": -math.pi / 2}[facing])
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+    vs = [m.matrix_world @ Vector(v.co) for v in m.data.vertices]
+    k = across / ((max(v.x for v in vs) - min(v.x for v in vs)) if facing in ("S", "N") else (max(v.y for v in vs) - min(v.y for v in vs)))
+    m.scale = (k, k, k * zs)
+    bpy.ops.object.transform_apply(scale=True)
+    m.data.materials.clear()
+    for mt in mats:
+        m.data.materials.append(mt)
+    vs = [m.matrix_world @ Vector(v.co) for v in m.data.vertices]
+    z0, z1 = min(v.z for v in vs), max(v.z for v in vs)
+    for p in m.data.polygons:
+        p.material_index = split(((m.matrix_world @ p.center).z - z0) / (z1 - z0), p)
+        p.use_smooth = True
+    foot = Vector(((min(v.x for v in vs) + max(v.x for v in vs)) / 2, (min(v.y for v in vs) + max(v.y for v in vs)) / 2, z0))
+    m.location = Vector((lx, ly, 0.0)) - foot
+    return m
+
+
 def couch(asset_id: str, lx: float, ly: float, L: float, Dp: float, zs: float, col, facing: str = "S") -> bpy.types.Object:
-    """A two-seater facing the room: seat, back, two arms, two seat cushions, a throw pillow."""
-    fab = fabric("couch", COUCH)
-    fab_dark = fabric("couch-dark", tuple(c * 0.9 for c in COUCH))
+    """A two-seater facing the room — a Meshy mesh (ADR 755, `meshes/couch.json`) in the room's fabric,
+    on dark wooden legs."""
     sn = facing in ("S", "N")
-    f = {"S": (0, 1), "N": (0, -1), "E": (1, 0), "W": (-1, 0)}[facing]
-    parts = []
-    seat = box(f"{asset_id}/seat", lx, ly, 0, L if sn else Dp, Dp if sn else L, 20, fab, zs)
-    bevel(seat, 2.0)
-    parts.append(seat)
-    back = box(f"{asset_id}/back", lx - f[0] * (Dp / 2 - 4), ly - f[1] * (Dp / 2 - 4), 0, L if sn else 10, 10 if sn else L, 34, fab_dark, zs)
-    bevel(back, 2.0)
-    parts.append(back)
-    p = (1, 0) if sn else (0, 1)
-    for sgn in (-1, 1):
-        arm = box(f"{asset_id}/arm", lx + sgn * p[0] * (L / 2 - 5), ly + sgn * p[1] * (L / 2 - 5), 0, 10 if sn else Dp, Dp if sn else 10, 27, fab_dark, zs)
-        bevel(arm, 2.0)
-        parts.append(arm)
-    for sgn in (-0.5, 0.5):
-        cx = lx + sgn * p[0] * (L / 2) + f[0] * 2
-        cy = ly + sgn * p[1] * (L / 2) + f[1] * 2
-        parts.append(ball(f"{asset_id}/cushion", cx, cy, 19, (L / 4 - 3) if sn else Dp / 2 - 5, Dp / 2 - 5 if sn else (L / 4 - 3), 3.5, fab, zs))
-    parts.append(ball(f"{asset_id}/pillow", lx - p[0] * (L / 2 - 16) - f[0] * 8, ly - p[1] * (L / 2 - 16) - f[1] * 8, 20, 9, 7, 7, fabric("pillow", srgb("#d9774f")), zs))
+    legs = wood("couch-legs", srgb("#4a3424"), grain=0.1)
+    parts = [meshy(asset_id, "couch", lx, ly, L, facing, [fabric("couch", COUCH), legs], lambda z, p: 1 if z < 0.12 else 0, zs)]
     parts.append(shadow(f"{asset_id}/shadow", lx, ly, (L if sn else Dp) * 0.58, (Dp if sn else L) * 0.6, zs))
     return finish(asset_id, parts, lx, ly, col)
 
@@ -856,26 +876,10 @@ def low_table(asset_id: str, lx: float, ly: float, w: float, d: float, h: float,
 
 
 def armchair(asset_id: str, lx: float, ly: float, S: float, facing: str, zs: float, col) -> bpy.types.Object:
-    """A real armchair: a wide low seat, two arms, and a back as tall as a task chair's (2026-10-27 —
-    the old one was a 34-unit cube with a 32-high back, and read as a footstool next to the desks)."""
-    fab = fabric("couch", COUCH)
-    fab_dark = fabric("couch-dark", tuple(c * 0.9 for c in COUCH))
-    sn = facing in ("S", "N")
-    f = {"S": (0, 1), "N": (0, -1), "E": (1, 0), "W": (-1, 0)}[facing]
-    # across = the axis the arms sit on; along = the facing axis
-    inner = S - 16  # seat width between the two 8-wide arms
-    seat = box(f"{asset_id}/seat", lx, ly, 0, inner if sn else S, S if sn else inner, 18, fab, zs)
-    bevel(seat, 2.0)
-    back = box(f"{asset_id}/back", lx - f[0] * (S / 2 - 5), ly - f[1] * (S / 2 - 5), 0, S if sn else 10, 10 if sn else S, 44, fab_dark, zs)
-    bevel(back, 2.0)
-    parts = [seat, back]
-    for side in (-1, 1):
-        ax = lx + (side * (S / 2 - 4) if sn else 0)
-        ay = ly + (0 if sn else side * (S / 2 - 4))
-        arm = box(f"{asset_id}/arm{side}", ax, ay, 0, 8 if sn else S - 4, S - 4 if sn else 8, 28, fab_dark, zs)
-        bevel(arm, 2.0)
-        parts.append(arm)
-    parts.append(ball(f"{asset_id}/cushion", lx + f[0] * 2, ly + f[1] * 2, 17, inner / 2 - 3, inner / 2 - 3, 3, fabric("cushion", srgb("#eabf50")), zs))
+    """An armchair — a Meshy mesh (ADR 755, `meshes/armchair.json`): a cushioned seat, rounded arms and a
+    back as tall as a task chair's, on tapered wooden legs, in the couch's fabric."""
+    legs = wood("couch-legs", srgb("#4a3424"), grain=0.1)
+    parts = [meshy(asset_id, "armchair", lx, ly, S, facing, [fabric("couch", COUCH), legs], lambda z, p: 1 if z < 0.12 else 0, zs)]
     parts.append(shadow(f"{asset_id}/shadow", lx, ly, S * 0.62, S * 0.62, zs))
     return finish(asset_id, parts, lx, ly, col)
 
