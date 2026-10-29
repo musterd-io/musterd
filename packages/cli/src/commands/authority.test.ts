@@ -411,3 +411,37 @@ describe('openCeremony', () => {
     expect(ok).toBe(true);
   });
 });
+
+describe('openCeremony expiry', () => {
+  it('returns false when Chrome never exits (times out)', async () => {
+    const child = {
+      unref() {},
+      on(_event: string, _cb: (code?: number | null) => void) {
+        // never fires exit/error — simulates a hung browser
+      },
+    };
+    const ok = await openCeremony('http://localhost/x', {
+      tty: true,
+      platform: 'linux',
+      spawn: () => child as never,
+    });
+    expect(ok).toBe(false);
+  });
+});
+
+describe('openCeremony cancellation', () => {
+  it('returns false when the browser exits non-zero (user cancelled)', async () => {
+    const child = {
+      unref() {},
+      on(event: string, cb: (code?: number | null) => void) {
+        if (event === 'exit') setTimeout(() => cb(1), 0);
+      },
+    };
+    const ok = await openCeremony('http://localhost/x', {
+      tty: true,
+      platform: 'linux',
+      spawn: () => child as never,
+    });
+    expect(ok).toBe(false);
+  });
+});
