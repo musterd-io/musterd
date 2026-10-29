@@ -36,9 +36,10 @@ export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 } as const;
 export const radius = { sm: 8, md: 12, lg: 18, pill: 999 } as const;
 
 /**
- * The brand's two faces (brand.md §3, ADR 760): DM Sans for every word, JetBrains Mono for
- * fingerprints and ids. Each weight is its own static file embedded by the expo-font plugin, so
- * a style names the file, not a `fontWeight` (iOS would fake a bold over one face).
+ * DM Sans for every word, data included (brand.md §3; nick 2026-10-22, #3194: "everything in our
+ * new font family"); figures that must line up use `fontVariant: ['tabular-nums']`. Each weight is
+ * its own static file embedded by the expo-font plugin (ADR 760), so a style names the file, not
+ * a `fontWeight` (iOS would fake a bold over one face).
  */
 export const font = {
   regular: 'DMSans-Regular',
@@ -46,5 +47,4 @@ export const font = {
   semibold: 'DMSans-SemiBold',
   bold: 'DMSans-Bold',
   display: 'DMSans-ExtraBold',
-  mono: 'JetBrainsMono-Regular',
 } as const;

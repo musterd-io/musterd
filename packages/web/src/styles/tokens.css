@@ -55,17 +55,19 @@
    * every screen and component. Faces are declared in styles/global.css
    * (@font-face) before a slot can point at them.
    *
-   * ACTIVE (ADR 706) — DM Sans for text, JetBrains Mono for data:
+   * ACTIVE (ADR 706) — DM Sans for everything; JetBrains Mono for literal code only
+   * (nick 2026-10-29: "the new font family should apply to everything"):
    *   --font-sans    DM Sans          body, chrome, marketing
    *   --font-display DM Sans          headings, names, chyron labels (same file)
-   *   --font-mono    JetBrains Mono   telemetry, timestamps, ids, the CLI mirror
+   *   --font-mono    DM Sans          data: timestamps, ids, counts (the slot name is historical)
+   *   --font-code    JetBrains Mono   literal code and traces
    *
    * A new family is an ADR (brand.md §3) and a budgets.json allowlist change.
    * ------------------------------------------------------------------------ */
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-  --font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace; /* literal code and traces; /live re-points --font-mono to sans, never this */
+  --font-mono: var(--font-sans);
+  --font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace; /* literal code and traces; the one place the mono remains */
 
   /* Motion — the SITE's easing. /live has its own scale in Live.css (ADR 329), and the site has not
      adopted it: that lane has not happened. --ease-in-out was removed on 2026-08-26 once /live's

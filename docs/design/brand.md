@@ -97,10 +97,11 @@ The CLI uses only these mappings so output stays on-brand and degrades cleanly i
 
 ## 3. Typography
 
-Two typefaces ([ADR 706](../decisions/706-web-type-dm-sans.md), 2026-10-21). **DM Sans** is the text face for display and body. **JetBrains Mono** is the data face. Successor to Recursive ([ADR 477](../decisions/477-web-type-recursive.md)).
+Two typefaces ([ADR 706](../decisions/706-web-type-dm-sans.md), 2026-10-21). **DM Sans** is the face for everything: display, body and data (nick, 2026-10-29: "the new font family should apply to everything"). **JetBrains Mono** is kept only for literal code. Successor to Recursive ([ADR 477](../decisions/477-web-type-recursive.md)).
 
 - **Display and sans (headings, member names, chyron labels, body, web chrome, marketing):** `DM Sans`. CSS tokens `--font-display` and `--font-sans` name the same family. One committed variable file: optical size 9–40 and weight 100–1000. The DOM uses optical sizing. Canvas paints the file's default, optical size 9, because `ctx.font` cannot set axes.
-- **Mono (data, timestamps, ids, CLI-mirroring UI, Figma terminal frames):** `JetBrains Mono`. CSS token `--font-mono`. Digits are equal width. The weight axis runs 100–800, so 600 and 700 are real. The CLI itself inherits the user's terminal font — Figma terminal frames must use a mono that visually matches an 80-col terminal grid.
+- **Data (timestamps, ids, counts):** `DM Sans` on every surface, with tabular digits where figures must line up. The CSS slot is still named `--font-mono` and resolves to DM Sans; the phone app embeds no mono at all.
+- **Code (literal code and trace blocks, CLI-mirroring UI, Figma terminal frames):** `JetBrains Mono`, through `--font-code`. Digits are equal width. The weight axis runs 100–800, so 600 and 700 are real. The CLI itself inherits the user's terminal font — Figma terminal frames must use a mono that visually matches an 80-col terminal grid.
 - **Wordmark:** the drawn nameplate ([ADR 704](../decisions/704-the-wordmark-nameplate.md)).
 
 The two files are committed latin cuts. DM Sans is `@fontsource-variable/dm-sans@5.2.8` (the CSS family is `DM Sans`; the name table says `DM Sans 9pt`). JetBrains Mono is a latin subset of the upstream variable font, version 2.305, name table left intact.
@@ -115,8 +116,8 @@ The two files are committed latin cuts. DM Sans is `@fontsource-variable/dm-sans
 | h3        | 18 / 26            | 600    | DM Sans        |
 | body      | 15 / 24            | 400    | DM Sans        |
 | small     | 13 / 20            | 400    | DM Sans        |
-| mono-body | 14 / 22            | 400    | JetBrains Mono |
-| mono-sm   | 12 / 18            | 400    | JetBrains Mono |
+| mono-body | 14 / 22            | 400    | JetBrains Mono (code only) |
+| mono-sm   | 12 / 18            | 400    | JetBrains Mono (code only) |
 
 ### Terminal type ramp (Figma terminal frames)
 

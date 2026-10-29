@@ -1,5 +1,5 @@
 /*
- * Web fonts (ADR 706). DM Sans for text, JetBrains Mono for data.
+ * Web fonts (ADR 706). DM Sans for everything; JetBrains Mono for literal code only.
  * Latin cuts, committed:
  *   dm-sans-latin.woff2          opsz 9–40, wght 100–1000
  *   jetbrains-mono-latin.woff2   wght 100–800

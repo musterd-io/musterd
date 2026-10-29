@@ -223,19 +223,14 @@ export default function PairScreen() {
             </Halo>
           </Pop>
           <Text style={[styles.title, { color: p.text }]}>Paired with {phase.team}</Text>
-          <Text style={[styles.copy, { color: p.text }]}>
-            Asks for you come to this phone while you’re away from your computer. At your desk, they
-            stay on the computer.
-          </Text>
           <Text style={[styles.copy, { color: p.muted }]}>
-            To change which asks come here, and when, open /live on your computer: Settings, then
-            You, then Away channels.
+            Asks reach you here while you’re away from your desk.
           </Text>
           {phase.fingerprint ? <Fingerprint value={phase.fingerprint} color={p.text} /> : null}
           <Text style={[styles.copy, { color: p.muted }]}>
             The fingerprint is the daemon that approved this phone.
           </Text>
-          <Button label="Asks" bg={p.accent} fg={p.onAccent} onPress={() => router.back()} />
+          <Button label="Done" bg={p.accent} fg={p.onAccent} onPress={() => router.back()} />
         </View>
       ) : null}
 
@@ -350,7 +345,7 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', marginVertical: space.lg },
   mark: { width: 88, height: 88 },
   fingerprint: {
-    fontFamily: font.mono,
+    fontFamily: font.medium,
     fontSize: 20,
     lineHeight: 28,
     textAlign: 'center',
