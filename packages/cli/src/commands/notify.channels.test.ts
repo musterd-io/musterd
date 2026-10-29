@@ -86,7 +86,7 @@ describe('musterd notify channels (away channels 6)', () => {
     h.setChannelSettings.mockClear();
     await expect(
       notifyCommand(parsed(['channels', 'set', 'bogus'], { deliver: 'on' })),
-    ).rejects.toThrow("unknown channel 'bogus' (v1 supports: slack)");
+    ).rejects.toThrow("unknown channel 'bogus' (v1 supports: slack, app)");
     expect(h.setChannelSettings).not.toHaveBeenCalled();
   });
 
@@ -108,6 +108,22 @@ describe('musterd notify channels (away channels 6)', () => {
       tier_floor: 'standard',
     });
     expect(out.join('')).toContain('deliver on');
+    vi.restoreAllMocks();
+  });
+
+  it('sets the app channel, which the daemon already accepts', async () => {
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    expect(
+      await notifyCommand(
+        parsed(['channels', 'set', 'app'], { deliver: 'on', 'presence-gating': 'off' }),
+      ),
+    ).toBe(0);
+    expect(h.setChannelSettings).toHaveBeenCalledWith('revive', 'app', {
+      deliver: true,
+      answer: false,
+      presence_gating: false,
+      tier_floor: null,
+    });
     vi.restoreAllMocks();
   });
 });

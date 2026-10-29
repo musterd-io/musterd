@@ -1,3 +1,4 @@
+import { APP_CHANNEL } from '@musterd/protocol';
 import { z } from 'zod';
 import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
@@ -41,7 +42,7 @@ const CHANNELS_USAGE =
 
 /** The adapters that exist in v1; the daemon's settings route enforces the same list and
  * stays the authority — this check only spares the human zod's raw enum wording. */
-const KNOWN_CHANNELS = ['slack'] as const;
+const KNOWN_CHANNELS = ['slack', APP_CHANNEL] as const;
 
 /** The answer switch as it actually takes effect: delivery off removes answer authority
  * (channelSettings.answerAllowed), so a stored "answer on" under "deliver off" reads as off. */
