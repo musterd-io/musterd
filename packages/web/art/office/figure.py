@@ -388,6 +388,15 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     clump("hair/long", "fall", HEAD_X - R * 0.7, 0, HEAD_C - R * 1.1, R * 0.45, R * 0.85, R * 1.5)
     for sy in (1, -1):  # strands over the front of the shoulders
         clump("hair/long", "front", HEAD_X - R * 0.05, sy * R * 0.75, HEAD_C - R * 1.0, R * 0.3, R * 0.28, R * 1.2)
+    # (v2-3b) polished: the bob gets a soft fringe and ends that curl under at the jaw; long hair gets
+    # crown volume and layered falls down the back instead of one slab
+    for i, y in enumerate((-0.42, 0.0, 0.42)):
+        clump("hair/bob", f"fringe{i}", HEAD_X + R * 0.62, y * R, HEAD_C + R * 0.74, R * 0.3, R * 0.34, R * 0.2, (0, math.radians(-30), 0))
+    for sy in (1, -1):
+        clump("hair/bob", "curl", HEAD_X + R * 0.05, sy * R * 0.74, HEAD_C - R * 0.72, R * 0.42, R * 0.3, R * 0.18)
+    clump("hair/long", "crown", HEAD_X - R * 0.3, 0, HEAD_C + R * 0.82, R * 0.8, R * 0.9, R * 0.4)
+    for i, (y, dz, k) in enumerate(((-0.42, -0.2, 0.9), (0.42, -0.25, 0.9), (0.0, -0.55, 1.05))):
+        clump("hair/long", f"layer{i}", HEAD_X - R * 0.82, y * R, HEAD_C - R * (0.9 - dz), R * 0.36, R * 0.4, R * 1.2 * k)
     cap("hair/ponytail")
     clump("hair/ponytail", "tie", HEAD_X - R * 1.0, 0, HEAD_C + R * 0.2, R * 0.28, R * 0.28, R * 0.28)
     clump("hair/ponytail", "tail", HEAD_X - R * 1.2, 0, HEAD_C - R * 0.55, R * 0.3, R * 0.3, R * 0.85)
