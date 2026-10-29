@@ -551,24 +551,39 @@ so a box is never wider than the screen.
 ### Daily view frames (lane 01M62CM4Y8, for wallow's 01M61VTTB6B)
 
 The warm daily view of `musterd status`. Order, top to bottom: you → ⚑ waiting on you → ◆ your work → ○ up next →
-the team on one line → ⚠ this machine, only when something is wrong. The full roster moves behind
-`status --team`, and the db, schema and build line behind `--verbose`. Items never wrap: they are cut with `…`
-at the column edge, and `inbox` / `lane show` carry the full text. At 80 columns, ages and states right-align
-to column 80. Sections keep their order every day, even when empty (the empty line is dim). The copy is
-placeholder until comms' pass.
+the team on one line → ⚠ this machine, only when something is wrong → the `roster: musterd status --all` hint.
+The full roster moves behind `status --all`, and the header block (db, schema, build) behind `--all` or
+`--verbose`. Items never wrap: they are cut with `…` at the column edge, and `inbox` / `lane show` carry the full
+text. At 80 columns, ages and lane hints right-align to column 80. The copy is comms' pass as it landed in
+`status.ts` (#3501, #3526): a waiting row reads `<who> · <act word>: <gist>` (`asks`, `needs help`, `hands you`,
+`redirects you`, `questions`, `wrote`), a lane row reads `<state> · <title>`, and an up-next row reads
+`<title> — <id>`.
 
 - [`cmd/status — daily · busy · 80`](https://figma.com/design/tgJ7dUNgGmlIMYBVVA5qIQ?node-id=27-2): three
-  directed acts waiting, two lanes held, one next, one teammate blocked.
+  directed acts waiting, two lanes held, two up next with `+1 more`, one teammate blocked.
 - [`cmd/status — daily · busy · 40`](https://figma.com/design/tgJ7dUNgGmlIMYBVVA5qIQ?node-id=27-4): the same
-  day in one column. Ages sit inline, there is one "next", and the team line drops the blocker's name.
+  day in one column. Ages sit at column 40, there is one up-next item, and the team line drops the blocker's
+  name.
 - [`cmd/status — daily · empty · 80`](https://figma.com/design/tgJ7dUNgGmlIMYBVVA5qIQ?node-id=27-6): nothing
-  waiting and no lanes held. Each empty section is one dim line and the next step still points somewhere.
-- [`cmd/status — daily · degraded · 80`](https://figma.com/design/tgJ7dUNgGmlIMYBVVA5qIQ?node-id=27-8): sync
-  to the hub held and the CLI behind the daemon. The ⚠ lines name the fix command, the team line says how old
-  it is, and "up next" says why it is missing rather than showing a stale list.
+  waiting and no lanes held. `You hold no lanes.` is followed by `pick one up  musterd lane claim <id>`, naming
+  the first up-next lane. When up next is empty as well, the view ends `All quiet. musterd next shows open work.`
+- [`cmd/status — daily · degraded · 80`](https://figma.com/design/tgJ7dUNgGmlIMYBVVA5qIQ?node-id=27-8): the hub
+  unreachable and the CLI behind the daemon. Each ⚠ line is followed by an indented `→` line with its fix
+  command, the team line says how old it is, and up next says why it is missing rather than showing a stale list.
 
 Colours per brand.md §2: ⚑ is yellow-bold only when the count is above zero; agents are cyan, humans magenta;
-ages, hints and arrows are bright-black; `active` is green; "blocked" and ⚠ lines are yellow.
+ages, hints, ids and arrows are bright-black; `active` is green; "blocked" and ⚠ lines are yellow.
+
+Where `status.ts` still differs from these frames (reconciled 2026-10-29; the code catches up, lane
+01M64626WK):
+
+1. No ages on waiting rows and no right-aligned lane hints (`PR merged · submit`, `ready to start`).
+2. Rows are not cut at the column edge: the gist is cut at 40 characters, and titles wrap.
+3. The identity line shows the member kind, not role and model.
+4. The team line counts here and online, not working and blocked with the blocker's name.
+5. The ⚠ lines print after the roster hint, on one long line each, and the hub line names no fix command.
+6. When the hub cannot be read, up next disappears instead of saying why, and the team line has no "as of".
+7. There is no test that renders the daily view, so nothing keeps these frames and the code together.
 
 ## Page: States (empty + error)
 
