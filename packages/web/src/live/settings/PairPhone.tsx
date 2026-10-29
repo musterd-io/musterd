@@ -168,7 +168,7 @@ export function PairPhone({
       const approval = await authorityProofForPhone(cfg, me, p.app.enroll_payload);
       if (!approval) {
         throw new Error(
-          'confirming a phone needs a passkey on this team — run `musterd authority enroll` once, then confirm here',
+          'confirming a phone needs a passkey — enroll one under Your passkeys above, then confirm here',
         );
       }
       await confirmChannelPairing(cfg, p.id, approval);

@@ -2685,3 +2685,19 @@ code to delete for it: the encoder is the feature. A re-baseline to measured + 1
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 387,000 B with this lane in,
   and initial JS no higher than before it.
 
+## 2026-10-29 — enroll a passkey from /live; Total JS RAISED 387,000 → 390,000 B (lane 01M64QBTZT)
+
+| Budget     | Before (main) | This branch (laptop) | Ceiling                    |
+| ---------- | ------------- | -------------------- | -------------------------- |
+| total JS   | ≈ 376 KB      | 378.2 KB             | RAISED 387,000 → 390,000 B |
+| initial JS | 148.0 KB      | 148.0 KB             | unchanged                  |
+
+nick: pairing a phone from /live still ended in a terminal when no passkey was enrolled. Settings →
+You → Your passkeys now runs the enrollment ceremony in the page (ADR 767). The code rides the
+settings sheet's lazy chunk, so initial JS is unchanged. Before raising, the module was trimmed: it
+reuses `authorityProof.ts`'s base64url and loopback helpers and `apiPost` instead of carrying its
+own. That took it from 378.4 to 378.2 KB, still over. A re-baseline to measured + 15% would loosen.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 390,000 B with this lane in,
+  and initial JS no higher than before it.
+
