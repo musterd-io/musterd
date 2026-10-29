@@ -413,6 +413,9 @@ interface Walk {
   /** An abandoned lane's card (ADR 751): taken off the cork, crumpled, and thrown into the bin at
    *  `throwLeg`. */
   toss?: { seed: number; takeLeg: number; throwLeg: number };
+  /** A handoff's folder or a review's card on its way to `to`'s desk (lane 01M62JK2JS): the desk shows
+   *  it only from `leg`, the beat the walker sets it down — not when the data says it is waiting. */
+  drop?: { to: string; leg: number };
 }
 type PinState = LaneState;
 type WalkReq = { kind: 'help' | 'handoff'; to: string; urgent: boolean };
@@ -609,6 +612,9 @@ export interface Actors {
   /** Every card a board walk has in play, and how far along: still on the cork (`before`), in a hand
    *  (`hand`), or put where it is going (`done`). */
   boardCards(): { seed: number; kind: 'pin' | 'move' | 'toss'; phase: 'before' | 'hand' | 'done' }[];
+  /** Desks a handoff folder or a review card is still on its way to (lane 01M62JK2JS) — queued, or
+   *  walking and not yet set down. The scene holds those desks' folder and tray back until it lands. */
+  incoming(): Set<string>;
   /** The tosses that have left the hand: who threw which card, so the scene can fly the ball. */
   thrown(): { seed: number; who: string }[];
   /** The cards on the cork that the board data does not know about yet (pin walks past their pin leg). */
@@ -1258,7 +1264,15 @@ export function createActors(): Actors {
       hold(stand, face, 0.5, {}),
       ...back,
     ];
-    return { legs, i: 0, t: 0, small: home.small, act: true, deliver: { seed, handLeg: out.length + 2 } };
+    return {
+      legs,
+      i: 0,
+      t: 0,
+      small: home.small,
+      act: true,
+      deliver: { seed, handLeg: out.length + 2 },
+      drop: { to, leg: out.length + 2 },
+    };
   }
 
   function build(from: string, req: Req, origin?: { lx: number; ly: number }): Walk | null {
@@ -1276,7 +1290,7 @@ export function createActors(): Actors {
     const a = approach(target, start);
     const speed = req.urgent ? 165 : 100; // logical units / sec — amble over, or hurry when urgent
     const carry: CarryKind | null = req.kind === 'handoff' ? 'box' : null;
-    const hold = req.kind === 'help' ? (req.urgent ? 0.5 : 0.75) : 0.6;
+    const holdDur = req.kind === 'help' ? (req.urgent ? 0.5 : 0.75) : 0.6;
     const holdBubble: Bubble = req.kind === 'help' ? (req.urgent ? '!' : '?') : null;
     // Route both trips around furniture and standing teammates; the visitor's stand spot is wherever
     // the outbound route actually ends (the approach point may get nudged off a blocked cell).
@@ -1296,27 +1310,33 @@ export function createActors(): Actors {
       4.5,
       null,
     );
+    const face = travelDir(stand.lx, stand.ly, target.lx, target.ly);
+    // A handoff sets its folder down on the desk (lane 01M62JK2JS): reach with it, then let go — the
+    // desk's folder appears on that second beat. Help still just stands and asks.
+    const visit: Leg[] =
+      req.kind === 'handoff'
+        ? [hold(stand, face, 0.35, { carry: 'box', overlay: GESTURE.reach }), hold(stand, face, 0.35, { overlay: GESTURE.take })]
+        : [
+            {
+              fx: stand.lx,
+              fy: stand.ly,
+              tx: stand.lx,
+              ty: stand.ly,
+              dir: face,
+              dur: holdDur,
+              carry,
+              bubble: holdBubble,
+              ease: 'inOut',
+            },
+          ];
     return {
-      legs: [
-        ...out,
-        {
-          fx: stand.lx,
-          fy: stand.ly,
-          tx: stand.lx,
-          ty: stand.ly,
-          dir: travelDir(stand.lx, stand.ly, target.lx, target.ly),
-          dur: hold,
-          carry,
-          bubble: holdBubble,
-          ease: 'inOut',
-        },
-        ...back,
-      ],
+      legs: [...out, ...visit, ...back],
       i: 0,
       t: 0,
       small: home.small,
       run: req.urgent,
       act: true,
+      ...(req.kind === 'handoff' ? { drop: { to: req.to, leg: out.length + 1 } } : {}),
     };
   }
 
@@ -1475,6 +1495,13 @@ export function createActors(): Actors {
     },
     toss(from, seed) {
       return enqueueBoard(from, { kind: 'toss', seed });
+    },
+    incoming() {
+      const out = new Set<string>();
+      for (const w of walks.values()) if (w.drop && w.i < w.drop.leg) out.add(w.drop.to);
+      for (const q of pending.values())
+        for (const r of q) if (r.kind === 'handoff' || r.kind === 'deliver') out.add(r.to);
+      return out;
     },
     boardCards() {
       const out: { seed: number; kind: 'pin' | 'move' | 'toss'; phase: 'before' | 'hand' | 'done' }[] = [];
