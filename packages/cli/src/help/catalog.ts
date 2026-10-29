@@ -755,6 +755,7 @@ export const CATALOG: readonly CommandEntry[] = [
       '`--dry-run` only counts. `compact` is the one-time VACUUM that hands freed pages back and flips ' +
       'the file to incremental auto-vacuum; it holds the write lock, so announce it, and the daemon ' +
       'refuses it without 1.2× the file free. Both are localhost-only, like every operator verb.',
+    examples: ['musterd store prune --dry-run', 'musterd store compact'],
   },
   {
     name: 'next',
@@ -781,6 +782,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'it IS `lane submit` (awaiting_acceptance, acceptor routed, ADR 192); without, it is an unconfirmed ' +
       'self-close (ADR 169) and prints that — unless the lane is acceptance-exempt (ADR 234). A lane already ' +
       'awaiting acceptance is refused rather than overridden.',
+    examples: ['musterd done 01M4YY5Z38 --pr 3443 --sha abc123'],
   },
   {
     name: 'goal',
@@ -822,6 +824,7 @@ export const CATALOG: readonly CommandEntry[] = [
       '  report tools             the MCP tool surface — per-tool calls/bounces/latency + rendered weight\n' +
       '  report review            outcome acceptance (ADR 192) — asks routed, no-counterpart degradations, rejects\n' +
       '  report ci                the CI trend (ADR 610) — main p50/p90, main-red, PR flake rate, this week beside last',
+    examples: ['musterd report', 'musterd report residency', 'musterd report --json'],
   },
   {
     name: 'board',
@@ -1026,6 +1029,7 @@ export const CATALOG: readonly CommandEntry[] = [
     primary: false,
     detail:
       "Goal dreaming: the day a dreaming session re-reads — your lanes' acts, your note, and insights saved since your last dream (else 24h). Your own seat only; the server bounds it to 24 KB.",
+    examples: ['musterd dream'],
   },
   {
     name: 'wake-context',
