@@ -4,8 +4,8 @@ import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { collectApproval } from './authority.js';
 import { resolve } from './helpers.js';
-import { claimSeams, renderClaims } from './laneClaims.js';
 import { followsUpFlag, printJson, readVerdictFlags, renderSubmitReport } from './lane.js';
+import { claimSeams, renderClaims } from './laneClaims.js';
 
 /**
  * `musterd done [<lane-id>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--read-verdict <outcome> --read-note "<what was read>"]` — close the unit of
