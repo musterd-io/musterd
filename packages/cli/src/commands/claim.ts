@@ -496,11 +496,13 @@ export async function claimCommand(parsed: Parsed): Promise<number> {
           }
           const tail = live
             ? `the waiting ${marker!.surface} session is going online as ${seat} now.`
-            : `bound this folder to ${seat}; the agent here will occupy it on launch (or call team_join).`;
+            : occupiedSeat.kind === 'human'
+              ? `bound this folder to ${seat}; musterd commands run here act as ${seat}.`
+              : `bound this folder to ${seat}; the agent here will occupy it on launch (or call team_join).`;
           // The continuity one-liner (ADR 093 §3): headline + age, never the body.
           const memLine = memory ? `${renderMemoryLine(memory)}\n` : '';
           process.stdout.write(
-            `${theme.ok('✓')} ${theme.memberName(seat, 'agent')} — occupied on ${team}\n` +
+            `${theme.ok('✓')} ${theme.memberName(seat, occupiedSeat.kind)} — occupied on ${team}\n` +
               `${theme.dim(tail)}\n` +
               memLine,
           );

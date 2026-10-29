@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { requireWords } from './send.js';
+import { recipientInBody, requireWords } from './send.js';
 
 /**
  * Lane `01M5D5J8HQG688C0QWEN0633H2`. An act with an empty body is stored, counts in the acts log,
@@ -26,5 +26,22 @@ describe('requireWords', () => {
     for (const act of ['accept', 'decline', 'wait', 'resolve']) {
       expect(() => requireWords(act, '')).not.toThrow();
     }
+  });
+});
+
+describe('recipientInBody', () => {
+  const members = ['nick', 'Ada', 'scout'];
+
+  it('finds a teammate named as the first word', () => {
+    expect(recipientInBody(['nick', 'can', 'you', 'look?'], members)).toBe('nick');
+    expect(recipientInBody(['ada', 'hi'], members)).toBe('Ada');
+  });
+
+  it('leaves a body whose first word is no member alone', () => {
+    expect(recipientInBody(['shipping', 'the', 'board'], members)).toBeNull();
+  });
+
+  it('leaves a one-word body alone — a name alone is not a message to that name', () => {
+    expect(recipientInBody(['nick'], members)).toBeNull();
   });
 });
