@@ -53,7 +53,7 @@ HEAD_X = 1.6 * FIG
 CROWN = HEAD_C + HEAD_R * 1.04
 
 # ── layers ─────────────────────────────────────────────────────────────────────────────────
-HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun", "slicked", "curly"]
+HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun", "slicked", "curly", "tousled"]
 FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band", "bucket"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
@@ -442,6 +442,19 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         if x > 0.55 and el < math.radians(45):
             continue  # the face
         clump("hair/curly", f"curl{i}", HEAD_X - R * 0.22 + R * 0.98 * x, R * 1.0 * y, HEAD_C + R * 0.14 + R * 1.02 * math.sin(el), R * 0.24, R * 0.24, R * 0.22)
+
+    # (v2-3c) new: tousled — medium length, pieces leaning every which way over the crown, a loose fringe
+    # falling over one brow, ends flicking out over the ears and nape (relaxed pool)
+    cap("hair/tousled", 1.03)
+    for i, (x, y, z, lean, tw) in enumerate((
+        (0.1, -0.45, 1.0, -28, 10), (0.15, 0.1, 1.08, 22, -14), (-0.25, 0.45, 1.0, 30, 8), (-0.45, -0.2, 0.95, -18, 20),
+        (-0.1, 0.5, 0.9, 40, -6), (0.35, -0.1, 0.98, -10, -25), (-0.6, 0.25, 0.75, 15, 30),
+    )):
+        clump("hair/tousled", f"piece{i}", HEAD_X + x * R, y * R, HEAD_C + z * R, R * 0.42, R * 0.3, R * 0.24, (math.radians(lean), math.radians(tw), 0))
+    clump("hair/tousled", "fringe", HEAD_X + R * 0.62, -R * 0.25, HEAD_C + R * 0.6, R * 0.3, R * 0.45, R * 0.24, (math.radians(-20), math.radians(-35), 0))
+    for sy in (1, -1):
+        clump("hair/tousled", "flick", HEAD_X - R * 0.15, sy * R * 0.92, HEAD_C - R * 0.05, R * 0.3, R * 0.18, R * 0.34, (math.radians(sy * 25), 0, 0))
+    clump("hair/tousled", "nape", HEAD_X - R * 0.85, 0, HEAD_C - R * 0.35, R * 0.38, R * 0.75, R * 0.4)
 
     # ── facial hair (v2-3a, spec §2.4): each style is one fused group that follows the jaw, with a
     # trimmed and an untrimmed beard. Every piece is tinted with the hair colour at draw time; the
