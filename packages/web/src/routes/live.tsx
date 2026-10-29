@@ -763,6 +763,33 @@ function LivePage() {
             </div>
           )}
           {phone && <div className="lc__phone-asks">{asksStrip}</div>}
+          {/* On a phone the room is inert (below), so its wall board and bookshelf are not doors any
+              more. These two are: the same overlays, opened from the button instead of the
+              furniture (lane 01M61QMGJC). */}
+          {phone && (
+            <nav className="lc__phone-doors" aria-label="Board and wiki">
+              <button
+                type="button"
+                className="lc__phone-door"
+                onPointerDown={preloadBoardOverlay}
+                onClick={(e) => openBoard(e.currentTarget.getBoundingClientRect())}
+              >
+                <span className="lc__phone-door-mark lc__phone-door-mark--board" aria-hidden />
+                Work board
+              </button>
+              {cfg && (
+                <button
+                  type="button"
+                  className="lc__phone-door"
+                  onPointerDown={preloadWiki}
+                  onClick={(e) => openWiki(e.currentTarget.getBoundingClientRect())}
+                >
+                  <span className="lc__phone-door-mark lc__phone-door-mark--wiki" aria-hidden />
+                  Wiki
+                </button>
+              )}
+            </nav>
+          )}
           <div
             className={
               `lc__canvas${collapsed.office ? ' is-office-collapsed' : ''}` +

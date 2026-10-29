@@ -5915,6 +5915,78 @@
 .lc__phone-asks .lc-asks__spacer {
   display: none;
 }
+/* The phone's doors to the board and the wiki (lane 01M61QMGJC): the room is inert on a phone, so
+   its wall board and bookshelf open from here instead. Two equal halves, thumb-height, paper-warm
+   like the furniture they stand in for. */
+.lc__phone-doors {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: var(--lc-4);
+  /* The ask card's own inset, so the doors line up under it rather than running to the glass. */
+  padding: 0 var(--lc-6) var(--lc-5);
+}
+.lc__phone-door {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lc-3);
+  min-height: 44px;
+  padding: 0 var(--lc-4);
+  border: 1px solid var(--lc-border);
+  border-radius: var(--lc-r-lg);
+  background: var(--lc-surface);
+  color: var(--lc-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform var(--lc-dur-1) var(--lc-ease-out),
+    background-color var(--lc-dur-1) var(--lc-ease-out);
+}
+.lc__phone-door:active {
+  transform: scale(0.97);
+  background: var(--lc-ground);
+}
+.lc__phone-door:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+/* A small drawn mark for each: a pinned card for the board, a book's spine for the wiki. */
+.lc__phone-door-mark {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 3px;
+}
+.lc__phone-door-mark--board {
+  background: var(--lc-accent-bright);
+  box-shadow: inset 0 -5px 0 rgba(0, 0, 0, 0.12);
+}
+.lc__phone-door-mark--board::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--lc-danger);
+}
+.lc__phone-door-mark--wiki {
+  width: 13px;
+  background: var(--lc-handoff);
+  box-shadow: inset 3px 0 0 rgba(0, 0, 0, 0.22);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc__phone-door {
+    transition: none;
+  }
+}
 /* The sheet's counters: the operator's numbers, one quiet line above the cards. */
 .lc-asks__counts {
   display: flex;
@@ -6133,6 +6205,48 @@
 }
 .lc-boardoverlay__main {
   padding: var(--lc-5);
+}
+/* On a phone the board is opened from the doors under the ask card (lane 01M61QMGJC), and the
+   desk-sized panel ran its header off the glass: the new-lane tab and the close button were past
+   the right edge at 390px. Here the panel takes the screen less a margin, and the header wraps —
+   title and close on the first line, the view switch and the new-lane tab on the next, the note
+   last. Settings and the wiki size their own panels with a compound selector, so this never
+   reaches them. */
+@media (max-width: 880px) {
+  .lc-boardoverlay__panel {
+    width: calc(100vw - var(--lc-6));
+    height: calc(100dvh - var(--lc-6));
+    min-width: 0;
+    min-height: 0;
+  }
+  .lc-boardoverlay__bar {
+    flex-wrap: wrap;
+    row-gap: var(--lc-4);
+  }
+  .lc-boardoverlay__title {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .lc-boardoverlay__close {
+    order: 1;
+    width: 36px;
+    height: 36px;
+  }
+  .lc-boardoverlay__bar .lc-board__views {
+    order: 2;
+  }
+  .lc-boardoverlay__bar .lc-board__new {
+    order: 3;
+    margin-left: auto;
+  }
+  .lc-boardoverlay__note {
+    order: 4;
+    flex-basis: 100%;
+    text-align: left;
+  }
+  .lc-boardoverlay__note:empty {
+    display: none;
+  }
 }
 /* the lazy chunk's brief stand-in: a quiet paper-toned shimmer, not a spinner */
 .lc-boardoverlay__loading {
