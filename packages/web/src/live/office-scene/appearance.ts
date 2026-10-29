@@ -155,9 +155,10 @@ const POLISHED_FACIAL: readonly FacialHair[] = ['none', 'none', 'none', 'none', 
 // `beard-wild` is the untrimmed beard (figure v2-3a): relaxed grooming's own, never the polished pool's.
 const RELAXED_FACIAL: readonly FacialHair[] = ['none', 'none', 'none', 'none', 'stubble', 'stubble', 'beard-wild', 'goatee', 'beard'];
 
-export type Hat = 'none' | 'cap' | 'beanie' | 'band';
+export type Hat = 'none' | 'cap' | 'beanie' | 'band' | 'bucket';
 /** Hats are the rarest thing on the floor, so they stay a small delight rather than a uniform. */
-const HATS: readonly Hat[] = ['none', 'none', 'none', 'none', 'none', 'cap', 'beanie', 'band'];
+// The bucket hat (v2-4e) joins at the same rarity: a hat on about one in three, as before.
+const HATS: readonly Hat[] = ['none', 'none', 'none', 'none', 'none', 'none', 'none', 'cap', 'beanie', 'band', 'bucket'];
 const HAT_COLORS = ['#d1503f', '#2f7f6a', '#3f6fa8', '#e1ad01', '#2f8fa3', '#2a2118', '#e8dcc8', '#e07a3f'] as const;
 
 /**

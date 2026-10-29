@@ -55,7 +55,7 @@ CROWN = HEAD_C + HEAD_R * 1.04
 # ── layers ─────────────────────────────────────────────────────────────────────────────────
 HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun"]
 FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
-HATS = ["cap", "beanie", "band"]
+HATS = ["cap", "beanie", "band", "bucket"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
 ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet", "headphones-neck"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
@@ -510,9 +510,17 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.orb("sole", f"ankle{side}", "shoes", shoe, 2.4 * FIG, y, 0.65 * FIG, 5.4 * FIG, 2.8 * FIG, 0.65 * FIG, "shoes")
 
     # ── hats, sized to the v2 head
+    # (v2-4e) the cap: a rounded crown with a button on top and a curved bill, not a flat board
     r.orb("cap", "head", "hat/cap", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 0.6, R * 1.04, R * 1.08, R * 0.7)
-    r.box("brim", "head", "hat/cap", acc, HEAD_X + R * 0.95, 0, HEAD_C + R * 0.66, R * 0.75, R * 0.95, 1.0, 0.4)
+    r.orb("cap-button", "head", "hat/cap", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 1.3, R * 0.12, R * 0.12, R * 0.07)
+    r.orb("brim", "head", "hat/cap", acc, HEAD_X + R * 1.05, 0, HEAD_C + R * 0.68, R * 0.62, R * 0.88, R * 0.08)
+    # the beanie: the knit crown, a thick folded-up cuff round the brow, and a pom on top
     r.orb("beanie", "head", "hat/beanie", acc, HEAD_X - R * 0.2, 0, HEAD_C + R * 0.42, R * 1.06, R * 1.08, R * 0.95)
+    r.torus("beanie-cuff", "head", "hat/beanie", acc, HEAD_X - R * 0.16, 0, HEAD_C + R * 0.5, R * 1.02, R * 0.16)
+    r.orb("beanie-pom", "head", "hat/beanie", acc, HEAD_X - R * 0.25, 0, HEAD_C + R * 1.42, R * 0.26, R * 0.26, R * 0.24)
+    # a new hat: the bucket hat — a soft crown and a wide brim that slopes down all round
+    r.cyl("bucket", "head", "hat/bucket", acc, HEAD_X - R * 0.15, 0, HEAD_C + R * 0.58, R * 1.02, R * 0.84, R * 0.9)
+    r.cyl("bucket-brim", "head", "hat/bucket", acc, HEAD_X - R * 0.15, 0, HEAD_C + R * 0.5, R * 1.42, R * 1.0, R * 0.14)
     # the headband (v2-4d): a soft fabric band, taller than it is thick and following the head's slope —
     # higher at the back, low on the brow so it hugs the hair instead of floating over it like the old one —
     # with a small tied knot behind one ear, not the old round cord

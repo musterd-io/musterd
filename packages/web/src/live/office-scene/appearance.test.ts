@@ -153,7 +153,7 @@ describe('style, grooming and the spots (office figure v2-5a — presents retire
 
   it('draws every option from every palette — a weak hash silently halves the wardrobe', () => {
     expect(new Set(looks.map((l) => l.cut)).size).toBe(5);
-    expect(new Set(looks.map((l) => l.hat)).size).toBe(4);
+    expect(new Set(looks.map((l) => l.hat)).size).toBe(5);
     expect(new Set(looks.map((l) => l.style))).toEqual(new Set(['formal', 'smart', 'casual', 'athletic']));
     expect(new Set(looks.map((l) => l.grooming))).toEqual(new Set(['polished', 'relaxed']));
     expect(new Set(looks.map((l) => l.skin)).size).toBeGreaterThan(14);
