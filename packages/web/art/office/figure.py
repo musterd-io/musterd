@@ -53,7 +53,7 @@ HEAD_X = 1.6 * FIG
 CROWN = HEAD_C + HEAD_R * 1.04
 
 # ── layers ─────────────────────────────────────────────────────────────────────────────────
-HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun"]
+HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun", "slicked"]
 FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band", "bucket"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
@@ -423,6 +423,14 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         clump("hair/afro", f"curl{i}", cx + R * 1.1 * math.cos(el) * math.cos(a) * 0.8, R * 1.35 * math.cos(el) * math.sin(a), cz + R * 1.25 * math.sin(el), R * 0.32, R * 0.32, R * 0.3)
     cap("hair/bun")
     clump("hair/bun", "bun", HEAD_X - R * 0.75, 0, HEAD_C + R * 0.95, R * 0.42, R * 0.42, R * 0.42)
+
+    # (v2-3c) new: slicked back — close to the head, combed straight back from a high hairline into a
+    # neat ridge at the crown that tucks in at the nape (polished pool)
+    cap("hair/slicked", 0.99)
+    for i, y in enumerate((-0.4, 0.0, 0.4)):
+        clump("hair/slicked", f"comb{i}", HEAD_X - R * 0.15, y * R, HEAD_C + R * 0.88, R * 0.75, R * 0.26, R * 0.22, (0, math.radians(14), 0))
+    clump("hair/slicked", "ridge", HEAD_X - R * 0.35, 0, HEAD_C + R * 1.0, R * 0.55, R * 0.6, R * 0.2)
+    clump("hair/slicked", "nape", HEAD_X - R * 0.8, 0, HEAD_C - R * 0.15, R * 0.3, R * 0.7, R * 0.45)
 
     # ── facial hair (v2-3a, spec §2.4): each style is one fused group that follows the jaw, with a
     # trimmed and an untrimmed beard. Every piece is tinted with the hair colour at draw time; the
