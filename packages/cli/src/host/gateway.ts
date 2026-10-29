@@ -60,9 +60,10 @@ export interface GatewayUpstream {
  *   points a metered wake at `<origin>/chatgpt` under a ChatGPT login or `<origin>/openai` under an
  *   API key. Codex tries a WebSocket upgrade on `/responses` first; the gateway does not accept the
  *   upgrade, and Codex falls back to HTTP, which is metered (lane 01M4VQ3CMR, 2026-10-19).
- * - OpenCode reads base URLs only from config. Its backend runs a metered wake `--standalone` with
- *   `OPENCODE_CONFIG_CONTENT` pointing its hosted providers (`opencode`, `opencode-go`) at
- *   `<origin>/<id>` (ADR 583 note 2026-10-19). Other OpenCode providers are not re-pointed.
+ * - OpenCode reads base URLs only from config. Its backend runs every wake `--standalone` (ADR 768)
+ *   and, on a metered wake, sets `OPENCODE_CONFIG_CONTENT` pointing its hosted providers (`opencode`,
+ *   `opencode-go`) at `<origin>/<id>` (ADR 583 note 2026-10-19). Other OpenCode providers are not
+ *   re-pointed.
  *
  * The host's OWN setting of each variable becomes the upstream (chaining an operator's gateway,
  * Bedrock, or a pinned endpoint) instead of being bypassed.

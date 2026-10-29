@@ -189,7 +189,8 @@ export function museBackend(deps: MuseDeps = {}): ActuatorBackend {
         // up front (`exec --session-id`), so the lease names it from spawn — no stdout parsing.
         // ADR 604: a dream order stamps `dream`. The MCP adapter reads the lease from the file:
         // Muse's stdio children receive MUSE_SESSION_ID but not MUSTERD_* (measured, ADR 619),
-        // and the adapter descends from this run pid (measured — no serve daemon, unlike opencode).
+        // and the adapter descends from this run pid (measured — no serve daemon; opencode has had
+        // none either since ADR 768, which runs every wake --standalone).
         const lease =
           child.pid !== undefined
             ? holdWakeLease(

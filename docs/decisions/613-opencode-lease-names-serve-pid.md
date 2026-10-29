@@ -34,11 +34,17 @@ When the opencode wake backend writes the lease file, `spawner_pid` names the pe
 for exactly one `opencode[.exe] serve` process owned by the current user. When discovery is
 ambiguous (zero or several matches, or a platform without the scan), the backend falls back to
 the `run` child's pid — exactly today's behavior, never worse.
+_(Amended 2026-10-29: retired with ADR 768 — every opencode wake now runs `--standalone`, so
+there is no serve daemon to discover and no scan to run; the lease names the run child's pid.
+See the dated note in Consequences.)_
 
 The schema is unchanged (`spawner_pid` stays a positive int); its meaning narrows to what the
 reader always required: *the pid the adapter's ancestry must include*. ADR 354's comment ("the
 harness process the actuator spawned") is amended — on OpenCode the harness the adapter belongs
 to is the daemon, and the actuator spawns a client of it, not the harness itself.
+_(Amended 2026-10-29: ADR 768 inverts the second half — a standalone run's adapter descends from
+the harness the actuator spawned, so ADR 354's own comment is true again unamended. See the
+dated note in Consequences.)_
 
 The trust shape changes in one bounded way: any adapter on the same serve daemon **in this
 workspace** honors the lease during its window — the check now attests "this adapter serves this
@@ -48,6 +54,9 @@ fence until `expires_at`. We accept that: the window is minutes, the refusal rea
 dream, and the standing alternative is that OpenCode seats never dream at all. The workspace
 binding and the expiry are the bounds, as they always were for the env channel on harnesses that
 forward it.
+_(Amended 2026-10-29: the widening this paragraph accepts is gone with ADR 768 — with the lease
+naming the run child's pid, only an adapter descended from that run honors the file. See the
+dated note in Consequences.)_
 
 ## Consequences
 
@@ -62,6 +71,15 @@ forward it.
   to the documented defect rather than risking a wrong attestation.
 - The resident-Claude-Code shape (lane `01M50C7QK0`, ADR 609) is the claim-side sibling of this
   same architecture; this ADR does not change it.
+- _Retired 2026-10-29, ADR 768 (lane `01M64PZ3WXJSZFJW9WJWXBHG3D`)._ Every opencode wake now runs
+  `opencode run --standalone`, so there is no background serve daemon to delegate to: the
+  backend's process-table scan and its `ps` seam are deleted, and the lease always names the run
+  child's pid. What this ADR bought still stands — the adapter honors the file and a dream wake
+  settles as `dream` — but by descent (adapter ← private server ← run) rather than by the
+  workspace-and-window trust described in Decision, which is no longer exercised. The two wiki
+  falsifiers above keep holding on the new mechanism. A side effect worth the record: the shared
+  daemon no longer outlives a wake (it held a deleted 4.9 GB `opencode.db` open on this laptop
+  until killed, 2026-10-29).
 
 ## Observability & Evaluation
 

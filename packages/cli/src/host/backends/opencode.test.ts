@@ -155,7 +155,6 @@ describe('opencodeBackend', () => {
       resolveBin: async () => '/opencode',
       recordFreshSession: () => undefined,
       spawn: (() => child) as never,
-      ps: async () => '', // no serve daemon here — the run child's pid is what lands (ADR 613 fallback)
       lease: {
         write: (_ws, lease) => writes.push(lease as unknown as Record<string, unknown>),
         clear: (_ws, id) => clears.push(id),
@@ -182,7 +181,6 @@ describe('opencodeBackend', () => {
       resolveBin: async () => '/opencode',
       recordFreshSession: () => undefined,
       spawn: (() => child) as never,
-      ps: async () => '',
       lease: {
         write: (_ws, lease) => writes.push(lease as unknown as Record<string, unknown>),
         clear: () => {},
@@ -198,86 +196,83 @@ describe('opencodeBackend', () => {
     await result.settled;
   });
 
-  describe('the lease file names the serve daemon the adapter descends from (ADR 613)', () => {
-    const uid = typeof process.getuid === 'function' ? process.getuid() : 501;
-    // The serve-pid lookup awaits between spawn and the lease write — flush past it.
+  /**
+   * ADR 768: every wake runs `--standalone`, so there is no background `opencode serve` to
+   * delegate to and no process table to scan — `OpencodeDeps` carries no `ps` seam at all, and
+   * the ADR 613 lookup went with it. What must hold in its place, for a plain wake, a local-model
+   * wake and a metered wake alike: the lease names the run child's pid, which is the pid the
+   * standalone adapter's ancestry actually includes (ADR 354's invariant, back on this harness).
+   */
+  describe('every wake runs --standalone and the lease names the run child (ADR 768)', () => {
+    // The lease write follows the spawn, with no lookup in between any more — one tick is enough.
     const flush = () => new Promise((r) => setTimeout(r, 0));
-    const table = (serves: number[]) =>
-      [
-        `  35892  ${uid}  /usr/local/bin/opencode run --format json`,
-        ...serves.map((pid) => `  ${pid}  ${uid}  /usr/local/bin/opencode serve --service`),
-        `  79436  0  /usr/local/bin/opencode serve --service`, // another user's — never ours
-        `    999  ${uid}  /bin/zsh -l`,
-      ].join('\n');
-    const backend = (
-      child: Child,
-      writes: Array<Record<string, unknown>>,
-      ps: () => Promise<string>,
-    ) =>
-      opencodeBackend({
+    const setup = (opts: { local?: boolean } = {}) => {
+      const child = new Child();
+      child.pid = 4242;
+      const writes: Array<Record<string, unknown>> = [];
+      const seen: string[][] = [];
+      const backend = opencodeBackend({
         resolveBin: async () => '/opencode',
         recordFreshSession: () => undefined,
-        spawn: (() => child) as never,
-        ps,
+        spawn: ((_bin: string, args: string[]) => {
+          seen.push(args);
+          return child;
+        }) as never,
+        ...(opts.local
+          ? {
+              readLocalServing: () => ({
+                provider: 'ollama',
+                model: 'qwen3:4b',
+                base_url: 'http://127.0.0.1:11434/v1',
+              }),
+            }
+          : {}),
         lease: {
           write: (_ws, lease) => writes.push(lease as unknown as Record<string, unknown>),
           clear: () => {},
           takeYield: () => false,
         },
       });
-
-    it('one serve daemon owned by this user → spawner_pid is the daemon, not the run child', async () => {
-      const child = new Child();
-      child.pid = 4242;
-      const writes: Array<Record<string, unknown>> = [];
-      const wake = backend(child, writes, async () => table([79437])).wake(spec, ctx);
-      await flush();
-      expect(writes[0]).toMatchObject({ spawner_pid: 79437 });
-      child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+      return { child, writes, seen, backend };
+    };
+    const finish = async (
+      t: ReturnType<typeof setup>,
+      wake: Promise<{ settled: Promise<unknown> }>,
+    ) => {
+      t.child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
       const result = await wake;
-      child.exit();
+      t.child.exit();
       await result.settled;
+    };
+
+    it('a plain wake with no gateway → run --standalone, lease names the run child', async () => {
+      const t = setup();
+      const wake = t.backend.wake(spec, ctx);
+      await flush();
+      expect(t.seen[0]?.slice(0, 2)).toEqual(['run', '--standalone']);
+      expect(t.writes[0]).toMatchObject({ spawner_pid: 4242 });
+      await finish(t, wake);
     });
 
-    it('no serve daemon → the run child pid (the pre-ADR-613 behavior)', async () => {
-      const child = new Child();
-      child.pid = 4242;
-      const writes: Array<Record<string, unknown>> = [];
-      const wake = backend(child, writes, async () => table([])).wake(spec, ctx);
+    it('a local-model wake → run --standalone too, and the run child on the lease', async () => {
+      const t = setup({ local: true });
+      const wake = t.backend.wake(spec, ctx);
       await flush();
-      expect(writes[0]).toMatchObject({ spawner_pid: 4242 });
-      child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
-      const result = await wake;
-      child.exit();
-      await result.settled;
+      expect(t.seen[0]?.slice(0, 2)).toEqual(['run', '--standalone']);
+      expect(t.writes[0]).toMatchObject({ spawner_pid: 4242 });
+      await finish(t, wake);
     });
 
-    it('several serve daemons → ambiguous, keep the run child pid', async () => {
-      const child = new Child();
-      child.pid = 4242;
-      const writes: Array<Record<string, unknown>> = [];
-      const wake = backend(child, writes, async () => table([79437, 79438])).wake(spec, ctx);
+    it('a metered wake → the run child on the lease, never a background serve (ADR 613 retired)', async () => {
+      const t = setup();
+      const wake = t.backend.wake(
+        { ...spec, gateway: { env: {}, origin: 'http://127.0.0.1:9' } },
+        ctx,
+      );
       await flush();
-      expect(writes[0]).toMatchObject({ spawner_pid: 4242 });
-      child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
-      const result = await wake;
-      child.exit();
-      await result.settled;
-    });
-
-    it('an unreadable process table → keep the run child pid', async () => {
-      const child = new Child();
-      child.pid = 4242;
-      const writes: Array<Record<string, unknown>> = [];
-      const wake = backend(child, writes, async () => {
-        throw new Error('ps failed');
-      }).wake(spec, ctx);
-      await flush();
-      expect(writes[0]).toMatchObject({ spawner_pid: 4242 });
-      child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
-      const result = await wake;
-      child.exit();
-      await result.settled;
+      expect(t.seen[0]?.slice(0, 2)).toEqual(['run', '--standalone']);
+      expect(t.writes[0]).toMatchObject({ spawner_pid: 4242 });
+      await finish(t, wake);
     });
   });
 
@@ -395,7 +390,9 @@ describe('opencodeBackend', () => {
       await Promise.resolve();
       child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_old"}');
       const result = await wake;
-      expect(calls[0]).toEqual(buildOpencodeResumeArgs('wake line', 'ses_old'));
+      expect(calls[0]).toEqual(
+        opencodeStandaloneArgs(buildOpencodeResumeArgs('wake line', 'ses_old')),
+      );
       expect(result.outcome.session).toBe('resumed');
       child.exit();
       await result.settled;
@@ -438,7 +435,7 @@ describe('opencodeBackend', () => {
     child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
     const result = await wake;
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toEqual(buildOpencodeFreshArgs('wake line'));
+    expect(calls[0]).toEqual(opencodeStandaloneArgs(buildOpencodeFreshArgs('wake line')));
     expect(result.outcome).toMatchObject({
       occupied: true,
       session: 'fresh',
@@ -562,16 +559,11 @@ describe('the completion record — every settled run reports what the host meas
   it('a metered wake runs --standalone with its hosted providers pointed at the gateway', async () => {
     const child = new Child();
     const seen: { args: string[]; env: NodeJS.ProcessEnv }[] = [];
-    let scans = 0;
     const wake = opencodeBackend({
       resolveBin: async () => '/opencode',
       spawn: ((_bin: string, args: string[], opts: { env: NodeJS.ProcessEnv }) => {
         seen.push({ args, env: opts.env });
         return child;
-      }) as never,
-      ps: (() => {
-        scans += 1;
-        return Promise.resolve('');
       }) as never,
       recordFreshSession: () => undefined,
       readLocalServing: () => null,
@@ -592,13 +584,12 @@ describe('the completion record — every settled run reports what the host meas
       },
     });
     expect(seen[0]!.env.OPENAI_BASE_URL).toBe('x');
-    // The adapter descends from the standalone run, so the background serve is never looked up.
-    expect(scans).toBe(0);
+    // No background serve to look up any more: `OpencodeDeps` carries no `ps` seam (ADR 768).
     child.exit(0);
     await result.settled;
   });
 
-  it('a wake with no gateway, or on a local model, keeps the background service and no override', async () => {
+  it('a wake with no gateway, or on a local model, runs --standalone but carries no override', async () => {
     for (const s of [
       spec,
       { ...spec, gateway: { env: {}, origin: 'http://127.0.0.1:9' } },
@@ -625,7 +616,8 @@ describe('the completion record — every settled run reports what the host meas
       await Promise.resolve();
       child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
       const result = await wake;
-      expect(seen[0]!.args).toEqual(buildOpencodeFreshArgs('wake line'));
+      expect(seen[0]!.args).toEqual(opencodeStandaloneArgs(buildOpencodeFreshArgs('wake line')));
+      expect(seen[0]!.args.slice(0, 2)).toEqual(['run', '--standalone']);
       expect(seen[0]!.env.OPENCODE_CONFIG_CONTENT).toBeUndefined();
       child.exit(0);
       await result.settled;
