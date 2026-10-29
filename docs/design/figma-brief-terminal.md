@@ -574,16 +574,15 @@ text. At 80 columns, ages and lane hints right-align to column 80. The copy is c
 Colours per brand.md §2: ⚑ is yellow-bold only when the count is above zero; agents are cyan, humans magenta;
 ages, hints, ids and arrows are bright-black; `active` is green; "blocked" and ⚠ lines are yellow.
 
-Where `status.ts` still differs from these frames (reconciled 2026-10-29; the code catches up, lane
-01M64626WK):
+The seven gaps reconciled on 2026-10-29 are closed in the code (lane 01M64626WK). `renderDailyView` in
+`render/rows.ts` draws the frames, and `commands/status.daily.test.ts` renders the busy, empty and degraded
+days at 80 and 40 columns from the frames' own data. Three small differences remain:
 
-1. No ages on waiting rows and no right-aligned lane hints (`PR merged · submit`, `ready to start`).
-2. Rows are not cut at the column edge: the gist is cut at 40 characters, and titles wrap.
-3. The identity line shows the member kind, not role and model.
-4. The team line counts here and online, not working and blocked with the blocker's name.
-5. The ⚠ lines print after the roster hint, on one long line each, and the hub line names no fix command.
-6. When the hub cannot be read, up next disappears instead of saying why, and the team line has no "as of".
-7. There is no test that renders the daily view, so nothing keeps these frames and the code together.
+1. The hub's ⚠ line is `describeHubLink`'s wording, `unreachable since 12m ago — …`, where the frame
+   reads `since 12m —`. That function lives in `@musterd/protocol`.
+2. A waiting row does not add the `(you + 2 others)` suffix for an ask sent to a set of seats.
+3. A cut row ends where its text runs out of room, so the gap before a right-aligned age or hint is
+   whatever is left, not the frames' hand-set gutter.
 
 ## Page: States (empty + error)
 

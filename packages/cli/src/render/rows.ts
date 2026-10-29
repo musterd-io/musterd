@@ -746,3 +746,220 @@ export function renderPresence(status: PresenceStatus, surface?: string): string
   const label = surface && status !== 'offline' ? `${status} via ${surface}` : status;
   return `${dot} ${theme.meta(label)}`;
 }
+
+/** One act waiting on you, as the daily view reads it. */
+export interface DailyWaiting {
+  from: string;
+  fromKind: MemberKind;
+  act: string;
+  body: string;
+  ts: number;
+}
+
+/** One lane you hold. `merged` is the lane's landed merge, when it has one. */
+export interface DailyLane {
+  state: string;
+  title: string;
+  merged?: boolean | undefined;
+}
+
+/** A ⚠ line about this machine, and the command that fixes it. */
+export interface DailyWarning {
+  line: string;
+  fix: string;
+}
+
+/** Everything the daily view of `musterd status` shows — collected by the command, drawn here. */
+export interface DailyView {
+  team: string;
+  me?:
+    | { name: string; kind: MemberKind; role?: string | undefined; model?: string | undefined }
+    | undefined;
+  memory?: string | undefined;
+  /** Undefined when nothing is waiting; `count` may exceed the acts listed. */
+  waiting?: { count: number; acts: DailyWaiting[] } | undefined;
+  lanes: DailyLane[];
+  /** `{ unreadable }` says why the list is missing rather than showing a stale one. */
+  upNext: { lanes: { id: string; title: string }[]; total: number } | { unreadable: string };
+  crew: {
+    here: number;
+    working: number;
+    blocked: { name: string; kind: MemberKind; why: string }[];
+    /** When the team line is not live: the last moment it was read. */
+    asOf?: number | undefined;
+  };
+  warnings: DailyWarning[];
+  /** Sections an older daemon does not report, said plainly. */
+  notReported: string[];
+}
+
+/** Waiting acts and the words a row uses for them (comms' pass, #3501/#3526). */
+const ACT_WORD: Record<string, string> = {
+  ask: 'asks',
+  request_help: 'needs help',
+  handoff: 'hands you',
+  steer: 'redirects you',
+  challenge: 'questions',
+  message: 'wrote',
+};
+
+/** Cut plain text to `max` visible columns with `…`; never wraps. */
+function cut(s: string, max: number): string {
+  if (visibleLen(s) <= max) return s;
+  let out = '';
+  for (const ch of s) {
+    if (visibleLen(out + ch) > max - 1) break;
+    out += ch;
+  }
+  return out.trimEnd() + '…';
+}
+
+/** Age of a waiting act: `now` under a minute, then `14m` / `1h` / `2d`. */
+function waitAge(ts: number, now: number): string {
+  return now - ts < 60_000 ? 'now' : ageLabel(ts, now);
+}
+
+/**
+ * One row: `head` (already painted, `headLen` visible columns) then `text`, cut so the row and its
+ * right-aligned `right` (an age or a lane hint) fit `width`, with `right` ending at the last column.
+ */
+function dailyRow(
+  head: string,
+  headLen: number,
+  text: string,
+  width: number,
+  right?: string,
+): string {
+  const room = width - headLen - (right ? visibleLen(right) + 2 : 0);
+  const body = cut(text, Math.max(1, room));
+  if (!right) return head + body;
+  const gap = width - headLen - visibleLen(body) - visibleLen(right);
+  return head + body + ' '.repeat(Math.max(2, gap)) + theme.meta(right);
+}
+
+/** The hint a held lane earns, right-aligned at 80 columns. */
+function laneHint(lane: DailyLane): string | undefined {
+  if (lane.state === 'awaiting_acceptance') return 'with the acceptor';
+  if (lane.merged) return 'PR merged · submit';
+  if (lane.state === 'claimed') return 'ready to start';
+  return undefined;
+}
+
+/**
+ * The daily view of `musterd status` (frames 27-2/27-4/27-6/27-8, `figma-brief-terminal.md` "Daily
+ * view frames"): you → ⚑ waiting on you → ◆ your work → ○ up next → the team on one line → ⚠ this
+ * machine, only when something is wrong. Items never wrap: a row is cut with `…` at the column edge,
+ * and `inbox` / `lane show` carry the full text. Ages and lane hints right-align to the last column;
+ * under 60 columns the model, the lane hints, the second up-next item and the blocker's name drop.
+ * Pure: `now` and `width` come in, so a test renders a day at 80 and at 40 columns.
+ */
+export function renderDailyView(v: DailyView, now: number, width: number): string[] {
+  const narrow = width < 60;
+  const out: string[] = [];
+  if (v.me) {
+    out.push(theme.meta(`musterd · ${v.team} · ${clock(now)}`));
+    const facets = [v.me.role || undefined, narrow ? undefined : v.me.model].filter(
+      (f): f is string => !!f,
+    );
+    const tail = facets.length > 0 ? facets : [v.me.kind];
+    out.push(
+      `you are ${theme.memberName(v.me.name, v.me.kind)}` +
+        theme.meta(tail.map((f) => ` ${sym.dot} ${f}`).join('')),
+    );
+    if (v.memory) out.push(theme.dim(cut(v.memory, width)));
+  }
+
+  out.push('');
+  if (v.waiting) {
+    out.push(theme.accent(`⚑ ${v.waiting.count} waiting on you`));
+    for (const a of v.waiting.acts.slice(0, 3)) {
+      const verb = ACT_WORD[a.act] ?? a.act;
+      const gist = a.body.replace(/\s+/g, ' ').trim();
+      out.push(
+        dailyRow(
+          `  ${theme.memberName(a.from, a.fromKind)}`,
+          2 + visibleLen(a.from),
+          ` ${sym.dot} ${verb}: ${gist}`,
+          width,
+          waitAge(a.ts, now),
+        ),
+      );
+    }
+    if (v.waiting.count > 3)
+      out.push(theme.meta(`  +${v.waiting.count - 3} more ${sym.dot} musterd inbox`));
+    out.push(theme.meta('  → musterd inbox'));
+  } else {
+    out.push(theme.meta('⚑ nothing waiting on you'));
+  }
+
+  out.push('');
+  const upLanes = 'lanes' in v.upNext ? v.upNext.lanes : [];
+  if (v.lanes.length === 0) {
+    out.push(theme.meta('You hold no lanes.'));
+    if (upLanes[0]) out.push(theme.meta(`pick one up  musterd lane claim ${upLanes[0].id}`));
+  } else {
+    out.push(`◆ your work  ${theme.meta(String(v.lanes.length))}`);
+    for (const lane of v.lanes.slice(0, 3)) {
+      const state = lane.state === 'active' ? theme.ok(lane.state) : lane.state;
+      out.push(
+        dailyRow(
+          `  ${state}`,
+          2 + lane.state.length,
+          ` ${sym.dot} ${lane.title}`,
+          width,
+          narrow ? undefined : laneHint(lane),
+        ),
+      );
+    }
+    if (v.lanes.length > 3)
+      out.push(theme.meta(`  +${v.lanes.length - 3} more ${sym.dot} musterd lanes --mine`));
+  }
+
+  if ('unreadable' in v.upNext) {
+    out.push('');
+    out.push(`○ up next  ${theme.meta(`— not shown: ${v.upNext.unreadable}`)}`);
+  } else if (upLanes.length > 0) {
+    const shown = upLanes.slice(0, narrow ? 1 : 2);
+    out.push('');
+    out.push('○ up next');
+    for (const lane of shown) {
+      // The 10-character prefix every lane command takes, as the frames print it.
+      const id = ` — ${lane.id.slice(0, 10)}`;
+      const title = cut(lane.title, Math.max(1, width - 2 - visibleLen(id)));
+      out.push(`  ${title}${theme.meta(id)}`);
+    }
+    const more = Math.max(v.upNext.total, upLanes.length) - shown.length;
+    if (more > 0) out.push(theme.meta(`  +${more} more ${sym.dot} musterd next`));
+    out.push(theme.meta('  → musterd next'));
+  }
+  for (const section of v.notReported)
+    out.push(theme.meta(`${section}: not reported by this daemon`));
+
+  out.push('');
+  const parts = [`${v.crew.here} here`];
+  parts.push(v.crew.working > 0 ? `${v.crew.working} working` : 'nobody working yet');
+  let crew = parts.join(` ${sym.dot} `);
+  const b = v.crew.blocked;
+  if (b.length > 0) {
+    crew += ` ${sym.dot} ${theme.warn(`${b.length} blocked`)}`;
+    if (!narrow) {
+      const why = cut(b[0]!.why, 24);
+      crew += ` (${theme.memberName(b[0]!.name, b[0]!.kind)}: ${why}${b.length > 1 ? ', …' : ''})`;
+    }
+  }
+  const asOf = v.crew.asOf !== undefined ? `as of ${clock(v.crew.asOf)} — ` : '';
+  out.push(narrow && !asOf ? crew : `${theme.meta('team')}  ${asOf}${crew}`);
+
+  const quiet =
+    v.lanes.length === 0 && !v.waiting && upLanes.length === 0 && !('unreadable' in v.upNext);
+  if (quiet) out.push(theme.meta('All quiet. musterd next shows open work.'));
+
+  if (v.warnings.length > 0) {
+    out.push('');
+    for (const w of v.warnings) {
+      out.push(theme.warn(cut(w.line, width)));
+      out.push(theme.meta(cut(`  → ${w.fix}`, width)));
+    }
+  }
+  return out;
+}
