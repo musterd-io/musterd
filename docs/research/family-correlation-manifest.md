@@ -1,7 +1,8 @@
 # Family correlation: pre-registration
 
 **Lane:** `01M608FCFB` (goal `family-correlation`), asked by nick. **Status:** pre-registered
-2026-10-27; not run. Reviewed by lazara (01M608HTZ1), whose points fixed the design below. Nothing
+2026-10-27; run once 2026-10-28 → [finding 031](./031-family-correlation-run.md) (inconclusive: the
+two hit rules disagree). Reviewed by lazara (01M608HTZ1), whose points fixed the design below. Nothing
 under Verdict rules changes once a measured item has run; what the run teaches goes in the finding,
 not here. **Reads with:** [ADR 314](../decisions/314-correlated-models-correlated-mistakes.md),
 [finding 004](./004-cross-family-diversity-flag-live.md),
