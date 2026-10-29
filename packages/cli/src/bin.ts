@@ -104,6 +104,14 @@ async function main(argv: string[]): Promise<number> {
     return launchByName(command, rest);
   }
 
+  // `--json` where the command has no JSON to give is refused before the command loads, so a script
+  // never gets prose back from a write that already happened (ADR 758).
+  if (rest.flags['json'] === true) {
+    const { jsonRefusal } = await import('./jsonOutput.js');
+    const refusal = jsonRefusal(command, rest.positionals);
+    if (refusal) throw new CliError(refusal, 2);
+  }
+
   const code = await instrumentedDispatch(command, rest);
   // Agent-side reachability (ADR 046) and the seat tab title (ADR 160): best-effort postambles.
   const { reachabilityNudge } = await import('./commands/helpers.js');

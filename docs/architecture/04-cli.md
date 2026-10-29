@@ -40,6 +40,7 @@ src/
     templates.ts      // built-in role templates `role create --from` instantiates into roles/<name>.toml — seeds with structural capabilities only, no promotion machinery (ADR 298)
   infra-gate.ts       // warn-only infra-touch check: asks the daemon whether the acting seat holds `platform`; every failure mode is silence, never a block (ADR 227 inc 2)
   hookStdin.ts        // readHookStdin(timeoutMs): the one bounded stdin drain every harness hook uses (gate, capture, codex-hook, trace tap) — a wiring mistake must never hang a tool call (ADR 247: one transform, one home)
+  jsonOutput.ts       // where `--json` has no JSON to give: NO_JSON_COMMANDS and NO_JSON_SUBCOMMANDS, which bin.ts refuses with exit 2 before the command loads (ADR 758 follow-up, audited 2026-10-29)
   keychain.ts         // keychainLookup (`security find-generic-password -w`, null on any miss) + seatKeyService: the stream key and a resident seat's API key (`musterd:<VAR>`, ADR 605) come from here, never logged
   trace/              // ADR 445 — the trace tap, client half: R1 hooks + R2 transcript tail
     hook.ts           // parseTraceHook (names/ids/sizes out of a hook payload — never tool_input/tool_response/prompt/error/transcript_path/cwd) + buildTraceEvent (sessionDigest, never the raw id) + emitTraceEvents (raced against TRACE_POST_BUDGET_MS, swallows everything) + tapHook (the one-call form each hook site uses; harness = payload spelling (inferTraceHarness: Grok camelCase, Cursor conversation_id) → caller's word → claude-code, and a spelling that contradicts the caller's word is a foreign run — Cursor running .claude hook lines — that posts only its HookOutcome; Cursor event names mapped onto the column's; an optional HookOutcome rides the same post) + traceDepth (the `traced: structural[+content]` line `musterd status` prints, ADR 445 §4) + extractTraceContent (1b: scrubToText per field, then one shared 256 KiB budget, cut on a UTF-8 boundary; pre-cut at 2× so a huge response is not regex-scanned whole) + read/writeTraceContentMode (.musterd/trace-policy.json, learned from the ingest reply) + traceContentEnabled (mode on AND loopback daemon); MUSTERD_NO_TRACE=1 is the seat's kill switch
@@ -444,7 +445,7 @@ What each harness enforces:
 
 ## Commands (args, flags, output, exit)
 
-All commands accept global `--team <slug>`, `--server <url>`, `--json` (machine output, no color, on the commands that list it; a write prints the daemon's reply as one line, ADR 758), `--no-color`, `--quiet` (suppress the reachability nudge below). `musterd --version` / `-v` / `version` prints the `@musterd/cli` `package.json` version and exits (ADR 067) — intercepted in `main()` before the help path so it isn't swallowed.
+All commands accept global `--team <slug>`, `--server <url>`, `--json` (machine output, no color; a write prints the daemon's reply as one line, ADR 758; a command or subcommand with no JSON output refuses the flag with exit 2 before anything is sent, `jsonOutput.ts`), `--no-color`, `--quiet` (suppress the reachability nudge below). `musterd --version` / `-v` / `version` prints the `@musterd/cli` `package.json` version and exits (ADR 067) — intercepted in `main()` before the help path so it isn't swallowed.
 
 ### `musterd seed <list|show|claim|ask|answer|brief|conclude|promote>`
 
