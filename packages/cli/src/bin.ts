@@ -66,7 +66,12 @@ async function main(argv: string[]): Promise<number> {
       process.stdout.write(help.renderHelpJson() + '\n');
       return 0;
     }
-    const topic = command === 'help' ? rest.positionals[0] : undefined;
+    // `musterd <cmd> --help` / `-h`: show that command's detail, not the general map.
+    // Previously `musterd send --help` fell through to the general help because `topic` was only
+    // set for the `musterd help <cmd>` word order.
+    let topic: string | undefined;
+    if (command === 'help') topic = rest.positionals[0];
+    else if (command && help.renderCommandHelp(command)) topic = command;
     if (topic) {
       const detail = help.renderCommandHelp(topic) ?? help.renderGroupHelp(topic);
       if (detail) {
