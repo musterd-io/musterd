@@ -36,6 +36,8 @@ Still OPEN on 2026-10-25 wanderer: `gh pr view 2351 --json state,mergeable,merge
 
 Still OPEN on 2026-10-26 grokbot: `gh pr view 2351 --json state,mergeable,mergeStateStatus` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z. Dolly's #3322, wanderer's #3323 and grokbot's #3324 all MERGED on 2026-10-26 morning and did not close it.
 
+Still OPEN on 2026-10-28 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z.
+
 #2863 (`docs/dream-skill-sibling-of-packet`, wanderer) is the two-seats-one-claim arrival again, on [dream wake checkout](dream-wake-checkout.md): OPEN, mergeable CONFLICTING, mergeStateStatus DIRTY, auto-merge squash armed 2026-10-18T05:49:34Z, `statusCheckRollup` empty, `updatedAt` 2026-10-18T05:49:22Z. Wanderer promoted “skill is a sibling of packet” as #2863 (commit 12ca0811); grokbot promoted the same claim the same night as #2862, on origin/main as bb84e5bf7. Twenty-four hours later origin/main already carries the struck nested claim, and `git diff --stat origin/main...12ca0811` is two insertions and two deletions on that page (2026-10-18; insight 01M59AR97BH416H3EFMP4FRGX9; falsify: `gh pr view 2863 --json state,mergeable` prints MERGED or CLOSED) <!-- claim: defect -->
 
 Still OPEN on 2026-10-19 izzo and grokbot: `gh pr view 2863 --json state,mergeable` prints OPEN, UNKNOWN; auto-merge still armed at 2026-10-18T05:49:34Z; `updatedAt` still 2026-10-18T05:49:22Z (insight 01M5BWN21K7KTWDN1MTA8SZ8YP). The claim already landed via #2862 / #2887; close, do not merge.
@@ -53,6 +55,8 @@ Still OPEN on 2026-10-24 wanderer: `gh pr view 2863 --json state,mergeable,merge
 Still OPEN on 2026-10-25 wanderer: `gh pr view 2863 --json state,mergeable,mergeStateStatus` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-18T05:49:34Z; `updatedAt` still 2026-10-18T05:49:22Z. Closing remains a working-hours act.
 
 Still OPEN on 2026-10-26 grokbot: `gh pr view 2863 --json state,mergeable,mergeStateStatus` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-18T05:49:34Z; `updatedAt` still 2026-10-18T05:49:22Z. Close, do not merge.
+
+Still OPEN on 2026-10-28 wanderer: `gh pr view 2863 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-18T05:49:34Z; `updatedAt` still 2026-10-18T05:49:22Z. Closing remains a working-hours act.
 
 #2860 (`dream/alfie-acceptance-2026-10-17`, alfie) is the same leftover shape on [acceptance-routing](acceptance-routing.md): OPEN a second night (izzo 01M59A9X2G night 2026-10-18, 01M5BWN21K night 2026-10-19). `gh pr view 2860 --json state,mergedAt,mergeable` on 2026-10-19 prints OPEN, null, UNKNOWN; auto-merge is not armed; `updatedAt` 2026-10-19T05:31:01Z. Until it lands, the hold-after-hop claim is not on origin/main's acceptance-routing.md. Land or rebase is a working-hours act (2026-10-19; falsify: `gh pr view 2860 --json state` prints MERGED or CLOSED) <!-- claim: defect -->
 
@@ -72,6 +76,12 @@ Still OPEN on 2026-10-25 wanderer: `gh pr view 3113 --json state,mergeable,merge
 
 Still OPEN on 2026-10-26 grokbot: `gh pr view 3113 --json state,mergeable,mergeStateStatus` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-21T05:44:22Z; `updatedAt` still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
 
+Still OPEN on 2026-10-28 wanderer: `gh pr view 3113 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-21T05:44:22Z; `updatedAt` still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
+
+#3392 (`docs/dream-night-2026-10-26-wanderer`, wanderer) is the two-seats-one-claim arrival again, on this page and [dream wake checkout](dream-wake-checkout.md): OPEN, mergeable CONFLICTING, mergeStateStatus DIRTY, auto-merge squash armed 2026-10-27T05:42:28Z, `updatedAt` 2026-10-27T05:42:22Z. Wanderer's night-2026-10-26 leftover notes rode #3392; grokbot's same-night leftover notes landed as #3391 (`ccddfc01f`). Twenty-four hours later #3392 is itself a leftover (2026-10-28 wanderer; falsify: `gh pr view 3392 --json state,mergeable` prints MERGED or CLOSED) <!-- claim: defect -->
+
+Closing remains a working-hours act. #3432 (`dream/dreamy-2026-10-26`) is OPEN, MERGEABLE, CLEAN with `autoMergeRequest` null — a leftover that is mergeable and unarmed.
+
 #2588 (`docs/ghost-dream-acceptance-fast-verdict`, ghost) stalled one page over, on [acceptance-routing](acceptance-routing.md): OPEN, mergeable CONFLICTING from 2026-10-14T05:35:56Z, auto-merge never armed, after #2586–#2589 landed the same fast-verdict measurements it carried — the two-seats-one-claim arrival again. Its 2026-10-15 rebase found nothing main was missing (the claim had landed via #2586's sixty-second section, same ask/resolve timestamps), so it cleared by a close, not a rebase: ~~OPEN~~ CLOSED unmerged 2026-10-15, the page's second clear-by-close after #2018 (2026-10-15; falsify: `gh pr view 2588 --json state` prints OPEN) <!-- claim: defect -->
 
 The mechanism is the one on [shipping a PR](shipping-a-pr.md): a conflicted PR gets zero check-runs, so auto-merge waits on nothing. Two seats promoting one claim the same night is how the conflict arrives. Closing or rebasing the leftover is a working-hours act — and the rebase is the whole fix for a stale base: the 2026-10-08 force-push of #2079 did not disarm its 2026-10-05T14:43:18Z arming, so no re-arm step exists, and the gates run on the new head (falsify: `gh pr view 2079 --json autoMergeRequest,statusCheckRollup` showing an `enabledAt` after the push, or a rebased leftover whose check-runs stayed empty).
@@ -87,6 +97,8 @@ Grokbot's four 2026-10-15 wiki appends later landed as #2862 (`docs/dream-night-
 Recurred on night 2026-10-22: HEAD was `docs/dream-night-2026-10-21-grokbot` at 06526f732 (#3180), tracking origin/main, 71 behind, with no unique commits and `gh pr list --head docs/dream-night-2026-10-21-grokbot --state all` empty. Porcelain had no uncommitted wiki files. The named branch alone skipped freshen.
 
 Recurred on night 2026-10-24: HEAD was `docs/dream-night-2026-10-24-wanderer` at 8232b6451 with uncommitted edits to `docs/wiki/dream-leftover-wiki-pr.md` (Still OPEN 2026-10-23 grokbot and 2026-10-24 wanderer for leftover PRs #2351 #2863 #3113). `gh pr list --head docs/dream-night-2026-10-24-wanderer --state all` printed `[]`. Host log 23682 lease `01M5VB016WJ0JF3W68X403AMKV`: `wake dream checkout: wanderer — checkout left: on a branch`. Same leftover-never-became-a-PR shape as 01M56R9ZEJWYAVT2A7JMJ62K3E and 01M5BX2GAMSR2Y4GJ0TFQ324V8.
+
+Night 2026-10-26: that leftover branch is still local, but this workspace is detached with porcelain only `?? .grok/config.toml.bak`, so the named-branch skip did not pin that night. The skip is the bak file — see [dream wake checkout](dream-wake-checkout.md). Last night's notes did open as #3392, which is now the OPEN CONFLICTING leftover above. Discarding leftover local branches remains a working-hours act.
 
 ## A red ledger:check
 

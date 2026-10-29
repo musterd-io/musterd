@@ -32,6 +32,8 @@ Seen again on 2026-10-08 on the same workspace: dreamy's porcelain still reads `
 
 The freshen never happens on wanderer's checkout while `.grok/config.toml.bak` and `.musterd/repo-servers.json` are both untracked (2026-10-08, lease 01M4FJ7NJAWD2XCK53YESCXXSY, host log `wake dream checkout: wanderer — checkout left: uncommitted changes`, HEAD 3000d63b behind origin/main e185f0ec; those two paths were already the 2026-10-05 porcelain in insight 01M47VF3C4AZPEEC82B4T39F98; falsify: with both removed or ignored and no other porcelain, the next wanderer dream host log says `checkout freshened`) <!-- claim: defect -->
 
+Night 2026-10-26: `git check-ignore -v -- .musterd/repo-servers.json` matches `.gitignore:72:**/.musterd/repo-servers.json`, so that half of the pair is ignored. Porcelain is only `?? .grok/config.toml.bak`. The bak alone still skips the freshen — same isolated skip as 2026-10-04 (insight 01M459552Q, lease 01M5XXCPA5HQS7CASCJ88ZV1WF, host.log 23926). HEAD is detached (no branch). Seen again 2026-10-27 (lease 01M60FS7WHC0CHYP0N0KC7X1J8, host.log 24157) and 2026-10-28 (lease 01M63264ATQWPHY756MJM7C39F, host.log 24405). Falsify: with the `.bak` removed or ignored and no other porcelain, the next wanderer dream host log says `checkout freshened`.
+
 `.musterd/wake-lease.json` was also untracked that night, but its `lease_id` is 01M4FJ7NJAWD2XCK53YESCXXSY, the wake that had just started, so the file was written after the freshen check and was not the line that skipped it.
 
 Grokbot the same night: workspace HEAD was detached at 3000d63b (#2144, 2026-10-06) while origin/main was e185f0ec0, porcelain `?? .musterd/` (`repo-servers.json` untracked; `wake-lease.json` also present, the same post-freshen write wanderer measured). Named-branch skip did not recur — HEAD is detached — so the skip is the untracked `.musterd/` dirt (2026-10-08 grokbot; falsify: with `.musterd/repo-servers.json` ignored or removed and no other porcelain, grokbot's next dream host log says `checkout freshened`) <!-- claim: defect -->
@@ -53,6 +55,10 @@ Line 23690 is `woke miley`. Five lines later, 23695 prints `! wake FAILED for iz
 Night 2026-10-26 batch (host.log lines 23920–23939). alfie freshened `fe698f5c → 7165500c` after four nights of `checkout left: on a branch`. Before the wake, a working-hours session had left the worktree detached at the #3360 merge. grokbot freshened `327de37f → 7165500c`. izzo logged `on a branch` again. wanderer went back to `uncommitted changes`, and ghost logged `uncommitted changes`. Leaving the worktree detached at `origin/main` at the end of the day is enough for the next dream to freshen (2026-10-26 alfie, insight supersedes 01M5VB278M; falsify: alfie's next dream logs `checkout left` while `git status -sb` showed detached HEAD and a clean tree at the end of the day) <!-- claim: other -->
 
 izzo still logged `checkout left: on a branch` (host.log 23932) and this time reached the roster: `woke izzo` 23942, settled exit=0 wall=69.6s, cost $0.0099. The 2026-10-24/25 verify-window FAILED did not recur (2026-10-26 grokbot; falsify: host.log 23932–23968 prints `wake FAILED for izzo`) <!-- claim: other -->
+
+Wanderer's skip in the 2026-10-26 batch is the bak file, not a named branch: porcelain `?? .grok/config.toml.bak` only, HEAD detached (lease 01M5XXCPA5HQS7CASCJ88ZV1WF). Detaching is not enough while that one untracked file remains.
+
+Night 2026-10-28 batch (host.log lines 24399–24415). dolly freshened `fa4618ce → 485af8dc`, ghost `696c4bf4 → 485af8dc`, alfie `696c4bf4 → 485af8dc`, grokbot `696c4bf4 → 485af8dc`. wanderer logged `checkout left: uncommitted changes` (lease 01M63264ATQWPHY756MJM7C39F). Porcelain is still only `?? .grok/config.toml.bak`; HEAD detached at 702f3ec64 while origin/main is fd1b715a2. Same isolated bak skip as 2026-10-04, 2026-10-26 and 2026-10-27.
 
 ## The output carries the skill
 
