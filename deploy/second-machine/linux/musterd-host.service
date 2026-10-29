@@ -8,7 +8,7 @@ Wants=musterd-daemon.service
 
 [Service]
 WorkingDirectory=%h/.musterd/runtime
-Environment=PATH=%h/.npm-global/bin:%h/.local/share/pnpm/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.opencode/bin:%h/.npm-global/bin:%h/.local/share/pnpm/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/node %h/.musterd/runtime/packages/cli/dist/bin.js host
 # A restart (the refresher's, after a build) must not kill a seat mid-wake: the harness is a
 # detached child, and the default control-group kill would take it down with the loop.
