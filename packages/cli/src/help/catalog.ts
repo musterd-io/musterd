@@ -107,7 +107,10 @@ export const START_HERE: readonly string[] = ['init', 'claim', 'status', 'next']
 export const GLOBAL_FLAGS: readonly { flag: string; summary: string }[] = [
   { flag: '--team <slug>', summary: 'act on a specific team (else the folder / config default)' },
   { flag: '--server <url>', summary: 'point at a specific daemon' },
-  { flag: '--json', summary: 'machine-readable output (no color, no chrome)' },
+  {
+    flag: '--json',
+    summary: 'machine-readable output where the command lists it (no color, no chrome)',
+  },
   { flag: '--no-color', summary: 'disable ANSI color' },
   { flag: '--quiet', summary: 'suppress the reachability nudge' },
 ];
@@ -685,6 +688,7 @@ export const CATALOG: readonly CommandEntry[] = [
       '  handoff <id> --to <seat> [--branch <ref>]   transfer it, with its branch\n' +
       '  update <id> [--state <s>] [--branch <ref>] [--goal <id>]  edit it\n' +
       '  resolve <id>                  close it\n' +
+      "--json on any of these prints the daemon's reply as one line, nothing else (ADR 758).\n" +
       '--goal links a lane to a Goal (ADR 084). --source-ref names the issue it came from\n' +
       '(acme/app#12, ENG-42) on open or update; one open lane per ref (ADR 561).',
     examples: [

@@ -300,6 +300,9 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
   );
   const sub = parsed.positionals[0];
   const { team, identity, http } = resolve(parsed.flags);
+  // `--json`: every write prints the daemon's reply as one JSON line and nothing else — the lane,
+  // its warnings, the review routing — so a script reads the outcome instead of scraping prose.
+  const json = parsed.flags['json'] === true;
 
   // ADR 582 §4: one lane in full — what reviewing a lane meant reading the DB for. The lines under
   // the board line are the protocol's, shared with the MCP `lane_board {q}` render.
@@ -307,10 +310,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     const id = parsed.positionals[1];
     if (!id) throw new CliError(USAGE, 2);
     const d = await http.laneShow(team, id);
-    if (parsed.flags['json']) {
-      process.stdout.write(JSON.stringify(d) + '\n');
-      return 0;
-    }
+    if (json) return printJson(d);
     process.stdout.write(renderLane(d.lane) + '\n');
     // Stripped: the brief and the history name text other seats wrote (a fold stores what another
     // daemon sent), so no escape sequence reaches the terminal.
@@ -337,6 +337,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       value: numberFlag(raw, 'value'),
       n: countFlag(parsed.flags),
     });
+    if (json) return printJson(res);
     const was = res.replaced ? ` (replaced ${String(res.replaced.value)})` : '';
     process.stdout.write(
       `${theme.ok('✓')} sample ${res.sample.day} = ${String(res.sample.value)} (n ${String(res.sample.n)})${was}\n`,
@@ -410,6 +411,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         : {}),
       ...(parsed.flags['claim'] === true ? { claim: true } : {}),
     });
+    if (json) return printJson(res);
     process.stdout.write(`${theme.ok('✓')} lane opened\n${renderLane(res.lane)}\n`);
     if (!res.lane.requested) process.stdout.write(theme.meta(LANE_REQUESTED_NUDGE) + '\n');
     printMetricNudge(res.lane);
@@ -516,6 +518,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
             ...readVerdictFlags(parsed.flags),
           },
     );
+    if (json) return printJson(res);
     const label = sub === 'claim' ? 'claimed' : submit ? 'submitted for acceptance' : 'done';
     process.stdout.write(`${theme.ok('✓')} lane ${label}\n${renderLane(res.lane)}\n`);
     const claimsText = renderClaims(res.lane.claims);
@@ -560,6 +563,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       state: 'open',
       ...(reason ? { release_reason: reason } : {}),
     });
+    if (json) return printJson(res);
     process.stdout.write(
       `${theme.ok('✓')} lane released — open for anyone\n${renderLane(res.lane)}\n`,
     );
@@ -582,6 +586,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       park_reason: reason,
       ...(until !== undefined ? { park_until: until } : {}),
     });
+    if (json) return printJson(res);
     process.stdout.write(
       `${theme.ok('✓')} lane parked — kept, not offered; agents cannot claim it\n${renderLane(res.lane)}\n`,
     );
@@ -592,6 +597,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     const id = parsed.positionals[1];
     if (!id) throw new CliError(USAGE, 2);
     const res = await http.updateLane(team, id, { state: 'open' });
+    if (json) return printJson(res);
     process.stdout.write(
       `${theme.ok('✓')} lane unparked — open for anyone\n${renderLane(res.lane)}\n`,
     );
@@ -614,6 +620,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         ? { handoff_note: flagStr(parsed.flags, 'note')! }
         : {}),
     });
+    if (json) return printJson(res);
     process.stdout.write(`${theme.ok('✓')} lane handed to ${to}\n${renderLane(res.lane)}\n`);
     renderWarnings(res.warnings);
     return 0;
@@ -691,6 +698,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         ? { card: parseCard(flagStr(parsed.flags, 'card')!) }
         : {}),
     });
+    if (json) return printJson(res);
     process.stdout.write(`${theme.ok('✓')} lane updated\n${renderLane(res.lane)}\n`);
     printMetricNudge(res.lane);
     renderWarnings(res.warnings);
@@ -939,6 +947,12 @@ export function metricFlags(
 }
 
 /** ADR 701: a dated read with no metric says, once, that its chart is one flag away. */
+/** `--json` on a lane verb or `done`: the daemon's reply as one line on stdout, exit 0. */
+export function printJson(value: unknown): number {
+  process.stdout.write(JSON.stringify(value) + '\n');
+  return 0;
+}
+
 function printMetricNudge(lane: Lane): void {
   const nudge = metricNudge(lane, 'cli');
   if (nudge) process.stdout.write(theme.meta(nudge) + '\n');
