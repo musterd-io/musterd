@@ -12,7 +12,7 @@ them. Change the manifest first.
 | 2b. Top up, if the kept pool is short | `items.py topup`, then step 2 again (it resumes) | as steps 1 and 2 | none |
 | 3. Draw pilot and main items | `items.py draw` | anywhere | none |
 | 4. Review | `review.py --stage pilot`, then `--stage main` | anywhere, with `OPENROUTER_API_KEY` | yes |
-| 5. Score, gate, compute `D` | `analyze.py --stage pilot`, then `--stage main` | anywhere | none |
+| 5. Score, gate, compute `D` | `analyze.py --stage pilot`, then `--stage main` (spend and the pilot projection read that stage's rows only) | anywhere | none |
 
 `patchlib.py` parses and numbers diffs; `mutate.py` holds the operators (the set in force and the first, for pilot 1). `models.json`
 lists the six reviewers (two per family) by OpenRouter id. Tests: `python3

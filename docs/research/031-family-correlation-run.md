@@ -126,7 +126,7 @@ six under the coarse rule.
 
 - **Grok 4.7's reasoning ran past the output cap.** `max_tokens: 2000` was sent to every reviewer.
   Grok 4.7's billed output had a median of 6,428 tokens and a maximum of 50,924, because OpenRouter
-  bills its reasoning outside the cap. That is $7.22 of the $13.72 main-run spend. The other five
+  bills its reasoning outside the cap. That is $7.22 of the $13.73 main-run spend. The other five
   stayed near the cap (medians of 342 to 626 tokens). The manifest put reasoning at the provider
   default. Grok 4.7's default spends far more than the others' defaults.
 - **Replies that could not be parsed count as misses**, as the manifest's Errors section says: 16 of
@@ -173,6 +173,13 @@ python3 scripts/research/family-correlation/analyze.py --run $S/run2 --stage mai
 python3 $S/secondary.py $S/run2          # spans, per-family gaps, clustering, per-class D, pair phi
 python3 scripts/research/family-correlation/analyze.py --run $S/pilot1 --stage pilot --cap-usd 200
 ```
+
+_Corrected 2026-10-28 (big-body's acceptance review):_ `analyze.py --stage pilot` used to add the cost of
+every stage in `reviews.jsonl`. Once the main run's rows were in the file, it projected $204.30 and failed
+the gate that had passed before the main run started. The live run was not affected, because the main rows
+did not exist when the gate was read. The analyzer now counts only that stage's rows (and reports
+`spent_all_stages_usd` beside them), so the commands above give pilot 2's $1.41 spent, $19.00 projected and
+pass from the committed file.
 
 `run2/` holds the keep results for the absence set (`kept.jsonl`), the drawn items and their run order
 (`items.jsonl`), and every reply with its tokens and cost (`reviews.jsonl`), for pilot 2 and the main

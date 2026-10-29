@@ -205,6 +205,29 @@ def test_verdict_needs_both_rules():
     assert analyze.verdict(None, (0.02, 0.3)) == "inconclusive (rules disagree)"
 
 
+def test_pilot_projection_reads_pilot_rows_only(tmp_path=None):
+    import json
+    import subprocess
+    import tempfile
+
+    run = Path(tmp_path or tempfile.mkdtemp())
+    item = {"path": "pkg/mod.py", "loc": [14, 14], "hunk": [10, 22], "feature": "r/task1/feature1", "class": "dropped_guard"}
+    items = [{**item, "item": "s1", "stage": "pilot"}, {**item, "item": "s2", "stage": "main"}]
+    reviews = [
+        {"item": "s1", "stage": "pilot", "model": "m", "family": "f", "findings": [], "cost_usd": 0.10},
+        {"item": "s2", "stage": "main", "model": "m", "family": "f", "findings": [], "cost_usd": 50.0},
+    ]
+    (run / "items.jsonl").write_text("".join(json.dumps(r) + "\n" for r in items))
+    (run / "reviews.jsonl").write_text("".join(json.dumps(r) + "\n" for r in reviews))
+    out = subprocess.run(
+        [sys.executable, str(Path(analyze.__file__)), "--run", str(run), "--stage", "pilot", "--main-reviews", "10"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    report = json.loads(out)
+    assert report["spent_usd"] == 0.1 and report["spent_all_stages_usd"] == 50.1
+    assert report["pilot_gate"]["projected_total_usd"] == 1.1  # 0.10 + 0.10 x 10, the main row ignored
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

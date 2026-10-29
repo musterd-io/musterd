@@ -92,6 +92,16 @@ def interval(miss, family, features: list[str]) -> tuple[float, float] | None:
     return ds[int(0.025 * len(ds))], ds[int(0.975 * len(ds)) - 1]
 
 
+def stage_spend(reviews) -> float:
+    return sum((r.get("cost_usd") or 0) for r in reviews)
+
+
+def projected_total(pilot_reviews: list[dict], main_reviews: int) -> float:
+    """The manifest's re-ask figure: pilot spend plus its mean cost per review times the main run."""
+    spent = stage_spend(pilot_reviews)
+    return spent + spent / max(1, len(pilot_reviews)) * main_reviews
+
+
 def verdict(primary: tuple | None, coarse: tuple | None) -> str:
     def one(ci):
         if ci is None:
@@ -130,8 +140,9 @@ def main() -> None:
     report["false_alarms"] = {
         m: sum(1 for k in controls if (by.get((k, m), {}).get("findings") or [])) for m in models
     }
-    spent = sum((r.get("cost_usd") or 0) for r in map(json.loads, open(a.run / "reviews.jsonl")))
+    spent = stage_spend(reviews)  # this stage's rows only, so the pilot gate reads the same after main runs
     report["spent_usd"] = round(spent, 2)
+    report["spent_all_stages_usd"] = round(stage_spend(map(json.loads, open(a.run / "reviews.jsonl"))), 2)
 
     for rule in ("primary", "coarse"):
         miss = {m: [0 if hit(by.get((k, m), {}).get("findings"), items[k], rule) else 1 for k in seeded] for m in models}
@@ -149,8 +160,7 @@ def main() -> None:
         json_ok = all(v >= 9 for v in report["json_ok"].values()) and len(items) >= 10
         rate = report["miss_rate_primary"]
         band = rate is not None and 0.20 <= rate <= 0.80
-        per_review = spent / max(1, len(reviews))
-        projected = spent + per_review * a.main_reviews
+        projected = projected_total(reviews, a.main_reviews)
         report["pilot_gate"] = {
             "json_shape_9_of_10": json_ok,
             "miss_rate_in_20_80": band,
