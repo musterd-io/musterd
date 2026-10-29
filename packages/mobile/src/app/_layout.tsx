@@ -1,14 +1,14 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { Image } from 'react-native';
+import wordmark from '../../assets/wordmark.png';
 import { usePalette } from '../ui/theme';
 
 export default function RootLayout() {
   const p = usePalette();
   // The navigator draws the header itself — its glass buttons and large title — from this theme,
-  // not from the screens. Left on its light default under a dark screen, build 2 drew light-grey
-  // button pills and a black large title on black (2026-10-06, nick's phone). The large title
-  // never rendered even with the theme (build 5), so the app uses the standard title bar.
-  const base = useColorScheme() === 'dark' ? DarkTheme : DefaultTheme;
+  // not from the screens, so it gets the app's palette too. The large title never rendered even
+  // with the theme (build 5), so the app uses the standard title bar. The app is light only.
+  const base = DefaultTheme;
   const theme = {
     ...base,
     colors: {
@@ -31,7 +31,20 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: p.bg },
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'Asks' }} />
+        <Stack.Screen
+          name="index"
+          options={{
+            title: 'Asks',
+            // The nameplate wordmark (ADR 704), rendered from docs/design/assets/wordmark.svg.
+            headerTitle: () => (
+              <Image
+                source={wordmark}
+                style={{ width: 122, height: 30 }}
+                accessibilityLabel="musterd"
+              />
+            ),
+          }}
+        />
         <Stack.Screen name="pair" options={{ title: 'Pair' }} />
         <Stack.Screen name="ask/[ref]" options={{ title: 'Ask' }} />
       </Stack>
