@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>remount-restarts-fade fixture</title>
+<style>
+  body { background: #ffffff; margin: 0; font: 16px sans-serif; }
+  /* The office floor the key card floats over. */
+  .floor { position: absolute; left: 0; top: 0; width: 320px; height: 200px; background: #debb92; }
+  /* The key card: opaque white, muted ink (6.14:1 on its own paper, 4.21:1 on the floor).
+     The fade is stretched past the real card's 200ms so the twin is still at its
+     shutter-instant opacity when the capture lands — the shutter samples the instant
+     of the remount, and capture latency must not let the twin finish entering first. */
+  @keyframes key-in { from { opacity: 0; } to { opacity: 1; } }
+  .key { position: absolute; left: 40px; top: 40px; padding: 8px; background: #ffffff;
+         animation: key-in 2s ease-out both; }
+  .key-close { color: #4d5462; }
+  .ok { position: absolute; left: 40px; top: 240px; color: #111111; }
+</style></head>
+<body>
+  <div class="floor"></div>
+  <div class="key" id="key"><span class="key-close">×</span></div>
+  <p class="ok">a normally measurable row</p>
+  <script>
+    // The connected /live flake (lane 01M5H404Z), made deterministic: the instant the sweep
+    // hides the glyphs for its shutter, the card is REMOUNTED like for like — same class, same
+    // text, same place — so the post-shutter reading finds an identical twin and the vanish
+    // guard's replacement vouch applies. But the twin restarts its entrance fade, so at shutter
+    // time its paper is not painted yet and the pixel under the glyph is the floor.
+    new MutationObserver(() => {
+      if (!document.getElementById('__a11y_glyphs_off')) return;
+      const old = document.getElementById('key');
+      const twin = old.cloneNode(true);
+      old.replaceWith(twin);
+    }).observe(document.head, { childList: true });
+  </script>
+</body>
+</html>

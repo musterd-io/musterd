@@ -378,6 +378,12 @@ jobs:
         run: node scripts/a11y/target-size-falsifier.mjs
         env:
           CHROME_BIN: /usr/bin/google-chrome
+      # The contrast sweep's own race falsifier: fixtures that force its freeze/remount arms.
+      # It had never run in CI, and one arm's assertion had gone stale unnoticed (2026-10-29).
+      - name: A11y contrast falsifier (controls)
+        run: node scripts/a11y/birth-falsifier.mjs --runs 1
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
 
   a11y-connected:
     name: a11y-connected
