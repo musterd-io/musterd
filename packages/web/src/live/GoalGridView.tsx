@@ -1,5 +1,6 @@
 import type { FlowMetrics, Goal, GoalFlow, Lane, LaneWarning, MemberSummary } from '@musterd/protocol';
 import { useMemo } from 'react';
+import { CopyId } from './CopyId';
 import { buildGoalGrid, type GoalCardModel, type RunwayDot, type ShippedGoal } from './goalGrid';
 import { initial, kindOf, memberDisc, hueOf} from './format';
 import './GoalGrid.css';
@@ -198,67 +199,76 @@ function GoalCard({
       : null;
   const flow = card.flow ? flowLine(card.flow) : [];
   return (
-    <button
-      className={`gg-card${card.id === null ? ' gg-card--loose' : ''}`}
-      onClick={onOpen}
-      aria-label={`${card.title} — ${card.counts.total} ${card.counts.total === 1 ? 'lane' : 'lanes'}${
-        card.staleNote ? `; review debt: ${card.staleNote}` : ''
-      }; open its lanes`}
-    >
-      <span className="gg-peek" aria-hidden="true">
-        peek inside →
-      </span>
-      <span className="gg-trow">
-        <span className="gg-card__title">{card.title}</span>
-        <span className={`gg-chip ${CHIP_CLASS[card.chip]}`}>
-          {card.chip === 'lanes'
-            ? `${card.counts.total} lane${card.counts.total === 1 ? '' : 's'}`
-            : card.declared
-              ? card.chip
-              : 'declare me'}
+    <div className={`gg-cardwrap${card.id !== null ? ' gg-cardwrap--id' : ''}`} data-cid-host="">
+      <button
+        className={`gg-card${card.id === null ? ' gg-card--loose' : ''}`}
+        onClick={onOpen}
+        aria-label={`${card.title} — ${card.counts.total} ${card.counts.total === 1 ? 'lane' : 'lanes'}${
+          card.staleNote ? `; review debt: ${card.staleNote}` : ''
+        }; open its lanes`}
+      >
+        <span className="gg-peek" aria-hidden="true">
+          peek inside →
         </span>
-      </span>
-      {card.story && <span className="gg-card__story">{card.story}</span>}
-      {card.outcome && (
-        <span className="gg-card__outcome">
-          <span className="gg-card__ev" aria-hidden="true">
-            ⇒
+        <span className="gg-trow">
+          <span className="gg-card__title">{card.title}</span>
+          <span className={`gg-chip ${CHIP_CLASS[card.chip]}`}>
+            {card.chip === 'lanes'
+              ? `${card.counts.total} lane${card.counts.total === 1 ? '' : 's'}`
+              : card.declared
+                ? card.chip
+                : 'declare me'}
           </span>
-          {card.outcome.text}
+        </span>
+        {card.story && <span className="gg-card__story">{card.story}</span>}
+        {card.outcome && (
+          <span className="gg-card__outcome">
+            <span className="gg-card__ev" aria-hidden="true">
+              ⇒
+            </span>
+            {card.outcome.text}
+          </span>
+        )}
+        <Runway dots={card.dots} overflow={card.overflow} rosterIdx={rosterIdx} />
+        {flow.length > 0 && <span className="gg-card__flow">{flow.join(' · ')}</span>}
+        <span className="gg-foot">
+          <span className="gg-foot__count">
+            {counts.join(' · ')}
+            {card.counts.blocked > 0 && (
+              <>
+                {' · '}
+                <span className="gg-foot__stuck">
+                  {card.counts.blocked} stuck
+                </span>
+              </>
+            )}
+            {debt && (
+              <>
+                {' · '}
+                {/* The daemon's own sentence carries the hours — we never recompute the age. */}
+                <span className="gg-foot__owed" title={card.staleNote ?? undefined}>
+                  ⏳ {debt}
+                </span>
+              </>
+            )}
+          </span>
+          {card.lastMoved ? (
+            <span className="gg-foot__tick">
+              moved <b>{card.lastMoved.title}</b> · {ago(now, card.lastMoved.at)}
+            </span>
+          ) : card.id === null ? (
+            <span className="gg-foot__tick">link them to a goal</span>
+          ) : null}
+        </span>
+      </button>
+      {/* The goal's ID rides over the card's top edge, not inside it: the card is a button, and a
+          button holds no button. */}
+      {card.id !== null && (
+        <span className="gg-card__id">
+          <CopyId kind="goal" id={card.id} title={card.title} />
         </span>
       )}
-      <Runway dots={card.dots} overflow={card.overflow} rosterIdx={rosterIdx} />
-      {flow.length > 0 && <span className="gg-card__flow">{flow.join(' · ')}</span>}
-      <span className="gg-foot">
-        <span className="gg-foot__count">
-          {counts.join(' · ')}
-          {card.counts.blocked > 0 && (
-            <>
-              {' · '}
-              <span className="gg-foot__stuck">
-                {card.counts.blocked} stuck
-              </span>
-            </>
-          )}
-          {debt && (
-            <>
-              {' · '}
-              {/* The daemon's own sentence carries the hours — we never recompute the age. */}
-              <span className="gg-foot__owed" title={card.staleNote ?? undefined}>
-                ⏳ {debt}
-              </span>
-            </>
-          )}
-        </span>
-        {card.lastMoved ? (
-          <span className="gg-foot__tick">
-            moved <b>{card.lastMoved.title}</b> · {ago(now, card.lastMoved.at)}
-          </span>
-        ) : card.id === null ? (
-          <span className="gg-foot__tick">link them to a goal</span>
-        ) : null}
-      </span>
-    </button>
+    </div>
   );
 }
 

@@ -1,5 +1,6 @@
 import type { Goal, GoalFlow, Lane, LaneWarning, MemberSummary } from '@musterd/protocol';
 import { useMemo } from 'react';
+import { CopyId } from './CopyId';
 import { buildGoalTable, type GoalRow } from './goalTable';
 import { initial, kindOf, memberDisc, hueOf } from './format';
 import { ago } from './GoalGridView';
@@ -144,11 +145,14 @@ function Row({
   const unheld = row.review - row.reviewers.length;
   const stages = (['open', 'working', 'blocked', 'review'] as const).filter((k) => row.mix[k] > 0);
   return (
-    <tr className={row.id === null ? 'gt-row gt-row--loose' : 'gt-row'}>
+    <tr className={row.id === null ? 'gt-row gt-row--loose' : 'gt-row'} data-cid-host="">
       <th scope="row" className="gt-goal">
-        <button className="gt-goal__btn" onClick={onOpen} title={row.title}>
-          {row.name}
-        </button>
+        <span className="gt-goal__top">
+          <button className="gt-goal__btn" onClick={onOpen} title={row.title}>
+            {row.name}
+          </button>
+          {row.id !== null && <CopyId kind="goal" id={row.id} title={row.title} />}
+        </span>
         {row.blurb && <span className="gt-goal__blurb">{row.blurb}</span>}
       </th>
       <td>

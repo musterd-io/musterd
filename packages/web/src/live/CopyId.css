@@ -1,0 +1,263 @@
+/* A card's ID chip (CopyId.tsx, lane 01M62KAMZ3). Quiet at rest — a reference, not a badge — warm on
+   hover, and a small celebration when it lands on the clipboard. Its own file: the board is a lazy
+   chunk, and so is this. */
+
+.cid-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.cid {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--lc-surface-2) 70%, transparent);
+  color: var(--lc-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: copy;
+  position: relative;
+  transition: all var(--lc-dur-2) var(--lc-ease-out);
+}
+.cid:hover,
+.cid:focus-visible {
+  background: #fff4d6;
+  border-color: #f0d38a;
+  color: var(--lc-accent-ink);
+  gap: 5px;
+}
+.cid:focus-visible {
+  outline: 2px solid var(--lc-accent-bright);
+  outline-offset: 2px;
+}
+.cid:active {
+  transform: scale(0.94);
+}
+
+/* The label and the confirmation share one cell, so the pill never changes width under the pointer. */
+.cid__face {
+  display: grid;
+}
+.cid__label,
+.cid__done {
+  grid-area: 1 / 1;
+  transition: all var(--lc-dur-2) var(--lc-ease-out);
+}
+.cid__done {
+  opacity: 0;
+  transform: translateY(5px);
+  justify-self: center;
+  font-weight: 600;
+}
+.cid__hash {
+  opacity: 0.45;
+  margin-right: 1px;
+}
+
+.cid__icon {
+  width: 0;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  opacity: 0;
+  transition: all var(--lc-dur-2) var(--lc-ease-out);
+}
+.cid:hover .cid__icon,
+.cid:focus-visible .cid__icon {
+  width: 11px;
+  opacity: 0.85;
+}
+
+/* Copied: green, a little pop, and the label rolls up to "✓ copied". */
+.cid-wrap[data-state='copied'] .cid,
+.cid-wrap[data-state='titled'] .cid {
+  background: #e3f5ea;
+  border-color: #a9dcbf;
+  color: var(--lc-success-ink);
+  animation: cid-pop var(--lc-dur-4) var(--lc-ease-pop);
+}
+.cid-wrap[data-state='failed'] .cid {
+  background: #fdeee6;
+  border-color: #f2c3a8;
+  color: #8a3b14;
+}
+.cid-wrap:not([data-state='idle']) .cid__label {
+  opacity: 0;
+  transform: translateY(-5px);
+}
+.cid-wrap:not([data-state='idle']) .cid__done {
+  opacity: 1;
+  transform: none;
+}
+.cid-wrap:not([data-state='idle']) .cid__icon {
+  width: 0;
+  opacity: 0;
+}
+
+@keyframes cid-pop {
+  from {
+    transform: scale(0.92);
+  }
+}
+
+/* Six sparks from the centre of the pill, in the room's warm set — fired once per copy. */
+.cid__burst {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  pointer-events: none;
+}
+.cid__burst i {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #e1ad01;
+  opacity: 0;
+  animation: cid-spark var(--lc-dur-5) var(--lc-ease-out) forwards;
+}
+.cid__burst i:nth-child(3n + 2) {
+  background: #f08a5d;
+}
+.cid__burst i:nth-child(3n) {
+  background: #2f9e6a;
+}
+@keyframes cid-spark {
+  from {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(4px);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(22px) scale(0.4);
+  }
+}
+
+/* The hint: what the chip does and its keys, after a beat of hover — never in the way of a quick tap. */
+.cid__tip {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: #2b2418;
+  color: #fbf6ea;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(40, 30, 10, 0.22);
+  opacity: 0;
+  transform: translateY(3px);
+  pointer-events: none;
+  transition: all var(--lc-dur-2) var(--lc-ease-out);
+}
+.cid-wrap:hover .cid__tip {
+  opacity: 1;
+  transform: none;
+  transition-delay: 450ms;
+}
+.cid-wrap:not([data-state='idle']) .cid__tip {
+  opacity: 0;
+  transition-delay: 0ms;
+}
+.cid__tip-2 {
+  color: #d9ccb0;
+}
+.cid__tip kbd {
+  font: inherit;
+  font-size: 10px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.cid__tip kbd + kbd {
+  margin-left: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cid-wrap[data-state] .cid {
+    animation: none;
+  }
+  .cid__burst {
+    display: none;
+  }
+}
+
+/* Where the chip sits on each board surface. Here rather than in Live.css or GoalGrid.css so the
+   placement ships with the chip, in the board's lazy chunk. */
+.lc-card__eyebrow {
+  display: flex;
+  /* The pill's padding hangs into the card's margin, so its text lines up with the title's. */
+  margin: -6px 0 -8px -9px;
+}
+
+/* An eyebrow chip sits at the very top of its card, so its hint opens downward, into the card, where
+   nothing clips it. */
+.lc-card__eyebrow .cid__tip,
+.gg-card__id .cid__tip {
+  bottom: auto;
+  top: calc(100% + 6px);
+  right: auto;
+  left: 0;
+  transform: translateY(-3px);
+}
+
+/* A goal card wears its ID as an eyebrow over the title, the way an issue tracker does. */
+.gg-cardwrap {
+  position: relative;
+}
+.gg-cardwrap--id .gg-card {
+  padding-top: 36px;
+}
+.gg-card__id {
+  position: absolute;
+  top: 8px;
+  left: 9px;
+  z-index: 1;
+}
+/* On the goal grid's warm paper, a warm chip — the grey one read as a sticker from another app. */
+.gg-card__id .cid,
+.gt-goal__top .cid {
+  background: #f6ecd7;
+  color: var(--gg-ink-quiet);
+}
+
+.gt-goal__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.gt-goal__top .gt-goal__btn {
+  min-width: 0;
+}
+.gt-goal__top .cid {
+  font-weight: 400;
+}
+.gg-card__id .cid:hover,
+.gg-card__id .cid:focus-visible,
+.gt-goal__top .cid:hover,
+.gt-goal__top .cid:focus-visible {
+  background: #fff1cc;
+  color: var(--lc-accent-ink);
+}
+.cid__tip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}

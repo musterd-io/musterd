@@ -348,6 +348,7 @@ live/
   SeedsTray.tsx                 // read-only active/history Seed drawer; promoted history → focused Lane
   OfficeScene.tsx               // React wrapper: mounts the scene, feeds it envelopes → emit
   Board.tsx / ApprovalQueue.tsx / ApprovalCard.tsx / AuditLog.tsx   // the other live views; a card's chain control (and a focused card) reads one lane and shows asked, claimed, model, accepted, authorized (ADR 629)
+  CopyId.tsx / CopyId.css / idCopy.ts   // the work board's ID chips (lane 01M62KAMZ3): every lane card (short 10-char ULID), goal card and table row wears its ID; a tap copies it, ⇧-tap copies it with its title, and `c` / ⇧C copies the hovered or focused card's; the clipboard falls back to a selection copy over plain http
   sound.ts                      // opt-in WebAudio firehose cues
   Live.css                      // the /live palette + component styles (--lc-* tokens)
   office-scene/

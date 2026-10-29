@@ -2610,3 +2610,17 @@ laptop). A re-baseline to measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,800,000 B with this lane in.
 
+## 2026-10-28 — the work board's ID chips; App CSS RAISED 16,240 → 17,600 B (lane 01M62KAMZ3)
+
+| Budget  | Before (main)  | This branch (laptop) | Ceiling                    |
+| ------- | -------------- | -------------------- | -------------------------- |
+| app CSS | ~16,200 B      | ~17,260 B            | RAISED 16,240 → 17,600 B   |
+
+swetha: every goal and lane on the work board shows its ID, with one tap to copy it. `CopyId.css`
+is the chip's own stylesheet: the pill, the copied state and its sparks, the key hint, and where the
+chip sits on lane cards, goal cards and table rows. It loads only with the board's lazy chunk
+(`Board-*.css`), so `/live`'s first paint and its CSS budget are unchanged. The raise first tried a
+trim: the motion went onto the token scale, the screen-reader rule reuses `.lc-sr`, and the
+keyframes were shortened. A re-baseline to measured + 15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports app CSS at or under 17,600 B with this lane in.
