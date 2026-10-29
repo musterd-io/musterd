@@ -963,6 +963,26 @@ export function mountOffice(
     return inFlight.length ? withMoving(wb, inFlight) : wb;
   }
 
+  /**
+   * The room's members as the desks should show them (lane 01M62JK2JS): a folder or a review card
+   * still in someone's hands on the way over is not on the desk yet — the desk gets it on the beat the
+   * walker sets it down, which changes the desk's sprite key and so re-bakes just that desk.
+   */
+  function nodesNow(): Map<string, OfficeNode> {
+    const nodes = actors.nodes();
+    const incoming = actors.incoming();
+    if (incoming.size === 0) return nodes;
+    for (const name of incoming) {
+      const n = nodes.get(name);
+      const w = n?.waiting;
+      // One card in hand is one card short in the tray; a folder in hand is no folder yet.
+      if (n && w?.kind === 'handoff') nodes.set(name, { ...n, waiting: null });
+      else if (n && w?.kind === 'review')
+        nodes.set(name, { ...n, waiting: w.count > 1 ? { kind: 'review', count: w.count - 1 } : null });
+    }
+    return nodes;
+  }
+
   /** Play the queued board moves (ADR 751): the mover walks it, or — out of the room — the card just
    *  moves, with a puff of cork dust where it hung. */
   function playBoardMoves(): void {
@@ -1237,7 +1257,7 @@ export function mountOffice(
     bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     bctx.clearRect(0, 0, width, height);
     if (!rendered) return; // the art is not in yet: nothing to paint, and the room is held invisible
-    const nodes = actors.nodes();
+    const nodes = nodesNow();
     // Members' faces for the rest of /live, painted from these same sheets (lane 01M6017Z38). Keyed per
     // member, so a bake repaints only someone whose look changed or whose sheet just arrived.
     if (rendered.figure) paintPortraits(rendered.figure, nodes.values());
@@ -2403,7 +2423,7 @@ export function mountOffice(
    *  so the measure pass and the paint pass of one frame must read the same snapshot. */
   function frameInputs() {
     return {
-      nodes: actors.nodes(),
+      nodes: nodesNow(),
       poses: actors.poses(),
       fx: actors.sceneFx(),
       board: wallBoardNow(),

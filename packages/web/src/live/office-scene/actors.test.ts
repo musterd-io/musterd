@@ -2019,3 +2019,39 @@ describe('heads that look (lane 01M5XS5ZYP): lookAt', () => {
     expect(actors.poses().get('Ada')!.gestureT).toBeGreaterThan(0);
   });
 });
+
+describe('the folder and the card are set down, not conjured (lane 01M62JK2JS)', () => {
+  /** Step until Bo's desk stops expecting something; answer where the walker was standing then. */
+  function setDown(start: (a: ReturnType<typeof createActors>) => boolean): { at: number; carry: unknown } {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    const bo = actors.poses().get('Bo')!;
+    expect(start(actors)).toBe(true);
+    expect(actors.incoming()).toEqual(new Set(['Bo']));
+    let guard = 0;
+    while (actors.incoming().size > 0 && guard++ < 4000) actors.step(0.05);
+    const p = actors.poses().get('Ada')!;
+    return { at: Math.hypot(p.lx - bo.lx, p.ly - bo.ly), carry: p.carry };
+  }
+
+  it('a handoff reaches Bo’s desk with the folder in hand, then lets go of it there', () => {
+    const { at, carry } = setDown((a) => a.walk('Ada', { kind: 'handoff', to: 'Bo', urgent: false }));
+    expect(at).toBeLessThan(80);
+    expect(carry).not.toBe('box'); // out of their hands — only their own laptop is left
+  });
+
+  it('a review card goes into the tray on the beat it leaves the hand', () => {
+    const { at, carry } = setDown((a) => a.deliver('Ada', 'Bo', 7));
+    expect(at).toBeLessThan(80);
+    expect(carry).not.toBe('card');
+  });
+
+  it('a help visit brings nothing to set down', () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    expect(actors.walk('Ada', { kind: 'help', to: 'Bo', urgent: false })).toBe(true);
+    expect(actors.incoming().size).toBe(0);
+  });
+});
