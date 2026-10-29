@@ -579,6 +579,7 @@ export const CATALOG: readonly CommandEntry[] = [
       '`notify channels` is away-channel settings (spec: Channel settings — nothing is on by ' +
       'default): your per-channel deliver/answer switches, presence gating (deliver only while ' +
       'you are away), and an optional tier floor, stored in the daemon with your bindings.',
+    examples: ['musterd notify', 'musterd notify channels'],
   },
 
   // ── Work & lanes ───────────────────────────────────────────────────────────────────────────
@@ -1039,6 +1040,7 @@ export const CATALOG: readonly CommandEntry[] = [
     primary: false,
     detail:
       'Read ADR 209 portable wake context for a directed Act or owned Lane. It names only canonical IDs, state, delivery intent, and explicit follow-up reads; it never loads an Act or memory body.',
+    examples: ['musterd wake-context --act 01ABCDEF', 'musterd wake-context --lane 01LANE'],
   },
   {
     name: 'availability',
@@ -1047,6 +1049,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'set your availability (away holds notifications; dnd passes urgent) — MCP: team_availability',
     group: 'waiting',
     primary: true,
+    examples: ['musterd availability away --until 2026-10-29T18:00:00'],
   },
   {
     name: 'status-line',
@@ -1061,6 +1064,7 @@ export const CATALOG: readonly CommandEntry[] = [
       '(ADR 721). At most 48 characters; the words are joined, so no quotes are needed. Bare, it prints ' +
       'yours and how long it has left; `--clear` clears it. Only you can set or clear yours, and agents ' +
       'have none. /broadcast is public.',
+    examples: ['musterd status-line "assembling a dresser"'],
   },
   {
     name: 'doorbell',
@@ -1260,12 +1264,14 @@ export const CATALOG: readonly CommandEntry[] = [
     signature: '',
     summary: 'release this folder’s seat — keeps it on the team, free to re-claim',
     group: 'team',
+    examples: ['musterd unbind'],
   },
   {
     name: 'reclaim',
     signature: '<member>',
     summary: 'drop a member’s stuck/stale live session so it can rejoin',
     group: 'team',
+    examples: ['musterd reclaim grokbot'],
   },
   {
     name: 'halt',
@@ -1276,12 +1282,14 @@ export const CATALOG: readonly CommandEntry[] = [
       'ADR 501. Human-only: an admin halts any agent, a non-admin only the agents they sponsor; the ' +
       'daemon decides. Nothing is killed — the seat is reached at its next tool boundary or musterd ' +
       'call, and stays halted until a human runs `musterd resume <seat>`.',
+    examples: ['musterd halt scout --reason "waiting on review"'],
   },
   {
     name: 'resume',
     signature: '<seat>',
     summary: 'lift a halt — the seat can claim, wake and act again',
     group: 'team',
+    examples: ['musterd resume scout'],
   },
   {
     name: 'calendar',
@@ -1293,6 +1301,10 @@ export const CATALOG: readonly CommandEntry[] = [
       'ADR 519. Dates and times are wall-clock in the entry’s tz (default America/Los_Angeles), never ' +
       'converted. `import` is the one-time cutover from the claude.ai artifact: each document goes up ' +
       'with its id as source_ref, so a second run reports every entry unchanged and writes nothing.',
+    examples: [
+      'musterd calendar list',
+      'musterd calendar add "standup" --date 2026-11-01 --kind event',
+    ],
   },
   {
     name: 'channels',
@@ -1306,6 +1318,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'The provider identity is staged by the relay path, and only `confirm` on this surface — ' +
       'showing the tenant and user exactly as the daemon holds them — creates the binding. ' +
       '`kill-switch` revokes every binding generation and outstanding token and disconnects the relay.',
+    examples: ['musterd channels'],
   },
   {
     name: 'hold',
@@ -1317,5 +1330,6 @@ export const CATALOG: readonly CommandEntry[] = [
       'admins set and lift; the daemon decides. Capped at 12h and clears itself — a longer freeze is ' +
       'a new hold. Every seat reads active holds in `musterd next` / `musterd status` / team_next. ' +
       '`propose` (any seat) sends an approve-ask; a human admin accepting it activates the hold.',
+    examples: ['musterd hold', 'musterd hold list'],
   },
 ];
