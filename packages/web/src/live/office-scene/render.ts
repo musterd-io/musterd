@@ -1,6 +1,7 @@
 import { canvasFont } from '../canvasFont';
 import type { LaneState, WorkingHours } from '@musterd/protocol';
 import type { Appearance } from './appearance';
+import { deskWaitingKey } from './deskWaiting';
 import { animFor, drawCharacter } from './character';
 import {
   cameraOf,
@@ -2896,6 +2897,69 @@ function deskNotebook(
   );
 }
 
+/** The desk's back corner opposite the dock — where a review tray stands (deskWaiting.ts). */
+const TRAY_ALONG = 24;
+
+/** A sticky note on the monitor's top corner: the owner is blocked. Paper-yellow, slightly askew. */
+function deskStickyNote(ctx: CanvasRenderingContext2D, fit: Fit, ix: number, iy: number, up: number): void {
+  const b = project(ix, iy, fit);
+  const s = fit.scale;
+  ctx.save();
+  ctx.translate(b.x + 11 * s, b.y - (up + 22) * s);
+  ctx.rotate(0.12);
+  ctx.fillStyle = 'rgba(40, 30, 10, 0.25)';
+  ctx.fillRect(-3.4 * s, -3.2 * s, 7.6 * s, 7.6 * s); // its shadow on the panel
+  ctx.fillStyle = '#f4d35e';
+  ctx.fillRect(-3.8 * s, -3.8 * s, 7.6 * s, 7.6 * s);
+  ctx.fillStyle = '#e0bb3c';
+  ctx.fillRect(-3.8 * s, -3.8 * s, 7.6 * s, 1.6 * s); // the glued strip
+  ctx.strokeStyle = 'rgba(120, 60, 30, 0.7)';
+  ctx.lineWidth = Math.max(0.6, 0.7 * s);
+  ctx.beginPath(); // two scribbled lines: something is written on it
+  ctx.moveTo(-2.4 * s, 0);
+  ctx.lineTo(2.2 * s, -0.3 * s);
+  ctx.moveTo(-2.4 * s, 1.9 * s);
+  ctx.lineTo(1 * s, 1.8 * s);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A manila folder lying on the desk's front lip: a handoff waits for this member to pick it up. */
+function deskFolder(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  sn: boolean,
+  up: number,
+): void {
+  const w = 22;
+  const d = 15;
+  // The papers inside, a shade offset so their edge peeks out past the cover on the room side.
+  box(ctx, fit, ix + 1, iy + 1, sn ? w - 2 : d - 2, sn ? d - 2 : w - 2, 1.2, '#fbf8f1', up);
+  box(ctx, fit, ix, iy, sn ? w : d, sn ? d : w, 1, '#e6b862', up + 1.2); // the cover, flat and manila
+  // The tab along the back edge — the silhouette that says folder rather than pad.
+  box(ctx, fit, ix - (sn ? 5 : 0), iy - (sn ? 0 : 5), sn ? 9 : 2, sn ? 2 : 9, 1, '#d4a04c', up + 2.2);
+}
+
+/** A desk tray with a card in it (two when more than one wait): reviews routed to this member. */
+function deskTray(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  ix: number,
+  iy: number,
+  sn: boolean,
+  up: number,
+  count: number,
+): void {
+  const w = 17;
+  const d = 13;
+  box(ctx, fit, ix, iy, sn ? w : d, sn ? d : w, 4, '#3f4652', up); // the tray, a low dark rim
+  // The cards lie IN it, their tops just over the rim: flat white, never a block.
+  box(ctx, fit, ix, iy, sn ? w - 4 : d - 4, sn ? d - 4 : w - 4, 0.8, '#fbf6ea', up + 3.6);
+  if (count > 1) box(ctx, fit, ix - 1, iy + 1, sn ? w - 4 : d - 4, sn ? d - 4 : w - 4, 0.8, '#efe6d2', up + 4.4);
+}
+
 /** A pen cup: a short tumbler with two or three stems leaning out of it. */
 function deskPens(
   ctx: CanvasRenderingContext2D,
@@ -3576,8 +3640,10 @@ export function drawWorkstation(
     });
 
   // optional personal props — each present-or-not per desk by a stable hash, at its own station
+  const waiting = node?.waiting ?? null;
   for (const kind of PROP_KINDS) {
     if (hide?.has(kind)) continue;
+    if (kind === 'notebook' && waiting?.kind === 'handoff') continue; // the folder lies where the pad was
     if (!deskHasProp(id, kind) && !mood?.props.includes(kind)) continue;
     const sp = PROP_SPEC[kind];
     at(sp.along, sp.across, (ix, iy) => {
@@ -3622,6 +3688,18 @@ export function drawWorkstation(
       }
     });
   }
+
+  // What is waiting at this desk right now (deskWaiting.ts): one prop, baked into the desk sprite
+  // like every other — it changes the sprite key, so it costs a re-bake when it starts and ends,
+  // and nothing per frame.
+  if (waiting?.kind === 'blocked')
+    // Pushed after the monitor at the monitor's own key: a tie sorts after it, so the note sits on the panel.
+    at(MONITOR_ALONG, 0, (ix, iy) => deskStickyNote(ctx, fit, ix, iy, up));
+  else if (waiting?.kind === 'handoff') {
+    const sp = PROP_SPEC.notebook;
+    at(sp.along, sp.across, (ix, iy) => deskFolder(ctx, fit, ix, iy, sn, up));
+  } else if (waiting?.kind === 'review')
+    at(TRAY_ALONG, -dockAcross(dir), (ix, iy) => deskTray(ctx, fit, ix, iy, sn, up, waiting.count));
 
   // The owned-desk plate + texture (presence-honesty §4) ride the same prop pipeline so they
   // depth-sort with the desk. All static paint keyed to data refreshes — no new rAF.
@@ -3706,6 +3784,7 @@ export function workstationKey(k: {
     k.lampLit ? 1 : 0,
     k.hidden ? [...k.hidden].sort().join('+') : '',
     k.warmAlpha,
+    deskWaitingKey(k.node?.waiting),
     fitKey(k.fit),
     k.dpr,
     paletteKey(),
