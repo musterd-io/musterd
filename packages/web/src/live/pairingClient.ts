@@ -149,3 +149,41 @@ export async function rejectChannelPairing(cfg: LiveConfig, pairingId: string): 
     `/teams/${encodeURIComponent(cfg.team)}/channels/pairings/${encodeURIComponent(pairingId)}/reject`,
   );
 }
+
+/** One of this human's channel bindings, as `GET /channels/bindings` lists it. */
+export interface ChannelBinding {
+  id: string;
+  channel: string;
+  status: string;
+  created_at: number;
+  /** An app binding's stored keys, as JSON text; only `device_name` is read here. */
+  app_keys?: string | null;
+}
+
+/** This human's channel bindings, newest first. */
+export async function fetchChannelBindings(cfg: LiveConfig): Promise<ChannelBinding[]> {
+  const out = await apiGet<{ bindings: ChannelBinding[] }>(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/channels/bindings`,
+  );
+  return out.bindings;
+}
+
+/** The name the phone gave itself when it paired, if the binding carries one. */
+export function bindingDeviceName(b: ChannelBinding): string | null {
+  if (!b.app_keys) return null;
+  try {
+    const name = (JSON.parse(b.app_keys) as { device_name?: unknown }).device_name;
+    return typeof name === 'string' && name.trim() !== '' ? name : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Revoke one binding: asks stop reaching it and its answers stop counting (ADR 618 §7). */
+export async function revokeChannelBinding(cfg: LiveConfig, bindingId: string): Promise<unknown> {
+  return channelPost(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/channels/bindings/${encodeURIComponent(bindingId)}/revoke`,
+  );
+}

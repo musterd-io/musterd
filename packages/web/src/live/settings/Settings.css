@@ -631,6 +631,26 @@
   color: #fff;
   font: 700 13px/1 var(--font-sans);
 }
+.lc-pair__have {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lc-4);
+  align-items: center;
+}
+.lc-pair__havewho {
+  display: grid;
+  flex: 1 1 160px;
+  gap: 2px;
+  font: 400 12.5px/1.35 var(--font-sans);
+  color: var(--lc-text);
+}
+.lc-pair__havewho b {
+  color: var(--lc-success-ink);
+}
+.lc-pair__btn--danger {
+  border-color: color-mix(in srgb, var(--lc-danger) 55%, transparent);
+  color: var(--lc-danger-ink);
+}
 .lc-pair__done b {
   color: var(--lc-success-ink);
 }
