@@ -59,6 +59,7 @@ import {
   type ActorAttestation,
   type GateCheckRequest,
   type LanePushReport,
+  type LastAskOutcome,
   type LanePushOutcome,
   LanePushOutcomeSchema,
   type GateDecision,
@@ -321,6 +322,8 @@ export interface ChannelSettings {
   answer: boolean;
   presenceGating: boolean;
   tierFloor: 'advisory' | 'standard' | 'blocking' | null;
+  /** What became of the last ask routed here (lane 01M64DSKT3); absent from an older daemon. */
+  lastAsk?: LastAskOutcome | null;
 }
 
 /** A channel binding: an immutable provider identity bound to a human (ADR 618 §7). */

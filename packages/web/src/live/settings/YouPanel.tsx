@@ -1,4 +1,4 @@
-import type { DoorbellPrefs, MemberSummary, WorkingHours } from '@musterd/protocol';
+import { lastAskLine, type DoorbellPrefs, type MemberSummary, type WorkingHours } from '@musterd/protocol';
 import type { DoorbellSink } from '@musterd/protocol/wire';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -390,7 +390,8 @@ function AwayChannels({ cfg }: { cfg: LiveConfig }) {
     setNote(null);
     try {
       const saved = await saveChannelSettings(cfg, next);
-      setRows((rs) => rs.map((r) => (r.channel === saved.channel ? saved : r)));
+      // The save answers the switches only; keep the row's last-ask line.
+      setRows((rs) => rs.map((r) => (r.channel === saved.channel ? { ...r, ...saved } : r)));
       setNote({ tone: 'ok', text: `${saved.channel} saved` });
     } catch (e) {
       setNote({ tone: 'err', text: message(e) });
@@ -408,6 +409,13 @@ function AwayChannels({ cfg }: { cfg: LiveConfig }) {
         return (
           <div key={s.channel} className="lc-set__chanblock">
             <span className="lc-set__chan lc-set__chan--head">{s.channel}</span>
+            {lastAskLine(s.lastAsk, Date.now()) && (
+              <p
+                className={`lc-set__hint lc-set__lastask${s.lastAsk?.outcome === 'sent' ? '' : ' lc-set__lastask--miss'}`}
+              >
+                {lastAskLine(s.lastAsk, Date.now())}
+              </p>
+            )}
             <Row label="Send asks here">
               <Switch
                 label={`Send asks to ${s.channel}`}

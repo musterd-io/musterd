@@ -97,7 +97,19 @@ export async function channelsCommand(parsed: Parsed): Promise<number> {
     const { pairings } = await http.listChannelPairings(team);
     if (json) return printJson(pairings);
     if (pairings.length === 0) {
+      // After a confirm the list is empty by design; say what IS paired, so the human is not left
+      // wondering whether the confirm took (lane 01M64DSKT3).
+      const paired = (await http.listChannelBindings(team)).bindings.filter(
+        (b) => b.status === 'active',
+      );
       process.stdout.write('no pairings waiting for confirmation\n');
+      for (const b of paired) {
+        process.stdout.write(
+          b.channel === 'app'
+            ? `paired: your phone (app, binding ${b.id})\n`
+            : `paired: ${b.channel} (binding ${b.id})\n`,
+        );
+      }
       return 0;
     }
     for (const p of pairings) {

@@ -153,6 +153,11 @@ export type AuditAction =
   | 'channel.sealed_delivered'
   | 'channel.answer_reported'
   | 'channel.fatigue_held'
+  // Lane 01M64DSKT3: what became of one ask on one human's channel — `sent`, `skipped` with why
+  // (`delivery_off`, `below_tier_floor`, `present`, `no_binding`, `relay_not_connected`), or
+  // `failed` at the relay. Target is the human; detail carries the channel, the ask id and the
+  // reason only. The latest row is what `musterd notify channels` and /live show.
+  | 'channel.ask_outcome'
   // Channel settings (away channels 6, lane 01M50XQ5YXXPJ8KVCV31KFB2N8): a human changing
   // their per-channel deliver/answer switches, presence gating, or tier floor. Detail carries
   // the switch states only — never a credential.
@@ -809,6 +814,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'channel.sealed_delivered': 'none',
   'channel.answer_reported': 'none',
   'channel.fatigue_held': 'none',
+  'channel.ask_outcome': 'target',
   'channel.settings.changed': 'actor',
   'channel.slack_installed': 'actor',
   'channel.slack_install_refused': 'actor',

@@ -54,6 +54,31 @@ describe('musterd notify channels (away channels 6)', () => {
     vi.restoreAllMocks();
   });
 
+  it('says what became of the last ask on a channel', async () => {
+    const stored = h.settings;
+    h.settings = [
+      {
+        channel: 'app',
+        deliver: true,
+        answer: true,
+        presenceGating: true,
+        tierFloor: null,
+        lastAsk: { at: Date.now() - 120_000, ask: 'a1', outcome: 'skipped', reason: 'present' },
+      },
+    ] as typeof h.settings;
+    const out: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((s) => {
+      out.push(String(s));
+      return true;
+    });
+    expect(await notifyCommand(parsed(['channels']))).toBe(0);
+    expect(out.join('')).toContain(
+      "last ask 2m ago: not sent — you were at your desk (Only while I'm away)",
+    );
+    vi.restoreAllMocks();
+    h.settings = stored;
+  });
+
   it('shows the effective answer state when delivery is off', async () => {
     const stored = h.settings;
     h.settings = [
