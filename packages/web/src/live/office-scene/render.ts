@@ -3692,14 +3692,25 @@ export function drawWorkstation(
   // What is waiting at this desk right now (deskWaiting.ts): one prop, baked into the desk sprite
   // like every other — it changes the sprite key, so it costs a re-bake when it starts and ends,
   // and nothing per frame.
+  // Rendered (lane 01M62HJR15): `desk/note`, `desk/folder-<axis>`, `desk/tray[2]-<axis>`; the paint
+  // stays as the fallback for an art set that predates them.
+  const axis = sn ? 'sn' : 'ew';
   if (waiting?.kind === 'blocked')
     // Pushed after the monitor at the monitor's own key: a tie sorts after it, so the note sits on the panel.
-    at(MONITOR_ALONG, 0, (ix, iy) => deskStickyNote(ctx, fit, ix, iy, up));
+    at(MONITOR_ALONG, 0, (ix, iy) => {
+      if (!blitIf(ctx, fit, rendered, 'desk/note', ix, iy)) deskStickyNote(ctx, fit, ix, iy, up);
+    });
   else if (waiting?.kind === 'handoff') {
     const sp = PROP_SPEC.notebook;
-    at(sp.along, sp.across, (ix, iy) => deskFolder(ctx, fit, ix, iy, sn, up));
-  } else if (waiting?.kind === 'review')
-    at(TRAY_ALONG, -dockAcross(dir), (ix, iy) => deskTray(ctx, fit, ix, iy, sn, up, waiting.count));
+    at(sp.along, sp.across, (ix, iy) => {
+      if (!blitIf(ctx, fit, rendered, `desk/folder-${axis}`, ix, iy)) deskFolder(ctx, fit, ix, iy, sn, up);
+    });
+  } else if (waiting?.kind === 'review') {
+    const id = `desk/${waiting.count > 1 ? 'tray2' : 'tray'}-${axis}`;
+    at(TRAY_ALONG, -dockAcross(dir), (ix, iy) => {
+      if (!blitIf(ctx, fit, rendered, id, ix, iy)) deskTray(ctx, fit, ix, iy, sn, up, waiting.count);
+    });
+  }
 
   // The owned-desk plate + texture (presence-honesty §4) ride the same prop pipeline so they
   // depth-sort with the desk. All static paint keyed to data refreshes — no new rAF.

@@ -1565,6 +1565,20 @@ describe('workstation phases (sprite cache)', () => {
     expect(fmtOps(split.ops)).toEqual(fmtOps(all.ops));
     expect(fmtOps(all.ops).some((o) => o.includes('rgba(122, 148, 156'))).toBe(true); // the afterglow painted
   });
+  it('what is waiting stays on the desk when its member leaves: one rendered prop, sat or gone', () => {
+    // Lane 01M62HJR15: the note, the folder and the tray are rendered art, so each is one more blit.
+    const blits = (n: OfficeNode, owned: boolean) => {
+      const r = recordingCtx();
+      ws(r.ctx, fit, slot, n, 'revive', owned, 3, undefined, false, false, 'all');
+      return r.ops.filter((o) => o.name === 'drawImage' && o.args[0] === FAKE_IMG).length;
+    };
+    const gone: OfficeNode = { ...owner, presence: 'offline', last_seen_at: Date.now() - 3_600_000 };
+    const waits = [{ kind: 'blocked' }, { kind: 'handoff', from: 'bo' }, { kind: 'review', count: 2 }] as const;
+    for (const waiting of waits) {
+      expect(blits({ ...gone, waiting }, true)).toBe(blits(gone, true) + 1);
+      expect(blits({ ...owner, waiting }, false)).toBe(blits(owner, false) + 1);
+    }
+  });
   it('the monitor phase is the only one that reads t — and only while the owner pulses (ADR 660)', () => {
     // A live pulse: the desktop scrolls on `t`, so two frames differ.
     const pulsing = {

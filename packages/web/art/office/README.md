@@ -67,6 +67,10 @@ would ship. Without `cwebp` the PNG stays and the runtime reads either.
   table and chairs, the printer, the rugs. Each carries its own soft contact shadow.
 - **Per-desk overlays**: `desk/lamp-off`, `desk/lamp-on` (the lit one with its pool on the slab) and
   `desk/fan-0..3` (the blades a quarter-turn apart); `drawWorkstation` picks by the desk's live state.
+- **What is waiting at a desk** (`deskWaiting.ts`, lane 01M62HJR15): `desk/note` (the sticky note on the
+  monitor, square to the camera), `desk/folder-<sn|ew>` and `desk/tray-<sn|ew>` / `desk/tray2-<sn|ew>`
+  (two cards when more than one review waits). `drawWorkstation` paints its old shapes when the art set
+  predates them.
 
 Items are rendered under the day rig; at evening and night the painted veil does to them what it
 always did, and `figureTintFor` carries the same curve to the figures of increment 3.

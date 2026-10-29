@@ -457,6 +457,28 @@
       "scale": 3.0
     },
     {
+      "id": "desk/folder-ew",
+      "file": "office-art-desk-folder-ew.webp",
+      "w": 84,
+      "h": 50,
+      "anchor": {
+        "x": 42.0,
+        "y": 134.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/folder-sn",
+      "file": "office-art-desk-folder-sn.webp",
+      "w": 84,
+      "h": 50,
+      "anchor": {
+        "x": 42.0,
+        "y": 134.0
+      },
+      "scale": 3.0
+    },
+    {
       "id": "desk/lamp-off",
       "file": "office-art-desk-lamp-off.webp",
       "w": 60,
@@ -475,6 +497,61 @@
       "anchor": {
         "x": 63.0,
         "y": 207.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/note",
+      "file": "office-art-desk-note.webp",
+      "w": 32,
+      "h": 32,
+      "anchor": {
+        "x": -17.0,
+        "y": 186.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/tray-ew",
+      "file": "office-art-desk-tray-ew.webp",
+      "w": 70,
+      "h": 47,
+      "anchor": {
+        "x": 35.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/tray-sn",
+      "file": "office-art-desk-tray-sn.webp",
+      "w": 70,
+      "h": 47,
+      "anchor": {
+        "x": 35.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/tray2-ew",
+      "file": "office-art-desk-tray2-ew.webp",
+      "w": 70,
+      "h": 47,
+      "anchor": {
+        "x": 35.0,
+        "y": 135.0
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "desk/tray2-sn",
+      "file": "office-art-desk-tray2-sn.webp",
+      "w": 70,
+      "h": 47,
+      "anchor": {
+        "x": 35.0,
+        "y": 135.0
       },
       "scale": 3.0
     },
