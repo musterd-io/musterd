@@ -450,7 +450,7 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         (0.1, -0.45, 1.0, -28, 10), (0.15, 0.1, 1.08, 22, -14), (-0.25, 0.45, 1.0, 30, 8), (-0.45, -0.2, 0.95, -18, 20),
         (-0.1, 0.5, 0.9, 40, -6), (0.35, -0.1, 0.98, -10, -25), (-0.6, 0.25, 0.75, 15, 30),
     )):
-        clump("hair/tousled", f"piece{i}", HEAD_X + x * R, y * R, HEAD_C + z * R, R * 0.42, R * 0.3, R * 0.24, (math.radians(lean), math.radians(tw), 0))
+        clump("hair/tousled", f"piece{i}", HEAD_X + x * R, y * R, HEAD_C + z * R, R * 0.6, R * 0.22, R * 0.16, (math.radians(lean), math.radians(tw), 0))
     clump("hair/tousled", "fringe", HEAD_X + R * 0.62, -R * 0.25, HEAD_C + R * 0.6, R * 0.3, R * 0.45, R * 0.24, (math.radians(-20), math.radians(-35), 0))
     for sy in (1, -1):
         clump("hair/tousled", "flick", HEAD_X - R * 0.15, sy * R * 0.92, HEAD_C - R * 0.05, R * 0.3, R * 0.18, R * 0.34, (math.radians(sy * 25), 0, 0))
