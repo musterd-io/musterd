@@ -4476,7 +4476,20 @@ export async function handleHttp(
         // claim mint a fresh one, and the old machine's credential and session leases die here.
         if (viaHostKey && host !== null && body.use === 'claim_seat') {
           const seat = await getMemberByName(ctx.db, team.id, body.target);
-          if (seat && (await claimedMoveFor(ctx.db, team.id, seat.id, host, member.id))) {
+          const move = seat
+            ? await claimedMoveFor(ctx.db, team.id, seat.id, host, member.id)
+            : undefined;
+          // Once per move row: a second claim_seat mint under the same row (a retried provision
+          // step) must not keep killing the credential the first one's claim just minted.
+          const already =
+            seat && move
+              ? await ctx.db.get<{ id: string }>(
+                  `SELECT id FROM audit WHERE team_id = ? AND action = 'agent_seat_credential.rotated'
+                     AND target = ? AND detail LIKE ? LIMIT 1`,
+                  [team.id, seat.name, `%"provision":"${move.id}"%`],
+                )
+              : undefined;
+          if (seat && move && !already) {
             await setCredentialHash(ctx.db, seat.id, null);
             const revoked = await revokeMemberSessionLeases(ctx.db, seat.id);
             await appendAudit(ctx.db, team.id, {
@@ -4484,7 +4497,13 @@ export async function handleHttp(
               action: 'agent_seat_credential.rotated',
               target: seat.name,
               result: 'allow',
-              detail: { reason: 'move', via: 'host_key', host, leases_revoked: revoked.length },
+              detail: {
+                reason: 'move',
+                via: 'host_key',
+                host,
+                provision: move.id,
+                leases_revoked: revoked.length,
+              },
             });
           }
         }

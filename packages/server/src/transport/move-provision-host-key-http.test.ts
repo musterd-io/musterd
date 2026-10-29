@@ -106,6 +106,15 @@ withDrivers('move-provision-host-key-http', (_o, kind) => {
       expect(minted.status).toBe(201);
       // Cleared, so the new machine's first claim mints the seat credential (agentAuthorityFor).
       expect((await getMemberByName(server.store, team.id, 'ryder'))!.credential_hash).toBeNull();
+      // Once per move row: after the new claim minted a credential, a retried mint keeps it.
+      await server.store.run('UPDATE members SET credential_hash = ? WHERE id = ?', [
+        'new-machine',
+        ryder.id,
+      ]);
+      expect((await mintSeatCredential('ryder', key)).status).toBe(201);
+      expect((await getMemberByName(server.store, team.id, 'ryder'))!.credential_hash).toBe(
+        'new-machine',
+      );
     });
 
     it('a sponsored mint never reissues: only a claimed move row does', async () => {

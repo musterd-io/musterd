@@ -30,9 +30,12 @@ VM must never hold (ADR 762 §4).
    revokes its session leases in the same request.
 2. The new machine's claim with that key then mints a fresh seat credential, which is the
    existing first-claim path. The old machine's credential and leases are dead from that moment.
+   It happens **once per move row**: the audit row carries `provision: <row id>`, and a later
+   `claim_seat` mint under the same row (a retried provision step) finds it and leaves the newly
+   minted credential alone.
    That is what a move means (ADR 358 §3: an agent seat lives on one machine).
 3. It is audited as `agent_seat_credential.rotated`, with
-   `detail: { reason: 'move', via: 'host_key', host, leases_revoked }`. There is no new audit
+   `detail: { reason: 'move', via: 'host_key', host, provision, leases_revoked }`. There is no new audit
    action and no protocol change.
 4. Nothing else changes. A sponsored mint, an admin or sponsor `claim_seat`, and any `claim_seat`
    without a claimed move row leave the credential as it is.
@@ -51,7 +54,7 @@ VM must never hold (ADR 762 §4).
 - **Traces:** each reissue is one `agent_seat_credential.rotated` audit row with `reason: 'move'`
   and the host label, next to the `bootstrap_credential.minted` row (`via: 'host_key'`).
 - **Eval:** `move-provision-host-key-http.test.ts` covers the reissue for a claimed move row, and
-  checks that an admin's direct `claim_seat` leaves the credential untouched.
+  checks that a retried mint under the same row and an admin's direct `claim_seat` both leave the credential untouched.
 - **Experiment:** a moved seat (ryder, then sloane and gptbot) answers a steer from
   `musterd-joiner-1` with its own MCP tools. Falsify: a seat moved under this ADR whose first
   routine call after the claim is refused for want of a seat credential.
