@@ -268,6 +268,8 @@ export async function confirmAppPairing(
     pairingId: string;
     proof?: ApprovalProof | undefined;
     now?: number;
+    /** The daemon's configured WebAuthn origins; a passkey approval cannot verify without them. */
+    expectedOrigins?: string[];
   },
 ): Promise<
   | { ok: true; binding: ChannelBinding; deviceKeyId: string }
@@ -293,6 +295,7 @@ export async function confirmAppPairing(
     publicKey: appEnrollPayload(keys).public_key,
     kind: 'phone',
     proof: input.proof,
+    expectedOrigins: input.expectedOrigins,
     now,
   });
   if (!enrolled.ok) return { ok: false, reason: enrolled.reason };
