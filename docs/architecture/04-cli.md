@@ -108,7 +108,7 @@ src/
   render/
     theme.ts          // mutable ANSI color instance + roles from brand.md; setColorEnabled wires --no-color (ADR 113)
     ui.ts             // shared layout toolkit: glyph set, termWidth, defList, success/heading/hint, visible-length padding (ADR 113)
-    rows.ts           // renderMessageRow, renderStatusTable, renderBanner, renderPresence; renderDailyView — the daily view of `status` (frames 27-2/4/6/8): rows cut with `…` at the column edge, ages and lane hints right-aligned, ⚠ lines with their `→` fix
+    rows.ts           // renderMessageRow, renderStatusTable, renderBanner, renderPresence; renderDailyView — the daily view of `status` (frames 27-2/4/6/8): rows cut with `…` to leave a fixed right column per section (ADR 757), ages and lane hints right-aligned, ⚠ lines with their `→` fix; hubWarning words the hub line as the frame does
     huddleTrace.ts    // renderHuddleTrace (ADR 493): `huddle show <id> --trace` — seat table (fastest to speak first; wake; time-to-turn) over the daemon's merged event list, clock first; draws, never joins
     huddles.ts        // the roster's huddle join (ADR 378): huddleMarks turns deriveHuddles' huddle-major answer into the seat-major one a roll-call row asks — open rooms only, spoken not merely named; owns TIMELINE_WINDOW so `status` and `huddle list` read the same window
     qr.ts             // renderTerminalQr (ADR 690): a QR as upper-half blocks with explicit black-on-white ANSI and a 4-module quiet zone, so it scans on a dark or light theme; encoded by `uqr`

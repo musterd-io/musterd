@@ -754,6 +754,8 @@ export interface DailyWaiting {
   act: string;
   body: string;
   ts: number;
+  /** An ask to a set of seats: how many others besides you may answer it. */
+  others?: number | undefined;
 }
 
 /** One lane you hold. `merged` is the lane's landed merge, when it has one. */
@@ -820,21 +822,38 @@ function waitAge(ts: number, now: number): string {
 }
 
 /**
- * One row: `head` (already painted, `headLen` visible columns) then `text`, cut so the row and its
- * right-aligned `right` (an age or a lane hint) fit `width`, with `right` ending at the last column.
+ * The right column a section's rows leave free (ADR 757): ages on waiting rows, hints on lane rows.
+ * Fixed per section and width, so cut rows end on one vertical line and the age or hint sits at
+ * the last column — the frames' layout as a rule rather than a hand-set gutter per row.
+ */
+const AGE_COLUMN = 10;
+const HINT_COLUMN = 20;
+const HINT_COLUMN_NARROW = 8;
+
+/**
+ * One row: `head` (already painted, `headLen` visible columns) then `text`, cut to leave the
+ * section's right `column` free, with `right` (an age or a lane hint) ending at the last column.
  */
 function dailyRow(
   head: string,
   headLen: number,
   text: string,
   width: number,
+  column: number,
   right?: string,
 ): string {
-  const room = width - headLen - (right ? visibleLen(right) + 2 : 0);
-  const body = cut(text, Math.max(1, room));
+  const body = cut(text, Math.max(1, width - headLen - column));
   if (!right) return head + body;
   const gap = width - headLen - visibleLen(body) - visibleLen(right);
   return head + body + ' '.repeat(Math.max(2, gap)) + theme.meta(right);
+}
+
+/**
+ * The hub's ⚠ line in the frame's wording (ADR 757): `unreachable since 12m — <cause>`. The shared
+ * `describeHubLink` says `since 12m ago`, which other surfaces keep; only the daily view drops it.
+ */
+export function hubWarning(line: string): string {
+  return line.replace(/^(⚠ hub \S+ unreachable since \S+) ago —/, '$1 —');
 }
 
 /** The hint a held lane earns, right-aligned at 80 columns. */
@@ -875,12 +894,15 @@ export function renderDailyView(v: DailyView, now: number, width: number): strin
     for (const a of v.waiting.acts.slice(0, 3)) {
       const verb = ACT_WORD[a.act] ?? a.act;
       const gist = a.body.replace(/\s+/g, ' ').trim();
+      // An ask to a set of seats says so: any of them may answer (ADR 254).
+      const set = a.others ? ` (you + ${a.others} other${a.others === 1 ? '' : 's'})` : '';
       out.push(
         dailyRow(
           `  ${theme.memberName(a.from, a.fromKind)}`,
           2 + visibleLen(a.from),
-          ` ${sym.dot} ${verb}: ${gist}`,
+          ` ${sym.dot} ${verb}: ${gist}${set}`,
           width,
+          AGE_COLUMN,
           waitAge(a.ts, now),
         ),
       );
@@ -907,6 +929,7 @@ export function renderDailyView(v: DailyView, now: number, width: number): strin
           2 + lane.state.length,
           ` ${sym.dot} ${lane.title}`,
           width,
+          narrow ? HINT_COLUMN_NARROW : HINT_COLUMN,
           narrow ? undefined : laneHint(lane),
         ),
       );

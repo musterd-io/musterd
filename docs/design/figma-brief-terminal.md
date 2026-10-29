@@ -575,14 +575,15 @@ Colours per brand.md §2: ⚑ is yellow-bold only when the count is above zero; 
 ages, hints, ids and arrows are bright-black; `active` is green; "blocked" and ⚠ lines are yellow.
 
 The seven gaps reconciled on 2026-10-29 are closed in the code (lane 01M64626WK). `renderDailyView` in
-`render/rows.ts` draws the frames, and `commands/status.daily.test.ts` renders the busy, empty and degraded
-days at 80 and 40 columns from the frames' own data. Three small differences remain:
+`render/rows.ts` draws the frames, and `commands/status.daily.test.ts` pins the busy day at 80 and 40
+columns line for line, and the empty and degraded days by their lines. [ADR 757](../decisions/757-daily-view-right-column.md) settles how the frames are read:
 
-1. The hub's ⚠ line is `describeHubLink`'s wording, `unreachable since 12m ago — …`, where the frame
-   reads `since 12m —`. That function lives in `@musterd/protocol`.
-2. A waiting row does not add the `(you + 2 others)` suffix for an ask sent to a set of seats.
-3. A cut row ends where its text runs out of room, so the gap before a right-aligned age or hint is
-   whatever is left, not the frames' hand-set gutter.
+- Each section leaves a fixed right column: 10 cells for ages, and 20 cells for lane hints (8 under
+  60 columns, where hints drop). Cut rows end on one vertical line instead of the frames' hand-set
+  gutters.
+- The hub's ⚠ line reads `since 12m —`.
+- An ask to a set of seats ends `(you + N others)`.
+- At 40 columns an up-next row keeps its id and cuts the title.
 
 ## Page: States (empty + error)
 
