@@ -60,7 +60,8 @@ so jade=agent / rose=human reads identically in both. Light values are provision
 Two committed faces (ADR 706; `budgets.json` allowlists `dm-sans` and `jetbrains-mono`):
 
 - **DM Sans** (`--font-display` and `--font-sans`) — headings, member names, chyron and canvas labels, and what's _said_: message bodies, buttons, prose.
-- **JetBrains Mono** (`--font-mono`) — the _wire_: timestamps, handles, ids, act labels, the CLI mirror.
+- **Data is DM Sans too, everywhere** (nick, 2026-10-29: "the new font family should apply to everything"): `--font-mono` (timestamps, handles, ids) resolves to `--font-sans`. Use tabular digits where figures line up.
+- **JetBrains Mono** (`--font-code`) — literal code and trace blocks only.
 - The wordmark is the drawn nameplate (ADR 704). Canvas painters read type through
   `src/live/canvasFont.ts`, never a hard-coded family.
 

@@ -29,7 +29,7 @@ Create a variable collection `musterd/core` with these modes: `light`, `dark`.
 
 Frames:
 
-1. `wordmark/primary` (640×200) — lowercase `musterd` in JetBrains Mono, weight 700, letter-spacing 0, color `zinc-900` on `zinc-50`. The `-d` (final letter) filled `accent`.
+1. `wordmark/primary` (640×200) — the drawn nameplate ([ADR 704](../decisions/704-the-wordmark-nameplate.md), `docs/design/assets/wordmark.svg`). It replaced the lowercase JetBrains Mono wordmark with a mustard `-d`.
 2. `wordmark/reversed` (640×200) — same, `zinc-50` on `zinc-900`, `-d` in `mustard-300`.
 3. `wordmark/mono` (640×200) — single color, all `zinc-900` (and a dark variant) — no accent, for stamping/embroidery-style use.
 4. `wordmark/ascii-block` (640×240) — **SUPERSEDED ([ADR 114](../decisions/114-cli-rollcall-wordmark.md)).** The multi-line letter-art CLI banner (thin-outline figlet, then a solid block — both too retro) was retired for the framed roll-call nameplate: a rounded panel holding three presence dots, the `musterd` **brand chip** (the word reversed out of a solid mustard block) with a trailing cursor, and the tagline — `renderBanner` in `packages/cli/src/render/rows.ts` is the source of truth. Redraw this frame as that nameplate on the next Figma sync; no letter-art in the CLI.

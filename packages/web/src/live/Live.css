@@ -11,9 +11,9 @@
  */
 
 .lc {
-  /* nick, 2026-10-22: everything on /live and /broadcast in the one family. `--font-mono` is the data
-     face the 100+ rules below ask for; here it resolves to DM Sans. Literal code (`--font-code`) keeps
-     the mono. */
+  /* nick, 2026-10-22: everything on /live and /broadcast in the one family; since 2026-10-29
+     tokens.css resolves `--font-mono` to DM Sans site-wide. Literal code (`--font-code`) keeps the
+     mono. */
   --font-mono: var(--font-sans);
   /* — palette: the product frame —
      The chrome around the room is neutral white and cool grey (nick, 2026-10-19, lane 01M5BEE19C:

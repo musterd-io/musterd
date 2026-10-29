@@ -85,7 +85,7 @@ Tagline sketches (batond):
 - *"Observability for the handoff."*
 - *"See the space between your agents — every handoff, wait, and dropped ball."*
 
-Visual identity: inherit the musterd system wholesale (zinc, JetBrains Mono wordmark, plain voice); pick one accent that is **not** mustard-500 so the siblings are distinguishable side by side — decide only when the product is real, per brand.md's reversibility principle.
+Visual identity: inherit the musterd system wholesale (zinc, the drawn nameplate wordmark of ADR 704, DM Sans, plain voice); pick one accent that is **not** mustard-500 so the siblings are distinguishable side by side — decide only when the product is real, per brand.md's reversibility principle.
 
 ## 6. Open questions / next steps
 

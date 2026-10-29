@@ -243,9 +243,10 @@ module. The seen-nonce store, the token and the pairing pin are keychain items o
 first. Read-modify-write of the nonce item is not atomic across processes; the extension is the
 writer when a delivery is displayed. A store that cannot be read fails closed.
 
-The app is light only and set in the brand's faces (ADR 760). `expo-font`'s config plugin embeds
-static DM Sans and JetBrains Mono TTFs from `assets/fonts/`, instanced from the web's variable
-files, and styles name them through `font` in `src/ui/theme.ts`. `expo-haptics` gives a press a
+The app is light only and set in DM Sans throughout, data included (ADR 760). `expo-font`'s config
+plugin embeds static DM Sans TTFs from `assets/fonts/`, instanced from the web's variable file, and
+styles name them through `font` in `src/ui/theme.ts`; figures that must line up, like the pairing
+fingerprint, use tabular digits. `expo-haptics` gives a press a
 light tick and an answer sent or a phone paired a success buzz. Cards are Liquid Glass on iOS 26 (`expo-glass-effect`, solid
 white before it) and the app's glyphs are SF Symbols (`expo-symbols`), ADR 764. The icon is `assets/icon.svg`
 (the ADR 702 mark, full-bleed) rendered to `icon.png`; `wordmark.png` and `mark.png` are the
