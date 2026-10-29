@@ -33,8 +33,8 @@ describe('MemberFace', () => {
     const spots = (name: string) => (html(name).match(/data-spot="(eyes|ears|neck)"/g) ?? []).length;
     for (const name of names) {
       const look = appearanceOf({ name, kind: 'human' });
-      // earrings (v2-4b) are too small for a 24px face; only headphones draw on the ears
-      const worn = [look.eyes, look.ears === 'headphones' ? 'headphones' : 'none', look.neck].filter((x) => x !== 'none').length;
+      // earrings (v2-4b) are too small for a 24px face, and neck headphones (v2-4d) are not drawn there
+      const worn = [look.eyes, look.ears === 'headphones' ? 'headphones' : 'none', look.neck === 'scarf' ? 'scarf' : 'none'].filter((x) => x !== 'none').length;
       expect(spots(name)).toBe(worn);
       if (look.eyes !== 'none') expect(html(name)).toContain(`stroke="${look.accessoryColor}"`);
     }
