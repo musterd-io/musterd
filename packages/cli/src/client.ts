@@ -174,6 +174,7 @@ import {
   connectionNeverEstablished,
   exitForCode,
   isConnRefused,
+  schemaError,
   worthRetrying,
 } from './errors.js';
 import { workspaceGuidanceEpoch } from './guidanceAttestation.js';
@@ -473,14 +474,14 @@ export type StyleSelfRead = z.infer<typeof StyleSelfReadSchema>;
 
 function parseStyleSelfRead(json: unknown): StyleSelfRead {
   const parsed = StyleSelfReadSchema.safeParse(json);
-  if (!parsed.success) throw new CliError('style response did not match the protocol schema', 1);
+  if (!parsed.success) throw schemaError('style', parsed.error);
   return parsed.data;
 }
 
 function parseDoorbellView(json: unknown): DoorbellView {
   const parsed = DoorbellViewSchema.safeParse(json);
   if (!parsed.success) {
-    throw new CliError('doorbell response did not match the protocol schema', 1);
+    throw schemaError('doorbell', parsed.error);
   }
   return parsed.data;
 }
@@ -932,7 +933,7 @@ export class HttpClient {
     });
     const parsed = HostProvisionsClaimResponseSchema.safeParse(json);
     if (!parsed.success)
-      throw new CliError('provision claim response did not match the protocol schema', 1);
+      throw schemaError('provision claim', parsed.error);
     return parsed.data;
   }
   /** ADR 463 §3: `musterd host provisions` — the rows this host key may see; claims nothing. */
@@ -943,7 +944,7 @@ export class HttpClient {
     );
     const parsed = HostProvisionsClaimResponseSchema.safeParse(json);
     if (!parsed.success)
-      throw new CliError('provision list response did not match the protocol schema', 1);
+      throw schemaError('provision list', parsed.error);
     return parsed.data;
   }
   /** ADR 463 §2: report a claimed provision `ready` or `failed {reason}`. */
@@ -959,7 +960,7 @@ export class HttpClient {
     );
     const parsed = z.object({ provision: HostProvisionSchema }).safeParse(json);
     if (!parsed.success)
-      throw new CliError('provision report response did not match the protocol schema', 1);
+      throw schemaError('provision report', parsed.error);
     return parsed.data;
   }
   // ADR 450: team invites. The secret comes back once from mint and is never listed.
@@ -1315,7 +1316,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/wake-context`, target.data);
     const response = WakeContextResponseSchema.safeParse(json);
     if (!response.success)
-      throw new CliError('wake-context response did not match the protocol schema', 1);
+      throw schemaError('wake-context', response.error);
     return response.data.context;
   }
   /** Goal dreaming, lane 2 — `GET /teams/:slug/dream`: the caller's own dream packet, never another seat's. */
@@ -1676,7 +1677,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/audit${qs ? `?${qs}` : ''}`);
     const parsed = AuditResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('audit response did not match the protocol schema', 1);
+      throw schemaError('audit', parsed.error);
     }
     return parsed.data;
   }
@@ -1693,7 +1694,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/grants`, body);
     const parsed = GrantMintSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('grant response did not match the protocol schema', 1);
+      throw schemaError('grant', parsed.error);
     }
     return parsed.data;
   }
@@ -1709,7 +1710,7 @@ export class HttpClient {
       throw new CliError('grant list response did not match the protocol schema', 1);
     const grants = raw.map((item) => GrantSchema.safeParse(item));
     if (grants.some((item) => !item.success))
-      throw new CliError('grant list response did not match the protocol schema', 1);
+      throw schemaError('grant list', grants.find((item) => !item.success)?.error);
     return grants
       .map((item) => (item.success ? item.data : null))
       .filter((item): item is Grant => item !== null);
@@ -1730,7 +1731,7 @@ export class HttpClient {
   async openLane(slug: string, body: OpenLane): Promise<LaneResult> {
     const json = await this.request('POST', `/teams/${slug}/lanes`, body);
     const parsed = LaneResultSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('lane response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('lane', parsed.error);
     return parsed.data;
   }
 
@@ -1741,7 +1742,7 @@ export class HttpClient {
       patch,
     );
     const parsed = LaneResultSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('lane response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('lane', parsed.error);
     return parsed.data;
   }
 
@@ -1753,7 +1754,7 @@ export class HttpClient {
       body,
     );
     const parsed = SampleResultSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('sample response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('sample', parsed.error);
     return parsed.data;
   }
 
@@ -1761,7 +1762,7 @@ export class HttpClient {
   async laneShow(slug: string, id: string): Promise<LaneDetail> {
     const json = await this.request('GET', `/teams/${slug}/lanes/${encodeURIComponent(id)}`);
     const parsed = LaneDetailSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('lane response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('lane', parsed.error);
     return parsed.data;
   }
 
@@ -1791,14 +1792,14 @@ export class HttpClient {
     const qs = params.toString();
     const json = await this.request('GET', `/teams/${slug}/lanes${qs ? `?${qs}` : ''}`);
     const parsed = LaneBoardSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('lanes response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('lanes', parsed.error);
     return parsed.data;
   }
 
   // ── Shared Seeds (ADR 319). Every wire response is parsed at this boundary.
   async seeds(slug: string): Promise<Seed[]> {
     const parsed = SeedListSchema.safeParse(await this.request('GET', `/teams/${slug}/seeds`));
-    if (!parsed.success) throw new CliError('Seeds response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('Seeds', parsed.error);
     return parsed.data.seeds;
   }
 
@@ -1806,7 +1807,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('GET', `/teams/${slug}/seeds/${encodeURIComponent(id)}`),
     );
-    if (!parsed.success) throw new CliError('Seed response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('Seed', parsed.error);
     return parsed.data.seed;
   }
 
@@ -1814,7 +1815,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/${encodeURIComponent(id)}/claim`, {}),
     );
-    if (!parsed.success) throw new CliError('Seed response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('Seed', parsed.error);
     return parsed.data.seed;
   }
 
@@ -1824,7 +1825,7 @@ export class HttpClient {
         body,
       }),
     );
-    if (!parsed.success) throw new CliError('Seed response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('Seed', parsed.error);
     return parsed.data.seed;
   }
 
@@ -1832,7 +1833,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/${encodeURIComponent(id)}/answer`, { body }),
     );
-    if (!parsed.success) throw new CliError('Seed response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('Seed', parsed.error);
     return parsed.data.seed;
   }
 
@@ -1840,7 +1841,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/${encodeURIComponent(id)}/brief`, body),
     );
-    if (!parsed.success) throw new CliError('Seed response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('Seed', parsed.error);
     return parsed.data.seed;
   }
 
@@ -1848,7 +1849,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/${encodeURIComponent(id)}/promote`, body),
     );
-    if (!parsed.success) throw new CliError('Seed response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('Seed', parsed.error);
     return parsed.data.seed;
   }
 
@@ -1857,7 +1858,7 @@ export class HttpClient {
     const parsed = SeedResultSchema.safeParse(
       await this.request('POST', `/teams/${slug}/seeds/repo`, body),
     );
-    if (!parsed.success) throw new CliError('Seed response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('Seed', parsed.error);
     return parsed.data.seed;
   }
 
@@ -1865,7 +1866,7 @@ export class HttpClient {
   async next(slug: string): Promise<NextBrief> {
     const json = await this.request('GET', `/teams/${slug}/next`);
     const parsed = NextBriefSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('next response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('next', parsed.error);
     return parsed.data;
   }
 
@@ -1883,7 +1884,7 @@ export class HttpClient {
     }
     const parsed = ReviewPromisesResponseSchema.safeParse(json);
     if (!parsed.success)
-      throw new CliError('review-promises response did not match the protocol schema', 1);
+      throw schemaError('review-promises', parsed.error);
     return parsed.data;
   }
 
@@ -1893,7 +1894,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/next/summary`);
     const parsed = NextSummarySchema.safeParse(json);
     if (!parsed.success)
-      throw new CliError('next/summary response did not match the protocol schema', 1);
+      throw schemaError('next/summary', parsed.error);
     return parsed.data;
   }
 
@@ -1901,7 +1902,7 @@ export class HttpClient {
   async declareGoal(slug: string, body: DeclareGoal): Promise<Goal> {
     const json = await this.request('POST', `/teams/${slug}/goals`, body);
     const parsed = GoalSchema.safeParse((json as { goal: unknown }).goal);
-    if (!parsed.success) throw new CliError('goal response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('goal', parsed.error);
     return parsed.data;
   }
 
@@ -1914,7 +1915,7 @@ export class HttpClient {
     const raw = (json as { goal: unknown }).goal;
     if (raw === null) return null;
     const parsed = GoalSchema.safeParse(raw);
-    if (!parsed.success) throw new CliError('goal response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('goal', parsed.error);
     return parsed.data;
   }
 
@@ -1924,7 +1925,7 @@ export class HttpClient {
     const raw = (json as { goal: unknown }).goal;
     if (raw === null) return null;
     const parsed = GoalSchema.safeParse(raw);
-    if (!parsed.success) throw new CliError('goal response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('goal', parsed.error);
     return parsed.data;
   }
 
@@ -1932,7 +1933,7 @@ export class HttpClient {
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';
     const json = await this.request('GET', `/teams/${slug}/goals${qs}`);
     const parsed = GoalListSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('goals response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('goals', parsed.error);
     return parsed.data;
   }
 
@@ -1942,7 +1943,7 @@ export class HttpClient {
   async nodeInvite(slug: string, label: string): Promise<NodeInviteMint> {
     const json = await this.request('POST', `/teams/${slug}/nodes/invite`, { label });
     const parsed = NodeInviteMintSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('invite response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('invite', parsed.error);
     return parsed.data;
   }
 
@@ -1992,7 +1993,7 @@ export class HttpClient {
   async nodeTrust(slug: string, nodeId: string): Promise<SeatNodeTrusted> {
     const json = await this.request('POST', `/teams/${slug}/nodes/trust`, { node_id: nodeId });
     const parsed = SeatNodeTrustedSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('trust response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('trust', parsed.error);
     return parsed.data;
   }
 
@@ -2007,7 +2008,7 @@ export class HttpClient {
       body,
     );
     const parsed = SeatMovedSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('move response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('move', parsed.error);
     return parsed.data;
   }
 
@@ -2022,7 +2023,7 @@ export class HttpClient {
     );
     const parsed = MoveProvisionStatusSchema.safeParse(json);
     if (!parsed.success)
-      throw new CliError('provision status did not match the protocol schema', 1);
+      throw schemaError('provision status', parsed.error);
     return parsed.data;
   }
 
@@ -2037,7 +2038,7 @@ export class HttpClient {
   async nodes(slug: string): Promise<NodeList> {
     const json = await this.request('GET', `/teams/${slug}/nodes`);
     const parsed = NodeListSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('nodes response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('nodes', parsed.error);
     return parsed.data;
   }
 
@@ -2046,7 +2047,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/messages/${messageId}/delivery`);
     const parsed = ActDeliverySchema.safeParse(json);
     if (!parsed.success)
-      throw new CliError('delivery response did not match the protocol schema', 1);
+      throw schemaError('delivery', parsed.error);
     return parsed.data;
   }
 
@@ -2078,7 +2079,7 @@ export class HttpClient {
   async report(slug: string): Promise<Report> {
     const json = await this.request('GET', `/teams/${slug}/report`);
     const parsed = ReportSchema.safeParse(json);
-    if (!parsed.success) throw new CliError('report response did not match the protocol schema', 1);
+    if (!parsed.success) throw schemaError('report', parsed.error);
     return parsed.data;
   }
 
@@ -2091,7 +2092,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/requests${qs}`);
     const parsed = RequestsResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('requests response did not match the protocol schema', 1);
+      throw schemaError('requests', parsed.error);
     }
     return parsed.data;
   }
@@ -2110,7 +2111,7 @@ export class HttpClient {
     );
     const parsed = DecideResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('decide response did not match the protocol schema', 1);
+      throw schemaError('decide', parsed.error);
     }
     return parsed.data;
   }
@@ -2124,7 +2125,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/enroll`, body);
     const parsed = EnrollResidencyResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('residency enroll response did not match the protocol schema', 1);
+      throw schemaError('residency enroll', parsed.error);
     }
     return parsed.data;
   }
@@ -2146,7 +2147,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/wake-leases`, { host });
     const parsed = WakeLeasesResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('wake-leases response did not match the protocol schema', 1);
+      throw schemaError('wake-leases', parsed.error);
     }
     return parsed.data;
   }
@@ -2160,7 +2161,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/pull`, { host });
     const parsed = PullPollResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('residency/pull response did not match the protocol schema', 1);
+      throw schemaError('residency/pull', parsed.error);
     }
     return parsed.data;
   }
@@ -2196,7 +2197,7 @@ export class HttpClient {
       await this.request('GET', `/teams/${slug}/style-block`),
     );
     if (!parsed.success) {
-      throw new CliError('style-block response did not match the protocol schema', 1);
+      throw schemaError('style-block', parsed.error);
     }
     return parsed.data;
   }
@@ -2210,7 +2211,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/doorbell/rings`, { host });
     const parsed = DoorbellRingsResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('doorbell rings response did not match the protocol schema', 1);
+      throw schemaError('doorbell rings', parsed.error);
     }
     return parsed.data;
   }
@@ -2284,7 +2285,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/wake-transcript`, body);
     const parsed = WakeTranscriptResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('wake-transcript response did not match the protocol schema', 1);
+      throw schemaError('wake-transcript', parsed.error);
     }
     return parsed.data;
   }
@@ -2302,7 +2303,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/residency/session`, body);
     const parsed = SessionAttestationResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('session attestation response did not match the protocol schema', 1);
+      throw schemaError('session attestation', parsed.error);
     }
     return parsed.data;
   }
@@ -2312,7 +2313,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/residency`);
     const parsed = ResidencyListResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('residency response did not match the protocol schema', 1);
+      throw schemaError('residency', parsed.error);
     }
     return parsed.data;
   }
@@ -2336,7 +2337,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/governed/policy`);
     const parsed = GovernedPolicyReadResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('governed policy response did not match the protocol schema', 1);
+      throw schemaError('governed policy', parsed.error);
     }
     return parsed.data;
   }
@@ -2347,7 +2348,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/governed/policy`, body);
     const parsed = GovernedPolicyResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('governed policy response did not match the protocol schema', 1);
+      throw schemaError('governed policy', parsed.error);
     }
     return parsed.data;
   }
@@ -2361,7 +2362,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/governed/launches`, body);
     const parsed = GovernedLaunchAuthorizationMintSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('governed launch response did not match the protocol schema', 1);
+      throw schemaError('governed launch', parsed.error);
     }
     return parsed.data;
   }
@@ -2374,7 +2375,7 @@ export class HttpClient {
     );
     const parsed = GovernedLaunchRevokeResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('governed launch revoke response did not match the protocol schema', 1);
+      throw schemaError('governed launch revoke', parsed.error);
     }
     return parsed.data;
   }
@@ -2448,7 +2449,7 @@ export class HttpClient {
     const json = await this.request('POST', `/teams/${slug}/trace/events`, body);
     const parsed = TraceIngestResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('trace ingest response did not match the protocol schema', 1);
+      throw schemaError('trace ingest', parsed.error);
     }
     return parsed.data;
   }
@@ -2464,7 +2465,7 @@ export class HttpClient {
     );
     const parsed = HuddleTraceSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('huddle trace response did not match the protocol schema', 1);
+      throw schemaError('huddle trace', parsed.error);
     }
     return parsed.data;
   }
@@ -2479,7 +2480,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/trace/sessions/${digest}`);
     const parsed = TraceSessionResponseSchema.safeParse(json);
     if (!parsed.success) {
-      throw new CliError('trace session response did not match the protocol schema', 1);
+      throw schemaError('trace session', parsed.error);
     }
     return parsed.data;
   }
@@ -2490,7 +2491,7 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/report/trace${q}`);
     const parsed = TraceReportSchema.safeParse(json);
     if (!parsed.success)
-      throw new CliError('trace report response did not match the protocol schema', 1);
+      throw schemaError('trace report', parsed.error);
     return parsed.data;
   }
 
