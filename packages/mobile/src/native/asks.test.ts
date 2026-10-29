@@ -201,4 +201,12 @@ describe('requestRedelivery', () => {
     expect(await requestRedelivery({ pin: unbound, fetchImpl })).toBe(false);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it('sends one request a minute, because each re-pushes every pending ask', async () => {
+    const at = 5_000_000_000_000;
+    expect(await requestRedelivery({ pin, fetchImpl, now: at })).toBe(true);
+    expect(await requestRedelivery({ pin, fetchImpl, now: at + 30_000 })).toBe(false);
+    expect(await requestRedelivery({ pin, fetchImpl, now: at + 61_000 })).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
 });

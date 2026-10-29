@@ -130,16 +130,25 @@ export async function loadAsks(input: {
   return { asks, held };
 }
 
+/** Opening the app fires both a first focus and a foreground; one re-push serves both. */
+const REDELIVER_GAP_MS = 60_000;
+let lastRedeliver = 0;
+
 /**
  * Ask the daemon, through the relay, to re-push this binding's pending set (ADR 676 decision 9).
- * The relay answers 202 whatever the daemon does; the result comes back as notifications.
+ * The relay answers 202 whatever the daemon does; the result comes back as notifications. At most
+ * one request a minute: each one re-pushes every pending ask.
  */
 export async function requestRedelivery(input: {
   pin: PairingPin;
   fetchImpl?: typeof fetch;
+  now?: number;
 }): Promise<boolean> {
   const { pin } = input;
   if (!pin.binding) return false;
+  const now = input.now ?? Date.now();
+  if (now - lastRedeliver < REDELIVER_GAP_MS) return false;
+  lastRedeliver = now;
   const callback = { app: 1 as const, kind: 'redeliver' as const, binding: pin.binding };
   if (!AppCallbackSchema.safeParse(callback).success) return false;
   const url = relayUrl(pin.relay, `app/${encodeURIComponent(pin.team)}/callback`);
