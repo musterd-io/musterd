@@ -145,14 +145,35 @@ export function transportError(
   );
 }
 
+/** The two builds a schema mismatch is judged against (ADR 135), each when it is known. */
+export interface Builds {
+  cli?: string | undefined;
+  daemon?: string | undefined;
+}
+
+/** What the builds say about a mismatch: skew to fix, a real bug, or where to look. */
+function buildContext(b: Builds): string {
+  const short = (ref: string) => ref.slice(0, 7);
+  const same = (a: string, d: string) => a.replace(/-dirty$/, '') === d.replace(/-dirty$/, '');
+  if (b.cli && b.daemon) {
+    return same(b.cli, b.daemon)
+      ? ` — the CLI and the daemon both run ${short(b.daemon)}, so this is a bug, not skew`
+      : ` — your CLI build (${short(b.cli)}) differs from the daemon (${short(b.daemon)}): rebuild your checkout (pnpm build) or match the daemon`;
+  }
+  if (b.cli)
+    return ` — CLI build ${short(b.cli)}; \`musterd status\` names the daemon's when they differ`;
+  return ' — `musterd --version` and `musterd status` name the builds';
+}
+
 /**
  * A server response did not match the protocol schema. Names the operation and, when available,
- * the first failing field path (safe — no values, no secrets) so a stale client or a daemon skew
- * is diagnosable instead of "did not match the protocol schema". Exit 1: the read failed; the
- * caller decides whether to retry. The error comes first: `fn('lanes', …)` is the shape
- * `cli-flags:check` reads as a flag read, and would hand every operation name to its callers.
+ * the first failing field path (safe — no values, no secrets), then the builds: a stale client or a
+ * daemon skew is the usual cause, so the message says whether the CLI and the daemon differ and how
+ * to fix it, or that they match and this is a bug. Exit 1: the read failed; the caller decides
+ * whether to retry. The error comes first: `fn('lanes', …)` is the shape `cli-flags:check` reads as
+ * a flag read, and would hand every operation name to its callers.
  */
-export function schemaError(err: unknown, operation: string): CliError {
+export function schemaError(err: unknown, operation: string, builds: Builds = {}): CliError {
   let detail = '';
   if (
     err &&
@@ -168,5 +189,8 @@ export function schemaError(err: unknown, operation: string): CliError {
       detail = path ? ` (field: ${path}${msg})` : msg;
     }
   }
-  return new CliError(`${operation} response did not match the protocol schema${detail}`, 1);
+  return new CliError(
+    `${operation} response did not match the protocol schema${detail}${buildContext(builds)}`,
+    1,
+  );
 }
