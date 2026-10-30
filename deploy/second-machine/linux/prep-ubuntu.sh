@@ -82,7 +82,14 @@ if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1
     "$tmp/x/usr/share/apparmor/extra-profiles/bwrap-userns-restrict" >/etc/apparmor.d/musterd-bwrap-userns
   rm -rf "$tmp"
   grep -q '^profile bwrap /{usr/bin/bwrap,' /etc/apparmor.d/musterd-bwrap-userns
+  # A box prepared by an earlier version of this script loaded UNCONFINED profiles under these
+  # names; the exact-path Codex one would outrank the new pattern. Unload them first.
+  printf 'profile musterd-bwrap {}\nprofile musterd-codex-bwrap {}\n' | apparmor_parser -R 2>/dev/null || true
   apparmor_parser -r /etc/apparmor.d/musterd-bwrap-userns
+  if aa-status 2>/dev/null | grep -qE '^\s+musterd-(codex-)?bwrap$'; then
+    echo "stale unconfined bwrap profile still loaded" >&2
+    exit 1
+  fi
 fi
 
 echo
