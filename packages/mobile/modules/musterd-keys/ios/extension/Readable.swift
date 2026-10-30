@@ -12,7 +12,7 @@ import Foundation
 enum Readable {
   private static let rules: [(String, String, NSRegularExpression.Options)] = [
     (#"^\s*\[[a-z-]+\]\s*"#, "", []),
-    ("```[^\\n]*\\n?", "", []),
+    ("```", "", []),
     ("`([^`\\n]+)`", "$1", []),
     (#"\*\*([^*\n]+)\*\*"#, "$1", []),
     (#"__([^_\n]+)__"#, "$1", []),

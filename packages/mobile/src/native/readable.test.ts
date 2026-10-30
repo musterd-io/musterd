@@ -45,6 +45,10 @@ describe('plain and summary', () => {
         expect(swift).toContain(JSON.stringify(line));
   });
 
+  it('keeps the words on a code fence line: only the marks go', () => {
+    expect(plain('```bash rm -rf build\n```')).toBe('bash rm -rf build');
+  });
+
   it('leaves short text alone', () => {
     expect(summary('Ship it?')).toBe('Ship it?');
   });

@@ -279,7 +279,7 @@ export default function AskScreen() {
           </>
         ) : null}
         <View style={[styles.quote, { borderColor: offers ? p.border : p.accent }]}>
-          <AskText text={ask.body} large={!offers} />
+          <AskText text={ask.body} large={!offers} foldable={!offers} />
         </View>
         {entry.delivery.lane ? (
           <Text numberOfLines={2} style={[styles.muted, { color: p.muted }]}>

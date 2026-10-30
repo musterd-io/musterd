@@ -84,11 +84,14 @@ small change.
   that ask is removed from Notification Center (`clearDelivered`) and from the phone's record. A
   503, 504 or no network clears nothing: the ask may still be open.
 - **Readable, not raw.** Agents write for a terminal. On the lock screen the notification's title
-  is the asker, and its text is the ask with its marks taken out: markdown, backticks, a `[lane]`
-  tag, and full ids cut to 10 characters. The text is also cut at a sentence (`Readable.swift`,
+  is the asker (`wallow · agent` for a seat), and its text is the ask with its marks taken out:
+  markdown, backticks and fences (never the words beside them), a `[lane]` tag, and full ids cut to
+  10 characters. The text is cut at a sentence unless the notification carries answer actions, in
+  which case it is never cut (`Readable.swift`,
   the Swift copy of `readable.ts`, run against the same fixtures). The list's tiles show the same
   summary. The ask screen shows the whole text with its paragraphs, bullets, bold and code kept,
-  and folds a long one behind Show more. Nothing is reworded, and a listed act's header is still
+  and folds a long advisory one behind Show more; on a listed act's screen nothing folds. Nothing is
+  reworded, and a listed act's header is still
   the app's own wording.
 - **A seen ask's notifications clear.** When the list loads while the app is in front, every
   listed ask is marked seen and its notifications are removed (`markShown`). It stays on the list

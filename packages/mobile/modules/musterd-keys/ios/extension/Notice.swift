@@ -71,10 +71,11 @@ enum Notice {
       // Lock-screen actions only show on a press and hold (nick, 2026-10-29).
       let subtitle = category == nil ? more : more.map { "\(answerHint) · \($0)" } ?? answerHint
       // Who is asking is the title; the text is cleaned and cut at a sentence (nick, 2026-10-30:
-      // "a tiny bit too much raw text dump"). The app's ask screen has the whole text.
+      // "a tiny bit too much raw text dump"). An ask answerable from here is never cut: the whole
+      // text is what the answer is about. The app's ask screen has the whole text either way.
       return Rendered(
         title: from,
-        body: Readable.summary(text, max: 180),
+        body: category == nil ? Readable.summary(text, max: 180) : Readable.plain(text),
         subtitle: subtitle,
         category: category,
         sound: true

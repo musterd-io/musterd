@@ -10,11 +10,20 @@ const FOLD = 420;
  * An asker's own words on the ask screen, made readable: paragraphs and bullets kept, bold as
  * bold, code as a quiet chip, full ids shortened. Long text folds after its first few blocks.
  */
-export function AskText({ text, large = false }: { text: string; large?: boolean }) {
+export function AskText({
+  text,
+  large = false,
+  foldable = true,
+}: {
+  text: string;
+  large?: boolean;
+  /** False where an answer is signed: everything the asker wrote stays in view. */
+  foldable?: boolean;
+}) {
   const p = usePalette();
   const all = blocks(text);
   const total = all.reduce((n, b) => n + length(b), 0);
-  const [open, setOpen] = useState(total <= FOLD);
+  const [open, setOpen] = useState(!foldable || total <= FOLD);
   const shown = open ? all : fold(all);
   const base = large ? styles.large : styles.body;
   return (

@@ -95,7 +95,8 @@ enum DeliveryOpen {
         actionClass == "advisory" || actionClass == "privileged",
         nonEmpty(ask["id"]) == route.ref,
         let from = nonEmpty(ask["from"]),
-        ask["from_kind"] as? String == "agent" || ask["from_kind"] as? String == "human",
+        let fromKind = ask["from_kind"] as? String,
+        fromKind == "agent" || fromKind == "human",
         ask["tier"] is String,
         stringOrNull(ask["species"]),
         jsonInt(ask["ts"]) != nil,
@@ -128,7 +129,8 @@ enum DeliveryOpen {
       }
       return .ask(
         text: text,
-        from: from,
+        // The title says what kind of member is asking, so a seat's name cannot pass for a person.
+        from: fromKind == "agent" ? "\(from) · agent" : from,
         actionClass: actionClass,
         hasApproval: hasApproval,
         waiting: waiting,
