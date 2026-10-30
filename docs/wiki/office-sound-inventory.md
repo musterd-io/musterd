@@ -121,3 +121,8 @@ Each file is in `packages/web/src/live/sounds/` and is trimmed from a CC0 (publi
 - Still synthesized, with recordings to come: the water bottle, the coffee machine, the wagon's phone, wheels, front-door chime and confetti pop, and the paws, yawn, label maker and toss.
 - Each take is mono at 48 kbps. Its gain on the LIFE bus (`TAKE_GAIN`) matches the peak of the synth voice it replaced.
 - Falsify: `pnpm perf:check` reports office sounds above `officeSoundBytes` (160,000 B).
+
+**Re-levelled 2026-10-30 (nick, lane 01M67J1YDR): "the coffee machine and the dog bark are too loud and still happen slightly too often".**
+- The coffee machine's synth levels are all halved (-6 dB), and its errand weight goes from 4 to 2.
+- The bark take's gain goes from 0.074 to 0.037 (-6 dB), and its roll weight from 0.005 to 0.0025.
+- A water-cooler trip now ends with a sip at the desk once the member is seated again. The sip clip is a seated one, so the sip waits for the sit.

@@ -3204,7 +3204,7 @@ export function mountOffice(
       ...(mayErrand
         ? ([
             // 15 → 4 (nick, 2026-10-30, lane 01M67D: the coffee run was the room's most frequent trip)
-            [4, () => coffeeStroll(who, slot)],
+            [2, () => coffeeStroll(who, slot)], // 4 → 2 (nick, 2026-10-30: still slightly too often)
             [9, () => actors.errandPhone(who, slotRng(teamName, slot, 'phone'))], // gets up, takes a call, paces, comes back
             // A meal is the one errand the dog cares about: it drops whatever it was doing and follows the
             // plate to the lounge to sit and stare at it. Not every time — a dog that never misses a meal is
@@ -3233,7 +3233,7 @@ export function mountOffice(
       // The floor's beat is a trip, not a fidget: the same weighted pick, over the errands only. Water
       // needs a bottle on that desk, so a lounging member draws from the other three.
       const errands: Array<[number, () => boolean]> = [
-        [4, () => coffeeStroll(who, slot)],
+        [2, () => coffeeStroll(who, slot)],
         [9, () => actors.errandPhone(who, slotRng(teamName, slot, 'phone'))],
         [7, () => actors.errandFridge(who, slotRng(teamName, slot, 'fridge')) !== null],
       ];

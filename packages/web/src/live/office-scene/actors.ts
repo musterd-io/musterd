@@ -416,6 +416,8 @@ interface Walk {
   /** A handoff's folder or a review's card on its way to `to`'s desk (lane 01M62JK2JS): the desk shows
    *  it only from `leg`, the beat the walker sets it down — not when the data says it is waiting. */
   drop?: { to: string; leg: number };
+  /** Back from the water cooler (lane 01M67J1YDR): once seated again, take a sip from the bottle. */
+  sipAfter?: true;
   /** Giving way (lane 01M67AVF78): the world-space sidestep currently applied, and how long this walker
    *  has been held up by someone in its way. */
   off?: { x: number; y: number };
@@ -1084,6 +1086,11 @@ export function createActors(): Actors {
    * loop must keep running through it, or a member freezes half-out of their chair. */
   /** The shared errand entry guard: only a seated desk member (not nook/queue `small`), present and
    * idle, runs one. Returns their home + the standing crowd to route around, or null. */
+  /** Members owed a sip once they are seated again, with when it stops being worth waiting for (lane
+   *  01M67J1YDR): the sip clip is a seated one, so a water trip ends with sitting down first. */
+  const pendingSips = new Map<string, number>();
+  let clockS = 0;
+
   function errandStart(from: string): { home: Pose; avoid: P[] } | null {
     const home = homes.get(from);
     if (!home || home.small || exiting.has(from) || walks.has(from) || pending.get(from)?.length) {
@@ -1695,6 +1702,7 @@ export function createActors(): Actors {
           ...back,
           hold(home, home.dir, 0.4, { carry: 'bottle' }), // set it back down
         ],
+        sipAfter: true,
         i: 0,
         t: 0,
         small: false,
@@ -2069,6 +2077,7 @@ export function createActors(): Actors {
       else gestures.clear();
     },
     step(dt) {
+      clockS += dt;
       const before = posesNow();
       // Seated bodies are behind their desks, which the routes already avoid; only standing ones count.
       const bodies: Body[] = [...before].filter(([, q]) => (q.sit ?? 0) < 0.5).map(([n, q]) => {
@@ -2136,6 +2145,7 @@ export function createActors(): Actors {
           }
         }
         if (done) {
+          if (w.sipAfter) pendingSips.set(name, clockS + 6);
           walks.delete(name);
           if (exiting.has(name)) {
             exiting.delete(name);
@@ -2150,13 +2160,23 @@ export function createActors(): Actors {
           }
         }
       }
+      // A member back from the cooler sips once the sit blend has landed them in the chair.
+      for (const [name, until] of [...pendingSips]) {
+        if (clockS > until) pendingSips.delete(name);
+        else if (animOf(name).sit > 0.9 && canGesture(name)) {
+          pendingSips.delete(name);
+          gestures.set(name, { kind: GESTURE.sip, t: 0, dur: GESTURE_DUR[GESTURE.sip] });
+          const h = homes.get(name)!;
+          motionSounds.push({ kind: 'sip', who: name, lx: h.lx, ly: h.ly });
+        }
+      }
       // Age in-place gestures; drop each when its window elapses (returns the member to a plain idle pose).
       for (const [name, g] of [...gestures.entries()]) {
         g.t += dt;
         if (g.t >= g.dur) gestures.delete(name);
       }
       advanceAnim(dt, before, posesNow());
-      return walks.size > 0 || gestures.size > 0 || settling();
+      return walks.size > 0 || gestures.size > 0 || pendingSips.size > 0 || settling();
     },
     poses: posesNow,
     settling,
