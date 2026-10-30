@@ -10,6 +10,7 @@ import {
 } from './envelope.wire.js';
 import { AnchorRefSchema, HuddleMetaSchema } from './huddle.js';
 import { BlockedBySchema } from './incident.js';
+import { AnswerSchema, QuestionSchema } from './question.js';
 import { ReviewPromiseReferenceSchema } from './review-promise.js';
 import { PROTOCOL_VERSION } from './version.js';
 
@@ -232,6 +233,26 @@ export function actMetaRules(
   // `ask` (ADR 147) is the to-human stream act: it MUST carry a valid `meta.species` (which of the three
   // kinds of directed-to-human traffic) and `meta.tier` (which derives the timeout + no-answer policy the
   // agent runs). Both are closed enums so a surface can't send an ask the no-answer machinery can't tier.
+  // ADR 773: `meta.answer` answers a question ask. It rides `accept` only (the `in_reply_to` rule above
+  // already holds for accept); whether its target is a question is the server's check, not the shape's.
+  if (meta['answer'] !== undefined) {
+    if (env.act !== 'accept') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['meta', 'answer'],
+        message: 'meta.answer rides act "accept" only (the answer to a question, ADR 773)',
+      });
+    } else {
+      const parsed = AnswerSchema.safeParse(meta['answer']);
+      if (!parsed.success) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['meta', 'answer'],
+          message: `meta.answer: ${parsed.error.issues[0]?.message ?? 'invalid'}`,
+        });
+      }
+    }
+  }
   if (env.act === 'ask') {
     if (!AskSpeciesSchema.safeParse(meta['species']).success) {
       ctx.addIssue({
@@ -240,7 +261,33 @@ export function actMetaRules(
         message: 'act "ask" requires meta.species (consult | escalate | approve)',
       });
     }
-    if (!AskTierSchema.safeParse(meta['tier']).success) {
+    // ADR 773: a question (`meta.question`) carries no tier — the seat has already ended its turn, so
+    // there is no waiting agent for a clock to govern. Every other ask keeps the tier requirement.
+    if (meta['question'] !== undefined) {
+      const parsed = QuestionSchema.safeParse(meta['question']);
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['meta', 'question', ...(issue?.path ?? [])],
+          message: `meta.question: ${issue?.message ?? 'invalid'}`,
+        });
+      }
+      if (meta['species'] !== 'consult') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['meta', 'species'],
+          message: 'a question ask is species "consult" (ADR 773)',
+        });
+      }
+      if (meta['tier'] !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['meta', 'tier'],
+          message: 'a question ask carries no meta.tier — it has no clock (ADR 773)',
+        });
+      }
+    } else if (!AskTierSchema.safeParse(meta['tier']).success) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['meta', 'tier'],

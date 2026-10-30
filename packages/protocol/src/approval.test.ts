@@ -42,15 +42,20 @@ describe('the app-facing modules are node-free (ADR 694)', () => {
   // The app imports these through `@musterd/protocol/approval` and `/app-channel`; the schema-free
   // approval-contracts sibling keeps browser builders out of the Zod bundle. A `node:` import (or a
   // module that has one) would break the Expo bundle, not this test run.
-  it.each(['./approval.ts', './appChannel.ts'])(
+  // `question.ts` rides in through `/app-channel` (the app's question answer, ADR 774), so it is
+  // held to the same rule.
+  const NODE_FREE = new Set([
+    'zod',
+    './approval.js',
+    './approvalContracts.js',
+    './question.js',
+    './question.wire.js',
+  ]);
+  it.each(['./approval.ts', './appChannel.ts', './question.ts', './question.wire.ts'])(
     '%s imports only zod and node-free siblings',
     (f) => {
       const imports = [...read(f).matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-      expect(
-        imports.filter(
-          (i) => i !== 'zod' && i !== './approval.js' && i !== './approvalContracts.js',
-        ),
-      ).toEqual([]);
+      expect(imports.filter((i) => !NODE_FREE.has(i!))).toEqual([]);
     },
   );
 });

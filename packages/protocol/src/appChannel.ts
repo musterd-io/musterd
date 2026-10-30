@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ApprovalDescriptorSchema } from './approval.js';
+import { AnswerSchema, type Answer } from './question.js';
 
 /**
  * The musterd app's channel (ADR 676): what the pairing QR carries and what the phone sends back,
@@ -232,6 +233,76 @@ export const AppAnswerSchema = z.object({
     .optional(),
 });
 export type AppAnswer = z.infer<typeof AppAnswerSchema>;
+
+/**
+ * The phone's answer to a **question** ask (ADR 773/774), opened from a body sealed with purpose
+ * `answer`. A separate schema from {@link AppAnswerSchema}: a question is answered with an option
+ * and/or text, never approve/reject, and its signature is over {@link appQuestionAnswerSigningBytes}
+ * — its own domain tag, so a question-key signature can never verify as a decision.
+ */
+export const AppQuestionAnswerSchema = z.object({
+  v: z.literal(1),
+  token: z.string().min(1).max(128),
+  answer: AnswerSchema,
+  nonce: z.string().min(1).max(64),
+  /** Which phone key signed: the silent question key (ADR 774 §5) or the Face ID signing key. */
+  key: z.enum(['question', 'signing']),
+  /** ECDSA P-256 / SHA-256, DER, over {@link appQuestionAnswerSigningBytes}. */
+  signature: b64url.max(256),
+});
+export type AppQuestionAnswer = z.infer<typeof AppQuestionAnswerSchema>;
+
+/** The exact bytes a question answer's signature covers. `text` is last and JSON-quoted, so a
+ *  newline in it cannot forge a field. */
+export function appQuestionAnswerSigningBytes(input: {
+  team: string;
+  binding: string;
+  ask: string;
+  token: string;
+  nonce: string;
+  answer: Answer;
+}): string {
+  return [
+    'musterd-app-question-answer/v1',
+    input.team,
+    input.binding,
+    input.ask,
+    input.token,
+    input.nonce,
+    input.answer.choice === undefined ? '-' : String(input.answer.choice),
+    input.answer.text === undefined ? '-' : JSON.stringify(input.answer.text),
+  ].join('\n');
+}
+
+/**
+ * Enrolling the phone's question key (ADR 774 §5): P-256, `ThisDeviceOnly`, no biometry, so a
+ * notification action can sign an answer to a question while the phone is locked. The enrollment
+ * itself is signed by the Face ID signing key over {@link questionKeyEnrollBytes}.
+ */
+export const AppQuestionKeyEnrollSchema = z.object({
+  v: z.literal(1),
+  binding: z.string().min(1).max(64),
+  /** The question key's uncompressed P-256 public point (65 bytes), base64url. */
+  question_key: b64url.min(86).max(88),
+  nonce: z.string().min(16).max(64),
+  signature: b64url.max(256),
+});
+export type AppQuestionKeyEnroll = z.infer<typeof AppQuestionKeyEnrollSchema>;
+
+export function questionKeyEnrollBytes(input: {
+  team: string;
+  binding: string;
+  question_key: string;
+  nonce: string;
+}): string {
+  return [
+    'musterd-app-question-key/v1',
+    input.team,
+    input.binding,
+    input.question_key,
+    input.nonce,
+  ].join('\n');
+}
 
 /**
  * The bytes the phone signs for an answer: domain-separated canonical JSON of everything the answer
