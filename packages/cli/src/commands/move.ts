@@ -25,6 +25,7 @@ import { provisionAgentSeat } from '../onboard/agentSeat.js';
 import { harnessAdapters } from '../onboard/harnesses/index.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
+import { collectApproval } from './authority.js';
 import { resolve } from './helpers.js';
 
 /**
@@ -422,6 +423,11 @@ export async function moveCommand(parsed: Parsed): Promise<number> {
         keepToolkit: true,
         sourceDir: process.cwd(),
         rosterHome: loadConfig().rosterHome[team],
+        // ADR 662: the seat's credential mint and standing grant are listed acts; a human whose
+        // device key is passkey-only is refused `no_signature` until the approval is collected
+        // (cider → mac.lan, 2026-10-29). The same retry `musterd agent` makes.
+        authorityApproval: (act, target, payload) =>
+          collectApproval(http, team, act, target, payload),
       });
       const dir = r.workspace.dir;
       lines.push(`${theme.ok(sym.ok)} workspace ${dir}\n`);
