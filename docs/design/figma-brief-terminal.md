@@ -647,6 +647,12 @@ The seven gaps reconciled on 2026-10-29 are closed in the code (lane 01M64626WK)
 `render/rows.ts` draws the frames, and `commands/status.daily.test.ts` pins the busy day at 80 and 40
 columns line for line, and the empty and degraded days by their lines. [ADR 757](../decisions/757-daily-view-right-column.md) settles how the frames are read:
 
+Three frame changes from lane `01M653WK0K` (2026-10-30, designer input on the shipped view): one
+pointer per destination — the `+N more · musterd inbox` / `musterd next` line names the command, so
+the `→` arrow follows only when nothing was elided; a lane whose PR has merged reads `landed` as its
+state word in green with `submit` as its hint; and bare `musterd` help lists a start-here command
+once, in the start-here section, not again in its room.
+
 - Each section leaves a fixed right column: 10 cells for ages, and 20 cells for lane hints (8 under
   60 columns, where hints drop). Cut rows end on one vertical line instead of the frames' hand-set
   gutters.

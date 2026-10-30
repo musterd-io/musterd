@@ -83,15 +83,15 @@ describe('musterd status — daily view frames', () => {
       /^ {2}Lin · needs help: daily view layout \(you \+ 2 others\) +now$/,
     );
     expect(out).toContain('◆ your work  2');
-    const active = rowEnding(out, 'PR merged · submit')!;
-    expect(active).toMatch(
-      /^ {2}active · Wire the roster render to the new presence.*… +PR merged · submit$/,
-    );
+    const active = rowEnding(out, 'submit')!;
+    expect(active).toMatch(/^ {2}landed · Wire the roster render to the new presence.*… +submit$/);
     expect(visibleLen(active)).toBe(80);
     expect(rowEnding(out, 'ready to start')).toMatch(/^ {2}claimed · Backfill the auth audit rows/);
     expect(out).toContain('  Desk-level presence for the auth module — 01M6ABCD12');
     expect(out).toContain('  Retire the v1 inbox cursor — 01M6ABCE7Q');
     expect(out).toContain('  +1 more · musterd next');
+    // One pointer per destination: the +more line names the command, so no arrow follows.
+    expect(out).not.toContain('  → musterd next');
     expect(out).toContain('team  3 here · 2 working · 1 blocked (Lin: waiting on CI)');
     expect(out).not.toContain('All quiet. musterd next shows open work.');
     for (const line of out) expect(visibleLen(line)).toBeLessThanOrEqual(80);
@@ -107,7 +107,7 @@ describe('musterd status — daily view frames', () => {
     expect(visibleLen(nick)).toBe(40);
     expect(rowEnding(out, '1h')).toMatch(/^ {2}Lin · hands you: lane 01AR.*… +1h$/);
     expect(out.some((l) => l.includes('PR merged'))).toBe(false);
-    expect(out.find((l) => l.startsWith('  active · '))).toMatch(/…$/);
+    expect(out.find((l) => l.startsWith('  landed · '))).toMatch(/…$/);
     expect(out.filter((l) => l.includes(' — 01M6'))).toHaveLength(1);
     expect(out).toContain('  +2 more · musterd next');
     expect(out).toContain('3 here · 2 working · 1 blocked');
@@ -216,14 +216,13 @@ describe('musterd status — daily view frames', () => {
       '  → musterd inbox',
       '',
       '◆ your work  2',
-      '  active · Wire the roster render to the new presence model…  PR merged · submit',
+      '  landed · Wire the roster render to the new presence model…              submit',
       '  claimed · Backfill the auth audit rows for the September…       ready to start',
       '',
       '○ up next',
       '  Desk-level presence for the auth module — 01M6ABCD12',
       '  Retire the v1 inbox cursor — 01M6ABCE7Q',
       '  +1 more · musterd next',
-      '  → musterd next',
       '',
       'team  3 here · 2 working · 1 blocked (Lin: waiting on CI)',
     ]);
@@ -241,13 +240,12 @@ describe('musterd status — daily view frames', () => {
       '  → musterd inbox',
       '',
       '◆ your work  2',
-      '  active · Wire the roster rend…',
+      '  landed · Wire the roster rend…',
       '  claimed · Backfill the auth a…',
       '',
       '○ up next',
       '  Desk-level presence for… — 01M6ABCD12',
       '  +2 more · musterd next',
-      '  → musterd next',
       '',
       '3 here · 2 working · 1 blocked',
     ]);

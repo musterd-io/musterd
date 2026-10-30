@@ -37,9 +37,10 @@ export function renderHelp(opts: { full?: boolean; width?: number } = {}): strin
     .map((c) => ({ term: c.name, desc: c.summary }));
   out.push(defList(startRows, { width }));
 
-  // The rooms.
+  // The rooms. A command already listed under "start here" is not listed again in its room —
+  // bare `musterd` read `next` (and `status`) twice (lane 01M653WK0K).
   for (const group of GROUPS) {
-    const inGroup = CATALOG.filter((c) => c.group === group.id);
+    const inGroup = CATALOG.filter((c) => c.group === group.id && !START_HERE.includes(c.name));
     const shown = opts.full ? inGroup : inGroup.filter((c) => c.primary);
     const rows = (shown.length ? shown : inGroup).map((c) => ({ term: c.name, desc: c.summary }));
     // The blurb is long; on a narrow terminal wrap it instead of overflowing the line.
