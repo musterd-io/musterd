@@ -436,7 +436,7 @@ export function isGateServerUnreachable(err: unknown): boolean {
   if (isDaemonUnreachable(err) || isConnRefused(err)) return true;
   if (err instanceof CliError) {
     if (err.code === 'server_error') return true;
-    if (/^server error \(5\d\d\)$/.test(err.message)) return true;
+    if (/^the daemon answered 5\d\d without an error frame/.test(err.message)) return true;
   }
   return false;
 }

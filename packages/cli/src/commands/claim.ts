@@ -544,7 +544,14 @@ export async function claimCommand(parsed: Parsed): Promise<number> {
       },
       onDeliver: () => {},
       onError: (msg) => {
-        finish(() => rejectP(new CliError(`claim failed: ${msg}`, 1)));
+        finish(() =>
+          rejectP(
+            new CliError(
+              `claim failed: ${msg} — run \`musterd status\` to check the daemon, then retry \`musterd claim\`.`,
+              1,
+            ),
+          ),
+        );
       },
     });
   });

@@ -339,7 +339,7 @@ describe('HttpClient.claim (SPEC A.7, ADR 075/077) — status dispatch', () => {
     stubFetch(500, {});
     await expect(new HttpClient({ server: 'http://x' }).claim('dawn', input)).rejects.toMatchObject(
       {
-        message: /server error \(500\)/,
+        message: /the daemon answered 500 without an error frame/,
         exitCode: 1,
       },
     );
