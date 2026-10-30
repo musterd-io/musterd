@@ -181,12 +181,12 @@ const CUTS_BY_STYLE: Record<Style, readonly TopCut[]> = {
  * The outer layer (v2-5b, spec §2.4): a cardigan, blazer or zip jacket worn over the top. When one is
  * worn it carries the identity hue and the top under it takes a plain shirt colour (§2.5).
  */
-export type Outer = 'none' | 'cardigan' | 'blazer';
+export type Outer = 'none' | 'cardigan' | 'blazer' | 'zip';
 const OUTERS_BY_STYLE: Record<Style, readonly Outer[]> = {
   formal: ['none', 'blazer', 'cardigan', 'blazer'],
-  smart: ['none', 'none', 'cardigan', 'blazer'],
-  casual: ['none', 'none', 'none', 'cardigan'],
-  athletic: ['none'],
+  smart: ['none', 'none', 'cardigan', 'blazer', 'zip'],
+  casual: ['none', 'none', 'none', 'cardigan', 'zip'],
+  athletic: ['none', 'none', 'zip'],
 };
 /** What a shirt under an outer layer is: plain, so the hue on the outside is the one you find them by. */
 const UNDER_COLORS = ['#f2eee6', '#c9d6e3', '#9aa0a6', '#2b3038', '#e8dcc4'] as const;

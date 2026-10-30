@@ -26,12 +26,14 @@ const femme: Appearance = {
   ...appearanceOf({ name: 'ada', kind: 'human' }),
   hair: 'bun',
   facialHair: 'none',
-  outer: 'none', // pinned: the outer pools grow (v2-5b), and ada's draw must not change this test's subject
   hat: 'none',
   cut: 'hoodie',
   eyes: 'glasses',
   ears: 'none',
   neck: 'none',
+  wrist: 'none',
+  outer: 'none',
+  underColor: null,
   accessory: 'glasses',
 };
 
