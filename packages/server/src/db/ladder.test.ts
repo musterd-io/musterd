@@ -557,13 +557,6 @@ describe('v137 — indexes for the hot statements (ADR 778)', () => {
       /idx_messages_digest_day/,
     ],
     [
-      'interrupt raises (delivery.ts)',
-      `SELECT COUNT(*) AS total FROM audit WHERE team_id = ? AND action = 'interrupt.raised'
-         AND target = ? AND json_extract(detail, '$.act') = ?`,
-      3,
-      /idx_audit_team_action_target_act \(team_id=\? AND action=\? AND target=\? AND <expr>=\?\)/,
-    ],
-    [
       'lanes by owner',
       'SELECT * FROM lanes WHERE team_id = ? AND owner_seat = ? ORDER BY created_at',
       2,
@@ -588,6 +581,22 @@ describe('v137 — indexes for the hot statements (ADR 778)', () => {
     expect(plan).toMatch(index);
     // Lane lists come back in created_at order from the index, with no sort step.
     if (/ORDER BY created_at/.test(sql)) expect(plan).not.toMatch(/TEMP B-TREE/);
+    db.close();
+  });
+
+  it('adds no audit expression index, so an audit row with malformed detail still inserts', () => {
+    const db = new Database(':memory:');
+    runMigrations(db);
+    db.prepare(
+      "INSERT INTO teams (id, slug, created_at, updated_at) VALUES ('t', 't', 0, 0)",
+    ).run();
+    expect(() =>
+      db
+        .prepare(
+          "INSERT INTO audit (id, team_id, ts, action, target, result, detail, created_at) VALUES ('a', 't', 0, 'interrupt.raised', 'x', 'allow', '{not json', 0)",
+        )
+        .run(),
+    ).not.toThrow();
     db.close();
   });
 
