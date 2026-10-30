@@ -122,6 +122,16 @@ build takes that Mac's CPU for its length. The cloud path still works when it sh
 id. Avoid `--auto-submit`: EAS Submit's free queue held build 3 for more than 40 minutes on
 2026-10-06.
 
+**On GitHub Actions** (nick, 2026-10-30). The EAS free plan caps cloud iOS builds per month, and
+the laptop that hosts the seats is short of disk. The `ios-testflight` workflow runs the same
+`eas build --local` on a GitHub macOS runner, then `scripts/upload-testflight.sh`. The repo is
+public, so its macOS minutes are free, and it spends no EAS build. It runs only by hand: Actions →
+ios-testflight → Run workflow, optionally with a branch or SHA. It needs two repository secrets:
+`EXPO_TOKEN`, an Expo access token for `@nas4146`, which fetches the signing credentials and the
+remote build number; and `ASC_API_KEY_CONFIG`, the contents of the API key config described below.
+The upload script treats altool's own `UPLOAD SUCCEEDED` line as success, because altool can fail
+the fastlane action afterwards on a resume-file error.
+
 The first EAS build asked for the Apple ID, with 2FA, and created the signing certificate, the
 provisioning profile and the App Store Connect app; every later build is non-interactive. A build
 appears in TestFlight after Apple processes it (10–15 minutes); add yourself as an internal tester
