@@ -30,12 +30,15 @@ existing flag's contract.
 `musterd inbox` (text form, no filter flags) leads with a directed section before the general
 list:
 
-- The section header is `waiting on you — N`, where N is computed by the same projection the
-  daily view's waiting count uses, over the same window. One query, two surfaces: the number
-  in `status` and the number at the top of `inbox` cannot drift apart.
-- The section shows the directed unread acts in the same `message-row` rendering and the same
-  newest-last order as the general list. A row shown in the section is not repeated in the
-  general list below it (dedupe by act id).
+- The section header is `⚑ waiting on you — N` — the daily view's glyph, in its accent —
+  where N is computed by the same projection the daily view's waiting count uses, over the
+  same window. One query, two surfaces: the number in `status` and the number at the top of
+  `inbox` cannot drift apart.
+- The section shows exactly the rows that projection returns, whether read or unread, in the
+  same `message-row` rendering and the same newest-last order as the general list. A read row
+  in it is shown but consumes nothing new, since the ADR 117 cursor only moves past unread
+  rows. A row shown in the section is not repeated in the general list below it (dedupe by
+  act id).
 - Everything below the section is today's inbox, unchanged: same window, same grouping, same
   rows.
 - Read semantics are untouched. The section's rows are shown rows, so an ordinary read
@@ -61,6 +64,16 @@ for the same slice alongside its window.
 This record changes no code. If the ADR is rejected, the fallback is to repoint the daily view's arrow at
 `musterd inbox --waiting` and accept that the landing is a banner, not the acts themselves.
 
+Amended 2026-10-30 (acceptance review, lane `01M653W2VKYQRP3P9MDHP7RRQ8`): as first landed,
+the Decision defined N by the daily view's projection but filled the section with "the
+directed unread acts" — two different sets, since an act read but not yet answered still
+waits. The Decision now reads as one set throughout: the section renders exactly the rows
+the projection returns, read or unread, the eval asserts the section's row count equals N,
+and the header carries the daily view's `⚑` glyph. The implementation lane's first landing
+also computed its N over the inbox's own bounded window with a first-page answered set, and
+the two counts disagreed live (40 vs 42); the correction derives both surfaces from the one
+projection helper over the one walked window.
+
 Follows-up: `01M658ZSMQFRQYRNCRJXSQ7YR1` (implementation, opened 2026-10-30, blocked on this
 ADR's acceptance).
 
@@ -69,9 +82,10 @@ ADR's acceptance).
 - **Traces:** n/a — no new events. The inbox read already logs its cursor movement; the
   section adds no server call shape beyond the existing daily projection.
 - **Eval:** on a seeded team with directed and broadcast unread mixed, `musterd status`'s
-  waiting count and `inbox`'s section header print the same N; every directed unread appears
-  in the section and exactly once on the page; a `--peek` read after it still shows the same
-  unread (nothing consumed); a normal read consumes exactly the rows shown, section included
-  (ADR 117's guarantee, re-run against the new layout).
+  waiting count and `inbox`'s section header print the same N, and the section's row count
+  equals N; every row the projection returns appears in the section and exactly once on the
+  page; a `--peek` read after it still shows the same unread (nothing consumed); a normal
+  read consumes exactly the rows shown, section included (ADR 117's guarantee, re-run
+  against the new layout).
 - **Experiment:** n/a — a layout correction against a measured mismatch, not a behavioural
   hypothesis. The falsifier is the eval above: if the two counts can disagree, the fix failed.
