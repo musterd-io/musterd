@@ -19,6 +19,7 @@ export {
   type DoorbellSink,
   idleMayRing,
   idleRingable,
+  isQuestionAnswer,
   type IdleRingInput,
   OFF_MACHINE_SINKS,
   ringTargets,

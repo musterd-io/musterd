@@ -472,6 +472,7 @@ import {
   supersededMessage,
 } from '../store/presence.js';
 import { afterPullClaim, offerPull } from '../store/pull.js';
+import { answerLineFor } from '../store/questions.js';
 import {
   lastActionBySubject,
   quietestBusyMs,
@@ -10601,7 +10602,14 @@ export async function handleHttp(
           )
         )
           return sendJson(res, 200, { raised: false, seam });
-        const line = composeInterruptLine(team.slug, latest, pending.length, huddleTopic, rest);
+        // ADR 774: a verified answer to this seat's own question rides the line, fenced. Only on the
+        // idle seam — the boundary seam interrupts a working turn, where a pointer is enough.
+        const answerLine =
+          idle && latest.act === 'accept'
+            ? await answerLineFor(ctx.db, team.id, team.slug, member.name, latest.id)
+            : null;
+        const line =
+          answerLine ?? composeInterruptLine(team.slug, latest, pending.length, huddleTopic, rest);
         // Which rail asked. The caller declares it (`musterd inbox --interrupt-check --hook X`);
         // until ADR 423 the flag only shaped the CLI's own stdout and never reached the server, so
         // every row was rail-blind and the doorbell contract had to cite a measurer's name per

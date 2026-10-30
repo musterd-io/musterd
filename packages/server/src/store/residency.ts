@@ -50,6 +50,7 @@ import {
   rowToEnvelope,
 } from './messages.js';
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
+import { answerLineFor } from './questions.js';
 import { lastActionBySubject } from './quiescence.js';
 import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
 import { getPolicy, getTeamById, spendApprovalUsd } from './teams.js';
@@ -1649,6 +1650,8 @@ async function dueCandidates(
     // around their own policy gates. `huddleOpens` admits exactly one act per huddle and is gated by
     // the seat's own effective policy, which is what makes it affordable on this side.
     for (const env of pendingInterrupts(envelopes, member.name, {
+      // ADR 773 §7: the seat ended its turn to wait for this answer — always a wake reason.
+      answers: true,
       huddleOpens: lanes.conveneHuddles,
       incidentRoutes: lanes.wakeOnIncidentRoute,
       incidentResolves: lanes.wakeOnIncidentResolve,
@@ -2926,6 +2929,17 @@ async function writeSeatPass(
       });
       const isWorkOrder = c.derivation === 'work_order';
       const kind = c.work_order_kind ?? 'dispatch';
+      // ADR 774: a verified answer to this seat's own question rides the line, fenced; the recap
+      // form is what a fresh session gets when the resume misses.
+      const answered =
+        !isWorkOrder && c.act === 'accept' && c.act_id !== undefined
+          ? {
+              line: await answerLineFor(t, teamId, teamSlug, member.name, c.act_id),
+              recap: await answerLineFor(t, teamId, teamSlug, member.name, c.act_id, {
+                recap: true,
+              }),
+            }
+          : null;
       return {
         lease_id: lease.id,
         seat: member.name,
@@ -2936,7 +2950,9 @@ async function writeSeatPass(
         lane: c.lane,
         composed_line: isWorkOrder
           ? composeWorkOrderLine(member.name, teamSlug, c.lane_id!, kind, c.act_id)
-          : composeWakeLine(member.name, teamSlug, c.act ?? 'message', c.sender ?? '?', c.act_id),
+          : (answered?.line ??
+            composeWakeLine(member.name, teamSlug, c.act ?? 'message', c.sender ?? '?', c.act_id)),
+        ...(answered?.recap ? { composed_recap_line: answered.recap } : {}),
         expires_at: lease.expires_at,
         tool_policy: isWorkOrder ? 'seat-policy' : policy.tool_policy,
         bounds: bounds(isWorkOrder ? policy.work_timeout_ms : policy.timeout_ms),

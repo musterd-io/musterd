@@ -5,7 +5,13 @@ import { withDrivers } from '../db/testing.js';
 import { openLane } from './lanes.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
-import { claimAnswer, openQuestions, questionView, waitingSeats } from './questions.js';
+import {
+  answerLineFor,
+  claimAnswer,
+  openQuestions,
+  questionView,
+  waitingSeats,
+} from './questions.js';
 import type { MemberRow, TeamRow } from './rows.js';
 import { createTeam } from './teams.js';
 
@@ -165,5 +171,33 @@ withDrivers('questions', (o) => {
     expect(await claimAnswer(db, team.id, { ...base, answerId: 'a3', at: 1_000 + 61_000 })).toEqual(
       { ok: true },
     );
+  });
+
+  it('answerLineFor gives the asker the fenced answer, and nobody else anything', async () => {
+    const { db, team, nick, ryder } = await seed();
+    await send(db, team, ryder, nick, 'ask', 'q1', 1, { meta: ask() });
+    const proof = { channel: 'live', verified: true, by: 'nick' };
+    await send(db, team, nick, ryder, 'accept', 'a1', 2, {
+      meta: {
+        in_reply_to: 'q1',
+        answer: { choice: 1, text: 'then ping big-body' },
+        answer_proof: proof,
+      },
+    });
+    expect(await answerLineFor(db, team.id, 'revive', 'ryder', 'a1')).toBe(
+      '⚡ musterd [revive]: nick answered your question q1 (via live) — «"Fix the flake first" — then ping big-body» — act on it; ack with team_wake_context {act_id: "a1"}',
+    );
+    expect(await answerLineFor(db, team.id, 'revive', 'ryder', 'a1', { recap: true })).toContain(
+      `you asked: «${flake.text}» —`,
+    );
+    expect(await answerLineFor(db, team.id, 'revive', 'swetha', 'a1')).toBeNull();
+    await send(db, team, nick, ryder, 'accept', 'a2', 3, {
+      meta: {
+        in_reply_to: 'q1',
+        answer: { choice: 0 },
+        answer_proof: { ...proof, verified: false },
+      },
+    });
+    expect(await answerLineFor(db, team.id, 'revive', 'ryder', 'a2')).toBeNull();
   });
 });

@@ -1,4 +1,12 @@
-import { questionOf, type AnswerChannel, type Question } from '@musterd/protocol';
+import {
+  AnswerProofSchema,
+  AnswerSchema,
+  answerLabel,
+  composeAnswerLine,
+  questionOf,
+  type AnswerChannel,
+  type Question,
+} from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 
 /**
@@ -209,4 +217,42 @@ export async function claimAnswer(
     [teamId, a.questionId],
   );
   return { ok: false, by: won?.answered_by ?? '', channel: won?.channel ?? 'live' };
+}
+
+/**
+ * The answer line for `seat` (ADR 774), or null when this act may not carry one: it is not a
+ * question's answer, the answer is not verified, or `seat` did not ask the question. A null caller
+ * falls back to the ids-only line. `recap` quotes the seat its own question first, for a fresh
+ * session that could not resume.
+ */
+export async function answerLineFor(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  seat: string,
+  answerId: string,
+  opts: { recap?: boolean } = {},
+): Promise<string | null> {
+  const row = await db.get<{ act: string; meta: string | null }>(
+    'SELECT act, meta FROM messages WHERE team_id = ? AND id = ?',
+    [teamId, answerId],
+  );
+  if (!row || row.act !== 'accept' || !row.meta) return null;
+  const meta = JSON.parse(row.meta) as Record<string, unknown>;
+  const proof = AnswerProofSchema.safeParse(meta['answer_proof']);
+  const answer = AnswerSchema.safeParse(meta['answer']);
+  const questionId = meta['in_reply_to'];
+  if (!proof.success || !proof.data.verified || !answer.success) return null;
+  if (typeof questionId !== 'string') return null;
+  const view = await questionView(db, teamId, questionId);
+  if (!view || view.asker !== seat) return null;
+  return composeAnswerLine({
+    team: teamSlug,
+    person: proof.data.by,
+    questionId,
+    answerId,
+    channel: proof.data.channel,
+    answer: answerLabel(view.question, answer.data),
+    ...(opts.recap ? { recapOf: view.question.text } : {}),
+  });
 }

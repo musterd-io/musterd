@@ -1,6 +1,5 @@
 import {
   AnswerProofSchema,
-  questionOf,
   type AnswerChannel,
   type AnswerProof,
   type Envelope,
