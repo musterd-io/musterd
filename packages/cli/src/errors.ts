@@ -139,7 +139,10 @@ export function transportError(
       7,
     );
   }
-  return new CliError(`can't reach the daemon at ${server} — is the daemon running? (musterd serve)`, 7);
+  return new CliError(
+    `can't reach the daemon at ${server} — is the daemon running? (musterd serve)`,
+    7,
+  );
 }
 
 /** The two builds a schema mismatch is judged against (ADR 135), each when it is known. */
