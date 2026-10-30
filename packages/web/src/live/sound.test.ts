@@ -64,7 +64,9 @@ describe('the life event roll', () => {
 
   it('has every requested event in the table', () => {
     const names = LIFE_EVENTS.map((e) => e.name);
-    for (const n of ['stapler', 'drawer', 'paws', 'nightair']) expect(names).toContain(n);
+    for (const n of ['keys', 'whisper', 'paws']) expect(names).toContain(n);
+    // cut 2026-10-30 (nick, lane 01M67C125R): the samey click family and the night air
+    for (const n of ['murmur', 'tap', 'softTap', 'stapler', 'drawer', 'nightair']) expect(names).not.toContain(n);
     expect(names).not.toContain('birds'); // left the roll 2026-10-28 (lane 01M625KHCN)
   });
 
@@ -120,7 +122,7 @@ describe('chatter', () => {
   });
 
   it('fires when two members actually share a zone', () => {
-    expect(sweep(near).has('murmur')).toBe(true);
+    expect(sweep(near).has('whisper')).toBe(true);
   });
 
   it('pans toward the pair, not at random', () => {
@@ -163,13 +165,13 @@ describe('work sounds track evidenced work (E2 spec §3)', () => {
   it('keeps work sounds out even when people are merely present (idle room keeps presence sounds)', () => {
     const heard = sweep(near);
     expect(heard.has('keys')).toBe(false);
-    expect(heard.has('murmur')).toBe(true);
+    expect(heard.has('whisper')).toBe(true);
   });
 
   it('lets keys fire only while some desk is in its typing phase', () => {
     const at = typingMomentFor(7);
     expect(sweep(oneWorking, at).has('keys')).toBe(true);
-    expect(sweep(oneWorking, at).has('tap')).toBe(true);
+    expect(sweep(oneWorking, at).has('tap')).toBe(false); // cut 2026-10-30
   });
 
   it('places a work event on an actual working desk', () => {
@@ -251,19 +253,11 @@ describe('the day cycle follows the window light (E2 spec §4)', () => {
     expect(sweep(morning).has('birds')).toBe(false);
   });
 
-  it('keeps night air for a dark room that someone is actually in', () => {
-    const lateShift: LifeContext = {
-      ...EMPTY_LIFE,
-      hours: 23,
-      daylight: 0,
-      working: [{ x: 0, seed: 1 }],
-    };
-    const emptyNight: LifeContext = { ...EMPTY_LIFE, hours: 23, daylight: 0 };
-    const day: LifeContext = { ...lateShift, hours: 12, daylight: 1 };
-    expect(sweep(lateShift, typingMomentFor(1)).has('nightair')).toBe(true);
-    expect(sweep(emptyNight).has('nightair')).toBe(false);
-    expect(sweep(day, typingMomentFor(1)).has('nightair')).toBe(false);
+  it('never plays night air — cut 2026-10-30 (nick, lane 01M67C125R)', () => {
+    const lateShift: LifeContext = { ...EMPTY_LIFE, hours: 23, daylight: 0, working: [{ x: 0, seed: 1 }] };
+    expect(sweep(lateShift, typingMomentFor(1)).has('nightair')).toBe(false);
   });
+
 });
 
 describe('the keyboard', () => {

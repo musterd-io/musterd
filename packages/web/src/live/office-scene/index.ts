@@ -60,7 +60,6 @@ import {
   RECEPTIONIST,
   SEAT_BACK,
   WAGON_PICKUP,
-  insideCafe,
 } from './layout';
 import { computeLightEnv, deskLampOn, type LightEnv } from './lighting';
 import { fetchWeather, type Weather, type WeatherReading, weatherDue, weatherMoves, weatherOverride } from './weather';
@@ -2772,20 +2771,11 @@ export function mountOffice(
     flyTosses();
     // Sound tied to motion (lane 01M5XS6KAD): what the floor just earned, panned to the body.
     for (const m of actors.takeMotionSounds()) {
+      // Footsteps and the chair creak were cut on 2026-10-30 (nick, lane 01M67C125R): a sound on every
+      // stride and every sit was the "plays too often" half of the complaint.
+      if (m.kind === 'step' || m.kind === 'sat' || m.kind === 'rose') continue;
       const name: Moment =
-        m.kind === 'step'
-          ? insideCafe(m.lx, m.ly)
-            ? 'stepTile'
-            : 'stepPlank'
-          : m.kind === 'sat' || m.kind === 'rose'
-            ? 'creak'
-            : m.kind === 'sip'
-              ? 'sipAt'
-              : m.kind === 'fill'
-                ? 'bottle'
-                : m.kind === 'eat'
-                  ? 'eatAt'
-                  : 'machine';
+        m.kind === 'sip' ? 'sipAt' : m.kind === 'fill' ? 'bottle' : m.kind === 'eat' ? 'eatAt' : 'machine';
       roomTone.moment(name, screenPan(project(m.lx, m.ly, fit).x, width));
     }
     if (tempo !== 1 && !actors.active()) tempo = 1;
