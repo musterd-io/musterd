@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
 import type { AskView } from './asks';
 import { CaptionPill } from './CaptionPill';
@@ -99,6 +100,8 @@ export function TeamColumn({
   /** What `/health` says about the daemon — the version badge in the header. */
   daemonInfo?: DaemonInfo | undefined;
 }) {
+  // A signed-in person may send the seats quick actions (seats ask 2c); an observer or a seat may not.
+  const canAct = you != null && roster.some((m) => m.name === you && m.kind === 'human');
   const { cards, offline } = teamCards(roster, board, goals, asks);
   const working = cards.filter((c) => c.state === 'working').length;
   const dated = loading ? [] : experimentEntries(board, now);
@@ -183,6 +186,7 @@ export function TeamColumn({
         {onCollapse && <CollapseButton side="mid" label="the team" onClick={onCollapse} />}
       </header>
       <CaptionPill caption={caption} color={captionColor} className="lc-team__caption" />
+      {cfg && canAct && !still && <StartEveryone cfg={cfg} />}
       {loading && (
         <ul className="lc-team__cards" aria-label="Loading the team">
           {[0, 1, 2, 3].map((i) => (
@@ -207,6 +211,7 @@ export function TeamColumn({
             daemonEpoch={daemonEpoch}
             still={still}
             you={you === c.name}
+            canAct={canAct}
           />
         ))}
       </ul>
@@ -316,5 +321,60 @@ function AvatarDisc({ className, name, fill, ink, hidden = false }: { className:
     >
       {initial(name)}
     </span>
+  );
+}
+
+/**
+ * **Start everyone** (seats ask 2c, ADR 779): one person's "good morning" to every agent seat. The
+ * quick-actions module (and its stylesheet) loads on the click, never with /live's first paint. The
+ * reply says what happened to each seat — "held by wake cap" is the hourly cap working, not a failure.
+ */
+function StartEveryone({ cfg }: { cfg: LiveConfig }) {
+  const [state, setState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'busy' }
+    | { kind: 'done'; mod: typeof import('./quickActions'); seats: import('./quickActions').StartAllReply['seats'] }
+    | { kind: 'error'; text: string }
+  >({ kind: 'idle' });
+  const run = async () => {
+    setState({ kind: 'busy' });
+    try {
+      const mod = await import('./quickActions');
+      const reply = await mod.startEveryone(cfg);
+      setState({ kind: 'done', mod, seats: reply.seats });
+    } catch (e) {
+      setState({ kind: 'error', text: e instanceof Error ? e.message : 'Could not start everyone' });
+    }
+  };
+  return (
+    // Inline styles on purpose: /live's eager stylesheet is at its budget, and the results' own styles
+    // arrive with the quick-actions chunk on the click.
+    <div style={{ display: 'grid', gap: 6, padding: '0 12px 8px' }}>
+      <button
+        type="button"
+        disabled={state.kind === 'busy'}
+        onClick={() => void run()}
+        style={{
+          justifySelf: 'start',
+          font: 'inherit',
+          fontSize: 12,
+          padding: '4px 12px',
+          borderRadius: 999,
+          border: '1px solid color-mix(in srgb, var(--lc-accent) 45%, transparent)',
+          background: 'color-mix(in srgb, var(--lc-accent) 12%, transparent)',
+          color: 'var(--lc-accent-ink)',
+          fontWeight: 600,
+          cursor: state.kind === 'busy' ? 'default' : 'pointer',
+        }}
+      >
+        {state.kind === 'busy' ? 'Starting…' : 'Start everyone'}
+      </button>
+      {state.kind === 'done' && <state.mod.StartAllResults seats={state.seats} />}
+      {state.kind === 'error' && (
+        <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--lc-danger-ink)' }}>
+          {state.text}
+        </p>
+      )}
+    </div>
   );
 }

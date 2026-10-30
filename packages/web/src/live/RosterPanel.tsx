@@ -1,4 +1,5 @@
 import type { MemberSummary } from '@musterd/protocol';
+import { QuickActionBar } from './quickActions';
 import { lazy, Suspense, useState } from 'react';
 import {
   acceptanceCapacity,
@@ -220,9 +221,12 @@ export function SeatDetail({
   m,
   trace = null,
   cfg = null,
+  canAct = false,
 }: {
   m: MemberSummary;
   cfg?: LiveConfig | null;
+  /** The viewer is a signed-in person, so the seat's quick actions are theirs to send (ADR 779). */
+  canAct?: boolean;
   trace?: { label: string; title: string } | null;
 }) {
   const online = m.presence !== 'offline';
@@ -378,6 +382,8 @@ export function SeatDetail({
       {/* ADR 445 increment 4b: the seat's recent trace, on demand. Structural events only —
         the route never selects content — and empty when this viewer may not read the seat. */}
       {cfg && <SeatTraceToggle cfg={cfg} seat={m.name} />}
+      {/* Seats ask 2c: Start / Check inbox / Check PR / Resume, for a person, on an agent seat. */}
+      {cfg && canAct && m.kind === 'agent' && <QuickActionBar cfg={cfg} seat={m.name} compact />}
       {/* ADR 501 Decision 5: the halt button renders from the daemon's `can_halt` ALONE — never from
           the viewer's role in this client — and only for a signed-in viewer. */}
       {cfg && m.can_halt === true && (

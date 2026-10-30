@@ -2754,3 +2754,9 @@ The list, the triage sheet and the question derivation are one lazy chunk, mount
 connected. Its stylesheet is classified with the other overlays in the `app` group (ADR 313).
 
 - Falsify: `pnpm perf:check` after a build reports total JS over 394,000 B or app CSS over 19,700 B with this lane in.
+
+## 2026-10-30 — seats ask 2c: the quick actions; total JS RAISED 394,000 → 396,000 B, app CSS RAISED 19,700 → 20,300 B (lane 01M67E4ZVY)
+
+The four quick actions (Start, Check inbox, Check PR, Resume) and Start everyone's per-seat results are one lazy module and stylesheet. The roster's seat detail and the triage card, both already lazy, share it, and the team column loads it on the Start everyone click. The button itself is inline-styled, so /live's eager CSS is unchanged. Initial JS is unchanged too.
+
+- Falsify: `pnpm perf:check` reports total JS over 396,000 B or app CSS over 20,300 B with this lane in.
