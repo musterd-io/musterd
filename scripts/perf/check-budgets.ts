@@ -51,6 +51,7 @@ interface Budgets {
   allowedFontFamilies: string[];
   /** Pre-rendered office art (`office-art-*.png|webp`), raw bytes — office realism, spec 2026-10-20 §5. */
   officeArtBytes: number;
+  officeSoundBytes: number;
 }
 
 type CssGroup = 'live' | 'app' | 'site' | 'shared';
@@ -229,6 +230,17 @@ if (totalArt > budgets.officeArtBytes) {
   failures.push(
     `office art ${kb(totalArt)} across ${art.length} file(s) > budget ${kb(budgets.officeArtBytes)}; largest:\n${top}\n` +
       `    → cut sprite directions/frames or identity layers, re-render at a lower --scale, or raise officeArtBytes deliberately and log it in docs/perf/web-live-baseline.md (ADR 151/183).`,
+  );
+}
+
+// Recorded room sounds (ADR 776): every `office-sound-*.mp3` the build emits, raw bytes. They load only
+// once a viewer turns sound on, but they ship with every build, so they get a ceiling of their own.
+const sounds = files.filter((f) => /\/office-sound-[^/]+\.mp3$/.test(f));
+const totalSound = sounds.reduce((s, f) => s + statSync(f).size, 0);
+if (totalSound > budgets.officeSoundBytes) {
+  failures.push(
+    `office sounds ${kb(totalSound)} across ${sounds.length} file(s) > budget ${kb(budgets.officeSoundBytes)}\n` +
+      `    → trim the takes (shorter, fewer per voice, a lower bitrate) or raise officeSoundBytes deliberately and log it in docs/perf/web-live-baseline.md (ADR 776).`,
   );
 }
 

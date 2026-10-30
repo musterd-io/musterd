@@ -67,6 +67,33 @@ const sine: OscillatorType = 'sine';
  * `chime('accept')` strikes a bar below.
  */
 /** Exported for the sound tests only — the engine is the one reader. */
+/**
+ * Recorded takes (ADR 776, lane 01M67CQQQK): short CC0 clips from BigSoundBank, trimmed and mono, one
+ * or more per voice as `sounds/office-sound-<voice>-<n>.mp3`. Only URLs live in this chunk; the bytes
+ * are fetched when the room tone starts, and a voice falls back to its synth recipe until they land.
+ */
+const SAMPLE_URLS = import.meta.glob('./sounds/office-sound-*.mp3', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+const TAKES: Record<string, string[]> = {};
+for (const [path, url] of Object.entries(SAMPLE_URLS)) {
+  const m = /office-sound-([a-z]+)-\d+\.mp3$/.exec(path);
+  if (m) (TAKES[m[1]!] ??= []).push(url);
+}
+/** Each take's level on the LIFE bus, matched to the peak of the synth voice it replaces (measured on
+ *  the soundboard render, 2026-10-30), so swapping the source did not also change the mix. */
+const TAKE_GAIN: Record<string, number> = {
+  door: 0.0069,
+  sip: 0.018,
+  eat: 0.021,
+  bark: 0.074,
+  jingle: 0.041,
+  nameplate: 0.0073,
+  board: 0.011,
+};
+
 export const CUES: Record<string, Note[]> = {
   // A question: two notes rising a fourth, the second held, unresolved — the bell on the asked desk.
   question: [
@@ -313,6 +340,9 @@ export class RoomTone {
   /** When the last milestone moment played — the E3 burst throttle's clock. */
   private lastMomentAt = -Infinity;
   private lastStepAt = -Infinity;
+  /** Decoded recorded takes by voice (ADR 776); empty until `loadTakes` resolves. */
+  private takes = new Map<string, AudioBuffer[]>();
+  private takesLoading = false;
 
 
   /** Toggle the bed. The façade owns the preference and its persistence; this is the audio half. */
@@ -365,6 +395,7 @@ export class RoomTone {
       this.ctx = new Ctor();
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+    this.loadTakes(this.ctx);
     if (this.bus) return; // already built and running
 
     const ctx = this.ctx;
@@ -749,15 +780,49 @@ export class RoomTone {
     for (let i = 0; i < 3; i++) this.click(ctx, out, t0 + 0.08 + i * 0.05, 2600 + i * 400, 0.01, 0.02);
   }
 
+  /** Fetch and decode every recorded take once. A failure leaves that voice on its synth recipe. */
+  private loadTakes(ctx: BaseAudioContext): void {
+    if (this.takesLoading) return;
+    this.takesLoading = true;
+    for (const [voice, urls] of Object.entries(TAKES)) {
+      void Promise.all(
+        urls.map((u) =>
+          fetch(u)
+            .then((r) => r.arrayBuffer())
+            .then((b) => ctx.decodeAudioData(b)),
+        ),
+      )
+        .then((bufs) => this.takes.set(voice, bufs))
+        .catch(() => {});
+    }
+  }
+
+  /** Play one recorded take of `voice`, picked at random and nudged in pitch so repeats differ.
+   *  False when no take is loaded, so the caller plays its synth recipe instead. */
+  private take(ctx: AudioContext, out: AudioNode, voice: string, scale = 1): boolean {
+    const bufs = this.takes.get(voice);
+    if (!bufs?.length) return false;
+    const src = ctx.createBufferSource();
+    src.buffer = bufs[Math.floor(Math.random() * bufs.length)]!;
+    src.playbackRate.value = 0.96 + Math.random() * 0.08;
+    const g = ctx.createGain();
+    g.gain.value = (TAKE_GAIN[voice] ?? 0.01) * scale;
+    src.connect(g).connect(out);
+    src.start(ctx.currentTime + 0.01);
+    return true;
+  }
+
   /** A nameplate under the viewer's own hand (E4): one felt-pad tick, pitched a touch up on open
    *  and down on close — siblings, not twins. Closer than the room, so smaller than the room. */
   private plateTick(ctx: AudioContext, out: AudioNode, open: boolean): void {
+    if (this.take(ctx, out, 'nameplate', open ? 1 : 0.8)) return;
     const base = open ? 640 : 480;
     this.click(ctx, out, ctx.currentTime + 0.01, base * (0.94 + Math.random() * 0.12), 0.035, 0.05);
   }
 
   /** The board overlay (E4): a brief paper swell — rising on open, falling and shorter on close. */
   private boardPaper(ctx: AudioContext, out: AudioNode, open: boolean): void {
+    if (this.take(ctx, out, 'board', open ? 1 : 0.8)) return;
     const t0 = ctx.currentTime + 0.02;
     const dur = open ? 0.28 + Math.random() * 0.08 : 0.18 + Math.random() * 0.06;
     const src = ctx.createBufferSource();
@@ -801,6 +866,7 @@ export class RoomTone {
   }
   /** The door (E3): a low latch click, the closer arm's short sigh, then a few steps from that side. */
   private doorMoment(ctx: AudioContext, out: AudioNode): void {
+    if (this.take(ctx, out, 'door')) return;
     const t0 = ctx.currentTime + 0.02;
     // Halved (inc 3): the door is foley under the arrive/leave cousin now, −6 dB across the board.
     this.click(ctx, out, t0, 320 + Math.random() * 120, 0.04, 0.05); // the latch
@@ -1041,6 +1107,8 @@ export class RoomTone {
   /** A sip — coffee at full body, water lower and wetter via `body`. A short liquid intake, then the
    *  tiny swallow underneath it. */
   private sip(ctx: AudioContext, out: AudioNode, body: number): void {
+    // the water bottle (body < 1) keeps its synth recipe until it has a recording of its own
+    if (body >= 1 && this.take(ctx, out, 'sip')) return;
     const t0 = ctx.currentTime + 0.02;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer(ctx);
@@ -1086,6 +1154,7 @@ export class RoomTone {
   /** Somebody eating at their desk: soft irregular crunches at an uneven rate — the irregularity is
    *  what separates chewing from machinery. */
   private eating(ctx: AudioContext, out: AudioNode): void {
+    if (this.take(ctx, out, 'eat')) return;
     const bites = 3 + Math.floor(Math.random() * 4);
     let at = ctx.currentTime + 0.02;
     for (let i = 0; i < bites; i++) {
@@ -1105,6 +1174,7 @@ export class RoomTone {
 
   /** A collar shake: a quick cluster of tiny bright transients — the tag against the buckle. */
   private jingle(ctx: AudioContext, out: AudioNode): void {
+    if (this.take(ctx, out, 'jingle')) return;
     let at = ctx.currentTime + 0.02;
     for (let i = 0; i < 6 + Math.floor(Math.random() * 5); i++) {
       this.ping(ctx, out, at, 2400 + Math.random() * 1600, 0.006 + Math.random() * 0.004);
@@ -1115,6 +1185,7 @@ export class RoomTone {
   /** One quiet bark — a short voiced burst with a fast pitch drop. Kept soft on purpose: this dog is
    *  across the room, and its rarity is set in LIFE_EVENTS, not here. */
   private bark(ctx: AudioContext, out: AudioNode): void {
+    if (this.take(ctx, out, 'bark')) return;
     const t0 = ctx.currentTime + 0.02;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer(ctx);

@@ -38,6 +38,7 @@
   },
   "totalFontBytes": 127000,
   "officeArtBytes": 8620000,
+  "officeSoundBytes": 160000,
   "allowedFontFamilies": [
     "dm-sans",
     "jetbrains-mono"
