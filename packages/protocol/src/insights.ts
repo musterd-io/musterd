@@ -3,6 +3,7 @@ import { CiTrendSchema } from './ci-telemetry.js';
 import { SPEND_CAP_USD_MAX, UNPRICED_WAKE_CAP_MAX } from './credentials.js';
 import { GoalSchema } from './goals.js';
 import { FAMILY_POSTURE_STATES, WAKEABILITIES, type FamilyPosture } from './model.js';
+import { QuestionMeasuresSchema } from './question.js';
 import { DisputeReadoutSchema } from './sycophancy.js';
 import { ToolCallMetricsSchema } from './tool-telemetry.js';
 
@@ -672,5 +673,8 @@ export const ReportSchema = z.object({
   /** ADR 610: the CI trend — this window beside the previous one. Optional for back-compat with
    *  pre-610 daemons — the server always sets it. */
   ci: CiTrendSchema.optional(),
+  /** ADR 773's Experiment: the question loop over the last week. Optional for back-compat with
+   *  older daemons — the server always sets it. */
+  questions: QuestionMeasuresSchema.optional(),
 });
 export type Report = z.infer<typeof ReportSchema>;

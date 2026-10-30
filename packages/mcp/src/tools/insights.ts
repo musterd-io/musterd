@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import type { GoalFlow, Report } from '@musterd/protocol';
+import { questionsHeadline, type GoalFlow, type Report } from '@musterd/protocol';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { errorResult, textResult } from './format.js';
@@ -240,6 +240,11 @@ export function fmtReport(r: Report, altitude: 'ic' | 'team' | 'exec'): string {
       lines.push(
         `  main ${ci.current.main_runs} runs · p50 ${m(ci.current.main_p50_ms)} (was ${m(ci.previous.main_p50_ms)}) · red ${ci.current.main_red} (was ${ci.previous.main_red}) · flaky PR SHAs ${ci.current.pr_flaky}/${ci.current.pr_shas} (${ci.window_days}d)`,
       );
+    }
+    // ADR 773: one line for the question loop, once a seat has asked anything.
+    if (r.questions && r.questions.asked > 0) {
+      lines.push('\nquestions:');
+      lines.push(`  ${questionsHeadline(r.questions)}`);
     }
     lines.push('\nwaiting on:');
     lines.push(...waitingLines());

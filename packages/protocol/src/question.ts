@@ -64,6 +64,18 @@ export const AnswerProofSchema = z
   })
   .strict();
 
+export const QuestionMeasuresSchema = z.object({
+  window_days: z.number().int().positive(),
+  asked: z.number().int().nonnegative(),
+  answered: z.number().int().nonnegative(),
+  answered_off_terminal: z.number().int().nonnegative(),
+  inferred: z.number().int().nonnegative(),
+  delivered: z.number().int().nonnegative(),
+  undelivered: z.number().int().nonnegative(),
+  unflagged_undelivered: z.number().int().nonnegative(),
+  resume_p50_ms: z.number().nonnegative().nullable(),
+});
+
 /** The question an act's meta carries, parsed with defaults — `null` when absent or malformed. */
 export function questionOf(meta: Record<string, unknown> | null | undefined): Question | null {
   const parsed = QuestionSchema.safeParse(meta?.['question']);

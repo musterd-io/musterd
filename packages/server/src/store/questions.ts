@@ -332,7 +332,7 @@ export async function sweepUndeliveredAnswers(
   return rows.map((r) => r.answer_id);
 }
 
-export interface QuestionMeasures {
+export interface QuestionMeasuresRaw {
   asked: number;
   answered: number;
   /** Answered from a card (`/live`, the phone, Slack) rather than a terminal. */
@@ -352,7 +352,7 @@ export async function questionMeasures(
   teamId: string,
   since: number,
   now: number = Date.now(),
-): Promise<QuestionMeasures> {
+): Promise<QuestionMeasuresRaw> {
   const asked = await db.all<{ meta: string | null }>(
     `SELECT meta FROM messages WHERE team_id = ? AND act = 'ask' AND ts >= ?
        AND json_extract(meta, '$.question') IS NOT NULL`,
