@@ -12,7 +12,7 @@ import { insertProvision } from '../store/hostProvisions.js';
 import { addMember, getMemberByName, hashToken } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { bindHostToNode, getResidency } from '../store/residency.js';
-import { getTeamBySlug } from '../store/teams.js';
+import { findBootstrapCredential, getTeamBySlug, ROTATION_GRACE_MS } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { pullTeam } from './pull.js';
 import { pushTeam } from './push.js';
@@ -200,6 +200,48 @@ withDrivers('credentials', (_o, kind) => {
           )
         ).status,
       ).toBe(401);
+    });
+
+    it('2b. a hub rotation rotates the projected predecessor at the joiner, which then lapses on the grace window (ADR 775)', async () => {
+      const first = await post(
+        hubBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'host', target: 'cloud-ada' },
+        nickOnHub,
+      );
+      const firstKey = first.json.agent_key as string;
+      await roundTrip();
+      const second = await post(
+        hubBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'host', target: 'cloud-ada' },
+        nickOnHub,
+      );
+      const secondKey = second.json.agent_key as string;
+      await roundTrip();
+
+      const team = await joinerTeam();
+      const row = await joiner.store.get<{ state: string; rotated_at: number | null }>(
+        'SELECT state, rotated_at FROM agent_bootstrap_credentials WHERE id = ?',
+        [first.json.credential.id],
+      );
+      expect(row?.state).toBe('rotated');
+      // Anchored on the hub's rotation (the successor's mint), not on when the joiner folded it.
+      expect(row?.rotated_at).toBe(second.json.credential.created_at);
+      const rotatedAt = row!.rotated_at!;
+      // Inside the window both keys still poll, so a staged move is not cut off mid-flight.
+      for (const key of [firstKey, secondKey]) {
+        expect(
+          (await post(joinerBase, '/teams/bravo/residency/wake-leases', { host: 'cloud-ada' }, key))
+            .status,
+        ).toBe(200);
+      }
+      const past = rotatedAt + ROTATION_GRACE_MS;
+      expect(await findBootstrapCredential(joiner.store, team.id, firstKey, past)).toBeNull();
+      expect(await findBootstrapCredential(joiner.store, team.id, secondKey, past)).toMatchObject({
+        id: second.json.credential.id,
+        state: 'active',
+      });
     });
 
     it('3. a joiner cannot author a credential fact: a forged credential.accepted is refused at the hub`s ingest', async () => {
