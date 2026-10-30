@@ -6,6 +6,8 @@ import type { AskEntry } from '../../native/asks';
 import { STALE_TEXT, UNVERIFIED_TEXT, waitingSubtitle } from '../../native/notice';
 import { showOffer, type ShownOffer } from '../../native/offer';
 import type { PairingPin } from '../../native/pairingPin';
+import { plain } from '../../native/readable';
+import { AskText } from '../../ui/askText';
 import { Button } from '../../ui/button';
 import { Backdrop, Glass } from '../../ui/glass';
 import { success, warning } from '../../ui/haptics';
@@ -277,13 +279,11 @@ export default function AskScreen() {
           </>
         ) : null}
         <View style={[styles.quote, { borderColor: offers ? p.border : p.accent }]}>
-          <Text style={[offers ? styles.body : styles.bodyLarge, { color: p.text }]}>
-            {ask.body}
-          </Text>
+          <AskText text={ask.body} large={!offers} />
         </View>
         {entry.delivery.lane ? (
-          <Text style={[styles.muted, { color: p.muted }]}>
-            Lane, as its seat named it: {entry.delivery.lane.title}
+          <Text numberOfLines={2} style={[styles.muted, { color: p.muted }]}>
+            Lane, as its seat named it: {plain(entry.delivery.lane.title)}
           </Text>
         ) : null}
         {waiting ? <Text style={[styles.muted, { color: p.muted }]}>{waiting}</Text> : null}
@@ -364,8 +364,6 @@ const styles = StyleSheet.create({
   rule: { height: StyleSheet.hairlineWidth, marginBottom: space.xs },
   theirs: { gap: space.sm },
   quote: { borderLeftWidth: 3, paddingLeft: space.md },
-  body: { fontFamily: font.regular, fontSize: 16, lineHeight: 23 },
-  bodyLarge: { fontSize: 20, lineHeight: 28, fontFamily: font.medium },
   muted: { fontFamily: font.regular, fontSize: 13, lineHeight: 18 },
   banner: { borderRadius: radius.md, padding: space.lg },
   bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },

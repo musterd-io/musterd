@@ -66,6 +66,7 @@ const EXTENSION_SOURCES = [
   'extension/SeenNonce.swift',
   'extension/AskRoutes.swift',
   'extension/SharedStore.swift',
+  'extension/Readable.swift',
   'extension/Notice.swift',
   'extension/DeliveryOpen.swift',
   'extension/PinBinding.swift',

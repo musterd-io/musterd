@@ -61,7 +61,7 @@ enum DeliveryOpen {
     if !ok { throw DeliveryOpenError.unverified }
 
     guard let body = parse(payload, route: route) else { throw DeliveryOpenError.unverified }
-    if case .ask(_, _, _, _, _) = body {
+    if case .ask(_, _, _, _, _, _) = body {
       // The ask's own expiry is inside the signed payload. A route expiry is the caller's.
       if let expires = askExpiry(payload), expires <= now { throw DeliveryOpenError.expired }
     }
@@ -94,7 +94,7 @@ enum DeliveryOpen {
         let actionClass = ask["action_class"] as? String,
         actionClass == "advisory" || actionClass == "privileged",
         nonEmpty(ask["id"]) == route.ref,
-        nonEmpty(ask["from"]) != nil,
+        let from = nonEmpty(ask["from"]),
         ask["from_kind"] as? String == "agent" || ask["from_kind"] as? String == "human",
         ask["tier"] is String,
         stringOrNull(ask["species"]),
@@ -128,6 +128,7 @@ enum DeliveryOpen {
       }
       return .ask(
         text: text,
+        from: from,
         actionClass: actionClass,
         hasApproval: hasApproval,
         waiting: waiting,
