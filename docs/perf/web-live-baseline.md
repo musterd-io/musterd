@@ -2740,3 +2740,17 @@ what a viewer downloads grows with the roster's wardrobe, not with this total. A
 measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,620,000 B with this lane in.
+
+## 2026-10-30 — seats ask 1e: "Waiting on you" and the triage card; total JS RAISED 390,000 → 394,000 B, app CSS RAISED 17,600 → 19,700 B (lane 01M674NR7Q)
+
+| Budget      | Before (ceiling) | This branch (gzip)        | Ceiling                        |
+| ----------- | ---------------- | ------------------------- | ------------------------------ |
+| initial JS  | 152,500 B        | unchanged                 | unchanged                      |
+| total JS    | 390,000 B        | +3,646 B (`WaitingOnYou`) | RAISED 390,000 → 394,000 B     |
+| app CSS     | 17,600 B         | +1,968 B (`WaitingOnYou`) | RAISED 17,600 → 19,700 B       |
+
+The list, the triage sheet and the question derivation are one lazy chunk, mounted behind `Suspense` on
+/live, so the eager graph pays only the `lazy()` stub and a viewer downloads the chunk once /live is
+connected. Its stylesheet is classified with the other overlays in the `app` group (ADR 313).
+
+- Falsify: `pnpm perf:check` after a build reports total JS over 394,000 B or app CSS over 19,700 B with this lane in.

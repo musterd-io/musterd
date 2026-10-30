@@ -1,0 +1,459 @@
+/* "Waiting on you" and the triage sheet (seats ask 1e). /live's own tokens throughout; a lazy chunk,
+   budgeted with the other overlays in the `app` CSS group. */
+.wy {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--lc-border);
+  border-radius: var(--lc-r-md);
+  background: var(--lc-surface);
+}
+.wy__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wy__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--lc-text);
+}
+.wy__n {
+  color: var(--lc-accent-ink);
+}
+.wy__all,
+.qt__send,
+.qt__skip,
+.qt__x,
+.qt__link {
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform var(--lc-dur-1) var(--lc-ease-out),
+    background-color var(--lc-dur-1) var(--lc-ease-out),
+    border-color var(--lc-dur-1) var(--lc-ease-out);
+}
+.wy__all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--lc-accent) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--lc-accent) 12%, transparent);
+  color: var(--lc-accent-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.wy__all kbd,
+.qt kbd {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--lc-border-2);
+  color: var(--lc-muted);
+  background: var(--lc-surface-2);
+}
+.wy__all:active,
+.qt__send:active,
+.qt__skip:active,
+.qt__opt:active {
+  transform: scale(0.97);
+}
+.wy__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.wy__row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid var(--lc-border);
+}
+.wy__row:first-child {
+  border-top: 0;
+}
+.wy__body {
+  min-width: 0;
+}
+.wy__q {
+  margin: 0;
+  color: var(--lc-text);
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wy__meta {
+  margin: 1px 0 0;
+  font-size: 12px;
+  color: var(--lc-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wy__seat {
+  color: var(--lc-dim);
+  font-weight: 600;
+}
+.wy__age {
+  font-size: 12px;
+  color: var(--lc-muted);
+  font-variant-numeric: tabular-nums;
+}
+.wy__age.is-blocking {
+  color: var(--lc-warn-ink);
+}
+
+/* The triage sheet: a centred modal over a dimmed room. */
+.qt {
+  position: fixed;
+  inset: 0;
+  z-index: var(--lc-z-overlay);
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--lc-text) 38%, transparent);
+  backdrop-filter: blur(6px);
+}
+.qt__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+.qt__sheet {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--lc-border-2);
+  border-radius: 18px;
+  background: var(--lc-surface);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--lc-text) 6%, transparent) inset,
+    0 24px 60px -20px rgb(0 0 0 / 0.45);
+  outline: none;
+  animation: qt-in var(--lc-dur-2) var(--lc-ease-out);
+}
+@keyframes qt-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+.qt__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.qt__dots {
+  display: flex;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.qt__dots li {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lc-border-2);
+  transition: background-color var(--lc-dur-2) var(--lc-ease-out);
+}
+.qt__dots li.is-done {
+  background: color-mix(in srgb, var(--lc-accent) 45%, transparent);
+}
+.qt__dots li.is-now {
+  background: var(--lc-accent);
+}
+.qt__count {
+  flex: 1;
+  font-size: 12px;
+  color: var(--lc-muted);
+  font-variant-numeric: tabular-nums;
+}
+.qt__x {
+  border: 1px solid var(--lc-border);
+  background: transparent;
+  color: var(--lc-muted);
+  border-radius: 7px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+}
+.qt__card {
+  display: grid;
+  gap: 12px;
+  animation: qt-card var(--lc-dur-2) var(--lc-ease-out);
+}
+@keyframes qt-card {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+.qt__who {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.qt__whoText {
+  display: grid;
+  min-width: 0;
+}
+.qt__seat {
+  font-weight: 600;
+  color: var(--lc-text);
+}
+.qt__ctx {
+  font-size: 12px;
+  color: var(--lc-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qt__pill {
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--lc-accent-ink);
+  background: color-mix(in srgb, var(--lc-accent) 14%, transparent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.qt__pill.is-blocking {
+  color: var(--lc-warn-ink);
+  background: color-mix(in srgb, var(--lc-warn) 18%, transparent);
+}
+.qt__q {
+  margin: 2px 0 0;
+  font-size: 19px;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--lc-text);
+  text-wrap: balance;
+}
+.qt__why {
+  margin: -4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--lc-dim);
+}
+.qt__opts {
+  display: grid;
+  gap: 6px;
+}
+.qt__opt {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  text-align: left;
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--lc-border);
+  border-radius: 11px;
+  background: var(--lc-surface-2);
+  color: var(--lc-text);
+  cursor: pointer;
+  transition:
+    transform var(--lc-dur-1) var(--lc-ease-out),
+    border-color var(--lc-dur-1) var(--lc-ease-out),
+    background-color var(--lc-dur-1) var(--lc-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .qt__opt:hover {
+    border-color: var(--lc-border-2);
+  }
+  .wy__all:hover {
+    background: color-mix(in srgb, var(--lc-accent) 18%, transparent);
+  }
+}
+.qt__opt.is-picked {
+  border-color: var(--lc-accent);
+  background: color-mix(in srgb, var(--lc-accent) 12%, var(--lc-surface-2));
+}
+.qt__opt.is-picked .qt__key {
+  border-color: var(--lc-accent);
+  color: var(--lc-accent-ink);
+}
+.qt__key {
+  text-align: center;
+  margin-top: 1px;
+}
+.qt__optText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.qt__label {
+  font-weight: 600;
+  font-size: 14px;
+}
+.qt__cons {
+  font-size: 12.5px;
+  color: var(--lc-muted);
+}
+.qt__text textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 44px;
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--lc-border);
+  border-radius: 11px;
+  background: var(--lc-surface-2);
+  color: var(--lc-text);
+}
+.qt__text textarea:focus-visible,
+.qt button:focus-visible,
+.wy button:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+.qt__undelivered {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--lc-warn-ink);
+}
+.qt__more {
+  list-style: none;
+  margin: 0;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  border-radius: 11px;
+  background: var(--lc-surface-2);
+  font-size: 12.5px;
+}
+.qt__more li {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+}
+.qt__moreAct {
+  color: var(--lc-muted);
+}
+.qt__moreBody {
+  color: var(--lc-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qt__foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.qt__link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--lc-muted);
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.qt__hints {
+  flex: 1;
+  font-size: 11.5px;
+  color: var(--lc-faint);
+  text-align: right;
+}
+.qt__skip {
+  border: 1px solid var(--lc-border);
+  background: transparent;
+  color: var(--lc-dim);
+  border-radius: 999px;
+  padding: 7px 14px;
+}
+.qt__send {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 18px;
+  background: var(--lc-accent);
+  color: #1a1405; /* the ink every accent fill on /live uses */
+  font-weight: 600;
+}
+.qt__send:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+.qt__flash {
+  position: absolute;
+  left: 50%;
+  bottom: -46px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  background: var(--lc-surface);
+  border: 1px solid var(--lc-border-2);
+  color: var(--lc-text);
+  animation: qt-flash var(--lc-dur-2) var(--lc-ease-out);
+}
+.qt__flash.is-taken {
+  color: var(--lc-warn-ink);
+}
+.qt__flash.is-error {
+  color: var(--lc-danger-ink);
+}
+@keyframes qt-flash {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qt__sheet,
+  .qt__card,
+  .qt__flash {
+    animation-name: qt-fade;
+  }
+  @keyframes qt-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  .wy__all,
+  .qt__send,
+  .qt__skip,
+  .qt__x,
+  .qt__link,
+  .qt__opt,
+  .qt__dots li {
+    transition-duration: 0s;
+  }
+  .wy__all:active,
+  .qt__send:active,
+  .qt__skip:active,
+  .qt__opt:active {
+    transform: none;
+  }
+}
+@media (max-width: 520px) {
+  .qt__hints {
+    display: none;
+  }
+}
