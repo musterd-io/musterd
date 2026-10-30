@@ -54,6 +54,30 @@ export type ClaimSeatTarget = { seat: string } | { role: string };
  * skips the approval lane.
  */
 
+/**
+ * A refused claim, held to the error floor (lane 01M653WNCD, second landing): the server's
+ * message says what happened, and every code carries its own next step — the first landing
+ * left both refusal paths (`onRefused`, the direct outcome) at the raw passthrough, on the
+ * first-run path where the reader has the least context. Exit code and shape unchanged.
+ */
+export function claimRefusedError(code: string, message: string, hint?: string): CliError {
+  const next: Record<string, string> = {
+    claim_conflict:
+      'see who holds the seat with `musterd status --all`, or claim another name: `musterd claim <name>`',
+    forbidden:
+      "check this folder's binding with `musterd whoami`; if it names the wrong team, re-run `musterd init` here",
+    not_found: '`musterd status --all` lists the team’s seats — claim one of those names',
+    disabled: 'ask a team admin to re-enable the seat — `musterd status --all` shows who is here',
+    banned: 'ask a team admin — a banned seat cannot be claimed from here',
+    halted:
+      'the hold is a human’s — ask them to lift it, or claim another seat: `musterd claim <name>`',
+    expired_grant: 'ask whoever issued the grant for a fresh one, then retry `musterd claim`',
+  };
+  const step = next[code] ?? 'run `musterd status` to check the daemon, then retry `musterd claim`';
+  const tail = hint ? ` — ${hint}` : '';
+  return new CliError(`claim refused (${code}): ${message}${tail} — next: ${step}`, 4);
+}
+
 /** ms → a compact human age: 2d, 3h, 12m, 45s. Local by the same precedent as `report.ts` et al. */
 function pendingAge(ms: number): string {
   const sec = Math.round(ms / 1000);
@@ -510,10 +534,7 @@ export async function claimCommand(parsed: Parsed): Promise<number> {
         });
       },
       onRefused: (code, message, claimable, hint) => {
-        finish(() => {
-          const tail = hint ? ` — ${hint}` : '';
-          rejectP(new CliError(`claim refused (${code}): ${message}${tail}`, 4));
-        });
+        finish(() => rejectP(claimRefusedError(code, message, hint)));
       },
       onPending: (requestId, message) => {
         if (flags['json']) {
@@ -609,10 +630,8 @@ async function detachedClaim(input: {
     workspaceKey: resolveWorkspaceKey(),
     ...(grant !== undefined ? { grant } : {}),
   });
-  if (outcome.state === 'refused') {
-    const tail = outcome.hint ? ` — ${outcome.hint}` : '';
-    throw new CliError(`claim refused (${outcome.code}): ${outcome.message}${tail}`, 4);
-  }
+  if (outcome.state === 'refused')
+    throw claimRefusedError(outcome.code, outcome.message, outcome.hint);
   if (outcome.state === 'pending') {
     if (json) {
       process.stdout.write(

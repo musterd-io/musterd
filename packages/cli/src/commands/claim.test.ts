@@ -17,7 +17,7 @@ import { HttpClient, watchClaim } from '../client.js';
 import { saveBinding, wsBase } from '../config.js';
 import { CliError } from '../errors.js';
 import { writePending } from '../onboard/pending.js';
-import { claimCommand } from './claim.js';
+import { claimCommand, claimRefusedError } from './claim.js';
 import { WAIT_TIMEOUT_EXIT } from './inbox.js';
 
 let server: RunningServer;
@@ -212,6 +212,26 @@ async function decide(
     body: JSON.stringify(body),
   });
 }
+
+/**
+ * Lane 01M653WNCD, second landing: a refused claim names its next step for every refusal
+ * code (acceptance found both refusal paths at the raw passthrough). Exit code stays 4.
+ */
+describe('claimRefusedError (the error floor on refusals)', () => {
+  it('gives each refusal code an actionable next step, hint preserved, exit 4', () => {
+    const conflict = claimRefusedError('claim_conflict', 'seat Ada is occupied');
+    expect(conflict.message).toContain('claim refused (claim_conflict): seat Ada is occupied');
+    expect(conflict.message).toContain('musterd status --all');
+    expect(conflict.message).toContain('musterd claim <name>');
+    expect(conflict.exitCode).toBe(4);
+    expect(claimRefusedError('expired_grant', 'grant expired').message).toContain('fresh one');
+    expect(claimRefusedError('not_found', 'no such seat').message).toContain('status --all');
+    const halted = claimRefusedError('halted', 'held by nick', 'since Tuesday');
+    expect(halted.message).toContain('— since Tuesday — next:');
+    // An unlisted code still lands on a next step, never the bare passthrough.
+    expect(claimRefusedError('some_future_code', 'nope').message).toContain('musterd status');
+  });
+});
 
 describe('musterd claim (v0.3 handshake, ADR 075)', () => {
   it.each([
