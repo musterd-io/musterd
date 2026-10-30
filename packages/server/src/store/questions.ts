@@ -144,6 +144,10 @@ export async function waitingSeats(db: Driver, teamId: string): Promise<Set<stri
   return new Set((await openQuestions(db, teamId)).map((q) => q.asker));
 }
 
+/** A claim with no persisted answer behind it after this long is an orphan (a send that failed
+ *  between claim and persist). Long enough that an in-flight first answer is never overtaken. */
+export const ORPHAN_CLAIM_MS = 60_000;
+
 /**
  * Claim the question for this answer — the first answer wins (ADR 773 §3). `ON CONFLICT DO
  * NOTHING` plus a read-back keeps it one statement on both drivers; a loser learns who won.
@@ -179,6 +183,27 @@ export async function claimAnswer(
     ],
   );
   if (res.changes === 1) return { ok: true };
+  // A claim whose answer never persisted (the send failed after the claim) must not hold the
+  // question forever. Past the grace window with no message behind it, the claim is taken over.
+  const taken = await db.run(
+    `UPDATE question_answers SET answer_id = ?, asker = ?, answered_by = ?, channel = ?,
+         verified = ?, late = ?, answered_at = ?
+       WHERE team_id = ? AND question_id = ? AND answered_at < ?
+         AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.id = question_answers.answer_id)`,
+    [
+      a.answerId,
+      a.asker,
+      a.by,
+      a.channel,
+      a.verified ? 1 : 0,
+      a.late ? 1 : 0,
+      a.at,
+      teamId,
+      a.questionId,
+      a.at - ORPHAN_CLAIM_MS,
+    ],
+  );
+  if (taken.changes === 1) return { ok: true };
   const won = await db.get<{ answered_by: string; channel: AnswerChannel }>(
     'SELECT answered_by, channel FROM question_answers WHERE team_id = ? AND question_id = ?',
     [teamId, a.questionId],

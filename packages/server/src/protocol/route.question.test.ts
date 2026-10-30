@@ -171,4 +171,31 @@ withDrivers('route.question', (o) => {
     expect(v?.state).toBe('withdrawn');
     expect(v?.answer?.late).toBe(true);
   });
+
+  it('a seat cannot answer a question, even a team one', async () => {
+    const db = await openStore();
+    const team = await createTeam(db, { slug: 'revive' });
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+    const ryder = (await addMember(db, team, { name: 'ryder', kind: 'agent', role: '' })).row;
+    const gptbot = (await addMember(db, team, { name: 'gptbot', kind: 'agent', role: '' })).row;
+    const ctx = stubCtx(db);
+    await routeEnvelope(
+      ctx,
+      team,
+      ryder,
+      makeEnvelope({
+        id: 'q1',
+        team: 'revive',
+        from: 'ryder',
+        to: { kind: 'member', name: 'nick' },
+        act: 'ask',
+        meta: { species: 'consult', question: { ...flake, audience: 'team' } },
+      }),
+    );
+    await expect(routeEnvelope(ctx, team, gptbot, answer('a1', 'gptbot'))).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+    expect((await questionView(db, team.id, 'q1'))?.state).toBe('open');
+    void nick;
+  });
 });

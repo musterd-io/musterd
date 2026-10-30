@@ -76,7 +76,7 @@ import {
   withEnvelopeSpan,
 } from '../telemetry.js';
 import { acceptedHandoffOf, applyDisputeAnswer, stampDispute } from './dispute.js';
-import { prepareQuestionAnswer, stripAnswerProof } from './questionAnswer.js';
+import { auditQuestionAnswer, prepareQuestionAnswer, stripAnswerProof } from './questionAnswer.js';
 
 export interface RouteResult {
   message: MessageRow;
@@ -867,6 +867,7 @@ async function routeEnvelopeInner(
   // Persist (append-only log) — the urgent-downgraded envelope when applicable, so the stored meta and
   // every delivery (direct + firehose, all derived from the row) carry the corrected flags.
   const message = await insertMessage(ctx.db, team.id, sender.id, toMemberId, outgoingEnv);
+  await auditQuestionAnswer(ctx.db, team, outgoingEnv);
   if (verifiedPrivilegedAskReply && sender.kind === 'human') {
     void tickVerdictQueue(ctx, team, sender, outgoingEnv.ts);
   }

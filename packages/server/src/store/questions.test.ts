@@ -144,4 +144,26 @@ withDrivers('questions', (o) => {
     expect((await questionView(db, team.id, 'q1'))?.state).toBe('lane_closed');
     expect(await waitingSeats(db, team.id)).toEqual(new Set());
   });
+
+  it('a claim whose answer never persisted is taken over after the grace window', async () => {
+    const { db, team, nick, ryder } = await seed();
+    await send(db, team, ryder, nick, 'ask', 'q1', 1, { meta: ask() });
+    const base = {
+      questionId: 'q1',
+      asker: 'ryder',
+      by: 'nick',
+      channel: 'live' as const,
+      verified: true,
+      late: false,
+    };
+    expect(await claimAnswer(db, team.id, { ...base, answerId: 'ghost', at: 1_000 })).toEqual({
+      ok: true,
+    });
+    expect(
+      (await claimAnswer(db, team.id, { ...base, answerId: 'a2', at: 1_000 + 5_000 })).ok,
+    ).toBe(false);
+    expect(await claimAnswer(db, team.id, { ...base, answerId: 'a3', at: 1_000 + 61_000 })).toEqual(
+      { ok: true },
+    );
+  });
 });

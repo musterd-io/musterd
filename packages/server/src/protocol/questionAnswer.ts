@@ -55,6 +55,11 @@ export async function prepareQuestionAnswer(
     // The asker is the answer's addressee: the ring and the wake follow `to` (ADR 773 §7).
     throw new MusterdError('bad_request', `an answer is addressed to the asker, ${view.asker}`);
   }
+  // ADR 773 §2: questions go to people. A seat cannot answer one — not even a team question — or an
+  // unverified answer would claim it ahead of the person it was for (first answer wins).
+  if (sender.kind !== 'human') {
+    throw new MusterdError('forbidden', 'a question is answered by a person, not a seat (ADR 773)');
+  }
   if (!mayAnswer(view, sender.name)) {
     throw new MusterdError(
       'forbidden',
@@ -89,18 +94,23 @@ export async function prepareQuestionAnswer(
       `question_already_answered: answered by ${claimed.by} on ${claimed.channel}`,
     );
   }
+  return { ...env, meta: { ...env.meta, answer_proof: proof } };
+}
+
+/** After persist: the answer is durable, so now it is audited (ADR 773 Observability). */
+export async function auditQuestionAnswer(db: Driver, team: TeamRow, env: Envelope): Promise<void> {
+  const proof = AnswerProofSchema.safeParse(env.meta?.['answer_proof']);
+  if (env.act !== 'accept' || !proof.success) return;
   await appendAudit(db, team.id, {
-    actor: sender.name,
+    actor: proof.data.by,
     action: 'question.answered',
-    target: view.id,
+    target: typeof env.meta?.['in_reply_to'] === 'string' ? env.meta['in_reply_to'] : null,
     result: 'allow',
     detail: {
       answer: env.id,
-      asker: view.asker,
-      channel: proof.channel,
-      verified: proof.verified,
-      late,
+      channel: proof.data.channel,
+      verified: proof.data.verified,
+      late: proof.data.late === true,
     },
   });
-  return { ...env, meta: { ...env.meta, answer_proof: proof } };
 }

@@ -210,7 +210,7 @@ Order: 1a → 1b → (1c, 1f) → 1d → 1e. 1g starts once 1b has landed, becau
     - `channel: 'live'`, `verified: true` when the sender is a human member on a browser session;
     - `'cli'`, `verified: true` for a human's CLI credential;
     - `verified: false` for an agent sender.
-  - An agent's `accept` with `meta.answer` is allowed (seats can answer `audience:'team'` questions) but is never verified.
+  - An agent's `accept` with `meta.answer` is refused (`forbidden`): questions go to people, and an unverified answer must never claim a question ahead of one (security review, 2026-10-30).
 
 - [ ] **Step 1: Write the failing tests:**
   - nick's `accept {in_reply_to:q, answer:{choice:0}}` persists with `answer_proof {channel:'live', verified:true, by:'nick'}`, and audits `question.answered`;

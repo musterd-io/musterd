@@ -3,6 +3,7 @@ import {
   DeferUntilSchema,
   eligibleOf,
   idleRingable,
+  isQuestionAnswer,
   OBLIGATION_ACTS_ANY,
   OBLIGATION_ACTS_DIRECTED,
   PROTOCOL_VERSION,
@@ -616,6 +617,9 @@ export function pendingInterrupts(
     /** ADR 558: the idle seam — admit every act `idleRingable` accepts (a plain directed ask,
      *  request_help, handoff). Live seam only, like `obligations`: never the paid wake rail. */
     directed?: boolean;
+    /** ADR 773 §7: the answer to a question I asked — a wake reason on BOTH rails, because the
+     *  seat ended its turn to wait for exactly this. */
+    answers?: boolean;
   } = {},
 ): Envelope[] {
   const resolved = new Set<string>();
@@ -795,7 +799,8 @@ export function pendingInterrupts(
           isHuddleOpen(m) ||
           isIncidentRoute(m) ||
           isIncidentResolve(m) ||
-          isDirectedIdle(m)) &&
+          isDirectedIdle(m) ||
+          (opts.answers === true && isQuestionAnswer(m))) &&
         !resolved.has(m.thread ?? m.id) &&
         // Directed obligations (no eligible set) were missing this: `discharged` only ran inside
         // the eligible-set branch of `actionNeeded`, so a self-answered `lane_review` ask kept
