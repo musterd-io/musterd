@@ -1210,3 +1210,14 @@ answer's text.
   to ` ⏎ `, `«`/`»` escaped as `‹‹`/`››`, the answer capped at 2,000 characters and the line at
   2,400. Every other wake line keeps ADR 088 §4's ids-only rule. The recap form, for a session that
   cannot be resumed, inserts `you asked: «<question text>» —` before the answer.
+
+## A.32 Quick actions and PR events (unreleased — ADR 779)
+
+- A `steer` MAY carry `meta.quick_action` ∈ {`start`, `check_inbox`, `check_pr`, `resume`}. A server
+  MUST refuse it on any other act and from any sender that is not a human member. The wake line for
+  it MUST be daemon-composed from the action and structured fields only (ADR 088 §4); the body
+  never appears on it.
+- `POST /teams/:slug/quick-actions/start-all` (human only) sends one `start` steer per enrolled
+  agent seat and answers `{seats: [{seat, result: started | capped | offline}]}`.
+- A daemon-composed `message` MAY carry `meta.pr_event {lane, pr, state: merged | ci_red | ci_green,
+  checks_url?}` to a lane's owner; it is a wake reason. A server MUST strip a client-supplied copy.
