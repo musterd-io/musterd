@@ -10,7 +10,10 @@ import type { Driver } from '../db/driver.js';
 import type { SqliteDriver } from '../db/sqliteDriver.js';
 import { type StoreSizes, storeSizes } from './retention.js';
 
-export const STORE_SIZES_TTL_MS = 10 * 60_000;
+// Six hours, not ten minutes (ADR 778): the walk is off the event loop but not off the disk. It reads
+// every sync_log page, and measured 2026-10-30 on the hub it took up to 70 s cold, 25 times in four
+// hours, while the laptop's other queries queued behind the I/O. A growth signal needs no fresher.
+export const STORE_SIZES_TTL_MS = 6 * 60 * 60_000;
 
 export type MeasureStoreSizes = (dbPath: string, archiveDir: string | null) => Promise<StoreSizes>;
 

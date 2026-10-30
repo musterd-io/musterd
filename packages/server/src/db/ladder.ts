@@ -1192,6 +1192,38 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
     version: 136,
     sql: QUESTION_ANSWERS_TABLE_SQL,
   },
+  {
+    // v137 — ADR 778 (lane 01M67EEB6Q): indexes for the statements that held the hub's event loop
+    // on 2026-10-30 (7,184 slow statements in four hours). Each index matches the expression its
+    // query already uses, so no SQL changes. On a copy of the revive hub: digest by day 123 → 0 ms,
+    // review ask by lane 13 → 0 ms, lanes by owner 9.1 → 0.6 ms. The two `messages` indexes are
+    // partial (asks; digests), so most inserts never touch them. No `audit` expression index: audit
+    // `detail` may be malformed by design, and an index on json_extract(detail, …) makes that insert
+    // throw `malformed JSON` (ADR 778 §Consequences).
+    // analyzeTablesMissingIndexStats gives every new index statistics after the ladder runs.
+    version: 137,
+    sqlite: (db) => {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_messages_lane_review
+          ON messages(team_id, json_extract(meta, '$.lane_review.lane')) WHERE act = 'ask';
+        CREATE INDEX IF NOT EXISTS idx_messages_digest_day
+          ON messages(team_id, json_extract(meta, '$.digest.day'))
+          WHERE json_extract(meta, '$.digest.day') IS NOT NULL;
+      `);
+      for (const sql of LANE_LIST_INDEX_SQL) db.exec(sql);
+    },
+    postgres: async (d) => {
+      // The JSON indexes would have to match the dialect's json_extract rewrite and are not measured
+      // on Postgres; hosted stores keep today's plan for those (as v135). The lane lists are plain.
+      for (const sql of LANE_LIST_INDEX_SQL) await d.exec(sql);
+    },
+  },
+];
+
+/** v137: the lane lists `ORDER BY created_at`, by owner and for the whole team (ADR 778). */
+const LANE_LIST_INDEX_SQL = [
+  'CREATE INDEX IF NOT EXISTS idx_lanes_team_owner_created ON lanes(team_id, owner_seat, created_at)',
+  'CREATE INDEX IF NOT EXISTS idx_lanes_team_created ON lanes(team_id, created_at)',
 ];
 
 /** v134: the lanes the card backfill places, in the order it places them. */
