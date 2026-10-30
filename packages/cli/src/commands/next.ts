@@ -12,8 +12,13 @@ import {
 } from '@musterd/protocol';
 import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
+import { cut } from '../render/rows.js';
 import { theme } from '../render/theme.js';
+import { termWidth, visibleLen } from '../render/ui.js';
 import { resolve } from './helpers.js';
+
+/** The 10-character lane prefix every lane command takes, as the daily view prints it. */
+const shortId = (id: string) => id.slice(0, 10);
 
 /**
  * `musterd next` — the orientation brief (ADR 049/084). A fresh session self-orients without a
@@ -47,10 +52,19 @@ export function upNextCountCopy(brief: {
 }
 
 function laneLine(l: Lane, tail = ''): string {
-  const goal = l.goal_id ? theme.meta(` ◆ ${l.goal_id}`) : '';
-  const areas = l.areas?.length ? theme.meta(` · ${l.areas.join(', ')}`) : '';
-  const branch = l.branch ? theme.meta(` ⎇ ${l.branch}`) : '';
-  return `  ${theme.meta(l.id)} ${l.state} "${l.title}"${goal}${areas}${branch}${tail}`;
+  // The daily view's row grammar (lane 01M653W2N4): state first, the title cut at the column
+  // edge, the short id after it. The full id wrapped mid-line and read as a different surface.
+  const goal = l.goal_id ? ` ◆ ${l.goal_id}` : '';
+  const areas = l.areas?.length ? ` · ${l.areas.join(', ')}` : '';
+  const branch = l.branch ? ` ⎇ ${l.branch}` : '';
+  const head = `  ${l.state} · `;
+  const suffix = ` — ${shortId(l.id)}${goal}${areas}${branch}`;
+  const title = cut(l.title, Math.max(8, termWidth() - visibleLen(head + suffix + tail)));
+  return (
+    `  ${l.state} ${theme.meta('·')} ${title}` +
+    theme.meta(` — ${shortId(l.id)}${goal}${areas}${branch}`) +
+    tail
+  );
 }
 
 /**
@@ -114,7 +128,7 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     w(`\n${theme.accent('owed by you')} — ${owed.length} lane(s) waiting on your verdict:\n`);
     for (const r of owed) {
       w(
-        `  ${theme.meta(r.lane.id)} "${r.lane.title}" — ${theme.memberName(r.from, 'agent')} has waited ${shortDuration(now - r.ts)}\n`,
+        `  ${theme.meta(shortId(r.lane.id))} "${cut(r.lane.title, Math.max(8, termWidth() - 16))}" — ${theme.memberName(r.from, 'agent')} has waited ${shortDuration(now - r.ts)}\n`,
       );
       w(theme.meta(`    answer: \`musterd send --act accept --reply-to ${r.ask_id} "…"\``) + '\n');
     }
@@ -128,7 +142,7 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     );
     for (const d of disputed) {
       w(
-        `  ${theme.meta(d.lane.id)} "${d.lane.title}" — ${theme.memberName(d.from, 'agent')} rejected ${shortDuration(now - d.ts)} ago: ${d.note}\n`,
+        `  ${theme.meta(shortId(d.lane.id))} "${cut(d.lane.title, Math.max(8, termWidth() - 16))}" — ${theme.memberName(d.from, 'agent')} rejected ${shortDuration(now - d.ts)} ago: ${d.note}\n`,
       );
       w(
         theme.meta(
@@ -151,7 +165,10 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     w(`\n${theme.accent('review debt')} — waiting on any seat's acceptance${more}:\n`);
     for (const r of debt) {
       w(
-        `  ${theme.meta(r.id)} "${r.title}"${r.owner ? ` — owner=${theme.memberName(r.owner, 'agent')}` : ''} — waiting ${Math.floor(r.waited_ms / 3_600_000)}h` +
+        `  "${cut(r.title, Math.max(8, termWidth() - 16))}"${theme.meta(` — ${shortId(r.id)}`)}\n` +
+          theme.meta(
+            `    ${r.owner ? `${r.owner} · ` : ''}waiting ${Math.floor(r.waited_ms / 3_600_000)}h`,
+          ) +
           (r.no_candidate
             ? theme.warn(
                 ` — NO REVIEWER WAS ASKED (${r.empty_pool ? emptyPoolCopy(r.empty_pool) : 'no eligible counterpart at submit'})`,
@@ -226,7 +243,9 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     for (const l of brief.in_flight) {
       w(laneLine(l) + '\n');
       const why = stalled.get(l.id);
-      if (why) w(theme.warn(`    ↳ NO WAKE DUE — ${why}`) + '\n');
+      // The detail already opens "no wake due: …" — saying it twice, once shouted, was the
+      // seam (lane 01M653W2N4).
+      if (why) w(theme.warn(`    ↳ ${why}`) + '\n');
     }
   }
   // ADR 373 increment 4: recorded intentions ABOVE the open lanes — a Seed is the same question one

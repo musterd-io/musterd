@@ -405,10 +405,10 @@ describe('next / done commands', () => {
           { lane: 'L2', tier: 5, reasons: [] },
         ],
       });
-      expect(why.split('\n').find((l) => l.includes('L1 open'))).toMatch(
-        / · nick pointed here · goal in flight$/,
+      expect(why.split('\n').find((l) => l.includes('nick pointed here'))).toMatch(
+        /open · L1 — L1 · nick pointed here · goal in flight$/,
       );
-      expect(why.split('\n').find((l) => l.includes('L2 open'))).not.toContain(' · ');
+      expect(why).not.toMatch(/L2 — L2 · nick/);
     });
 
     /** ADR 276 named this gap in its Consequences: `musterd next` rendered no review debt at all. */
@@ -440,11 +440,12 @@ describe('next / done commands', () => {
         return 0;
       });
       expect(res.out).toContain("review debt — waiting on any seat's acceptance (showing 3 of 5):");
-      expect(res.out).toContain('L1 "stuck work" — owner=June — waiting 26h');
+      expect(res.out).toContain('"stuck work" — L1');
+      expect(res.out).toContain('June · waiting 26h');
       expect(res.out).toContain(
-        'L2 "nobody asked" — owner=Lin — waiting 3h — NO REVIEWER WAS ASKED (no other member is live)',
+        'Lin · waiting 3h — NO REVIEWER WAS ASKED (no other member is live)',
       );
-      expect(res.out).toContain('L3 "never landed" — waiting 1h — NO MERGE ATTESTATION');
+      expect(res.out).toContain('waiting 1h — NO MERGE ATTESTATION');
       expect(res.out).not.toContain('nothing in flight');
     });
 
