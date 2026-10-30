@@ -300,7 +300,10 @@ export function grokBackend(deps: GrokDeps = {}): ActuatorBackend {
         );
       }
       const fresh = await run(
-        buildGrokFreshArgs(spec.order.composed_line, spec.workspace),
+        buildGrokFreshArgs(
+          spec.order.composed_recap_line ?? spec.order.composed_line,
+          spec.workspace,
+        ),
         'fresh',
         spec.bounds.timeout_ms,
       );

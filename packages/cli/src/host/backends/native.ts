@@ -380,7 +380,7 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
       };
       const runPromise = engine.run({
         model,
-        prompt: spec.order.composed_line,
+        prompt: spec.order.composed_recap_line ?? spec.order.composed_line,
         tools: runTools,
         maxTurns: spec.bounds.max_turns,
         signal: controller.signal,

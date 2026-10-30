@@ -575,6 +575,7 @@ src/
     status.ts     // works while dormant/pending; appends the ADR 135 build-skew warning and the ADR 445 §4 `traced:` line (client.traceDepth, one memoized /health read shared with daemonBuild)
     members.ts    // works while dormant/pending; a human row carries its `style:` dials facet (ADR 514 inc 3)
     availability.ts // team_availability — set your OWN availability (ADR 044), the MCP twin of `musterd availability`; not a WRITE_TOOL, a muted seat may still say it is away (surface survey #1245 item 6)
+    question.ts     // team_question — a seat's question to a person (ADR 773): `ask` + `meta.question` (species consult, no tier), returns at once telling the seat to end its turn; refuses a seat as `to`; context defaults to the one live claimed lane and the workspace branch; a WRITE_TOOL
     memory.ts     // team_memory_save/read — the seat's continuity blob + the join one-liner (ADR 093)
     style.ts      // team_style / team_style_set (ADR 514 inc 3) — a human's own dials and prose over GET/PUT /members/me/style; read-merge-write so one dial never wipes the rest, clear:true empties; the daemon's 403 for a seat is surfaced verbatim
     wakeContext.ts // team_wake_context — recipient-scoped orientation packet (ADR 209); renders the v2 context block — thread attributed, open ledger, lane, memory — and names `fetch` follow-ups only for what did not fit (ADR 430)

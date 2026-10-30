@@ -184,6 +184,34 @@ describe('WakeArgOpts (inc 5): tool policy + turn cap ride the argv', () => {
 });
 
 describe('claudeCodeBackend.wake', () => {
+  it('a fresh spawn for an answer gets the recap; a resume gets the answer line (ADR 774 §3)', async () => {
+    const answer = order({
+      act: 'accept',
+      composed_line: 'ANSWER-LINE',
+      composed_recap_line: 'RECAP-LINE',
+    });
+    const fresh = new FakeChild();
+    const a = harness(fresh);
+    const woke = await a.backend.wake(
+      spec({ order: answer }),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(a.calls[0]!.args[a.calls[0]!.args.indexOf('-p') + 1]).toBe('RECAP-LINE');
+    fresh.exit(0);
+    await woke.settled;
+
+    const resumed = new FakeChild();
+    const b = harness(resumed, { readSession: () => resumable() });
+    const again = await b.backend.wake(
+      spec({ order: answer }),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(b.calls[0]!.args).toContain('--resume');
+    expect(b.calls[0]!.args[b.calls[0]!.args.indexOf('-p') + 1]).toBe('ANSWER-LINE');
+    resumed.exit(0);
+    await again.settled;
+  });
+
   it('order knobs flow into the spawn argv; a per-seat transcript bound tightens the ladder', async () => {
     const child = new FakeChild();
     const { backend, calls } = harness(child, { readSession: () => resumable() });

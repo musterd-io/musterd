@@ -42,7 +42,7 @@ function renderPrimer(identity: string): string {
     "  **never build in a lane a teammate owns.** Hand off with `team_send {act:'handoff'}`; after merge `lane_submit`, then **do what its reply says** (ADR 235).",
     '- **Ask a human before you act big or stall.** For a costly / irreversible / out-of-scope action, or',
     "  when only a human can unblock you: `team_send {act:'ask'}` / `musterd send --act ask` (`meta.species`",
-    '  + `meta.tier`). The `team_send` reply hands you the contract: blocking 15m HOLDS; standard 5m / advisory 3m PROCEED (risk logged).',
+    '  + `meta.tier`). The `team_send` reply hands you the contract: blocking 15m HOLDS; standard 5m / advisory 3m PROCEED (risk logged). A question to a person: `team_question`, then end your turn — never a question in chat (ADR 773).',
     '',
     'Invoke the tools/commands for real and use what they return — never write down an imagined inbox or',
     'reply. Keep messages short: use the acts, do not narrate in free text. **The daemon refreshes itself',

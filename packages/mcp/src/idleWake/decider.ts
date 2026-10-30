@@ -12,6 +12,7 @@ import {
   type IdleWakeReport,
   type IdleWakeState,
   idleMayRing,
+  isPushableAnswerLine,
   isPushableLine,
 } from '@musterd/protocol';
 import type { InjectAdapter } from './inject.js';
@@ -213,7 +214,8 @@ export class IdleWake {
     }
     // Defence in depth (ADR 558): what is pushed becomes a USER-role turn, so it must be what the
     // daemon composes — one short printable line. Anything else is not pushed and not retried.
-    if (!isPushableLine(res.line)) {
+    // ADR 774: or the answer line — a verified answer to this seat's own question, fenced.
+    if (!isPushableLine(res.line) && !isPushableAnswerLine(res.line)) {
       this.deps.report({
         act: res.act,
         outcome: 'failed',

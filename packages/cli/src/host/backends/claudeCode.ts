@@ -893,12 +893,18 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
       // ── Fresh: the complete inc-3 path, with whatever watchdog budget remains ─────────────
       // The floor keeps a fallback viable when resume ate most of the lease, but never inflates a
       // caller's configured bound (a 50ms test timeout must stay 50ms when no resume ran).
+      // ADR 774 §3: a fresh session never saw the question it asked, so an answer's wake carries
+      // the recap (the seat's own question quoted first). Every other wake has no recap line.
       const sessionId = (deps.mintSessionId ?? randomUUID)();
       const remaining = Math.max(deadline - Date.now(), Math.min(10_000, spec.bounds.timeout_ms));
       const fresh = runAttempt(
         deps,
         bin,
-        buildWakeArgs(spec.order.composed_line, sessionId, argOpts),
+        buildWakeArgs(
+          spec.order.composed_recap_line ?? spec.order.composed_line,
+          sessionId,
+          argOpts,
+        ),
         spec,
         ctx,
         {
@@ -936,7 +942,11 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
         const retry = runAttempt(
           deps,
           healed,
-          buildWakeArgs(spec.order.composed_line, sessionId, argOpts),
+          buildWakeArgs(
+            spec.order.composed_recap_line ?? spec.order.composed_line,
+            sessionId,
+            argOpts,
+          ),
           spec,
           ctx,
           {

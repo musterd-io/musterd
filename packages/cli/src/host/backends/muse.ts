@@ -302,7 +302,7 @@ export function museBackend(deps: MuseDeps = {}): ActuatorBackend {
       const sessionId = (deps.newSessionId ?? randomUUID)();
       const fresh = await run(
         buildMuseFreshArgs(
-          spec.order.composed_line,
+          spec.order.composed_recap_line ?? spec.order.composed_line,
           spec.workspace,
           maxSteps !== undefined ? { sessionId, maxSteps } : { sessionId },
         ),

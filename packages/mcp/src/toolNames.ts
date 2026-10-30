@@ -24,6 +24,7 @@ export const TOOL_NAMES = [
   'team_memory_save',
   'team_memory_read',
   'team_availability',
+  'team_question',
   'team_style',
   'team_style_set',
   'team_wake_context',

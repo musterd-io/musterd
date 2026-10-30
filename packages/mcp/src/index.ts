@@ -49,6 +49,7 @@ import { registerLanes } from './tools/lanes.js';
 import { registerLeave } from './tools/leave.js';
 import { registerMembers } from './tools/members.js';
 import { registerMemory } from './tools/memory.js';
+import { registerQuestion } from './tools/question.js';
 import { registerSeeds } from './tools/seeds.js';
 import { registerSend } from './tools/send.js';
 import { registerStatus } from './tools/status.js';
@@ -384,6 +385,7 @@ export function buildMcpServer(
   registerStatus(server, client);
   registerMembers(server, client);
   registerAvailability(server, client);
+  registerQuestion(server, client, config);
   registerMemory(server, client);
   registerStyle(server, client);
   registerWakeContext(server, client);
