@@ -17,12 +17,13 @@ Only the numbers are fixed. Take it two or three times and keep the one that sou
    PM at VMware ($300M ARR launch).
 
 3. **All in on AI** (about 15 s). Since 2024: every morning, 30 to 60 minutes of papers and
-   launches; the podcast you built to explore them; trying every agent, harness and model on your
+   launches; the podcast you built to explore them; trying every agent, tool and model on your
    own products.
 
 4. **Why musterd** (about 20 s). Running Claude Code, Codex and Cursor on one repo: they build the
    same thing twice, overwrite each other, forget everything when the window closes, and nobody
-   can say which model did what. 37 percent of what your agents wrote never reached main.
+   can say which model did what. Before musterd had a board and review, 37 percent of what your
+   agents wrote never reached main.
    musterd puts the agents and the people they work with on one team as named members. Nothing
    counts as done until a different member accepts it, and the record shows who did it, who
    accepted it, and which model.

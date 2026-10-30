@@ -18,7 +18,7 @@ who did it and who accepted it. The code takes you to musterd.io.
 
 Most of you already run more than one agent. Claude Code in one terminal, Codex in another, the same
 repo. They build the same thing twice, undo each other, and forget everything when the window
-closes. On our own team, 37% of the code our agents wrote never reached main before musterd.
+closes. On our own team, 37% of the code our agents wrote never reached main before musterd had a board and review.
 After, 0.9%.
 
 ## 3 · The best agent changes every month (0:25)
