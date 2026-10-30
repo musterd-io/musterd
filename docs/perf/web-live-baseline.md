@@ -2713,3 +2713,15 @@ what a viewer downloads grows with the roster's wardrobe, not with this total. A
 measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,300,000 B with this lane in.
+
+## 2026-10-29 — figure v2-5b-blazer; Office art RAISED 8,300,000 → 8,760,000 B (lane 01M62415ZG)
+
+| Budget     | Before (ceiling)    | This branch (CI/files) | Ceiling                          |
+| ---------- | ------------------- | ---------------------- | -------------------------------- |
+| office art | 8,300,000 B          | ~8,703,388 B (177)  | RAISED 8,300,000 → 8,760,000 B |
+
+Sheets from the full figure render: `outer-blazer` 0 KB → 449 KB. Figure sheets load only for the layers a member wears (`loadFigureLayers`, `wornLayers`), so
+what a viewer downloads grows with the roster's wardrobe, not with this total. A re-baseline to
+measured + 15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 8,760,000 B with this lane in.
