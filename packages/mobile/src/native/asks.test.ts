@@ -184,9 +184,30 @@ describe('loadAsks', () => {
     const asleep = vi.fn(async (url: string, init?: RequestInit) =>
       String(url).endsWith('/asleep') ? new Response('', { status: 503 }) : fetchImpl(url, init),
     ) as unknown as typeof fetch;
-    const view = await loadAsks({ pin, now: 1, fetchImpl: asleep });
+    const view = await loadAsks({ pin, now: 1, fetchImpl: asleep, pauseMs: 0 });
     expect(view.asks.map((e) => e.delivery.ask.id)).toEqual(['a1']);
     expect(phoneKeys.clearDelivered).not.toHaveBeenCalled();
+    // Tried twice, then counted rather than dropped in silence.
+    expect(view.unreachable).toBe(1);
+    expect(
+      vi.mocked(asleep).mock.calls.filter(([u]) => String(u).endsWith('/asleep')),
+    ).toHaveLength(2);
+  });
+
+  it('lists an ask whose first fetch hit a sleeping relay and whose second got through', async () => {
+    live.set('a1', ask('a1', 10));
+    vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue([notification('n1', route('a1'), 1)]);
+    let first = true;
+    const flaky = vi.fn(async (url: string, init?: RequestInit) => {
+      if (first) {
+        first = false;
+        return new Response('', { status: 503 });
+      }
+      return fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const view = await loadAsks({ pin, now: 1, fetchImpl: flaky, pauseMs: 0 });
+    expect(view.asks.map((e) => e.delivery.ask.id)).toEqual(['a1']);
+    expect(view.unreachable).toBe(0);
   });
 
   it('shows the newest held summary inside its hour, and fetches nothing for it', async () => {

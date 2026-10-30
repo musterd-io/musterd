@@ -25,6 +25,7 @@ import { b64urlEncode, utf8Encode } from './bytes';
 import { DeliveryExpiredError, openDelivery } from './delivery';
 import { STALE_TEXT, UNVERIFIED_TEXT } from './notice';
 import { showOffer, type ShownOffer } from './offer';
+import { RETRY_MS, sendOrKeep, type OutboxStorage } from './outbox';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys, phoneKeysErrorCode } from './phoneKeys';
 import { readFetchedBody, readPush, routeOf, type PushRoute } from './push';
@@ -53,7 +54,7 @@ export function outcomeNote(outcome: AnswerOutcome): string | null {
     case 'refused':
       return 'This ask has to be answered in the app.';
     case 'undelivered':
-      return 'The answer did not leave this phone.';
+      return 'Your answer hasn’t reached your team yet. musterd keeps trying while it’s open.';
     case 'cancelled':
       return 'Face ID did not confirm the answer.';
   }
@@ -135,6 +136,7 @@ export async function answerNotification(input: {
   pin: PairingPin | null;
   now?: number;
   fetchImpl?: typeof fetch;
+  pauseMs?: number;
 }): Promise<AnswerOutcome> {
   const decision = decisionFor(input.action);
   if (!decision) return 'refused';
@@ -143,9 +145,16 @@ export async function answerNotification(input: {
   const push = readPush(input.userInfo);
   if (!push || !samePlace(pin, push)) return 'unverified';
 
-  const resolved = push.sealed
+  let resolved = push.sealed
     ? { route: routeOf(push), sealed: push.sealed }
     : await fetchBody(pin.relay, routeOf(push), input.fetchImpl ?? fetch);
+  // A relay that answered nothing gets one more try; still nothing is `undelivered`, never
+  // `unverified` — the ask may well be fine (2026-10-30).
+  if ('miss' in resolved && resolved.miss === 'unreachable') {
+    await new Promise((resolve) => setTimeout(resolve, input.pauseMs ?? RETRY_MS));
+    resolved = await fetchBody(pin.relay, routeOf(push), input.fetchImpl ?? fetch);
+    if ('miss' in resolved && resolved.miss === 'unreachable') return 'undelivered';
+  }
   if ('miss' in resolved || !resolved.sealed) return 'unverified';
   if (!samePlace(pin, resolved.route)) return 'unverified';
 
@@ -197,6 +206,8 @@ export async function sendAnswer(input: {
   reported: boolean;
   now: number;
   fetchImpl?: typeof fetch;
+  /** Tests only: where an undelivered answer is kept, and the pause before the second try. */
+  outbox?: { storage: OutboxStorage; pauseMs: number };
 }): Promise<AnswerOutcome> {
   const { pin, route, delivery, decision } = input;
   if (!samePlace(pin, route)) return 'unverified';
@@ -275,16 +286,18 @@ export async function sendAnswer(input: {
   if (!AppCallbackSchema.safeParse(callback).success) return 'unverified';
   const url = relayUrl(pin.relay, `app/${encodeURIComponent(resolved.route.team)}/callback`);
   if (!url) return 'unverified';
-  try {
-    const response = await (input.fetchImpl ?? fetch)(url, {
-      method: 'POST',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
+  // Twice now, then kept and re-sent on every open until the relay takes it (outbox.ts).
+  const sent = await sendOrKeep(
+    {
+      url,
       body: JSON.stringify(callback),
-    });
-    return response.status === 202 ? 'sent' : 'undelivered';
-  } catch {
-    return 'undelivered';
-  }
+      ref: resolved.route.ref,
+      expires_at: resolved.route.expires_at,
+    },
+    {
+      ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+      ...(input.outbox ? { storage: input.outbox.storage, pauseMs: input.outbox.pauseMs } : {}),
+    },
+  );
+  return sent ? 'sent' : 'undelivered';
 }
