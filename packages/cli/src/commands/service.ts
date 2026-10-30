@@ -50,6 +50,7 @@ import {
   uninstallAutoRefresh,
   type AutoRefreshCtx,
 } from '../service/autorefresh.js';
+import { clearStaleIndexLock } from '../service/gitLock.js';
 import { guardianStatusLine, guardianTick } from '../service/guardian.js';
 import { clearHandover, readHandover, writeHandover } from '../service/handover.js';
 import { describeHold, readHold, resolveHoldUntil } from '../service/hold.js';
@@ -1941,6 +1942,26 @@ async function refreshDaemon(
   }
   // Guard the bounce up front (like restart/stop): fail fast before any sync/build side effects.
   await guardLiveSessions(health, force);
+
+  // A git command that died here leaves `index.lock` behind, and then every tick fails at the
+  // switch below until someone removes it by hand (measured 2026-10-30: ~50 min, nothing deployed).
+  // Clear one old enough that no live git command can hold it; a younger one fails the tick as before.
+  const gitDir = git('rev-parse', '--absolute-git-dir').stdout.trim();
+  if (gitDir) {
+    try {
+      const lock = clearStaleIndexLock(gitDir);
+      if (lock.cleared) {
+        ok(
+          `removed an abandoned ${gitDir}/index.lock ` +
+            theme.meta(
+              `(${Math.round(lock.ageMs / 60_000)} min old; no git command holds a lock that long)`,
+            ),
+        );
+      }
+    } catch (e) {
+      ok(theme.meta(`could not remove a stale ${gitDir}/index.lock: ${(e as Error).message}`));
+    }
+  }
 
   const before = git('rev-parse', '--short', 'HEAD').stdout.trim();
   if (pinRef !== undefined) {
