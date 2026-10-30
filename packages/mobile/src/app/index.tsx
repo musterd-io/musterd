@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, FlatList, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import mark from '../../assets/mark.png';
 import type { AskEntry, AsksView } from '../native/asks';
-import { heldBody, waitingSubtitle } from '../native/notice';
+import { heldBody, refusalLine, waitingSubtitle } from '../native/notice';
 import { showOffer } from '../native/offer';
 import type { PairingPin } from '../native/pairingPin';
 import { summary } from '../native/readable';
@@ -26,6 +26,7 @@ export default function AsksScreen() {
   const [pin, setPin] = useState<PairingPin | null | undefined>(undefined);
   const [view, setView] = useState<AsksView | null>(null);
   const [loading, setLoading] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<string | null>(null);
   const alive = useRef(true);
   // Every list refresh re-fetches each ask, which re-issues its token and spends the old one. The
   // ask screen holds a token of its own, so nothing refreshes while it is in front.
@@ -48,6 +49,12 @@ export default function AsksScreen() {
       const next = await loadAsks({ pin: current });
       if (!alive.current) return;
       setView(next);
+      try {
+        const { phoneKeys } = await import('../native/phoneKeys');
+        setDiagnostics(refusalLine(phoneKeys.recentRefusals(), Date.now()));
+      } catch {
+        setDiagnostics(null);
+      }
       // Shown to you, so their notifications go; the asks stay here until settled (ADR 772).
       if (focused.current && AppState.currentState === 'active')
         void markShown(next.asks.map((entry) => entry.route.ref));
@@ -223,6 +230,11 @@ export default function AsksScreen() {
         keyExtractor={(entry) => entry.delivery.ask.id}
         ListHeaderComponent={header}
         ListEmptyComponent={empty}
+        ListFooterComponent={
+          diagnostics ? (
+            <Text style={[styles.diagnostics, { color: p.placeholder }]}>{diagnostics}</Text>
+          ) : undefined
+        }
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -369,4 +381,11 @@ const styles = StyleSheet.create({
   askText: { fontSize: 17, lineHeight: 24, fontFamily: font.medium },
   waitingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   waitingDot: { width: 6, height: 6, borderRadius: radius.pill },
+  diagnostics: {
+    fontFamily: font.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+    marginTop: space.lg,
+  },
 });

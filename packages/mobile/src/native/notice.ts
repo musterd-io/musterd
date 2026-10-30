@@ -15,8 +15,14 @@
 import type { AppDelivery } from '@musterd/protocol/app-channel';
 import type { NonceVerdict } from './nonceStore';
 
-/** Decision 3's one sentence. Which check failed is an oracle and is never said. */
+/** Decision 3's one sentence, in the app. Which check failed is an oracle and is never said. */
 export const UNVERIFIED_TEXT = 'an ask could not be verified';
+
+/**
+ * The lock screen's fallback when the extension's check refuses (ADR 777): the app fetches the ask
+ * again and checks it fully, so the way on is always to open it.
+ */
+export const LOCK_SCREEN_FALLBACK_TEXT = 'New ask — open musterd to see it.';
 
 /**
  * Replay and expiry. The extension cannot withdraw an alert — Apple delivers the original
@@ -78,7 +84,7 @@ export function noticeFor(
   }
   if (delivery.kind === 'ask') {
     if (delivery.ask.body === '')
-      return { title: NOTICE_TITLE, body: UNVERIFIED_TEXT, sound: false };
+      return { title: NOTICE_TITLE, body: LOCK_SCREEN_FALLBACK_TEXT, sound: false };
     const category =
       delivery.ask.action_class === 'advisory' && delivery.approval === undefined
         ? ADVISORY_CATEGORY
@@ -96,14 +102,33 @@ export function noticeFor(
   if (delivery.kind === 'held') {
     return { title: NOTICE_TITLE, body: heldBody(delivery.count), sound: true };
   }
-  if (delivery.member === '') return { title: NOTICE_TITLE, body: UNVERIFIED_TEXT, sound: false };
+  if (delivery.member === '')
+    return { title: NOTICE_TITLE, body: LOCK_SCREEN_FALLBACK_TEXT, sound: false };
   return { title: NOTICE_TITLE, body: `Paired as ${delivery.member}.`, sound: true };
 }
 
 export function unverifiedNotice(): Notice {
-  return { title: NOTICE_TITLE, body: UNVERIFIED_TEXT, sound: false };
+  return { title: NOTICE_TITLE, body: LOCK_SCREEN_FALLBACK_TEXT, sound: false };
 }
 
 export function staleNotice(): Notice {
   return { title: NOTICE_TITLE, body: STALE_TEXT, sound: false };
+}
+
+/**
+ * The asks list's Diagnostics line (ADR 777): lock-screen refusals in the last 24 hours, with their
+ * reasons in first-seen order. Null when there were none.
+ */
+export function refusalLine(
+  refusals: { reason: string; at: number }[],
+  now: number,
+): string | null {
+  const recent = refusals.filter((r) => r.at > now - 24 * 3_600_000 && r.at <= now);
+  if (recent.length === 0) return null;
+  const reasons = [...new Set(recent.map((r) => r.reason))].join(', ');
+  const count =
+    recent.length === 1
+      ? '1 lock-screen check failed'
+      : `${recent.length} lock-screen checks failed`;
+  return `Diagnostics: ${count} today (${reasons})`;
 }

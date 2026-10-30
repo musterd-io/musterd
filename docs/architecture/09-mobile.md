@@ -46,7 +46,9 @@ small change.
   interruption level; the notification service extension opens the seal with this phone's HPKE
   receive key and checks the daemon's Ed25519 signature against the key pinned at pairing. A sealed
   body over 3 KB is not pushed: the push carries the ask ref and the phone fetches the body through
-  the relay. Any failure shows a generic "an ask could not be verified" with no actions. The
+  the relay. Any failure shows "New ask — open musterd to see it." with no actions, and records a
+  coarse reason (`check`, `fetch`, `timeout`, `keychain`, `not-paired`, `malformed`; every
+  cryptographic check is `check`) that the asks list shows as one Diagnostics line (ADR 777). The
   composition that performs those steps for app-side reads is `src/native/delivery.ts` (below);
   the extension runs its own copy of them in Swift, where it cannot run JavaScript.
 - **Out.** The answer is sealed to the daemon and POSTed to the relay's callback route; the daemon

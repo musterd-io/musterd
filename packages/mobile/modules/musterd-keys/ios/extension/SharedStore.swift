@@ -26,6 +26,7 @@ enum SharedStore {
   static let pushAccount = "push-token"
   static let pinAccount = "pairing-pin"
   static let askRoutesAccount = "ask-routes"
+  static let refusalsAccount = "refusals"
 
   struct PushToken {
     var token: String
@@ -68,6 +69,28 @@ enum SharedStore {
     if next == current { return true }
     guard let data = AskRoutes.encode(next) else { return false }
     return save(data, account: askRoutesAccount)
+  }
+
+  /// Why the extension refused a delivery (ADR 777): a coarse reason and the time, the last 10.
+  /// Nothing from the delivery is kept. A failed write is dropped: this is diagnostics only.
+  static func recordRefusal(_ reason: String, at now: Int) {
+    var records: [[String: Any]] = []
+    if case .data(let data) = load(account: refusalsAccount),
+      let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    {
+      records = array
+    }
+    records.append(["reason": reason, "at": now])
+    guard let data = try? JSONSerialization.data(withJSONObject: Array(records.suffix(10)))
+    else { return }
+    _ = save(data, account: refusalsAccount)
+  }
+
+  static func loadRefusals() -> [[String: Any]] {
+    guard case .data(let data) = load(account: refusalsAccount),
+      let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else { return [] }
+    return array.filter { $0["reason"] is String && $0["at"] is NSNumber }
   }
 
   static func savePushToken(token: String, environment: String) {
