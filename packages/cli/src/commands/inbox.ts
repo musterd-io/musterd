@@ -13,10 +13,17 @@ import { findBinding, wsBase, type Identity } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
 import { pendingPickLine, takePendingPick } from '../pick/marker.js';
-import { isActionNeeded, openActionNeeded, renderInbox, renderMessageRow } from '../render/rows.js';
+import { isActionNeeded, renderInbox, renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { tapHook } from '../trace/hook.js';
-import { findWorkspaceDir, kindLookup, resolve, resolveRead, viewerFlags } from './helpers.js';
+import {
+  findWorkspaceDir,
+  kindLookup,
+  pendingActionSummary,
+  resolve,
+  resolveRead,
+  viewerFlags,
+} from './helpers.js';
 import { waitingCommand } from './nudge.js';
 import { attestSlotIfUnattested, refreshModelObservation } from './session.js';
 
@@ -287,24 +294,23 @@ export async function inboxCommand(parsed: Parsed): Promise<number> {
       { ...(d.by ? { by: d.by } : {}), ...(d.reason ? { reason: d.reason } : {}) },
     ]),
   );
-  // ADR 770: lead with the directed section, so the daily view's `⚑ N waiting on you` arrow
-  // lands on the acts it counted. Same projection family as status (openActionNeeded over the
-  // unread rows), deduped by act id against the general list below. Shown rows are consumed
-  // exactly as before (ADR 752/117) — this only reorders the page.
-  const viewer = await viewerFlags(http, team, identity.name);
-  const directed = filtering
-    ? []
-    : openActionNeeded(
-        messages,
-        identity.name,
-        res.answered ?? [],
-        [...discharged.keys()],
-        viewer,
-      ).filter((m) => envelopePosition(m) > cursorTs);
+  // ADR 770 (amended 2026-10-30): lead with the directed section, so the daily view's
+  // `⚑ N waiting on you` arrow lands on the acts it counted. The section is the daily view's
+  // own projection — `pendingActionSummary`, the helper `status` counts with, over the same
+  // walked unread window with the answered/discharged sets unioned across pages — so the
+  // header N and the rows under it are one set by construction, and the two surfaces cannot
+  // drift. (The first landing computed its own N over this page's bounded window with only
+  // the first page's answered set, and the counts disagreed live: 40 in status, 42 here.)
+  // Deduped by act id against the general list below. Shown rows are consumed exactly as
+  // before (ADR 752/117) — this only reorders the page.
+  const pending = filtering
+    ? undefined
+    : await pendingActionSummary(http, team, identity.name).catch(() => undefined);
+  const directed = pending?.waiting ?? [];
   const directedIds = new Set(directed.map((m) => m.id));
   const rest = directedIds.size > 0 ? messages.filter((m) => !directedIds.has(m.id)) : messages;
   if (directed.length > 0) {
-    process.stdout.write(`\n${theme.accent(`waiting on you — ${directed.length}`)}\n`);
+    process.stdout.write(`\n${theme.accent(`⚑ waiting on you — ${directed.length}`)}\n`);
     process.stdout.write(renderInbox(directed, kindOf, { cursorTs, discharged }) + '\n');
   }
   if (rest.length > 0)
