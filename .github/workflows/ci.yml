@@ -301,7 +301,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends bubblewrap apparmor-profiles apparmor-utils
-          sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+          # Ubuntu 24.04 ships the profile under extra-profiles/; 26.04 (AppArmor 5, ubuntu-latest from
+          # 2026-10-30) does not keep it there. Take it from wherever the installed packages put it.
+          f="$(dpkg -L apparmor apparmor-profiles 2>/dev/null | grep -m1 '/bwrap-userns-restrict$' || true)"
+          if [ -z "$f" ]; then echo "no bwrap-userns-restrict in the apparmor packages" >&2; exit 1; fi
+          [ "$f" = /etc/apparmor.d/bwrap-userns-restrict ] || sudo install -m 0644 "$f" /etc/apparmor.d/bwrap-userns-restrict
           sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
       - uses: ./.github/actions/setup
       - name: Tests + coverage (shard ${{ matrix.shard }} of ${{ needs.plan.outputs.shard_count }})
