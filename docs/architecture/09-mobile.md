@@ -293,8 +293,10 @@ src/app/_layout.tsx   // the Stack, themed from the palette; the nameplate wordm
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
 src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, and answering
+src/ui/button.tsx     // the three buttons: one mustard primary, a grey secondary, a quiet text way out
 src/ui/glass.tsx      // Glass (Liquid Glass card, solid fallback) and the warm Backdrop (ADR 764)
 src/ui/icon.tsx       // an SF Symbol in the text's colour, with a text fallback (ADR 764)
+src/ui/moment.tsx     // a whole screen for one moment — on its way, done, or stopped
 src/ui/motion.tsx     // Rise, Squish, Breathe, Pop, Halo — RN Animated, off under Reduce Motion
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```
