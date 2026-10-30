@@ -124,7 +124,7 @@ describe('the portable ladder (spec §12.2)', () => {
         'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
       )
       .all();
-    expect(runMigrations(sqlite)).toBe(136);
+    expect(runMigrations(sqlite)).toBe(137);
     expect(
       sqlite
         .prepare(
@@ -223,7 +223,7 @@ describe('the portable ladder (spec §12.2)', () => {
     const pgSyncBefore = await owner.all(
       'SELECT id, team_id, origin_node, origin_seq, hub_seq, received_at FROM sync_log ORDER BY id',
     );
-    expect(await migratePostgres(owner)).toBe(136);
+    expect(await migratePostgres(owner)).toBe(137);
     expect(
       await owner.all(
         'SELECT id, ts, actor, action, target, result, created_at, origin_node, origin_seq FROM audit ORDER BY id',
@@ -311,7 +311,7 @@ describe('the portable ladder (spec §12.2)', () => {
       "INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at) VALUES ('M', NULL, 0, 1)",
     );
     s.exec("INSERT INTO schema_meta (key, value) VALUES ('schema_version', '80')");
-    expect(runMigrations(s)).toBe(136);
+    expect(runMigrations(s)).toBe(137);
     expect(s.prepare('SELECT team_id FROM presence WHERE id = ?').get('P')).toEqual({
       team_id: 'T',
     });
@@ -342,7 +342,7 @@ describe('the portable ladder (spec §12.2)', () => {
       `INSERT INTO tool_call_stats (team_id, seat, role, tool, outcome, bucket_start, calls,
          total_duration_ms, max_duration_ms) VALUES ('T','ada','backend','team_send','ok',3600000,4,40,20)`,
     );
-    expect(runMigrations(s)).toBe(136);
+    expect(runMigrations(s)).toBe(137);
     expect(s.prepare('SELECT rail, calls, role FROM tool_call_stats').get()).toEqual({
       rail: 'stdio',
       calls: 4,
@@ -395,7 +395,7 @@ describe('the portable ladder (spec §12.2)', () => {
       "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '103') ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     ).run();
 
-    expect(runMigrations(s)).toBe(136);
+    expect(runMigrations(s)).toBe(137);
 
     expect(s.prepare('SELECT * FROM presence WHERE id = ?').get('P')).toMatchObject({
       id: 'P',
@@ -451,7 +451,7 @@ describe('the portable ladder (spec §12.2)', () => {
 
     // A rewind replays the rebuild. The lease must still be there: fkOff is the whole point.
     s.prepare("UPDATE schema_meta SET value = '103' WHERE key = 'schema_version'").run();
-    expect(runMigrations(s)).toBe(136);
+    expect(runMigrations(s)).toBe(137);
     expect(s.prepare('SELECT presence_id FROM session_leases WHERE id = ?').get('L')).toEqual({
       presence_id: 'P',
     });
@@ -535,6 +535,73 @@ describe('v136 — question answers (ADR 773)', () => {
       .pluck()
       .all();
     expect(pk).toEqual(['team_id', 'question_id']);
+    db.close();
+  });
+});
+
+describe('v137 — indexes for the hot statements (ADR 778)', () => {
+  // Each statement exactly as its source phrases it, and the index it must be able to seek.
+  const cases: Array<[string, string, number, RegExp]> = [
+    [
+      'review ask by lane (review.ts)',
+      `SELECT m.id FROM messages m WHERE m.team_id = ? AND m.act = 'ask'
+         AND json_extract(m.meta, '$.lane_review.lane') = ?`,
+      2,
+      /idx_messages_lane_review/,
+    ],
+    [
+      'digest by day (digest.ts)',
+      `SELECT id FROM messages WHERE team_id = ? AND meta IS NOT NULL
+         AND json_extract(meta, '$.digest.day') = ? LIMIT 1`,
+      2,
+      /idx_messages_digest_day/,
+    ],
+    [
+      'interrupt raises (delivery.ts)',
+      `SELECT COUNT(*) AS total FROM audit WHERE team_id = ? AND action = 'interrupt.raised'
+         AND target = ? AND json_extract(detail, '$.act') = ?`,
+      3,
+      /idx_audit_team_action_target_act \(team_id=\? AND action=\? AND target=\? AND <expr>=\?\)/,
+    ],
+    [
+      'lanes by owner',
+      'SELECT * FROM lanes WHERE team_id = ? AND owner_seat = ? ORDER BY created_at',
+      2,
+      /idx_lanes_team_owner_created/,
+    ],
+    [
+      'all lanes',
+      'SELECT * FROM lanes WHERE team_id = ? ORDER BY created_at',
+      1,
+      /idx_lanes_team_created/,
+    ],
+  ];
+
+  it.each(cases)('%s seeks its index after migration', (_name, sql, params, index) => {
+    const db = new Database(':memory:');
+    runMigrations(db);
+    const plan = db
+      .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+      .all(...Array<string>(params).fill('x'))
+      .map((r) => (r as { detail: string }).detail)
+      .join('\n');
+    expect(plan).toMatch(index);
+    // Lane lists come back in created_at order from the index, with no sort step.
+    if (/ORDER BY created_at/.test(sql)) expect(plan).not.toMatch(/TEMP B-TREE/);
+    db.close();
+  });
+
+  it('keeps the messages indexes partial, so a plain message insert never updates them', () => {
+    const db = new Database(':memory:');
+    runMigrations(db);
+    const sql = (name: string) =>
+      (
+        db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?").get(name) as {
+          sql: string;
+        }
+      ).sql;
+    expect(sql('idx_messages_lane_review')).toMatch(/WHERE act = 'ask'/);
+    expect(sql('idx_messages_digest_day')).toMatch(/IS NOT NULL/);
     db.close();
   });
 });

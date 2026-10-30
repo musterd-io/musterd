@@ -33,7 +33,7 @@ The daemon log for the lane window (12:50–13:15) shows three endpoints holding
 
 ## Where else this shape lives
 
-`json_extract(detail, '$.act') = ?` on `audit` (`residency.ts`, several sites) is the same pattern on a 228k-row table. It is bounded today by `idx_audit_team_action_ts` narrowing on `action` first, so it did not show in the profile, but it is the next candidate if `audit` grows.
+`json_extract(detail, '$.act') = ?` on `audit` (`residency.ts`, several sites) is the same pattern on a 228k-row table. It is bounded today by `idx_audit_team_action_ts` narrowing on `action` first, so it did not show in the profile, but it is the next candidate if `audit` grows. _(2026-10-30: it grew to 414,039 rows on the hub, and `interruptRaises` alone logged 978 slow runs in four hours, up to 3.6 s. [ADR 778](../decisions/778-indexes-for-the-daemons-hot-statements.md) v137 indexes `audit(team_id, action, target, json_extract(detail, '$.act'))`. The comparison is with a bound parameter, so the expression index applies, with no generated column needed.)_
 
 ## An index newer than the table's statistics wins plans it should lose (2026-10-13; falsify: on a copy of a store at v94, `DELETE FROM sqlite_stat1 WHERE idx = 'idx_messages_thread_act_ts'`, `ANALYZE sqlite_schema`, and `EXPLAIN QUERY PLAN` the `answeredByAnyoneSql` clause from `discharge.ts` — before lane 01M4VGRX57 it reads `dr USING INDEX idx_messages_thread_act_ts (team_id=? AND act=?)`) <!-- claim: defect -->
 
