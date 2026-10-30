@@ -600,11 +600,12 @@ describe('the completion record — every settled run reports what the host meas
       }) as never,
       recordFreshSession: () => undefined,
       readLocalServing: () => null,
+      hasOpenrouterCredential: async () => true,
     }).wake(
       { ...spec, gateway: { env: { OPENAI_BASE_URL: 'x' }, origin: 'http://127.0.0.1:9' } },
       ctx,
     );
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
     child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
     const result = await wake;
     expect(seen[0]!.args).toEqual(opencodeStandaloneArgs(buildOpencodeFreshArgs('wake line')));
@@ -618,6 +619,32 @@ describe('the completion record — every settled run reports what the host meas
     });
     expect(seen[0]!.env.OPENAI_BASE_URL).toBe('x');
     // No background serve to look up any more: `OpencodeDeps` carries no `ps` seam (ADR 768).
+    child.exit(0);
+    await result.settled;
+  });
+
+  it('a metered wake leaves OpenRouter out when this machine holds no OpenRouter credential', async () => {
+    // OpenCode v2 treats a configured provider as usable: an openrouter block with no credential
+    // behind it failed every metered dreamy wake ("No cookie auth credentials found", exit 1).
+    const child = new Child();
+    const seen: NodeJS.ProcessEnv[] = [];
+    const wake = opencodeBackend({
+      resolveBin: async () => '/opencode',
+      spawn: ((_bin: string, _args: string[], opts: { env: NodeJS.ProcessEnv }) => {
+        seen.push(opts.env);
+        return child;
+      }) as never,
+      recordFreshSession: () => undefined,
+      readLocalServing: () => null,
+      hasOpenrouterCredential: async () => false,
+    }).wake({ ...spec, gateway: { env: {}, origin: 'http://127.0.0.1:9' } }, ctx);
+    await new Promise((r) => setTimeout(r, 0));
+    child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+    const result = await wake;
+    expect(Object.keys(JSON.parse(seen[0]!.OPENCODE_CONFIG_CONTENT!).provider)).toEqual([
+      'opencode',
+      'opencode-go',
+    ]);
     child.exit(0);
     await result.settled;
   });

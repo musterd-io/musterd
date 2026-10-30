@@ -1,4 +1,7 @@
-import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { LocalServing, WakeUsage } from '@musterd/protocol';
 import { z } from 'zod';
 import { findBinding, saveBinding } from '../../config.js';
@@ -51,11 +54,42 @@ export function opencodeStandaloneArgs(args: string[]): string[] {
 /** The wake-scoped provider override: OpenCode's hosted providers point at the gateway, and
  *  nothing else changes. OpenCode merges `OPENCODE_CONFIG_CONTENT` over the seat's own config,
  *  so the seat's opencode.json is never edited. */
-export function opencodeGatewayConfig(origin: string): string {
+export function opencodeGatewayConfig(origin: string, withOpenrouter = true): string {
   const provider: Record<string, { options: { baseURL: string } }> = {};
-  for (const u of [...OPENCODE_HOSTED_UPSTREAMS, OPENCODE_OPENROUTER_UPSTREAM])
+  for (const u of [
+    ...OPENCODE_HOSTED_UPSTREAMS,
+    ...(withOpenrouter ? [OPENCODE_OPENROUTER_UPSTREAM] : []),
+  ])
     provider[u.name] = { options: { baseURL: `${origin}/${u.name}` } };
   return JSON.stringify({ provider });
+}
+
+/**
+ * Whether this machine's OpenCode holds an OpenRouter credential. OpenCode v2 treats a configured
+ * provider as usable, so an `openrouter` block with no credential behind it fails the run before it
+ * prints a line ("No cookie auth credentials found", exit 1 — every metered dreamy wake on
+ * musterd-joiner-1, 2026-10-29). Credentials live in the env, v1's `auth.json`, or v2's store,
+ * which only `opencode auth list` reads. Any read that fails counts as no credential.
+ */
+export async function hasOpencodeOpenrouterCredential(
+  bin: string,
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir(),
+): Promise<boolean> {
+  if (env['OPENROUTER_API_KEY']) return true;
+  try {
+    const auth = JSON.parse(
+      readFileSync(join(home, '.local', 'share', 'opencode', 'auth.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    if ('openrouter' in auth) return true;
+  } catch {
+    /* no v1 store */
+  }
+  return await new Promise<boolean>((resolve) => {
+    execFile(bin, ['auth', 'list'], { timeout: 5_000 }, (_err, stdout) =>
+      resolve(/openrouter/i.test(String(stdout ?? ''))),
+    );
+  });
 }
 
 /** Every `--format json` event line carries the acting session's id at top level (upstream
@@ -183,6 +217,8 @@ export interface OpencodeDeps {
   ensurePinned?: (opts: { node: string; binJs: string }) => string | undefined;
   /** ADR 663: the three-part `local` read, taken once at spawn (tests inject the answer). */
   readLocalServing?: (workspace: string) => LocalServing | null;
+  /** Whether to route OpenRouter through the gateway: only when a credential exists to route. */
+  hasOpenrouterCredential?: (bin: string) => Promise<boolean>;
 }
 
 function recordFreshSession(workspace: string, id: string, startedAt: number): void {
@@ -231,7 +267,13 @@ async function attempt(
   const runArgs = opencodeStandaloneArgs(args);
   const gatewayEnv =
     origin !== undefined
-      ? { ...spec.gateway?.env, OPENCODE_CONFIG_CONTENT: opencodeGatewayConfig(origin) }
+      ? {
+          ...spec.gateway?.env,
+          OPENCODE_CONFIG_CONTENT: opencodeGatewayConfig(
+            origin,
+            await (deps.hasOpenrouterCredential ?? hasOpencodeOpenrouterCredential)(bin),
+          ),
+        }
       : spec.gateway?.env;
   let child: ChildProcess;
   try {
