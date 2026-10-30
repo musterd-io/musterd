@@ -82,6 +82,8 @@ export function idleRingable(env: IdleRingInput, seat: string): boolean {
   if (env.meta?.['urgent'] === true) return true;
   // ADR 773 §7: the answer to the seat's question rings it — the one `accept` that does.
   if (isQuestionAnswer(env)) return true;
+  // ADR 779 §4: the hub's PR watch telling a lane's owner its PR merged or went red.
+  if (isPrEvent(env)) return true;
   return IDLE_RINGS.has(env.act);
 }
 
@@ -107,4 +109,10 @@ export function isPullAnnouncement(meta: Record<string, unknown> | null | undefi
  *  turn) — the daemon's `seam=idle` read is the authority for both. */
 export function idleMayRing(env: IdleRingInput, seat: string): boolean {
   return idleRingable(env, seat) || (env.from !== seat && env.thread != null);
+}
+
+/** ADR 779 §4: the PR watch's `message` (server-controlled `meta.pr_event`; a client copy is stripped). */
+export function isPrEvent(env: Pick<IdleRingInput, 'act' | 'meta'>): boolean {
+  const ev = env.meta?.['pr_event'];
+  return env.act === 'message' && typeof ev === 'object' && ev !== null;
 }

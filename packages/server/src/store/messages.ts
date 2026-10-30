@@ -3,6 +3,7 @@ import {
   DeferUntilSchema,
   eligibleOf,
   idleRingable,
+  isPrEvent,
   isQuestionAnswer,
   OBLIGATION_ACTS_ANY,
   OBLIGATION_ACTS_DIRECTED,
@@ -618,7 +619,8 @@ export function pendingInterrupts(
      *  request_help, handoff). Live seam only, like `obligations`: never the paid wake rail. */
     directed?: boolean;
     /** ADR 773 §7: the answer to a question I asked — a wake reason on BOTH rails, because the
-     *  seat ended its turn to wait for exactly this. */
+     *  seat ended its turn to wait for exactly this. ADR 779 §4: so is the PR watch telling me my
+     *  lane's PR merged or went red. */
     answers?: boolean;
   } = {},
 ): Envelope[] {
@@ -800,7 +802,7 @@ export function pendingInterrupts(
           isIncidentRoute(m) ||
           isIncidentResolve(m) ||
           isDirectedIdle(m) ||
-          (opts.answers === true && isQuestionAnswer(m))) &&
+          (opts.answers === true && (isQuestionAnswer(m) || isPrEvent(m)))) &&
         !resolved.has(m.thread ?? m.id) &&
         // Directed obligations (no eligible set) were missing this: `discharged` only ran inside
         // the eligible-set branch of `actionNeeded`, so a self-answered `lane_review` ask kept

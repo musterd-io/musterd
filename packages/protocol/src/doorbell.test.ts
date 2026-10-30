@@ -258,6 +258,13 @@ describe('idleRingable (ADR 558 §1)', () => {
   it.each(['steer', 'ask', 'request_help', 'handoff'])('a directed %s rings', (act) => {
     expect(idleRingable(env({ act }), 'izzo')).toBe(true);
   });
+  it('the PR watch rings the lane owner; a plain message does not (ADR 779 §4)', () => {
+    const ev = { lane: 'L1', pr: 3660, state: 'merged' };
+    expect(
+      idleRingable(env({ act: 'message', from: 'board', meta: { pr_event: ev } }), 'izzo'),
+    ).toBe(true);
+    expect(idleRingable(env({ act: 'message', from: 'board' }), 'izzo')).toBe(false);
+  });
   it("a question's answer rings its asker; a plain accept does not (ADR 773 §7)", () => {
     const proof = { channel: 'live', verified: true, by: 'nick' };
     const answer = env({

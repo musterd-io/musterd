@@ -95,3 +95,58 @@ export async function readPrState(
     return { unknown: 'gh_error' };
   }
 }
+
+/** One `gh pr list` row the watch needs. */
+export interface ListedPr {
+  number: number;
+  branch: string;
+  state: 'open' | 'merged' | 'closed';
+  checks: 'green' | 'red' | 'pending' | 'none';
+  url: string | undefined;
+}
+
+/**
+ * Every recent PR, newest first, by head branch — ONE `gh` call per sweep rather than one per lane
+ * (ADR 779 §4), so a team of twenty lanes costs one API request a minute.
+ */
+export async function listPrsByBranch(
+  run: GhRunner = runGh,
+): Promise<Map<string, ListedPr> | { unknown: 'no_gh' | 'gh_error' }> {
+  let out: string;
+  try {
+    out = await run([
+      'pr',
+      'list',
+      '--state',
+      'all',
+      '--limit',
+      '200',
+      '--json',
+      'number,headRefName,state,statusCheckRollup,url',
+    ]);
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException & { stderr?: string };
+    if (e.code === 'ENOENT') return { unknown: 'no_gh' };
+    const said = `${e.stderr ?? ''} ${e.message ?? ''}`.toLowerCase();
+    if (said.includes('gh auth login') || said.includes('not logged')) return { unknown: 'no_gh' };
+    return { unknown: 'gh_error' };
+  }
+  try {
+    const rows = JSON.parse(out) as Array<GhPr & { headRefName: string; url?: string }>;
+    const byBranch = new Map<string, ListedPr>();
+    for (const r of rows) {
+      if (byBranch.has(r.headRefName)) continue; // newest first: keep the first seen per branch
+      const s = r.state.toUpperCase();
+      byBranch.set(r.headRefName, {
+        number: r.number,
+        branch: r.headRefName,
+        state: s === 'MERGED' ? 'merged' : s === 'CLOSED' ? 'closed' : 'open',
+        checks: rollupChecks(r.statusCheckRollup),
+        url: r.url,
+      });
+    }
+    return byBranch;
+  } catch {
+    return { unknown: 'gh_error' };
+  }
+}

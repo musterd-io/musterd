@@ -82,6 +82,12 @@ going red without being asked, and each person should decide how loud questions 
   - From the commit security review: a seat sets its lane's branch, so the branch is checked
     before it reaches `gh`. It must use git's branch characters, with no leading `-` and no `..`.
     It is passed after `--`, so `--repo=…` can never be read as a flag.
+- 2026-10-30 (lane `01M67E4EB8`), decision 4 as built:
+  - Each (lane, PR, state) is remembered by its `pr_event.sent` audit row, not a `pr_watch` table.
+    That gives the same once-only guarantee without a migration.
+  - The watch makes one `gh pr list` call per team per sweep, not one per lane.
+  - A red after a green is told again, so a flapping PR reaches its owner each time it turns.
+  - The loop is named `pr_watch` and does not run on Cloud.
 
 ## Observability & Evaluation
 
