@@ -60,6 +60,10 @@ authority, no general relay, no broader key scope, no team or member bearer cred
   `musterd-joiner-1` the host runs `--cloud-provision --server <hub>`.
   Follows-up: teach `answerCredentialRequest` the same move-row check, so a joiner-local host can
   finish a move without dialing the hub (lane `01M64AYDSZ`).
+  _(Done 2026-10-30, lane `01M654MED7`: the hub fold now accepts a relayed `claim_seat` for an
+  unsponsored seat when its own records hold a claimed move row for that seat, pinned to and
+  claimed by the host label, authored by the sponsor — `sync/credentials.test.ts` case 11b. A
+  joiner host may now run `--cloud-provision` against its own daemon.)_
 - Existing behaviour changes in one place: a sponsor-scoped key now claims a move row it authored
   for a seat it does not sponsor. `hostProvisions.test.ts` pins this, and still pins that another
   sponsor's key does not.

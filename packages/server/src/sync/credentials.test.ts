@@ -8,6 +8,7 @@ import type { Ctx } from '../context.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { appendAudit } from '../store/audit.js';
+import { insertProvision } from '../store/hostProvisions.js';
 import { addMember, getMemberByName, hashToken } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { bindHostToNode, getResidency } from '../store/residency.js';
@@ -647,6 +648,78 @@ withDrivers('credentials', (_o, kind) => {
           [credentialId],
         ),
       ).toEqual({ state: 'active', replicated_from: null });
+    });
+  });
+
+  describe('ADR 762 follow-up — the hub fold honours a claimed move row for an unsponsored seat', () => {
+    it('11b. a joiner host finishing a hub-authored move mints the seat`s claim key there, and the hub accepts the request', async () => {
+      const ht = await hubTeam();
+      const jt = await joinerTeam();
+      const nickHub = (await getMemberByName(hub.store, ht.id, 'nick'))!;
+      const cora = (await addMember(hub.store, ht, { name: 'cora', kind: 'agent' })).row;
+      await addMember(joiner.store, jt, { name: 'cora', kind: 'agent' });
+      const hostKey = (
+        await post(
+          hubBase,
+          '/teams/bravo/agent-bootstrap-credentials',
+          { use: 'host', target: 'cloud-cora' },
+          nickOnHub,
+        )
+      ).json.agent_key as string;
+      // The move the hub authorized (ADR 696), pinned to the joiner's host label (ADR 703), with
+      // the ledger fact `sync/move.ts` writes beside it so the row projects to the joiner.
+      const move = { harness: 'claude-code', policy: null };
+      const now = Date.now();
+      const row = await insertProvision(
+        hub.store,
+        ht.id,
+        cora.id,
+        nickHub.id,
+        now,
+        null,
+        'cloud-cora',
+        'move',
+        JSON.stringify(move),
+      );
+      await appendAudit(hub.store, ht.id, {
+        actor: null,
+        action: 'host.provision_pending',
+        target: row.id,
+        result: 'allow',
+        detail: {
+          agent: 'cora',
+          sponsor: 'nick',
+          host: 'cloud-cora',
+          connect_origin: null,
+          created_at: now,
+          kind: 'move',
+          move,
+        },
+      });
+      await roundTrip();
+      const claim = await post(
+        joinerBase,
+        '/teams/bravo/host/provisions',
+        { host: 'cloud-cora', kinds: ['move'] },
+        hostKey,
+      );
+      expect(claim.json.provisions.map((p: { agent: string }) => p.agent)).toEqual(['cora']);
+      await roundTrip();
+
+      const minted = await post(
+        joinerBase,
+        '/teams/bravo/agent-bootstrap-credentials',
+        { use: 'claim_seat', target: 'cora' },
+        hostKey,
+      );
+      expect(minted.status).toBe(201);
+      const credentialId = minted.json.credential.id as string;
+      await roundTrip();
+      const verdicts = await hub.store.all<{ action: string; detail: string }>(
+        "SELECT action, detail FROM audit WHERE team_id = ? AND action IN ('credential.accepted', 'credential.refused') AND target = ?",
+        [ht.id, credentialId],
+      );
+      expect(verdicts.map((v) => v.action)).toEqual(['credential.accepted']);
     });
   });
 
