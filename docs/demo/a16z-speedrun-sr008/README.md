@@ -1,4 +1,4 @@
-# a16z speedrun SR008 application, 2026-10-26, revised 2026-10-30
+# a16z speedrun SR008 application, submitted 2026-10-30
 
 > The record of what nick submits to [speedrun.a16z.com/apply](https://speedrun.a16z.com/apply) for
 > SR008 (applications close 2026-11-01; the residency runs 2027-02-01 to 2027-04-16 in San Francisco;
@@ -13,55 +13,47 @@ page then.
 
 ## The written answers
 
-Version 3, 2026-10-30, after fifty's and lazara's reads the same day. Counts were read that day by nick; what changed from the 2026-10-26 text is under [What changed on 2026-10-30](#what-changed-on-2026-10-30).
+As submitted by nick on 2026-10-30. Counts were read that day by nick. How the text got here is under [What changed on 2026-10-30](#what-changed-on-2026-10-30) and [What nick changed in the form](#what-nick-changed-in-the-form-2026-10-30). Funding history and active fundraising round were left closed: the form's funding section requires a last-round date and a list of investors, and there are none; "self-funded" is said in Anything else instead.
 
-**One-liner** (100 characters; 87)
+**One-liner** (100 characters; 83)
 
-> Agents that work as a team alongside you, for dev teams running several agents at once.
+> Agents that work as a team alongside you, for teams running several agents at once.
 
-**Startup description** (800 characters; 773)
+**Startup description** (800 characters; 779)
 
 > Small dev teams now run several agents at once: Claude Code in one window, Codex in another, on the same repo. Each works alone. They build the same thing twice, overwrite each other, and lose their context when the window closes, and nobody can say which model did what. Before musterd had a board and review, 37 percent of what our own agents wrote never reached main.
 >
-> musterd puts the agents and the people they work with on one team as named members, in any tool. Work is claimed on a board, one owner at a time. A member can decline or hand off. Nothing counts as done until a different member accepts it, and the record shows who did it, who accepted it, and which model. In September that figure was 0.9 percent. Self-hosted is free and MIT; hosted teams come next.
+> musterd puts the agents and the people they work with on one team as named members, in any tool. Work is claimed on a board, one owner at a time. A member can decline or hand off. Nothing counts as done until a different member accepts it, and the record shows who did it, who accepted it, and which model. In September that figure was 0.9 percent. Self-hosted is free and MIT; hosted cloud teams come next.
 
-**Relevant experience** (1,000 characters; 987; nick's first person)
+**Relevant experience** (1,000 characters; 994; nick's first person)
 
-> At Fannie Mae I went from Project Analyst in enterprise architecture to Technology Engineer by teaching myself to program, shadowing the engineers and taking on work for internal tech teams outside my role. As an engineer I led a developer-tools team serving 220+ applications, and deployed the system that took open-source package approval from two weeks to an instant download by building the approval into the download itself.
+> I keep running into the same problem: people shipping fast while someone needs to know what shipped and who approved it.
 >
-> After an MBA at UT Austin I was a PM at VMware, where I launched a $300M ARR subscription for VMware Cloud on AWS with three engineering teams, and a commerce launch that grew our U.S. government customer base 80% in two years.
+> At Fannie Mae I started as a Project Analyst. I taught myself to program, shadowed engineers and took on work for tech teams outside my role until I became a Technology Engineer, then led a developer-tools team serving 220+ applications. Our biggest win: open-source package approval went from two weeks to an instant download, by building the approval into the download itself.
 >
-> Since 2024 I have gone all in on AI: papers and launches every morning, a daily podcast I built to explore them (Exploring Next), and products built with every agent, tool and model I could get. Running several agents on one repo led to musterd: the Fannie Mae problem again, approval built into how work lands, now for agents.
+> After an MBA at UT Austin I was a PM at VMware. I launched a $300M ARR subscription for VMware Cloud on AWS with three engineering teams, then a launch that grew our U.S. government customer base 80% in two years.
+>
+> Since 2024 I've gone all in on AI: papers and launches every morning, a daily podcast I built to digest them (Exploring Next), and products built with every agent and model I could get. Running several agents on one repo brought the Fannie Mae problem back, so I built musterd.
 
-**Tell us more about the team** (1,000 characters; 633)
+**Tell us more about the team** (1,000 characters; 472)
 
-> musterd is built on musterd: about two dozen agents, each a named member of the team, on models from seven makers, working alongside me since July 2. In the last 30 days, 180 of 1,454 review verdicts sent the work back, and every verdict came from a member other than the author.
+> musterd is built on musterd: about two dozen agents, each a named member of the team, working alongside me since June.
 >
 > I work on the team too: I set the goals, and the agents bring me the questions that need a person, 336 in the last 30 days. I know the buyer because I am one: a PM who ships with agents and hit the collisions, the lost context and the unreadable history first. I am the only founder, full time, not yet incorporated, and open to a technical co-founder.
 
-**Anything else we should know** (1,000 characters; 942)
+**Anything else we should know** (1,000 characters; a single-line field, so no paragraph breaks; 281)
 
-> musterd has been built since June by the agents and me, on musterd itself, with the build streamed on Twitch. The repository has been public since October 12 (github.com/musterd-io/musterd).
+> Watch the team build musterd live: https://www.twitch.tv/musterd_io. What the residency buys: by Demo Day, hosted musterd live with the first outside teams on it, and the first paying team. Self-funded so far; October spend was about $1,000 (model subscriptions, hosting, domains).
+
+**Traction** (optional, 1,000 characters; 901)
+
+> Built by a team that runs on it: 2,518 pieces of work closed, with activity on 111 of the last 121 days.
 >
-> The record now carries a person's signature where only a person may act: signing off a merge in a person's name, changing team policy or adding an agent takes that person's passkey, so an agent holding their login cannot do it. People join a team from claude.ai, ChatGPT or Codex, and can answer a teammate from their phone.
+> On CooperBench, a public benchmark for two coding agents on one repo, we ran ten fresh pairs, pre-registered, in October: musterd's two agents produced no conflicting patches, 0 of 10, where CooperBench's own two-agent setups conflicted on 6 and 7 of 10.
 >
-> What the residency buys. By Demo Day: hosted musterd live, the first outside teams on it for two weeks or more, and the first paying team. The hosted team is what gets paid for. Spend in October is about $1,000: model subscriptions, hosting and domains. The money goes to building hosted teams and to sitting with each new team for its first hour, which is where we find out what a stranger cannot do without me in the room.
-
-**Traction** (optional; 993)
-
-> Built by a team that runs on it: 2,518 pieces of work closed and 3,095 questions put to a member, with activity on 111 of the 121 days since July 2 (read October 30). On CooperBench, a public benchmark for two coding agents on one repo, we ran ten fresh pairs, pre-registered, in October: musterd's two agents produced no conflicting patches, 0 of 10, where CooperBench's own two-agent setups conflicted on 6 and 7 of 10.
+> This month I demoed musterd live at two San Francisco events, and rebuilt the demo around the product between them. At the second, during SF Tech Week, agents on four different models picked up a request live and came back within minutes with questions and a design objection. Afterwards the hosts, the incubator EPIC Connector, told me the demo left a strong impression on their team and introduced me to their venture partner.
 >
-> This month I demoed musterd live at two San Francisco events, rebuilding the demo between them around the product itself. At the second, during SF Tech Week, agents on four different models picked up a request live and came back within minutes with questions and a design objection. The hosts, the incubator EPIC Connector, followed up to say the demo left a strong impression on their team and introduced me to their venture partner.
->
-> musterd installs from npm and Homebrew. No outside teams yet: getting the first ones onto hosted musterd is what the residency is for.
-
-**Funding history** (optional; 78)
-
-> None. Self-funded; about $1,000 a month in tooling and hosting, covered by me.
-
-**Active fundraising round** (optional; 55)
-
-> No round open; this would be the first outside capital.
+> Next, I'm looking for the first design partners, so team- and enterprise-level feedback shapes what we build.
 
 ## The other fields
 
@@ -73,11 +65,13 @@ Version 3, 2026-10-30, after fifty's and lazara's reads the same day. Counts wer
 | Startup name | musterd | SandRise Studio is the maker, never the product brand (`docs/wiki/positioning.md`) |
 | Primary / secondary category | Infrastructure / Dev Tools; B2B / Enterprise Applications | ADR 550 §4: builders first, knowledge work as the expansion |
 | Where it is built | United States, San Francisco | |
-| Founded | August 2026 | nick's rule: the month musterd.io was registered. `whois musterd.io` creation date 2026-08-13, read 2026-10-26. The first commit is 2026-06-09 |
+| Founded | June 2026 | One date everywhere (nick, 2026-10-30): the first commit is 2026-06-09 and the answers say "since June". It was August 2026, the domain's registration month (`whois musterd.io` 2026-08-13), until that day |
+| Product launch date (Traction) | June 2026 | Required once Traction is opened: "When did you first launch a working version to users?" `@musterd/cli` 0.2.0 was published to npm on 2026-06-22 (`npm view @musterd/cli time`) |
 | Website | https://musterd.io | |
-| Team video (MP4) | nick on camera, about 90 seconds, in his own words, with an optional cutaway to `/live`; the beats are [`video.md`](video.md) | The form's only video field is "Team Video (MP4)", optional, with no length or guidance (read 2026-10-30). speedrun's "What founders ask us before applying" (2026-10-07): "We just need you … talking earnestly about what you're building", no AI voice, polish not weighed. It is not a product demo; the 10-26 entry "the 2-minute demo" was alfie's, not the form's |
-| Pitch deck | `../pitch/build.sh` output, 12 pages | #3342 and #3344, 2026-10-26; its two daily-use counts refreshed to the 2026-10-30 read in this record's v3 PR |
-| Where did you learn about speedrun | Other: researching SF accelerators, incubators and residencies | nick, 2026-10-26 |
+| Team video (MP4) | nick on camera, 2:14, in his own words, no cutaway; cut from his two Zoom recordings of 2026-10-30 (edit 10). The beats are [`video.md`](video.md) | The form's only video field is "Team Video (MP4)", optional, with no length or guidance (read 2026-10-30). speedrun's "What founders ask us before applying" (2026-10-07): "We just need you … talking earnestly about what you're building", no AI voice, polish not weighed. It is not a product demo; the 10-26 entry "the 2-minute demo" was alfie's, not the form's |
+| Pitch deck | `../pitch/build.sh` output, 12 pages, uploaded | #3342 and #3344, 2026-10-26; the 2026-10-30 counts and slide 2's "before musterd had a board and review" from #3630 |
+| Where did you learn about speedrun | Other: "Researching SF accelerators, incubators and residencies for the company." | nick, 2026-10-26 |
+| Category; where built | Infrastructure / Dev Tools, then B2B / Enterprise Applications; San Francisco, California | |
 
 ## Sources
 
@@ -141,6 +135,21 @@ points below; nick reads the result before he submits.
   (fixed). Left: swapping the morning-reading line for a named product, because nick asked for it;
   it is shortened instead.
 
+## What nick changed in the form, 2026-10-30
+
+After #3630 merged, nick edited several answers in the form, and alfie made a last pass on them with him.
+
+- **nick's edits:** the one-liner says "for teams" rather than "for dev teams"; the team answer drops its numbers
+  (seven makers, the verdict counts); traction drops its first paragraph and gains a line on design partners;
+  Anything else becomes the Twitch link; the description says "hosted cloud teams".
+- **The last pass (nick asked for it, "all"):** relevant experience rewritten around one thread, the approval
+  step in the developer's path, from Fannie Mae to musterd, without the undergraduate line; the description's
+  "Before musterd, 37 percent" put back to "before musterd had a board and review" (the readers' point, above);
+  traction's opening line restored with two numbers; the EPIC Connector and design-partner sentences cleaned
+  up; Anything else gains the residency plan and the spend; dates unified on June 2026.
+- **Not in the submitted text, though true:** the models-from-seven-makers count, the 180 of 1,454 verdicts,
+  the passkey line and joining from claude.ai, ChatGPT or Codex. Their source rows above stay for the record.
+
 ## Decisions, nick, 2026-10-26
 
 - One-liner C of three. The tagline is ADR 563's; the clause after the comma names the buyer.
@@ -179,6 +188,6 @@ Three seats read the five written fields on 2026-10-26; nick took the edits belo
 
 ## Submission day
 
-To be filled in when nick submits: the date, and any count that moved after the 2026-10-30 read.
-(The other two items this section first held are settled: "lining up the first outside teams" was
-cut, and the October spend is about $1,000, both nick on 2026-10-30.)
+Submitted by nick on 2026-10-30, two days before the 2026-11-01 deadline; the confirmation page says reviews run
+every two weeks and a reply comes in 10–14 days. The counts are the 2026-10-30 read (rows above); none was
+re-read after it. The written answers above are the text as sent; the personal fields are not recorded here.
