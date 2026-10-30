@@ -95,6 +95,14 @@ public final class MusterdKeysModule: Module {
       }
     }
 
+    AsyncFunction("questionPublicKey") { () -> String in
+      try run { try PhoneKeys.questionPublicKey() }
+    }
+
+    AsyncFunction("signQuestion") { (message: String) -> String in
+      try run { try PhoneKeys.signQuestion(message) }
+    }
+
     AsyncFunction("generateAttestationKey") { (challenge: String) async throws -> [String: String] in
       let result = try await runAsync { try await PhoneKeys.attestationKey(challenge: challenge) }
       return ["keyId": result.keyId, "attestation": result.attestation]
