@@ -222,8 +222,10 @@ withDrivers('authority-relay-http (ADR 728/729)', (_o, kind) => {
     ).toBeUndefined();
 
     // An explicit pull exercises the ordinary sync path, not a relay response copied into the
-    // joiner database.
-    expect(await pushTeam(hubCtx, hubTeam)).toBeGreaterThan(0);
+    // joiner database. The push's own count is not asserted: the hub's background push can stage
+    // these rows first, and then this push correctly finds nothing new — on a loaded CI runner it
+    // returned 0 three times on 2026-10-30. What matters is what the joiner holds after the pull.
+    await pushTeam(hubCtx, hubTeam);
     await pullTeam(joinerCtx, joinerTeam);
     expect(
       await joiner.store.get('SELECT id FROM messages WHERE team_id = ? AND id = ?', [
