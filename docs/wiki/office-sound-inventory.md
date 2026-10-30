@@ -53,6 +53,15 @@ The verdicts below are design judgements from the synthesis, the gates and the s
 
 ## Verdicts
 
+**Cut 2026-10-30 (nick, after hearing every sound in a row on the soundboard, lane 01M67C125R).**
+Apart from the keyboard, the sounds were annoying and alike, and they played too often. Most were one recipe, a short bandpassed noise burst. These are gone from `/live` and `/broadcast`:
+- footsteps: `stepPlank` and `stepTile` are no longer emitted;
+- the chair `creak`;
+- `tap` and `softTap`, `stapler`, `drawer` and `murmur`;
+- `nightair`.
+
+Their voices are still in the engine, but nothing triggers them. The keyboard now carries the room roll's weight. Kept as is: the keyboard, the gestures, the chimes, and arrive/leave. Marked for a re-voice, more realistic and less alike: the door, `whisper`, `sipAt`, `bottle`, `eatAt`, `machine`, the dog, the welcome wagon's foley, and the nameplate and board clicks.
+
 **Re-decided 2026-10-28 — the sound identity** (`docs/superpowers/specs/2026-10-28-office-sound-identity-design.md`): the room stays foley and is re-levelled (inc 3); the musterd layer becomes one voice — the shelf chimes for finished work, five gestures in all, everything else folded into the room. Inc 1 (this page's table) is the synth; inc 2 moves the emit sites; inc 4 draws the chimes. Inc 3 re-levelled the room to the numbers above. The verdicts below predate it and stand where they do not conflict.
 
 **Keep as is.** `keys`, `murmur`/`whisper`, `tap`, `stapler`, `drawer`, the dog set, `birds`, `nightair`, the bed. Gated on something the eye can see (a typing desk, a pair, the dog, the clock), placed where it happens, rare where it should be. They are the office being inhabited.

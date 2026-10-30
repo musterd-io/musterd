@@ -58,28 +58,21 @@ export function shouldChime(now: number, last: number, minGapMs = BROADCAST_CUE_
  * the stapler and the drawer a third more common than they were ever tuned to be.
  */
 export const LIFE_EVENTS: ReadonlyArray<{ name: string; weight: number }> = [
-  { name: 'keys', weight: 0.48 }, // 0.45 + the birds' 0.03 (lane 01M625KHCN)
-  { name: 'murmur', weight: 0.25 },
-  { name: 'whisper', weight: 0.04 },
-  { name: 'tap', weight: 0.07 },
-  { name: 'softTap', weight: 0.03 },
-  { name: 'stapler', weight: 0.03 },
-  { name: 'drawer', weight: 0.03 },
+  // CUT 2026-10-30 (nick, after hearing every sound in a row, lane 01M67C125R): `murmur`, `tap`,
+  // `softTap`, `stapler`, `drawer` and `nightair`. Apart from the keyboard they read as one annoying,
+  // samey click family (most were the same bandpassed-noise recipe) and played too often. Their
+  // weight went to `keys`, the one room sound kept as is. Adding any of them back is a regression.
+  { name: 'keys', weight: 0.91 },
+  { name: 'whisper', weight: 0.04 }, // kept for a re-voice (lane 01M67C125R's follow-up)
   // `footsteps`, `sip`, `blow`, `water` and `eating` LEFT THE ROLL on 2026-10-27 (lane 01M5XS6KAD):
   // they played from a random side on a timer while the office had real walks, sip beats, water
-  // errands and plates — a footstep nobody is taking is the thing the `creak` cut was about. They
-  // are placed moments now (`stepPlank`/`stepTile`, `sipAt`, `bottle`, `eatAt`, `machine`), fired
-  // by the choreography where the body is (actors.ts `MotionSound`). Their 0.11 went to keys and
-  // murmur, the majority the mix is built around. Adding any of them back here is a regression.
+  // errands and plates. They are placed moments now (`sipAt`, `bottle`, `eatAt`, `machine`), fired
+  // by the choreography where the body is (actors.ts `MotionSound`).
   { name: 'paws', weight: 0.025 },
   { name: 'jingle', weight: 0.01 },
   { name: 'yawn', weight: 0.01 },
   // A bark on a timer is an alarm clock. Rarity IS the design; do not "fix" this upward.
   { name: 'bark', weight: 0.005 },
-  // The day cycle (E2 spec §4): both weight-modulated by the lighting envelope below.
-  // `birds` LEFT THE ROLL 2026-10-28 (lane 01M625KHCN): sine chirps that read as a beep series on the
-  // stream all morning (nick: "doesn't really sound like birds"). A real bird is a later synth job.
-  { name: 'nightair', weight: 0.02 },
 ];
 
 const CHATTER = new Set(['murmur', 'whisper']);
