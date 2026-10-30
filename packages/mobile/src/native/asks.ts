@@ -40,6 +40,8 @@ export interface AsksView {
   asks: AskEntry[];
   /** Listed-act asks the hourly ceiling is holding, while the hour lasts. */
   held: { count: number; until: number } | null;
+  /** Asks that reached this phone but could not be fetched, even on a second try. */
+  unreachable: number;
 }
 
 /** Open one sealed body against the pin; null for anything that does not verify or is late. */
@@ -97,6 +99,8 @@ export async function loadAsks(input: {
   pin: PairingPin;
   now?: number;
   fetchImpl?: typeof fetch;
+  /** The pause before the second try of an unreachable fetch; tests pass 0. */
+  pauseMs?: number;
 }): Promise<AsksView> {
   const now = input.now ?? Date.now();
   const { pin } = input;
@@ -104,7 +108,7 @@ export async function loadAsks(input: {
   try {
     delivered = await phoneKeys.deliveredPushes();
   } catch {
-    return { asks: [], held: null };
+    return { asks: [], held: null, unreachable: 0 };
   }
 
   // One route per ref — the newest notification's — and the newest held summary.
@@ -154,11 +158,28 @@ export async function loadAsks(input: {
       }),
     })),
   );
+  // A relay that answered nothing gets one more try (2026-10-30: an ask vanished from the list).
+  if (fetched.some(({ got }) => 'miss' in got && got.miss === 'unreachable')) {
+    await new Promise((resolve) => setTimeout(resolve, input.pauseMs ?? 1_200));
+    for (const entry of fetched) {
+      if (!('miss' in entry.got) || entry.got.miss !== 'unreachable') continue;
+      const route = refs.get(entry.ref)!.route;
+      entry.got = await fetchAskOrMiss({
+        pin,
+        route,
+        now,
+        ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+      });
+    }
+  }
   void clearSettled(settledRefs(fetched));
   const asks = fetched
     .flatMap(({ got }) => ('miss' in got ? [] : [got]))
     .sort((a, b) => b.delivery.ask.ts - a.delivery.ask.ts);
-  return { asks, held };
+  const unreachable = fetched.filter(
+    ({ got }) => 'miss' in got && got.miss === 'unreachable',
+  ).length;
+  return { asks, held, unreachable };
 }
 
 /** The refs the daemon called gone. An unreachable one is not settled: it may still be open. */

@@ -27,6 +27,7 @@ export default function AsksScreen() {
   const [view, setView] = useState<AsksView | null>(null);
   const [loading, setLoading] = useState(false);
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
+  const [outgoing, setOutgoing] = useState(0);
   const alive = useRef(true);
   // Every list refresh re-fetches each ask, which re-issues its token and spends the old one. The
   // ask screen holds a token of its own, so nothing refreshes while it is in front.
@@ -46,6 +47,10 @@ export default function AsksScreen() {
       }
       const { loadAsks, markShown, requestRedelivery } = await import('../native/asks');
       if (redeliver) void requestRedelivery({ pin: current });
+      // Answers a dropped relay kept from leaving go first (outbox.ts).
+      const { flushOutbox } = await import('../native/outbox');
+      const stillWaiting = await flushOutbox();
+      if (alive.current) setOutgoing(stillWaiting);
       const next = await loadAsks({ pin: current });
       if (!alive.current) return;
       setView(next);
@@ -152,6 +157,27 @@ export default function AsksScreen() {
       {note ? (
         <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
           <Text style={[styles.bannerText, { color: p.text }]}>{note}</Text>
+        </Rise>
+      ) : null}
+      {outgoing > 0 ? (
+        <Rise style={[styles.banner, { backgroundColor: p.tint }]}>
+          <Text style={[styles.bannerTitle, { color: p.accentText }]}>
+            {outgoing === 1
+              ? '1 answer is still on its way'
+              : `${outgoing} answers are still on their way`}
+          </Text>
+          <Text style={[styles.bannerText, { color: p.text }]}>
+            Your team hasn’t got it yet. musterd sends it again each time you open the app.
+          </Text>
+        </Rise>
+      ) : null}
+      {view && view.unreachable > 0 ? (
+        <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
+          <Text style={[styles.bannerText, { color: p.text }]}>
+            {view.unreachable === 1
+              ? '1 ask couldn’t load. Pull down to try again.'
+              : `${view.unreachable} asks couldn’t load. Pull down to try again.`}
+          </Text>
         </Rise>
       ) : null}
       {view?.held ? (

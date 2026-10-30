@@ -95,6 +95,13 @@ small change.
   and folds a long advisory one behind Show more; on a listed act's screen nothing folds. Nothing is
   reworded, and a listed act's header is still
   the app's own wording.
+- **A flaky relay loses nothing** (2026-10-30). An answer's callback is POSTed twice. If both
+  fail, the sealed callback is kept in the app's keychain (`expo-secure-store`, never the plaintext)
+  and POSTed again on every open until the relay takes it or its token expires. A resend is the same
+  sealed body, so it needs no second Face ID, and the daemon spends the token on the first copy that
+  arrives. While one waits, Home says so. A list fetch the relay drops gets one more try; if that
+  fails too, Home counts it ("1 ask couldn't load") instead of leaving it off the list. A lock-screen
+  action whose body fetch fails twice is `undelivered`, never `unverified`.
 - **A seen ask's notifications clear.** When the list loads while the app is in front, every
   listed ask is marked seen and its notifications are removed (`markShown`). It stays on the list
   until it is settled (ADR 772).
@@ -309,6 +316,7 @@ src/
     notice.ts              // lock-screen copy and which asks get actions
     notificationAnswers.ts // take a pending action once the app is open; a plain tap opens its ask
     offer.ts               // a listed act's offer as shown and signed: digest checked on the phone
+    outbox.ts              // an answer the relay dropped: kept sealed, re-sent on every open until taken
     pair.ts                // after the fingerprint matches: keys, attestation, seal, POST, pin
     pairingPin.ts          // the keychain pin pairing writes and the extension reads
     pairingQr.ts           // the QR parse, the relay origin, the fingerprint, the challenge
