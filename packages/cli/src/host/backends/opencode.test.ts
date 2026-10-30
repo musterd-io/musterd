@@ -146,6 +146,39 @@ describe('opencodeBackend', () => {
     await result.settled;
   });
 
+  it('waits for the streamed session id when the lease attests before OpenCode prints it (musterd-joiner-1, 2026-10-29)', async () => {
+    // The MCP adapter attests the lease as it starts; OpenCode v2 prints its first sessionID only
+    // with step_start, after the model's first reply. Judging `exact` at the attest killed every
+    // wake on the Linux joiner (exit 130, "session id missing").
+    const child = new Child();
+    const backend = opencodeBackend({
+      resolveBin: async () => '/opencode',
+      recordFreshSession: () => undefined,
+      spawn: (() => child) as never,
+    });
+    const wake = backend.wake(spec, ctx);
+    setTimeout(() => child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_late"}'), 30);
+    const result = await wake;
+    expect(result.outcome).toEqual({ occupied: true, session: 'fresh' });
+    child.exit();
+    await result.settled;
+  });
+
+  it('still fails a lease-attested run that exits without ever naming a session', async () => {
+    const child = new Child();
+    const backend = opencodeBackend({
+      resolveBin: async () => '/opencode',
+      recordFreshSession: () => undefined,
+      spawn: (() => child) as never,
+    });
+    const wake = backend.wake(spec, ctx);
+    setTimeout(() => child.exit(1), 30);
+    const result = await wake;
+    expect(result.outcome.occupied).toBe(false);
+    expect(result.outcome.reason).toMatch(/session id missing/);
+    await result.settled;
+  });
+
   it('writes the lease naming the child, rewrites it with the streamed session, and reports a take-over (ADR 546)', async () => {
     const child = new Child();
     child.pid = 4242;
