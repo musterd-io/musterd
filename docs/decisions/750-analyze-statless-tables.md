@@ -66,6 +66,10 @@ and the guard that was built to stop exactly that only fires for tables already 
 - The lane's earlier out-of-band application to the hub's database is now explained by a migration
   instead of a mystery column: the live store is reproducible from the ladder again.
 
+- _(2026-10-30: decision 2's "no query uses them" held for the index shapes measured here. A
+  **partial** urgent index does change the ledger read's plan, 47.6 → 3.2 ms on a hub copy, so ADR
+  771 adds one in v135. Decision 3, the unchanged SQL, stands.)_
+
 ## Observability & Evaluation
 
 - **Traces:** none new. The existing `sqlite_stmt_slow` and `event_loop_stall` lines (#2603) are the

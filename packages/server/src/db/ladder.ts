@@ -1147,6 +1147,25 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
         await d.run('UPDATE lanes SET card_json = ? WHERE id = ?', [u.card_json, u.id]);
     },
   },
+  {
+    // v135 — ADR 771 (lane 01M654E2GD): a partial index over the urgent directed messages, the one
+    // arm of openDirectedLedger's OR that no index served. With it the planner takes a MULTI-INDEX OR
+    // (idx_messages_thread_act_ts for request_help/handoff, this for urgent) instead of walking every
+    // team message: 47.6 ms → 3.2 ms median on a copy of the revive hub (34,708 messages), and the
+    // wake poll that runs it every 10 s per host was the hub's top event-loop stall (~770 ms avg).
+    // Unlike the full-coverage index ADR 750 dropped, a partial index carries only urgent
+    // member-directed rows (3 of 34,708 here), so a message insert almost never updates it.
+    version: 135,
+    sqlite: (db) => {
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_messages_urgent_directed ON messages(team_id, ts)
+               WHERE to_kind = 'member' AND json_extract(meta, '$.urgent') = 1`);
+      db.exec('ANALYZE messages');
+    },
+    postgres: async () => {
+      // Not measured on Postgres; the dialect's json_extract rewrite would need its own expression
+      // index. Hosted stores keep today's plan (ADR 771 Consequences).
+    },
+  },
 ];
 
 /** v134: the lanes the card backfill places, in the order it places them. */
