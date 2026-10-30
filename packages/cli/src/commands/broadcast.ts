@@ -473,7 +473,7 @@ export function ffmpegArgs(
 ): string[] {
   const vcodec = opts.encoder === 'videotoolbox' ? 'h264_videotoolbox' : 'libx264';
   if (opts.capture === 'x11' && !display) {
-    throw new CliError('--capture x11 has no display to grab — Xvfb did not report one', 1);
+    throw new CliError('--capture x11 has no display to grab — Xvfb did not report one; re-run `musterd broadcast` (it starts Xvfb itself), and if it repeats check that Xvfb is installed', 1);
   }
   const stage = stagePixels(opts.resolution);
   const video =
@@ -1405,6 +1405,18 @@ export function chromeDefault(platform: NodeJS.Platform = process.platform): str
   return platform === 'darwin' ? CHROME_MACOS : CHROME_LINUX;
 }
 
+/**
+ * How to relaunch this broadcast, naming the command that was actually running (lane
+ * 01M653WNCD, third landing): `musterd stream start` is only true inside the cloud stream
+ * — Fly sets its machine env there — while a local `musterd broadcast` runner re-runs
+ * `musterd broadcast`. The first version of this advice named the cloud command everywhere.
+ */
+export function relaunchStep(env: NodeJS.ProcessEnv = process.env): string {
+  return env['FLY_MACHINE_ID'] || env['FLY_APP_NAME']
+    ? 'run `musterd stream start` to relaunch the broadcast'
+    : 're-run `musterd broadcast` to relaunch it';
+}
+
 export function chromeArgs(
   debugPort: number,
   profileDir: string,
@@ -1461,7 +1473,7 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
   const page = targets?.find((t) => t.type === 'page');
   if (!page)
     throw new CliError(
-      'headless Chrome never exposed a page target — the broadcast browser started without a usable page; run `musterd stream start` to relaunch it, and if it repeats check the Chrome binary (`CHROME_BIN`)',
+      `headless Chrome never exposed a page target — the broadcast browser started without a usable page; ${relaunchStep()}, and if it repeats check the Chrome binary (\`CHROME_BIN\`)`,
       1,
     );
   const ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -1470,7 +1482,7 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
     ws.onerror = () =>
       rej(
         new CliError(
-          'could not attach to the Chrome DevTools socket — run `musterd stream start` to relaunch the broadcast browser',
+          `could not attach to the Chrome DevTools socket — ${relaunchStep()}`,
           1,
         ),
       );
@@ -1498,14 +1510,14 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
   ws.onclose = () =>
     failAll(
       new CliError(
-        'the Chrome DevTools socket closed — the broadcast browser went away; run `musterd stream start` to relaunch it',
+        `the Chrome DevTools socket closed — the broadcast browser went away; ${relaunchStep()}`,
         lossCode(),
       ),
     );
   ws.onerror = () =>
     failAll(
       new CliError(
-        'the Chrome DevTools socket errored — the broadcast browser went away; run `musterd stream start` to relaunch it',
+        `the Chrome DevTools socket errored — the broadcast browser went away; ${relaunchStep()}`,
         lossCode(),
       ),
     );
@@ -1536,7 +1548,7 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
           if (pending.delete(id))
             rej(
               new CliError(
-                `Chrome did not answer ${method} in time — run \`musterd stream start\` to relaunch the broadcast browser`,
+                `Chrome did not answer ${method} in time — ${relaunchStep()}`,
                 1,
               ),
             );
@@ -2163,7 +2175,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
         if (!ready)
           reject(
             new CliError(
-              'headless Chrome exited before the page was ready — the browser died during startup; run `musterd stream start` to relaunch it, and if it repeats check the Chrome binary (`CHROME_BIN`)',
+              `headless Chrome exited before the page was ready — the browser died during startup; ${relaunchStep()}, and if it repeats check the Chrome binary (\`CHROME_BIN\`)`,
               1,
             ),
           );

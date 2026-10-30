@@ -37,6 +37,7 @@ import {
   type RunState,
   chromeArgs,
   chromeDefault,
+  relaunchStep,
   compositorHz,
   stagePixels,
   cdpTimeoutFor,
@@ -737,6 +738,14 @@ describe('chromeArgs', () => {
 
   it('keeps about:blank last so the flags are never read as a URL', () => {
     expect(chromeArgs(9333, '/tmp/profile', 'linux').at(-1)).toBe('about:blank');
+  });
+});
+
+describe('relaunchStep (the advice names the command that was running)', () => {
+  it('names `musterd broadcast` locally and `musterd stream start` only on Fly', () => {
+    expect(relaunchStep({})).toContain('re-run `musterd broadcast`');
+    expect(relaunchStep({ FLY_MACHINE_ID: 'm1' })).toContain('`musterd stream start`');
+    expect(relaunchStep({ FLY_APP_NAME: 'app' })).toContain('`musterd stream start`');
   });
 });
 
