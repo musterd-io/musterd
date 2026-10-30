@@ -69,7 +69,9 @@ export function opencodeGatewayConfig(origin: string, withOpenrouter = true): st
  * provider as usable, so an `openrouter` block with no credential behind it fails the run before it
  * prints a line ("No cookie auth credentials found", exit 1 — every metered dreamy wake on
  * musterd-joiner-1, 2026-10-29). Credentials live in the env, v1's `auth.json`, or v2's store,
- * which only `opencode auth list` reads. Any read that fails counts as no credential.
+ * which only `opencode auth list` reads. Fails CLOSED for metering: only a successful listing
+ * that names no OpenRouter counts as absent — an errored or timed-out read keeps OpenRouter on the
+ * gateway, so a credential this check could not see is never routed around the meter.
  */
 export async function hasOpencodeOpenrouterCredential(
   bin: string,
@@ -79,15 +81,18 @@ export async function hasOpencodeOpenrouterCredential(
   if (env['OPENROUTER_API_KEY']) return true;
   try {
     const auth = JSON.parse(
-      readFileSync(join(home, '.local', 'share', 'opencode', 'auth.json'), 'utf8'),
+      readFileSync(
+        join(env['XDG_DATA_HOME'] || join(home, '.local', 'share'), 'opencode', 'auth.json'),
+        'utf8',
+      ),
     ) as Record<string, unknown>;
     if ('openrouter' in auth) return true;
   } catch {
     /* no v1 store */
   }
   return await new Promise<boolean>((resolve) => {
-    execFile(bin, ['auth', 'list'], { timeout: 5_000 }, (_err, stdout) =>
-      resolve(/openrouter/i.test(String(stdout ?? ''))),
+    execFile(bin, ['auth', 'list'], { timeout: 5_000, env }, (err, stdout) =>
+      resolve(err ? true : /openrouter/i.test(String(stdout ?? ''))),
     );
   });
 }

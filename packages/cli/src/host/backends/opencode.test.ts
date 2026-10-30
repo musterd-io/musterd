@@ -7,6 +7,7 @@ import {
   opencodeStandaloneArgs,
   buildOpencodeResumeArgs,
   opencodeBackend,
+  hasOpencodeOpenrouterCredential,
   opencodeGatewayConfig,
   opencodeWakeEnv,
   parseOpencodeSessionLine,
@@ -647,6 +648,17 @@ describe('the completion record — every settled run reports what the host meas
     ]);
     child.exit(0);
     await result.settled;
+  });
+
+  it('the OpenRouter check fails closed: an unreadable credential listing keeps the gateway route', async () => {
+    const home = '/nonexistent-home';
+    // A binary that cannot run: the listing errors, so OpenRouter stays metered.
+    expect(await hasOpencodeOpenrouterCredential('/no/such/opencode', {}, home)).toBe(true);
+    // A successful listing that names no OpenRouter is the one "absent" answer.
+    expect(await hasOpencodeOpenrouterCredential('/bin/echo', {}, home)).toBe(false);
+    expect(
+      await hasOpencodeOpenrouterCredential('/bin/echo', { OPENROUTER_API_KEY: 'k' }, home),
+    ).toBe(true);
   });
 
   it('a wake with no gateway, or on a local model, runs --standalone but carries no override', async () => {
