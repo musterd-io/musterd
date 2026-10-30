@@ -83,6 +83,13 @@ small change.
   app, on /live or in Slack, or expired), and when the app sends an answer, every notification for
   that ask is removed from Notification Center (`clearDelivered`) and from the phone's record. A
   503, 504 or no network clears nothing: the ask may still be open.
+- **Readable, not raw.** Agents write for a terminal. On the lock screen the notification's title
+  is the asker, and its text is the ask with its marks taken out: markdown, backticks, a `[lane]`
+  tag, and full ids cut to 10 characters. The text is also cut at a sentence (`Readable.swift`,
+  the Swift copy of `readable.ts`, run against the same fixtures). The list's tiles show the same
+  summary. The ask screen shows the whole text with its paragraphs, bullets, bold and code kept,
+  and folds a long one behind Show more. Nothing is reworded, and a listed act's header is still
+  the app's own wording.
 - **A seen ask's notifications clear.** When the list loads while the app is in front, every
   listed ask is marked seen and its notifications are removed (`markShown`). It stays on the list
   until it is settled (ADR 772).
@@ -302,6 +309,7 @@ src/
     pairingQr.ts           // the QR parse, the relay origin, the fingerprint, the challenge
     phoneKeys.ts           // the typed TS contract of the native module modules/musterd-keys
     push.ts                // the musterd block on an APNs payload, and a fetched body
+    readable.ts            // an ask's text cleaned for a phone: one-line summary, or paragraphs and bullets
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/
     haptics.ts             // a light tick under a press, a success buzz when something lands (ADR 760)
@@ -315,6 +323,7 @@ src/app/_layout.tsx   // the Stack, themed from the palette; the nameplate wordm
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
 src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, and answering
+src/ui/askText.tsx    // the asker's words on the ask screen: light formatting, long text folded
 src/ui/button.tsx     // the three buttons: one mustard primary, a grey secondary, a quiet text way out
 src/ui/glass.tsx      // Glass (Liquid Glass card, solid fallback) and the warm Backdrop (ADR 764)
 src/ui/icon.tsx       // an SF Symbol in the text's colour, with a text fallback (ADR 764)

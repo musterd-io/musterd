@@ -6,6 +6,7 @@ import type { AskEntry, AsksView } from '../native/asks';
 import { heldBody, waitingSubtitle } from '../native/notice';
 import { showOffer } from '../native/offer';
 import type { PairingPin } from '../native/pairingPin';
+import { summary } from '../native/readable';
 import { Backdrop, Glass } from '../ui/glass';
 import { Icon } from '../ui/icon';
 import { Halo, Rise, Squish } from '../ui/motion';
@@ -255,7 +256,7 @@ function AskRow({ entry }: { entry: AskEntry }) {
   const headline = listed
     ? (showOffer(delivery.approval!.approve, { team: route.team, now: Date.now() })?.wording
         .headline ?? 'An ask that needs the app')
-    : delivery.ask.body;
+    : summary(delivery.ask.body, 140);
   const waiting = waitingSubtitle(delivery.waiting ?? 0);
   const agent = delivery.ask.from_kind === 'agent';
   return (
