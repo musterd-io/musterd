@@ -21,6 +21,7 @@ import { appendAudit, REPLICATED_LEDGER_VERBS } from '../store/audit.js';
 import { BOARD_SEAT, boardSeat } from '../store/boardSeat.js';
 import { applyHaltLocally, applyResumeLocally } from '../store/halt.js';
 import { projectHoldEvent } from '../store/holds.js';
+import { claimedMoveFor } from '../store/hostProvisions.js';
 import { deleteSample, upsertSample } from '../store/laneSamples.js';
 import { getMemberByName, hostServiceSeat, hostServiceSeatName } from '../store/members.js';
 import { parseWriter } from '../store/memory.js';
@@ -1321,7 +1322,16 @@ async function answerCredentialRequest(
     return;
   }
   const agent = await getMemberByName(db, teamId, target);
-  if (!agent || agent.left_at !== null || agent.sponsored_by !== sponsor.id) {
+  // ADR 762 (follow-up, lane 01M654MED7): a seat the sponsor does not sponsor passes only through
+  // a move this hub authorized — a claimed `kind: move` row for that seat, pinned to and claimed by
+  // this host label, authored by this sponsor. The hub reads its own row (the joiner's claim reached
+  // it as `host.provision_claimed`, ADR 689 d3); nothing in the pushed request vouches for it.
+  if (
+    !agent ||
+    agent.left_at !== null ||
+    (agent.sponsored_by !== sponsor.id &&
+      !(await claimedMoveFor(db, teamId, agent.id, host, sponsor.id)))
+  ) {
     await refuse('target_not_sponsored');
     return;
   }
