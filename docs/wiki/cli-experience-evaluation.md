@@ -16,22 +16,34 @@ journeys review left them.
 **Orientation.** `musterd status` (live, 2026-10-30): identity, `⚑ 5 waiting on you` with the
 oldest first, your work with `landed · … submit` on merged lanes, up next, the team on one
 line. One pointer per destination — `+38 more · musterd next` carries no second arrow
-(lane `01M653WK0K`, #3600). `musterd next`: lane rows read `claimed · CLI experience:
-validate the e… — 01M61VV4TX` — state first, title cut at the edge, short id; review debt puts
-`lazara · waiting 75h` on its own dim line (lane `01M653W2N4`, #3603). Bare `musterd` lists
-each start-here command once (verified live: four term rows, `next` only in START HERE).
+(lane `01M653WK0K`, #3600). `musterd next` (re-run at 80 columns on the merged CLI,
+2026-10-30): carrying rows give the title the line — `blocked · First-run tour cold read
+with a new human at the keybo… — 01M4V751KR`, goal/areas/branch on the dim line under it;
+the stale-goal warning reads `⚠ <goal> · quiet 3d` over a short-id lane row; the
+`↳ no wake due` detail and seed summaries cut at the edge (lane `01M653W2N4`, #3603 +
+#3616, every line pinned ≤80 columns by `orient.test.ts`). Three row families still run
+past the edge — owed rows at 102–105 cells, review-debt at 81, shipped rows at 114–120 —
+carried by lane `01M65K3JKM`, below. Bare `musterd` lists each start-here command once
+(verified live: four term rows, `next` only in START HERE).
 
-**Messaging.** `musterd inbox --peek` now leads with `waiting on you — 6`: the directed
-unread acts, in message-rows, before 574 general unread (ADR 770, lane `01M658ZSMQ`, #3609).
-Empty and filtered views keep ADR 752's honest lines. One defect found, below.
+**Messaging.** `musterd inbox --peek` now leads with `⚑ waiting on you — 9`, and
+`musterd status` prints `⚑ 9 waiting on you` in the same minute (re-run 2026-10-30 on the
+merged CLI): the directed acts, in message-rows, before the general unread (ADR 770 as
+amended, lanes `01M658ZSMQ`/`01M65AB64H`, #3609 + #3615). The section is the daily view's
+own projection — one helper over one walked window — so the header N and the rows under it
+are the same set. Empty and filtered views keep ADR 752's honest lines. The defect the
+first pass found here is fixed; see below.
 
 **Completion.** `done` receipts and JSON-for-writes (ADR 758) stand as shipped; nothing in
 this pass re-opened them.
 
 **Recovery.** The daemon-down and unframed-reply errors now say what happened and what to do:
 the unframed non-2xx reads "the daemon answered 500 without an error frame — retry, and if it
-persists run `musterd status`…" (lane `01M653WNCD`, #3606). Live check of the shallow end:
-an unknown command answers `✗ unknown command "badcmd" · musterd help` on one line.
+persists run `musterd status`…" (lane `01M653WNCD`, #3606). A refused claim now names its
+next step for every refusal code — `claim refused (claim_conflict): … — next: see who holds
+the seat with `musterd status --all`, or claim another name` (#3617, same lane, second
+landing). Live check of the shallow end: an unknown command answers
+`✗ unknown command "badcmd" · musterd help` on one line.
 
 **Copy.** The contrast frame is out of the surveyed strings, `session` reads Presence/seat
 where that is the meaning, and the roster-home string no longer says "worktree"
@@ -39,22 +51,28 @@ where that is the meaning, and the roster-home string no longer says "worktree"
 capitals, and "is the daemon running?" keeps the daemon named twice rather than thinning to
 "is it running?" — the retry suite pins the fuller form and it reads clearer.
 
-## The one defect this pass found
+## The one defect this pass found — fixed
 
-`status` said **5** waiting; the inbox section said **6**. Both surfaces use
+`status` said **5** waiting; the inbox section said **6**. Both surfaces used
 `openActionNeeded`, but `status`'s count unions the answered/discharged sets across every
-drained unread page (`claimCheckLines`, helpers.ts), while the directed section reads them
-from the first bounded inbox response only. An act this seat already answered, sitting past
-page one, still appears in the section. That is ADR 770's core promise — the two counts
-cannot drift — not yet kept in this corner.
+drained unread page (helpers.ts), while the directed section read them from the first
+bounded inbox response only. That was ADR 770's core promise — the two counts cannot
+drift — not kept in that corner.
 
-→ lane `01M65AB64H` (union answered/discharged across drained pages, with the answering act
-beyond page one as the test). The section's ordering, dedupe, and read semantics behaved as
-specified; only the count's inputs differ.
+Fixed by #3615 (lanes `01M658ZSMQ`/`01M65AB64H`): the section no longer computes its own
+count at all — it renders `pendingActionSummary`, the helper `status` counts with, over the
+same walked window, under the `⚑ waiting on you — N` header. The ADR's eval is now a
+seeded test (an answered ask leaves both surfaces; status N == inbox N == the section's row
+count). Re-run live 2026-10-30: `⚑ 9 waiting on you` / `⚑ waiting on you — 9`.
+
+The `next` re-run found the same budget slip in three more row families — owed rows append
+their suffix after the title cut (102–105 cells), review-debt rows land at 81, shipped rows
+print the full title (114–120) — carried by lane `01M65K3JKM`. The `answer:` copy-paste
+command lines measure 81 and stay whole: a command is not cut.
 
 ## What remains open
 
-- The count-parity lane above.
+- Lane `01M65K3JKM` (owed / review-debt / shipped row widths in `next`).
 - The three human-only paths from the journeys review (passkey ceremony in a real browser,
   interactive `init` with a person typing, a first agent's maiden launch) — still unexercised
   by an agent, still owed a human walk.
@@ -63,10 +81,10 @@ specified; only the count's inputs differ.
 
 ## Verdict
 
-The five journeys read as one experience now: the two register seams the design record named
-(`next`'s grammar, the waiting count's landing) are closed in the shipped CLI. The one open
-corner is the count parity measured above on 2026-10-30, carried by lane `01M65AB64H` —
-falsifier: on a seat whose answered act sits past page one, `status` and the inbox section
-print the same N. Every other proposal in the record is a named lane with its gate, listed in
-the design record's seams; this page is the evidence they were checked against the shipped
-CLI of 2026-10-30.
+The five journeys read as one experience now: the waiting count lands on exactly the acts
+it counts (falsifier re-run above: the two Ns agree, and the section's rows equal N), and
+the `next` register's carrying family — the rows a seat works from — holds the column edge,
+pinned by test. What remains open is named, not hidden: the owed/review-debt/shipped row
+widths (`01M65K3JKM`), the three human-only paths, and the warmth verdict. Every proposal
+in the design record is a named lane with its gate; this page is the evidence they were
+checked against the shipped CLI of 2026-10-30.
