@@ -855,7 +855,7 @@ export async function handleAppCallback(
     } catch {
       return { ok: false, reason: 'sealed_body' };
     }
-    return enrollQuestionKey(ctx, team, binding, keys, enrollBody, now);
+    return enrollQuestionKey(ctx, team, binding, keys, enrollBody, now, cb.expires_at);
   }
 
   let opened: Uint8Array;

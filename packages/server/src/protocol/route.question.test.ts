@@ -6,6 +6,7 @@ import { withDrivers } from '../db/testing.js';
 import { MusterdError } from '../errors.js';
 import { listAudit } from '../store/audit.js';
 import { addMember } from '../store/members.js';
+import { insertMessage } from '../store/messages.js';
 import { questionView } from '../store/questions.js';
 import { createTeam } from '../store/teams.js';
 import { routeEnvelope } from './route.js';
@@ -197,5 +198,32 @@ withDrivers('route.question', (o) => {
     });
     expect((await questionView(db, team.id, 'q1'))?.state).toBe('open');
     void nick;
+  });
+
+  it('an answer cannot act on a question that is also a gate (advice, never authority)', async () => {
+    const db = await openStore();
+    const team = await createTeam(db, { slug: 'revive' });
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+    const ryder = (await addMember(db, team, { name: 'ryder', kind: 'agent', role: '' })).row;
+    await insertMessage(
+      db,
+      team.id,
+      ryder.id,
+      nick.id,
+      makeEnvelope({
+        id: 'q1',
+        team: 'revive',
+        from: 'ryder',
+        to: { kind: 'member', name: 'nick' },
+        act: 'ask',
+        meta: { species: 'consult', question: flake, gate: { tool: 'Bash' } },
+      }),
+    );
+    await expect(
+      routeEnvelope(stubCtx(db), team, nick, answer('a1', 'nick')),
+    ).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+    expect((await questionView(db, team.id, 'q1'))?.state).toBe('open');
   });
 });

@@ -1044,9 +1044,10 @@ async function enrollBody(
   s: Awaited<ReturnType<typeof seed>>,
   questionPublic: KeyObject,
   signer: KeyObject = s.phone.signing,
+  over: { nonce?: string; expiresAt?: number } = {},
 ) {
   const question_key = p256Raw(questionPublic);
-  const nonce = 'n'.repeat(24);
+  const nonce = over.nonce ?? 'n'.repeat(24);
   const signature = cryptoSign(
     'sha256',
     Buffer.from(
@@ -1055,7 +1056,12 @@ async function enrollBody(
     ),
     signer,
   ).toString('base64url');
-  const route = { team: s.team.slug, binding: s.binding.id, ref: 'qk-1', expires_at: NOW + 60_000 };
+  const route = {
+    team: s.team.slug,
+    binding: s.binding.id,
+    ref: 'qk-1',
+    expires_at: over.expiresAt ?? NOW + 60_000,
+  };
   const sealed = await sealToDaemon({
     daemonReceivePublic: s.daemon.receivePublic,
     route,
@@ -1282,5 +1288,73 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
         NOW + 1_000,
       ),
     ).resolves.toEqual({ ok: true });
+  });
+
+  it('a revoked phone key takes the question key with it', async () => {
+    const s = await seed();
+    const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('qk-1', await enrollBody(s, qk.publicKey)),
+      NOW,
+    );
+    const d = await delivered(s, await raiseQuestion(s, 'q-1'));
+    await revokeDeviceKey(s.db, s.team.id, s.deviceKeyId);
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, qk.privateKey)),
+        NOW + 1_000,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'key_revoked' });
+  });
+
+  it('an enrollment cannot be replayed to roll the key back, nor sealed for far in the future', async () => {
+    const s = await seed();
+    const k1 = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const k2 = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const first = await enrollBody(s, k1.publicKey, s.phone.signing, { nonce: 'a'.repeat(24) });
+    await expect(handleRelayCallback(s.ctx, s.team, callback('qk-1', first), NOW)).resolves.toEqual(
+      { ok: true },
+    );
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback(
+          'qk-1',
+          await enrollBody(s, k2.publicKey, s.phone.signing, { nonce: 'b'.repeat(24) }),
+        ),
+        NOW,
+      ),
+    ).resolves.toEqual({ ok: true });
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('qk-1', first), NOW + 1),
+    ).resolves.toEqual({
+      ok: false,
+      reason: 'replayed',
+    });
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback(
+          'qk-1',
+          await enrollBody(s, k1.publicKey, s.phone.signing, {
+            nonce: 'c'.repeat(24),
+            expiresAt: NOW + 60 * 60_000,
+          }),
+        ),
+        NOW,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'expired' });
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('qk-1', first), NOW + 2 * 60_000),
+    ).resolves.toEqual({
+      ok: false,
+      reason: 'expired',
+    });
   });
 });

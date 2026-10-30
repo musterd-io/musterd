@@ -29,6 +29,8 @@ import { getTeamBySlug } from '../store/teams.js';
 
 /** A question has no clock; its delivery token lives this long (ADR 773 §1). */
 export const QUESTION_APP_TTL_MS = 7 * 24 * 60 * 60_000;
+/** An enrollment's seal must expire within this window — replay is bounded in time by it. */
+export const ENROLL_WINDOW_MS = 10 * 60_000;
 /** "No phone buzz while you are active on /live" — a web presence seen this recently. */
 export const LIVE_ACTIVE_WINDOW_MS = 2 * 60_000;
 
@@ -120,7 +122,12 @@ export async function enrollQuestionKey(
   keys: AppKeys,
   opened: Uint8Array,
   now: number,
+  expiresAt: number,
 ): Promise<{ ok: boolean; reason?: string }> {
+  // A replayed enrollment would roll the key back to an older one. The seal binds `expires_at`, so
+  // a short window bounds replay in time, and the used nonces close it inside the window.
+  if (expiresAt <= now || expiresAt > now + ENROLL_WINDOW_MS)
+    return { ok: false, reason: 'expired' };
   const parsed = (() => {
     try {
       return AppQuestionKeyEnrollSchema.safeParse(JSON.parse(new TextDecoder().decode(opened)));
@@ -145,7 +152,11 @@ export async function enrollQuestionKey(
     nonce: enroll.nonce,
   });
   if (!verifies(signer, bytes, enroll.signature)) return { ok: false, reason: 'bad_signature' };
-  if (!(await setAppQuestionKey(ctx.db, team.id, binding.id, enroll.question_key, now)))
+  if ((keys.question_key_nonces ?? []).includes(enroll.nonce))
+    return { ok: false, reason: 'replayed' };
+  if (
+    !(await setAppQuestionKey(ctx.db, team.id, binding.id, enroll.question_key, enroll.nonce, now))
+  )
     return { ok: false, reason: 'binding_stale' };
   await appendAudit(ctx.db, team.id, {
     actor: null,
@@ -182,12 +193,12 @@ export async function verifyQuestionAnswer(
   })();
   if (!parsed?.success) return { ok: false, reason: 'bad_request' };
   const answer = parsed.data;
+  // The question key is only as good as the phone key that enrolled it: revoke the phone key
+  // (ADR 662 decision 6) and the question key goes with it, without a separate revocation path.
+  const phone = await phoneKey(ctx, team.id, binding, keys);
+  if (!phone) return { ok: false, reason: 'key_revoked' };
   const key =
-    answer.key === 'question'
-      ? keys.question_key
-        ? p256(keys.question_key)
-        : null
-      : await phoneKey(ctx, team.id, binding, keys);
+    answer.key === 'question' ? (keys.question_key ? p256(keys.question_key) : null) : phone;
   if (!key) return { ok: false, reason: 'key_revoked' };
   const bytes = appQuestionAnswerSigningBytes({
     team: team.slug,

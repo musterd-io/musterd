@@ -102,6 +102,11 @@ questions: an answer straight from the notification, with no Face ID (2026-10-30
   - A question's delivery carries `question` and `interruption` (`active` only when the question
     is blocking and the person is not on `/live`). Its token lives 7 days.
   - The question key on anything that is not a question is refused (`answer_on_non_question`).
+  - From the commit security review: the question key verifies only while the binding's Face ID
+    phone key still stands, so revoking the phone key revokes both. An enrollment's seal must
+    expire within 10 minutes, and its nonce is never reused (`replayed`), so an old enrollment
+    cannot roll the key back. An answer is refused on any ask that is not an advisory question
+    (a gate, lane review, hold, policy review or handoff), keeping it advice, never authority.
 
 ## Observability & Evaluation
 
