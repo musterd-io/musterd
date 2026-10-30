@@ -23,6 +23,7 @@ import { appPairingChallenge } from '../store/appAttest.js';
 import { fakeAppAttest } from '../store/appAttest.testkit.js';
 import {
   appEnrollPayload,
+  setAppQuestionKey,
   confirmAppPairing,
   stageAppPairing,
   stagedAppKeys,
@@ -1325,7 +1326,10 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
         s.team,
         callback(
           'qk-1',
-          await enrollBody(s, k2.publicKey, s.phone.signing, { nonce: 'b'.repeat(24) }),
+          await enrollBody(s, k2.publicKey, s.phone.signing, {
+            nonce: 'b'.repeat(24),
+            expiresAt: NOW + 70_000,
+          }),
         ),
         NOW,
       ),
@@ -1356,5 +1360,93 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
       ok: false,
       reason: 'expired',
     });
+  });
+
+  it('an older enrollment the relay held back cannot land after a newer one (no rollback)', async () => {
+    const s = await seed();
+    const k1 = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const k2 = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const older = await enrollBody(s, k1.publicKey, s.phone.signing, {
+      nonce: 'o'.repeat(24),
+      expiresAt: NOW + 60_000,
+    });
+    const newer = await enrollBody(s, k2.publicKey, s.phone.signing, {
+      nonce: 'w'.repeat(24),
+      expiresAt: NOW + 120_000,
+    });
+    await expect(handleRelayCallback(s.ctx, s.team, callback('qk-1', newer), NOW)).resolves.toEqual(
+      {
+        ok: true,
+      },
+    );
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('qk-1', older), NOW + 1),
+    ).resolves.toEqual({
+      ok: false,
+      reason: 'replayed',
+    });
+    // The key in force is still the newer one: k2 answers, k1 does not.
+    const d = await delivered(s, await raiseQuestion(s, 'q-1'));
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, k1.privateKey)),
+        NOW + 2,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'bad_signature' });
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, k2.privateKey)),
+        NOW + 3,
+      ),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it('a racing enrollment that changed the keys between read and write loses (compare-and-swap)', async () => {
+    const s = await seed();
+    const k1 = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    // A driver whose transaction lets a rival write land just before our UPDATE — what Postgres's
+    // READ COMMITTED allows when two enrollments read the same keys.
+    let raced = false;
+    const racing = {
+      ...s.db,
+      tx: <T>(fn: (t: Driver) => Promise<T>) =>
+        s.db.tx((t) =>
+          fn(
+            new Proxy(t, {
+              get(target, prop, recv) {
+                if (prop !== 'run') return Reflect.get(target, prop, recv);
+                return async (sql: string, params: unknown[]) => {
+                  if (!raced && sql.startsWith('UPDATE channel_bindings SET app_keys')) {
+                    raced = true;
+                    const rival = await target.get<{ app_keys: string }>(
+                      'SELECT app_keys FROM channel_bindings WHERE id = ?',
+                      [s.binding.id],
+                    );
+                    const keys = JSON.parse(rival!.app_keys) as Record<string, unknown>;
+                    await target.run('UPDATE channel_bindings SET app_keys = ? WHERE id = ?', [
+                      JSON.stringify({ ...keys, question_key_expires_at: NOW + 999_999 }),
+                      s.binding.id,
+                    ]);
+                  }
+                  return target.run(sql, params as never);
+                };
+              },
+            }),
+          ),
+        ),
+    } as Driver;
+    await expect(
+      setAppQuestionKey(
+        racing,
+        s.team.id,
+        s.binding.id,
+        { questionKey: p256Raw(k1.publicKey), nonce: 'r'.repeat(24), expiresAt: NOW + 60_000 },
+        NOW,
+      ),
+    ).resolves.toBe('replayed');
   });
 });

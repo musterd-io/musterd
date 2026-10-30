@@ -55,6 +55,8 @@ export interface AppKeys {
   /** The enrollment nonces already used on this binding (newest last, bounded) — a replayed
    *  enrollment cannot roll the key back. */
   question_key_nonces?: string[];
+  /** The sealed `expires_at` of the last accepted enrollment — enrollments are accepted in order. */
+  question_key_expires_at?: number;
 }
 
 export type AppPairingRefusal =
@@ -363,27 +365,47 @@ export async function appBindingKeys(
   return JSON.parse(row.app_keys) as AppKeys;
 }
 
-/** ADR 774 §5: record (or replace) the binding's question key inside its `app_keys`. */
+/**
+ * ADR 774 §5: record (or replace) the binding's question key inside its `app_keys`, in order.
+ *
+ * The enrollment's seal binds its `expires_at` (the relay cannot change it), and the phone stamps it
+ * from its clock, so it only grows. An enrollment whose `expires_at` is not past the last accepted
+ * one — a replay, or an older one the relay held back and delivered late — cannot roll the key back.
+ * The check and the write share one transaction, so two racing enrollments cannot both pass.
+ */
 export async function setAppQuestionKey(
   db: Driver,
   teamId: string,
   bindingId: string,
-  questionKey: string,
-  nonce: string,
+  enroll: { questionKey: string; nonce: string; expiresAt: number },
   now: number,
-): Promise<boolean> {
-  const keys = await appBindingKeys(db, teamId, bindingId);
-  if (!keys) return false;
-  const next: AppKeys = {
-    ...keys,
-    question_key: questionKey,
-    question_key_at: now,
-    question_key_nonces: [...(keys.question_key_nonces ?? []), nonce].slice(-32),
-  };
-  await db.run('UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ?', [
-    JSON.stringify(next),
-    bindingId,
-    teamId,
-  ]);
-  return true;
+): Promise<'ok' | 'binding_stale' | 'replayed'> {
+  return db.tx(async (t) => {
+    const row = await t.get<{ app_keys: string | null; channel: string; status: string }>(
+      'SELECT app_keys, channel, status FROM channel_bindings WHERE id = ? AND team_id = ?',
+      [bindingId, teamId],
+    );
+    if (!row || row.channel !== APP_CHANNEL || row.status !== 'active' || !row.app_keys)
+      return 'binding_stale';
+    const keys = JSON.parse(row.app_keys) as AppKeys;
+    if (
+      (keys.question_key_nonces ?? []).includes(enroll.nonce) ||
+      enroll.expiresAt <= (keys.question_key_expires_at ?? 0)
+    )
+      return 'replayed';
+    const next: AppKeys = {
+      ...keys,
+      question_key: enroll.questionKey,
+      question_key_at: now,
+      question_key_expires_at: enroll.expiresAt,
+      question_key_nonces: [...(keys.question_key_nonces ?? []), enroll.nonce].slice(-32),
+    };
+    // Compare-and-swap on the value just read: Postgres's READ COMMITTED lets two enrollments read
+    // the same keys, and only the first write may land. The loser saw a stale order — `replayed`.
+    const swapped = await t.run(
+      'UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ? AND app_keys = ?',
+      [JSON.stringify(next), bindingId, teamId, row.app_keys],
+    );
+    return swapped.changes === 1 ? 'ok' : 'replayed';
+  });
 }

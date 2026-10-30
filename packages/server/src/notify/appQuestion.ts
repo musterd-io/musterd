@@ -152,12 +152,14 @@ export async function enrollQuestionKey(
     nonce: enroll.nonce,
   });
   if (!verifies(signer, bytes, enroll.signature)) return { ok: false, reason: 'bad_signature' };
-  if ((keys.question_key_nonces ?? []).includes(enroll.nonce))
-    return { ok: false, reason: 'replayed' };
-  if (
-    !(await setAppQuestionKey(ctx.db, team.id, binding.id, enroll.question_key, enroll.nonce, now))
-  )
-    return { ok: false, reason: 'binding_stale' };
+  const stored = await setAppQuestionKey(
+    ctx.db,
+    team.id,
+    binding.id,
+    { questionKey: enroll.question_key, nonce: enroll.nonce, expiresAt },
+    now,
+  );
+  if (stored !== 'ok') return { ok: false, reason: stored };
   await appendAudit(ctx.db, team.id, {
     actor: null,
     action: 'app.question_key_enrolled',
