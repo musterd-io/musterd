@@ -552,6 +552,9 @@ export type AuditAction =
   | 'question.answer_delivered'
   | 'question.answer_undelivered'
   | 'app.question_key_enrolled'
+  // ADR 779: quick actions — the action and seat, never a body.
+  | 'quick_action.sent'
+  | 'quick_action.start_all'
   | 'ask.raised'
   | 'ask.deferred'
   | 'ask.held'
@@ -942,6 +945,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'question.answer_delivered': 'none',
   'question.answer_undelivered': 'none',
   'app.question_key_enrolled': 'none',
+  'quick_action.sent': 'actor',
+  'quick_action.start_all': 'actor',
   'ask.raised': 'actor',
   'ask.deferred': 'actor',
   'ask.held': 'actor',

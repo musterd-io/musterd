@@ -620,6 +620,15 @@ async function routeEnvelopeInner(
   }
   // ADR 773 §5: `answer_proof` says how a question's answer was verified — server-controlled.
   outgoingEnv = stripAnswerProof(outgoingEnv, daemonComposed);
+  // ADR 779: a quick action is a person's — a seat cannot press a teammate's buttons.
+  if (outgoingEnv.meta?.['quick_action'] !== undefined && sender.kind !== 'human') {
+    throw new MusterdError('forbidden', "a quick action is a person's, not a seat's (ADR 779)");
+  }
+  // ADR 779 §4: `pr_event` is the hub's PR watch speaking — server-controlled, a client copy goes.
+  if (!daemonComposed && outgoingEnv.meta && 'pr_event' in outgoingEnv.meta) {
+    const { pr_event: _clientPrEvent, ...restMeta } = outgoingEnv.meta;
+    outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
   // ADR 662: a human answer to a privileged ask is accepted only after the same A2 gate used by
   // lane verdicts. This stamp is server-owned; persistent consumers use it to distinguish answers
   // checked by this route from older bearer-only rows that must no longer release work.
@@ -868,6 +877,15 @@ async function routeEnvelopeInner(
   // every delivery (direct + firehose, all derived from the row) carry the corrected flags.
   const message = await insertMessage(ctx.db, team.id, sender.id, toMemberId, outgoingEnv);
   await auditQuestionAnswer(ctx.db, team, outgoingEnv);
+  if (typeof outgoingEnv.meta?.['quick_action'] === 'string' && outgoingEnv.to.kind === 'member') {
+    await appendAudit(ctx.db, team.id, {
+      actor: sender.name,
+      action: 'quick_action.sent',
+      target: outgoingEnv.to.name,
+      result: 'allow',
+      detail: { action: outgoingEnv.meta['quick_action'], act: outgoingEnv.id },
+    });
+  }
   if (verifiedPrivilegedAskReply && sender.kind === 'human') {
     void tickVerdictQueue(ctx, team, sender, outgoingEnv.ts);
   }

@@ -243,6 +243,7 @@ import {
   rerouteDepartedAcceptances,
   wasPulled,
 } from '../protocol/laneReroute.js';
+import { quickActionLineFor, startAll } from '../protocol/quickActions.js';
 import { announceIncidentResolved, routeEnvelope } from '../protocol/route.js';
 import { parseEnvelope, parseOrBadRequest } from '../protocol/validate.js';
 import { claimedLanesByOwner, resolveActivity } from '../store/activity.js';
@@ -10612,8 +10613,15 @@ export async function handleHttp(
           idle && latest.act === 'accept'
             ? await answerLineFor(ctx.db, team.id, team.slug, member.name, latest.id)
             : null;
+        // ADR 779: a person's quick action rides its own composed line on the idle seam too.
+        const quickLine =
+          idle && !answerLine && latest.act === 'steer'
+            ? await quickActionLineFor(ctx.db, team, member.name, latest.id)
+            : null;
         const line =
-          answerLine ?? composeInterruptLine(team.slug, latest, pending.length, huddleTopic, rest);
+          answerLine ??
+          quickLine ??
+          composeInterruptLine(team.slug, latest, pending.length, huddleTopic, rest);
         // Which rail asked. The caller declares it (`musterd inbox --interrupt-check --hook X`);
         // until ADR 423 the flag only shaped the CLI's own stdout and never reached the server, so
         // every row was rail-blind and the doorbell contract had to cite a measurer's name per
@@ -10660,6 +10668,12 @@ export async function handleHttp(
       // capped ring, with x-musterd-no-touch — injecting is presence-neutral (spec §2), and so is
       // saying it happened. Structured fields only: the schema is strict and has no field for the
       // line, so a report can never carry an act's body into the audit log.
+      // ADR 779 §3: "Start everyone" — a person's one tap, a start steer per seat that can hear it.
+      if (method === 'POST' && rest === '/quick-actions/start-all') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        return sendJson(res, 200, await startAll(ctx, team, member));
+      }
+
       if (method === 'POST' && rest === '/inbox/idle-wake') {
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);

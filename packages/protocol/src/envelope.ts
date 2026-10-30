@@ -11,6 +11,7 @@ import {
 import { AnchorRefSchema, HuddleMetaSchema } from './huddle.js';
 import { BlockedBySchema } from './incident.js';
 import { AnswerSchema, QuestionSchema } from './question.js';
+import { PrEventSchema, QuickActionSchema } from './quickAction.js';
 import { ReviewPromiseReferenceSchema } from './review-promise.js';
 import { PROTOCOL_VERSION } from './version.js';
 
@@ -233,6 +234,31 @@ export function actMetaRules(
   // `ask` (ADR 147) is the to-human stream act: it MUST carry a valid `meta.species` (which of the three
   // kinds of directed-to-human traffic) and `meta.tier` (which derives the timeout + no-answer policy the
   // agent runs). Both are closed enums so a surface can't send an ask the no-answer machinery can't tier.
+  // ADR 779: a quick action rides `steer` only, and names one of the four actions. Who may send it
+  // (a human member) is the server's check — the shape cannot know the sender's kind.
+  if (meta['quick_action'] !== undefined) {
+    if (env.act !== 'steer') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['meta', 'quick_action'],
+        message: 'meta.quick_action rides act "steer" only (ADR 779)',
+      });
+    } else if (!QuickActionSchema.safeParse(meta['quick_action']).success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['meta', 'quick_action'],
+        message: 'meta.quick_action is start | check_inbox | check_pr | resume (ADR 779)',
+      });
+    }
+  }
+  if (meta['pr_event'] !== undefined && !PrEventSchema.safeParse(meta['pr_event']).success) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['meta', 'pr_event'],
+      message:
+        'meta.pr_event is {lane, pr, state: merged | ci_red | ci_green, checks_url?} (ADR 779)',
+    });
+  }
   // ADR 773: `meta.answer` answers a question ask. It rides `accept` only (the `in_reply_to` rule above
   // already holds for accept); whether its target is a question is the server's check, not the shape's.
   if (meta['answer'] !== undefined) {

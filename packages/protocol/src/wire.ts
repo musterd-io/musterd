@@ -40,6 +40,8 @@ export * from './model.js';
 export * from './offline.wire.js';
 // ADR 773/774: a question's shape and the answer line, for /live and the injectors.
 export * from './question.wire.js';
+// ADR 779: the quick-action vocabulary, for /live's buttons.
+export * from './quickAction.wire.js';
 export * from './posture.wire.js';
 export * from './seeds.wire.js';
 // ADR 514: the dial vocabularies and prose cap /board's style sheet picks from — no zod behind them.

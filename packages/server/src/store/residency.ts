@@ -32,6 +32,7 @@ import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { readNodeState } from '../node/state.js';
+import { quickActionLineFor } from '../protocol/quickActions.js';
 import { type AuditEntry, appendAudit } from './audit.js';
 import { BOARD_SEAT } from './boardSeat.js';
 import { laneMovedSinceLastWoke, MINTED_HERE } from './continuationStall.js';
@@ -2940,6 +2941,13 @@ async function writeSeatPass(
               }),
             }
           : null;
+      // ADR 779: a person's quick action gets its own composed line (ids and read states only).
+      const quickLine =
+        !isWorkOrder && c.act === 'steer' && c.act_id !== undefined
+          ? await quickActionLineFor(t, { id: teamId, slug: teamSlug }, member.name, c.act_id, {
+              readGitHub: false,
+            })
+          : null;
       return {
         lease_id: lease.id,
         seat: member.name,
@@ -2951,6 +2959,7 @@ async function writeSeatPass(
         composed_line: isWorkOrder
           ? composeWorkOrderLine(member.name, teamSlug, c.lane_id!, kind, c.act_id)
           : (answered?.line ??
+            quickLine ??
             composeWakeLine(member.name, teamSlug, c.act ?? 'message', c.sender ?? '?', c.act_id)),
         ...(answered?.recap ? { composed_recap_line: answered.recap } : {}),
         expires_at: lease.expires_at,
@@ -3179,6 +3188,25 @@ export async function listWakeTranscript(
  * act re-becomes due, still bounded by the derived rate policy.
  */
 /** Teams with at least one residency enrollment — who a host suspension concerns (ADR 236). */
+/**
+ * ADR 779: would a wake for this seat be held by its hourly cap right now? The same derivation the
+ * lease path gates on (`wakesSince` against the effective policy), so "Start everyone" can say
+ * `capped` instead of a start that silently never wakes.
+ */
+export async function seatAtHourlyCap(
+  db: Driver,
+  teamId: string,
+  member: MemberRow,
+  now: number = Date.now(),
+): Promise<boolean> {
+  const enrollment = await getResidency(db, teamId, member.id);
+  const policy = effectiveWakePolicy(
+    seatWakeDefaults(await getPolicy(db, teamId), member),
+    enrollment?.policy ?? null,
+  );
+  return (await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap;
+}
+
 export async function listResidencyTeamIds(db: Driver): Promise<string[]> {
   return (await db.all<{ team_id: string }>('SELECT DISTINCT team_id FROM residency')).map(
     (r) => r.team_id,
