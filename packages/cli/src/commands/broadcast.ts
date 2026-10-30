@@ -1463,7 +1463,13 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise<void>((res, rej) => {
     ws.onopen = () => res();
-    ws.onerror = () => rej(new CliError('could not attach to the Chrome DevTools socket', 1));
+    ws.onerror = () =>
+      rej(
+        new CliError(
+          'could not attach to the Chrome DevTools socket — run `musterd stream start` to relaunch the broadcast browser',
+          1,
+        ),
+      );
   });
   let msgId = 0;
   const pending = new Map<
@@ -1511,7 +1517,13 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
       new Promise((res, rej) => {
         const id = ++msgId;
         const timer = setTimeout(() => {
-          if (pending.delete(id)) rej(new CliError(`Chrome did not answer ${method} in time`, 1));
+          if (pending.delete(id))
+            rej(
+              new CliError(
+                `Chrome did not answer ${method} in time — run \`musterd stream start\` to relaunch the broadcast browser`,
+                1,
+              ),
+            );
         }, cdpTimeoutFor(method));
         pending.set(id, {
           res: (v) => {

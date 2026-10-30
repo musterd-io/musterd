@@ -798,7 +798,10 @@ export class HttpClient {
           parsed.data.error.code,
         );
       }
-      throw new CliError(`server error (${res.status})`, 1);
+      throw new CliError(
+        `the daemon answered ${res.status} without an error frame — retry, and if it persists run \`musterd status\` to see which daemon answered`,
+        1,
+      );
     }
     return json;
   }
@@ -2645,10 +2648,16 @@ export class HttpClient {
         if (errBody.success) {
           throw new CliError(errBody.data.error.message, exitForCode(errBody.data.error.code));
         }
-        throw new CliError(`claim failed (${res.status})`, 1);
+        throw new CliError(
+          `claim failed (${res.status}) — the daemon answered without a claim frame. Run \`musterd status\` to check the daemon, then retry.`,
+          1,
+        );
       }
     }
-    throw new CliError(`server error (${res.status})`, 1);
+    throw new CliError(
+      `the daemon answered ${res.status} without an error frame — retry, and if it persists run \`musterd status\` to see which daemon answered`,
+      1,
+    );
   }
 }
 

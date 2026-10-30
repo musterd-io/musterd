@@ -153,7 +153,11 @@ async function decideWithAuthority(
   }
   const { requests } = await http.requests(team);
   const request = requests.find((r) => r.id === id);
-  if (!request) throw new CliError(`request "${id}" is no longer available`, 1);
+  if (!request)
+    throw new CliError(
+      `request "${id}" is no longer available — it may have been decided or expired. Run \`musterd requests\` to see what is open.`,
+      1,
+    );
   const authority = requestDecisionApproval({
     requestId: id,
     requestTarget: request.target,
