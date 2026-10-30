@@ -545,6 +545,12 @@ export type AuditAction =
   // = a below-top ask timed out and the agent proceeded, recording what it risked (detail
   // `{ ask_ref, risk, chosen_approach, human_unreachable: true }`). The raised→terminal pair is the whole
   // stream's trace; `risk_accepted` is the auditable risk-acceptance ADR 145 §3.1 promised.
+  // ADR 773: a question ask's lifecycle — ids, channel and verification only, never text.
+  | 'question.raised'
+  | 'question.answered'
+  | 'question.withdrawn'
+  | 'question.answer_delivered'
+  | 'question.answer_undelivered'
   | 'ask.raised'
   | 'ask.deferred'
   | 'ask.held'
@@ -929,6 +935,11 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'mcp.surface_rendered': 'actor',
   'mcp.startup_measured': 'actor',
   'ci.run_measured': 'actor',
+  'question.raised': 'actor',
+  'question.answered': 'actor',
+  'question.withdrawn': 'actor',
+  'question.answer_delivered': 'none',
+  'question.answer_undelivered': 'none',
   'ask.raised': 'actor',
   'ask.deferred': 'actor',
   'ask.held': 'actor',

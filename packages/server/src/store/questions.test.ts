@@ -2,6 +2,7 @@ import { makeEnvelope, type Act } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { openLane } from './lanes.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
 import { claimAnswer, openQuestions, questionView, waitingSeats } from './questions.js';
@@ -130,5 +131,17 @@ withDrivers('questions', (o) => {
       'q2',
     ]);
     expect(await openQuestions(db, team.id, { forPerson: 'ryder' })).toEqual([]);
+  });
+
+  it('a closed lane closes its questions, on read', async () => {
+    const { db, team, nick, ryder } = await seed();
+    const lane = await openLane(db, team.id, 'revive', 'ryder', { title: 't', claim: true });
+    await send(db, team, ryder, nick, 'ask', 'q1', 1, {
+      meta: { species: 'consult', question: { ...flake, context: { lane: lane.id } } },
+    });
+    expect((await questionView(db, team.id, 'q1'))?.state).toBe('open');
+    await db.run("UPDATE lanes SET state = 'done' WHERE id = ?", [lane.id]);
+    expect((await questionView(db, team.id, 'q1'))?.state).toBe('lane_closed');
+    expect(await waitingSeats(db, team.id)).toEqual(new Set());
   });
 });

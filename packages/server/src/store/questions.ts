@@ -45,13 +45,16 @@ interface QuestionRow {
   answered_at: number | null;
   delivered_at: number | null;
   undelivered_at: number | null;
+  lane_state: string | null;
 }
 
 const QUESTIONS_SQL = `SELECT m.id, m.meta, m.ts, f.name AS asker, t.name AS to_name,
     (SELECT COALESCE(r.meta, '{}') FROM messages r WHERE r.team_id = m.team_id AND r.act = 'resolve'
        AND r.thread_id = m.id ORDER BY r.ts, r.id LIMIT 1) AS resolve_meta,
     qa.answer_id, qa.answered_by, qa.channel, qa.verified, qa.late, qa.answered_at,
-    qa.delivered_at, qa.undelivered_at
+    qa.delivered_at, qa.undelivered_at,
+    (SELECT l.state FROM lanes l WHERE l.team_id = m.team_id
+       AND l.id = json_extract(m.meta, '$.question.context.lane')) AS lane_state
   FROM messages m
   JOIN members f ON f.id = m.from_member
   LEFT JOIN members t ON t.id = m.to_member
@@ -66,13 +69,16 @@ function toView(row: QuestionRow): QuestionView | null {
   const resolveMeta = row.resolve_meta
     ? (JSON.parse(row.resolve_meta) as Record<string, unknown> | null)
     : null;
+  // A closed lane closes its questions on read (ADR 773 Consequences, 2026-10-30): every close path
+  // (verdict, resolve, sweep, fold) is covered without each one having to write a resolve.
+  const laneClosed = row.lane_state === 'done' || row.lane_state === 'abandoned';
   const state: QuestionState =
     row.answer_id !== null && row.late !== 1
       ? 'answered'
-      : row.resolve_meta === null
-        ? 'open'
-        : resolveMeta?.['withdrawn'] === 'lane_closed'
-          ? 'lane_closed'
+      : laneClosed || resolveMeta?.['withdrawn'] === 'lane_closed'
+        ? 'lane_closed'
+        : row.resolve_meta === null
+          ? 'open'
           : 'withdrawn';
   return {
     id: row.id,

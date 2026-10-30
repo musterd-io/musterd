@@ -7337,7 +7337,17 @@ export async function handleHttp(
         // re-attested from `x-musterd-model` after that claim ages out. (A human fanned out over
         // several attested sessions on different models is the one ambiguous case; the stateless
         // request carries nothing to disambiguate it.)
-        const result = await routeEnvelope(ctx, team, member, env);
+        const result = await routeEnvelope(
+          ctx,
+          team,
+          member,
+          env,
+          undefined,
+          false,
+          undefined,
+          undefined,
+          surfaceHeader(req),
+        );
         // Dependency-targeted invalidation (ADR 111, ADR 088 §5): a `defer` — or a `steer` that names a
         // Goal — bumps that Goal's epoch, so any live lane claimed against the older epoch (on the Goal,
         // or building on a lane on it) is now stale. Wake exactly those owners, never the team. Rides the
