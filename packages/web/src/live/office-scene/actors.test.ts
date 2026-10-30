@@ -754,6 +754,27 @@ describe('errands', () => {
     expect(actors.sceneFx().bottleCarriers.size).toBe(0); // bottle back on the desk
   });
 
+  it('water errand: back at the desk and seated, the member takes a sip (lane 01M67J1YDR)', () => {
+    const { placements, byName } = world([node('Ada')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    actors.takeMotionSounds();
+    expect(actors.errandWater('Ada')).toBe(true);
+    let guard = 0;
+    let sipped = false;
+    while (guard++ < 4000) {
+      const live = actors.step(0.05);
+      const sounds = actors.takeMotionSounds();
+      if (sounds.some((m) => m.kind === 'sip' && m.who === 'Ada')) {
+        sipped = true;
+        expect(actors.poses().get('Ada')!.sit).toBeGreaterThan(0.9);
+        break;
+      }
+      if (!live) break;
+    }
+    expect(sipped).toBe(true);
+  });
+
   it('fridge errand: door opens, a plate is carried, the member really sits and eats, then returns empty-handed', () => {
     const { placements, byName } = world([node('Ada')]);
     const actors = createActors();

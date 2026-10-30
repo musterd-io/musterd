@@ -88,7 +88,7 @@ const TAKE_GAIN: Record<string, number> = {
   door: 0.0069,
   sip: 0.018,
   eat: 0.021,
-  bark: 0.074,
+  bark: 0.037, // -6 dB (nick, 2026-10-30: too loud)
   jingle: 0.041,
   nameplate: 0.0073,
   board: 0.011,
@@ -696,11 +696,12 @@ export class RoomTone {
    *  labours up a little as the pressure builds, coffee trickles into the cup, and it ends on a
    *  few drips. Nothing in it is steady, which is what keeps it from reading as noise on the line. */
   private machine(ctx: AudioContext, out: AudioNode): void {
+    // Every level halved, -6 dB (nick, 2026-10-30: too loud).
     const t0 = ctx.currentTime + 0.02;
     const pumpOn = t0 + 0.12;
     const pumpOff = t0 + 1.9;
     // 1 · the switch: one low clunk, then the pump answers it.
-    this.click(ctx, out, t0, 210, 0.05, 0.07);
+    this.click(ctx, out, t0, 210, 0.025, 0.07);
     // 2 · the pump: a buzzing square in the body's band (not the 50/60 Hz floor a hum lives on),
     //     beaten by a fast tremolo so it rattles instead of droning, and rising slightly under load.
     const pump = ctx.createOscillator();
@@ -713,13 +714,13 @@ export class RoomTone {
     body.Q.value = 1.4;
     const pg = ctx.createGain();
     pg.gain.setValueAtTime(0.0001, pumpOn);
-    pg.gain.exponentialRampToValueAtTime(0.03, pumpOn + 0.08);
-    pg.gain.setValueAtTime(0.03, pumpOff - 0.12);
+    pg.gain.exponentialRampToValueAtTime(0.015, pumpOn + 0.08);
+    pg.gain.setValueAtTime(0.015, pumpOff - 0.12);
     pg.gain.exponentialRampToValueAtTime(0.0001, pumpOff);
     const rattle = ctx.createOscillator();
     rattle.frequency.value = 13;
     const depth = ctx.createGain();
-    depth.gain.value = 0.012; // ±40% of the pump's level: a rattle, not a vibrato
+    depth.gain.value = 0.006; // ±40% of the pump's level: a rattle, not a vibrato
     rattle.connect(depth).connect(pg.gain);
     pump.connect(body).connect(pg).connect(out);
     pump.start(pumpOn);
@@ -738,8 +739,8 @@ export class RoomTone {
     const sg = ctx.createGain();
     const pourOn = t0 + 0.55;
     sg.gain.setValueAtTime(0.0001, pourOn);
-    sg.gain.exponentialRampToValueAtTime(0.014, pourOn + 0.25);
-    sg.gain.setValueAtTime(0.014, pumpOff - 0.1);
+    sg.gain.exponentialRampToValueAtTime(0.007, pourOn + 0.25);
+    sg.gain.setValueAtTime(0.007, pumpOff - 0.1);
     sg.gain.exponentialRampToValueAtTime(0.0001, pumpOff + 0.15);
     const wobble = ctx.createOscillator();
     wobble.frequency.value = 5.5;
@@ -765,7 +766,7 @@ export class RoomTone {
       o.frequency.exponentialRampToValueAtTime(f * 1.6, at + 0.04);
       const dg = ctx.createGain();
       dg.gain.setValueAtTime(0.0001, at);
-      dg.gain.exponentialRampToValueAtTime(0.007, at + 0.006);
+      dg.gain.exponentialRampToValueAtTime(0.0035, at + 0.006);
       dg.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
       o.connect(dg).connect(out);
       o.start(at);
