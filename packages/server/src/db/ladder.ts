@@ -1194,7 +1194,6 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
   },
 ];
 
-
 /** v134: the lanes the card backfill places, in the order it places them. */
 const CARD_BACKFILL_SQL = `SELECT id, team_id, goal_id, state, owner_seat, created_by, updated_at
   FROM lanes WHERE card_json IS NULL ORDER BY team_id, created_at, id`;

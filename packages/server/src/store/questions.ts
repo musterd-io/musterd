@@ -8,6 +8,7 @@ import {
   type Question,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { appendAudit } from './audit.js';
 
 /**
  * Question asks (ADR 773): a seat's question to a person, open until it is answered, withdrawn by a
@@ -255,4 +256,132 @@ export async function answerLineFor(
     answer: answerLabel(view.question, answer.data),
     ...(opts.recap ? { recapOf: view.question.text } : {}),
   });
+}
+
+/** An answer not delivered by now is flagged on every card that shows it (ADR 773 §8). */
+export const ANSWER_UNDELIVERED_MS = 5 * 60_000;
+
+/**
+ * Record that `seat` received answer `answerId` — by an injected doorbell line or a wake that
+ * occupied. A no-op for any act that is not an undelivered answer to a question `seat` asked, so the
+ * report handlers can call it for every act they see.
+ */
+export async function markAnswerDelivered(
+  db: Driver,
+  teamId: string,
+  answerId: string,
+  seat: string,
+  via: 'inject' | 'wake',
+  now: number = Date.now(),
+): Promise<boolean> {
+  const row = await db.get<{ question_id: string; answered_at: number; channel: string }>(
+    `SELECT question_id, answered_at, channel FROM question_answers
+      WHERE team_id = ? AND answer_id = ? AND asker = ? AND delivered_at IS NULL`,
+    [teamId, answerId, seat],
+  );
+  if (!row) return false;
+  await db.run(
+    `UPDATE question_answers SET delivered_at = ?, delivered_via = ?
+      WHERE team_id = ? AND answer_id = ? AND delivered_at IS NULL`,
+    [now, via, teamId, answerId],
+  );
+  await appendAudit(db, teamId, {
+    actor: null,
+    action: 'question.answer_delivered',
+    target: row.question_id,
+    result: 'allow',
+    detail: {
+      answer: answerId,
+      seat,
+      via,
+      channel: row.channel,
+      latency_ms: now - row.answered_at,
+    },
+  });
+  return true;
+}
+
+/**
+ * Flag answers still undelivered past {@link ANSWER_UNDELIVERED_MS}. Re-offering is the rails' own
+ * job — the idle seam re-raises an act until the seat reads past it, and the immediate lane re-leases
+ * it — so the daemon's part is never letting a miss go silent.
+ */
+export async function sweepUndeliveredAnswers(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<string[]> {
+  const rows = await db.all<{ question_id: string; answer_id: string; asker: string }>(
+    `SELECT question_id, answer_id, asker FROM question_answers
+      WHERE team_id = ? AND delivered_at IS NULL AND undelivered_at IS NULL AND answered_at < ?`,
+    [teamId, now - ANSWER_UNDELIVERED_MS],
+  );
+  for (const r of rows) {
+    await db.run(
+      'UPDATE question_answers SET undelivered_at = ? WHERE team_id = ? AND question_id = ?',
+      [now, teamId, r.question_id],
+    );
+    await appendAudit(db, teamId, {
+      actor: null,
+      action: 'question.answer_undelivered',
+      target: r.question_id,
+      result: 'deny',
+      detail: { answer: r.answer_id, seat: r.asker },
+    });
+  }
+  return rows.map((r) => r.answer_id);
+}
+
+export interface QuestionMeasures {
+  asked: number;
+  answered: number;
+  /** Answered from a card (`/live`, the phone, Slack) rather than a terminal. */
+  answered_off_terminal: number;
+  inferred: number;
+  delivered: number;
+  undelivered: number;
+  /** Undelivered answers with no flag — the design's zero target (ADR 773 Experiment). */
+  unflagged_undelivered: number;
+  /** Median answer → delivery, ms; null with nothing delivered. */
+  resume_p50_ms: number | null;
+}
+
+/** The ADR 773 measures since `since` (ms epoch), for `team_report`. */
+export async function questionMeasures(
+  db: Driver,
+  teamId: string,
+  since: number,
+  now: number = Date.now(),
+): Promise<QuestionMeasures> {
+  const asked = await db.all<{ meta: string | null }>(
+    `SELECT meta FROM messages WHERE team_id = ? AND act = 'ask' AND ts >= ?
+       AND json_extract(meta, '$.question') IS NOT NULL`,
+    [teamId, since],
+  );
+  const answers = await db.all<{
+    channel: string;
+    answered_at: number;
+    delivered_at: number | null;
+    undelivered_at: number | null;
+  }>(
+    `SELECT channel, answered_at, delivered_at, undelivered_at FROM question_answers
+      WHERE team_id = ? AND answered_at >= ?`,
+    [teamId, since],
+  );
+  const latencies = answers
+    .filter((a) => a.delivered_at !== null)
+    .map((a) => a.delivered_at! - a.answered_at)
+    .sort((x, y) => x - y);
+  const late = (a: (typeof answers)[number]) =>
+    a.delivered_at === null && now - a.answered_at >= ANSWER_UNDELIVERED_MS;
+  return {
+    asked: asked.length,
+    answered: answers.length,
+    answered_off_terminal: answers.filter((a) => a.channel !== 'cli').length,
+    inferred: asked.filter((r) => questionOf(r.meta ? JSON.parse(r.meta) : null)?.inferred).length,
+    delivered: latencies.length,
+    undelivered: answers.filter(late).length,
+    unflagged_undelivered: answers.filter((a) => late(a) && a.undelivered_at === null).length,
+    resume_p50_ms: latencies.length ? latencies[Math.floor((latencies.length - 1) / 2)]! : null,
+  };
 }

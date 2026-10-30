@@ -522,7 +522,13 @@ describe('v136 — question answers (ADR 773)', () => {
     runMigrations(db);
     const cols = db.prepare("SELECT name FROM pragma_table_info('question_answers')").pluck().all();
     expect(cols).toEqual(
-      expect.arrayContaining(['question_id', 'answer_id', 'verified', 'delivered_at', 'undelivered_at']),
+      expect.arrayContaining([
+        'question_id',
+        'answer_id',
+        'verified',
+        'delivered_at',
+        'undelivered_at',
+      ]),
     );
     const pk = db
       .prepare("SELECT name FROM pragma_table_info('question_answers') WHERE pk > 0 ORDER BY pk")

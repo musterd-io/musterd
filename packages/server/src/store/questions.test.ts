@@ -1,13 +1,18 @@
 import { makeEnvelope, type Act } from '@musterd/protocol';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { listAudit } from './audit.js';
 import { openLane } from './lanes.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
 import {
+  ANSWER_UNDELIVERED_MS,
   answerLineFor,
   claimAnswer,
+  markAnswerDelivered,
+  questionMeasures,
+  sweepUndeliveredAnswers,
   openQuestions,
   questionView,
   waitingSeats,
@@ -91,7 +96,7 @@ withDrivers('questions', (o) => {
   });
 
   it('an answer closes it, the first answer wins, and a late one leaves the close standing', async () => {
-    const { db, team, nick, swetha, ryder } = await seed();
+    const { db, team, nick, ryder } = await seed();
     await send(db, team, ryder, nick, 'ask', 'q1', 1, { meta: ask('team') });
     const base = { questionId: 'q1', asker: 'ryder', verified: true, late: false, at: 5 };
     expect(
@@ -199,5 +204,57 @@ withDrivers('questions', (o) => {
       },
     });
     expect(await answerLineFor(db, team.id, 'revive', 'ryder', 'a2')).toBeNull();
+  });
+
+  it('delivery is marked once, by the asker only; the sweep flags a miss; the measures add up', async () => {
+    const { db, team, nick, ryder } = await seed();
+    await send(db, team, ryder, nick, 'ask', 'q1', 1, { meta: ask() });
+    await send(db, team, ryder, nick, 'ask', 'q2', 2, { meta: ask() });
+    const base = { asker: 'ryder', by: 'nick', verified: true, late: false };
+    await claimAnswer(db, team.id, {
+      ...base,
+      questionId: 'q1',
+      answerId: 'a1',
+      channel: 'live',
+      at: 10_000,
+    });
+    await claimAnswer(db, team.id, {
+      ...base,
+      questionId: 'q2',
+      answerId: 'a2',
+      channel: 'cli',
+      at: 10_000,
+    });
+
+    expect(await markAnswerDelivered(db, team.id, 'a1', 'swetha', 'inject', 14_000)).toBe(false);
+    expect(await markAnswerDelivered(db, team.id, 'a1', 'ryder', 'inject', 14_000)).toBe(true);
+    expect(await markAnswerDelivered(db, team.id, 'a1', 'ryder', 'wake', 15_000)).toBe(false);
+    expect((await questionView(db, team.id, 'q1'))?.answer?.delivered_at).toBe(14_000);
+
+    expect(await sweepUndeliveredAnswers(db, team.id, 10_000 + ANSWER_UNDELIVERED_MS - 1)).toEqual(
+      [],
+    );
+    const late = 10_000 + ANSWER_UNDELIVERED_MS + 1;
+    expect(await sweepUndeliveredAnswers(db, team.id, late)).toEqual(['a2']);
+    expect(await sweepUndeliveredAnswers(db, team.id, late + 1)).toEqual([]);
+    expect((await questionView(db, team.id, 'q2'))?.answer?.undelivered).toBe(true);
+
+    expect(await questionMeasures(db, team.id, 0, late)).toEqual({
+      asked: 2,
+      answered: 2,
+      answered_off_terminal: 1,
+      inferred: 0,
+      delivered: 1,
+      undelivered: 1,
+      unflagged_undelivered: 0,
+      resume_p50_ms: 4_000,
+    });
+    const audit = await listAudit(db, team.id);
+    expect(
+      JSON.parse(String(audit.find((r) => r.action === 'question.answer_delivered')?.detail)),
+    ).toMatchObject({
+      latency_ms: 4_000,
+      via: 'inject',
+    });
   });
 });

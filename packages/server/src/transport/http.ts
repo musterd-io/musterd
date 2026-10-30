@@ -472,7 +472,7 @@ import {
   supersededMessage,
 } from '../store/presence.js';
 import { afterPullClaim, offerPull } from '../store/pull.js';
-import { answerLineFor } from '../store/questions.js';
+import { answerLineFor, markAnswerDelivered } from '../store/questions.js';
 import {
   lastActionBySubject,
   quietestBusyMs,
@@ -6488,6 +6488,10 @@ export async function handleHttp(
           : body.occupied
             ? 'residency.woke'
             : 'residency.wake_failed';
+        // ADR 773 §8: a wake that occupied, for a lease carrying a question's answer, delivered it.
+        if (body.occupied && !body.deferred && lease.act_id && seat) {
+          await markAnswerDelivered(ctx.db, team.id, lease.act_id, seat.name, 'wake');
+        }
         await appendAudit(ctx.db, team.id, {
           actor: null,
           action,
@@ -10660,6 +10664,10 @@ export async function handleHttp(
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const body = parseOrBadRequest(IdleWakeReportSchema, await readJson(req));
+        // ADR 773 §8: an injected answer is a delivered one.
+        if (body.outcome === 'injected') {
+          await markAnswerDelivered(ctx.db, team.id, body.act, member.name, 'inject');
+        }
         await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: body.outcome === 'capped' ? 'idle_wake.capped' : 'idle_wake.injected',
