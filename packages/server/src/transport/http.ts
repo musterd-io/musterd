@@ -472,6 +472,7 @@ import {
   supersededMessage,
 } from '../store/presence.js';
 import { afterPullClaim, offerPull } from '../store/pull.js';
+import { answerLineFor, markAnswerDelivered } from '../store/questions.js';
 import {
   lastActionBySubject,
   quietestBusyMs,
@@ -6487,6 +6488,10 @@ export async function handleHttp(
           : body.occupied
             ? 'residency.woke'
             : 'residency.wake_failed';
+        // ADR 773 §8: a wake that occupied, for a lease carrying a question's answer, delivered it.
+        if (body.occupied && !body.deferred && lease.act_id && seat) {
+          await markAnswerDelivered(ctx.db, team.id, lease.act_id, seat.name, 'wake');
+        }
         await appendAudit(ctx.db, team.id, {
           actor: null,
           action,
@@ -7337,7 +7342,17 @@ export async function handleHttp(
         // re-attested from `x-musterd-model` after that claim ages out. (A human fanned out over
         // several attested sessions on different models is the one ambiguous case; the stateless
         // request carries nothing to disambiguate it.)
-        const result = await routeEnvelope(ctx, team, member, env);
+        const result = await routeEnvelope(
+          ctx,
+          team,
+          member,
+          env,
+          undefined,
+          false,
+          undefined,
+          undefined,
+          surfaceHeader(req),
+        );
         // Dependency-targeted invalidation (ADR 111, ADR 088 §5): a `defer` — or a `steer` that names a
         // Goal — bumps that Goal's epoch, so any live lane claimed against the older epoch (on the Goal,
         // or building on a lane on it) is now stale. Wake exactly those owners, never the team. Rides the
@@ -10591,7 +10606,14 @@ export async function handleHttp(
           )
         )
           return sendJson(res, 200, { raised: false, seam });
-        const line = composeInterruptLine(team.slug, latest, pending.length, huddleTopic, rest);
+        // ADR 774: a verified answer to this seat's own question rides the line, fenced. Only on the
+        // idle seam — the boundary seam interrupts a working turn, where a pointer is enough.
+        const answerLine =
+          idle && latest.act === 'accept'
+            ? await answerLineFor(ctx.db, team.id, team.slug, member.name, latest.id)
+            : null;
+        const line =
+          answerLine ?? composeInterruptLine(team.slug, latest, pending.length, huddleTopic, rest);
         // Which rail asked. The caller declares it (`musterd inbox --interrupt-check --hook X`);
         // until ADR 423 the flag only shaped the CLI's own stdout and never reached the server, so
         // every row was rail-blind and the doorbell contract had to cite a measurer's name per
@@ -10642,6 +10664,10 @@ export async function handleHttp(
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const body = parseOrBadRequest(IdleWakeReportSchema, await readJson(req));
+        // ADR 773 §8: an injected answer is a delivered one.
+        if (body.outcome === 'injected') {
+          await markAnswerDelivered(ctx.db, team.id, body.act, member.name, 'inject');
+        }
         await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: body.outcome === 'capped' ? 'idle_wake.capped' : 'idle_wake.injected',

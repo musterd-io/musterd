@@ -601,8 +601,12 @@ export const WakeOrderSchema = z
      *  host's own log without the daemon's audit. Absent on board continuation and from an older daemon. */
     act_ts: z.number().int().optional(),
     lane: WakeLaneSchema,
-    /** The daemon-composed one-line spawn prompt (structured fields only, ADR 088 §4). */
+    /** The daemon-composed one-line spawn prompt (structured fields only, ADR 088 §4 — or, for a
+     *  verified answer to the seat's own question, the ADR 774 answer line). */
     composed_line: z.string(),
+    /** ADR 774 §3: the recap form of the answer line, for a fresh session when the resume misses —
+     *  the seat's own question quoted before the answer. Absent on every other wake. */
+    composed_recap_line: z.string().optional(),
     /** Lease expiry (ms epoch, ~120s): report before this or the wake re-becomes due. */
     expires_at: z.number().int(),
     /** Effective tool policy for the run (increment 5). Absent (older daemon) ⇒ reply-only. */

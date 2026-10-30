@@ -53,6 +53,7 @@ The design, approved by nick on 2026-10-30, is
    - **withdrawn**: the asker sends `resolve` on its thread;
    - **lane closed**: when `context.lane` goes `done` or `abandoned`, the daemon writes a `resolve`
      on the thread with `meta.withdrawn: 'lane_closed'`.
+     _(Amended 2026-10-30: derived on read from the lane's state, not written; see Consequences.)_
 
    An answer that arrives after a withdrawal is still recorded and delivered, with `late: true` in
    its proof, so the seat can ignore it. The first answer wins. A second is refused with
@@ -96,6 +97,17 @@ The design, approved by nick on 2026-10-30, is
   delivery state. Its primary key on the question is what makes the first answer win.
 - Phase 2 of the design (quick actions; PR-merged and CI-red events go to the seat) builds on
   decision 7's wake and is not part of this ADR.
+- 2026-10-30 (lane `01M674NBRZ`): a question whose `context.lane` is `done` or `abandoned` reads as
+  `lane_closed`. The daemon writes no `resolve`, because lanes close on four paths (a resolve, an
+  acceptor's verdict, the acceptance sweep and the federation fold), and one read rule covers all
+  of them where four writes would each be a place to forget. A `resolve` carrying
+  `meta.withdrawn: 'lane_closed'` still reads as `lane_closed`.
+- 2026-10-30 (lane `01M674NBRZ`), decision 8: re-offering an undelivered answer is the rails' own
+  job. The idle seam raises the act again until the seat reads past it, and the immediate lane
+  re-leases it. The daemon adds no separate 60 s re-ring; its sweep flags the answer `undelivered`
+  at 5 minutes (`ANSWER_UNDELIVERED_MS`). `questionMeasures` computes the Experiment's numbers
+  from `question_answers`. Surfacing them in `team_report` follows with the `/live` increment.
+  Follows-up: lane `01M674NR7Q`.
 
 ## Observability & Evaluation
 

@@ -12,6 +12,7 @@ import { sweepAbandonedAcceptance } from '../store/laneSweep.js';
 import { getMemberById, reapExcessIdleObservers, reapStaleObservers } from '../store/members.js';
 import { hasLivePresence, reapStale } from '../store/presence.js';
 import { releaseDeadPulls, sweepPullWindows } from '../store/pull.js';
+import { sweepUndeliveredAnswers } from '../store/questions.js';
 import { expireRequests } from '../store/requests.js';
 import type { RequestRow } from '../store/requests.js';
 import {
@@ -276,6 +277,18 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
           log.info({ msg: 'pull_released', team: team.slug, ...r });
       } catch (err) {
         log.warn({ msg: 'pull_sweep_failed', team: team.slug, err: String(err) });
+      }
+    }
+
+    // ADR 773 §8: a question's answer that never reached its seat is flagged, never silently lost.
+    for (const team of activeTeams) {
+      if (joinerTeams.has(team.id)) continue;
+      try {
+        for (const answer of await sweepUndeliveredAnswers(ctx.db, team.id, now)) {
+          log.warn({ msg: 'question_answer_undelivered', team: team.slug, answer });
+        }
+      } catch (err) {
+        log.warn({ msg: 'question_answer_sweep_failed', team: team.slug, err: String(err) });
       }
     }
 

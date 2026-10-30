@@ -1191,9 +1191,9 @@ answer's text.
   `{text (1–280), why? (≤ 600), options? (0–9 of {label (1–80), consequence? (≤ 140)}), context?
   {lane?, pr?, branch?}, blocking (default false), audience ('addressee' | 'team', default
   'addressee'), inferred (default false)}`.
-- A question is open until answered, withdrawn (a `resolve` on its thread by the asker), or its
-  `context.lane` goes `done`/`abandoned`, when the server MUST write that `resolve` with
-  `meta.withdrawn: 'lane_closed'`.
+- A question is open until answered, withdrawn (a `resolve` on its thread), or its `context.lane`
+  is `done`/`abandoned` — a server MUST then read it as `lane_closed` (derived from the lane's
+  state; no act is written).
 - An answer is an `accept` with `meta.in_reply_to` naming the question and `meta.answer {choice?
   (0–8), text? (1–4000)}`, at least one present. A server MUST refuse `meta.answer` on any other
   act or target, MUST refuse an answer from anyone but the addressee when `audience` is

@@ -258,6 +258,22 @@ describe('idleRingable (ADR 558 §1)', () => {
   it.each(['steer', 'ask', 'request_help', 'handoff'])('a directed %s rings', (act) => {
     expect(idleRingable(env({ act }), 'izzo')).toBe(true);
   });
+  it("a question's answer rings its asker; a plain accept does not (ADR 773 §7)", () => {
+    const proof = { channel: 'live', verified: true, by: 'nick' };
+    const answer = env({
+      act: 'accept',
+      from: 'nick',
+      meta: { in_reply_to: 'q1', answer: { choice: 0 }, answer_proof: proof },
+    });
+    expect(idleRingable(answer, 'izzo')).toBe(true);
+    expect(
+      idleRingable(env({ act: 'accept', from: 'nick', meta: { in_reply_to: 'q1' } }), 'izzo'),
+    ).toBe(false);
+    // No server proof, no ring: a client cannot ring a seat by dressing an accept as an answer.
+    expect(
+      idleRingable(env({ act: 'accept', from: 'nick', meta: { answer: { choice: 0 } } }), 'izzo'),
+    ).toBe(false);
+  });
   it.each([
     'message',
     'status_update',

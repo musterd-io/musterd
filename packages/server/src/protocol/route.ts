@@ -76,6 +76,7 @@ import {
   withEnvelopeSpan,
 } from '../telemetry.js';
 import { acceptedHandoffOf, applyDisputeAnswer, stampDispute } from './dispute.js';
+import { auditQuestionAnswer, prepareQuestionAnswer, stripAnswerProof } from './questionAnswer.js';
 
 export interface RouteResult {
   message: MessageRow;
@@ -301,6 +302,9 @@ export async function routeEnvelope(
   /** A forwarded authority-bearing answer is checked against the origin configured for this
    *  enrolled node and must consume a descriptor issued to the same node. */
   forwardedNodeId?: string,
+  /** The surface a stateless send names (`x-musterd-surface`; `/live` says `web`) — the channel
+   *  label on a question's answer (ADR 773 §5). A live socket's own presence surface wins. */
+  senderSurface?: string,
 ): Promise<RouteResult> {
   if (daemonComposed) await refuseVoiceBoundElsewhere(ctx, team, sender);
   return withEnvelopeSpan(
@@ -315,6 +319,7 @@ export async function routeEnvelope(
         daemonComposed,
         senderConnId,
         forwardedNodeId,
+        senderSurface,
       ),
   );
 }
@@ -328,6 +333,7 @@ async function routeEnvelopeInner(
   daemonComposed = false,
   senderConnId?: string,
   forwardedNodeId?: string,
+  senderSurface?: string,
 ): Promise<RouteResult> {
   // ADR 231: a `handoff` that names no lane. Only `lane_handoff` ever wrote
   // `meta.lane_handoff.lane`, so a plain `team_send {act:'handoff'}` hands over work without saying
@@ -612,6 +618,8 @@ async function routeEnvelopeInner(
     const { channel_answer: _clientChannelAnswer, ...restMeta } = outgoingEnv.meta;
     outgoingEnv = { ...outgoingEnv, meta: restMeta };
   }
+  // ADR 773 §5: `answer_proof` says how a question's answer was verified — server-controlled.
+  outgoingEnv = stripAnswerProof(outgoingEnv, daemonComposed);
   // ADR 662: a human answer to a privileged ask is accepted only after the same A2 gate used by
   // lane verdicts. This stamp is server-owned; persistent consumers use it to distinguish answers
   // checked by this route from older bearer-only rows that must no longer release work.
@@ -843,10 +851,23 @@ async function routeEnvelopeInner(
   // ADR 505 §2: the act that opens a dispute carries its source. Before persist, so the stored
   // row and every delivery derived from it agree, and so the pinned SELECT can read it.
   outgoingEnv = await stampDispute(ctx, team, sender, outgoingEnv);
+  // ADR 773 §3–§5: a question's answer claims the question (first wins) and is stamped with its
+  // proof. Last before persist, so no later refusal can leave a claimed question with no answer row.
+  outgoingEnv = await prepareQuestionAnswer(ctx.db, team, sender, outgoingEnv, {
+    daemonComposed,
+    surface: senderPresenceId
+      ? ((
+          await ctx.db.get<{ surface: string }>('SELECT surface FROM presence WHERE id = ?', [
+            senderPresenceId,
+          ])
+        )?.surface ?? senderSurface)
+      : senderSurface,
+  });
 
   // Persist (append-only log) — the urgent-downgraded envelope when applicable, so the stored meta and
   // every delivery (direct + firehose, all derived from the row) carry the corrected flags.
   const message = await insertMessage(ctx.db, team.id, sender.id, toMemberId, outgoingEnv);
+  await auditQuestionAnswer(ctx.db, team, outgoingEnv);
   if (verifiedPrivilegedAskReply && sender.kind === 'human') {
     void tickVerdictQueue(ctx, team, sender, outgoingEnv.ts);
   }

@@ -25,6 +25,24 @@ describe('pendingInterrupts (ADR 088)', () => {
   const urgent = { urgent: true, urgent_reason: 'prod is down' };
   const toMe = { kind: 'member' as const, name: 'me' };
 
+  it("a question's answer is a wake reason only where a rail opts in (ADR 773 §7)", () => {
+    const answer = env({
+      id: 'a1',
+      from: 'nick',
+      to: toMe,
+      act: 'accept',
+      meta: {
+        in_reply_to: 'q1',
+        answer: { choice: 0 },
+        answer_proof: { channel: 'live', verified: true, by: 'nick' },
+      },
+    });
+    expect(pendingInterrupts([answer], 'me').map((m) => m.id)).toEqual([]);
+    expect(pendingInterrupts([answer], 'me', { answers: true }).map((m) => m.id)).toEqual(['a1']);
+    expect(pendingInterrupts([answer], 'me', { directed: true }).map((m) => m.id)).toEqual(['a1']);
+    expect(pendingInterrupts([answer], 'someone-else', { answers: true })).toEqual([]);
+  });
+
   it('raises an urgent directed act and an urgent request_help', () => {
     const msgs = [
       env({ id: 'a', from: 'nick', to: toMe, act: 'handoff', meta: urgent }),

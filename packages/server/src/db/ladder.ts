@@ -127,6 +127,25 @@ const PRESENCE_COLUMNS = [
 const PRESENCE_SURFACES_SQL =
   "'cli','claude-code','codex','opencode','grok','cursor','web','ios','slack','other','musterd','muse'";
 
+/** v136 (ADR 773). Above `LADDER`: a `sql:` rung reads it when the array is built. */
+const QUESTION_ANSWERS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS question_answers (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  question_id TEXT NOT NULL,
+  answer_id TEXT NOT NULL,
+  asker TEXT NOT NULL,
+  answered_by TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  verified INTEGER NOT NULL,
+  late INTEGER NOT NULL DEFAULT 0,
+  answered_at BIGINT NOT NULL,
+  delivered_at BIGINT,
+  delivered_via TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_attempt_at BIGINT,
+  undelivered_at BIGINT,
+  PRIMARY KEY (team_id, question_id)
+)`;
+
 export const LADDER: PortableMigration[] = [
   {
     // v81 — ADR 487 (nothing vanishes, #1897): what a closing lane said is left (`follows_up_json`:
@@ -1165,6 +1184,13 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       // Not measured on Postgres; the dialect's json_extract rewrite would need its own expression
       // index. Hosted stores keep today's plan (ADR 771 Consequences).
     },
+  },
+  {
+    // v136 — ADR 773 (lane 01M674NBRZ): one row per answered question. The primary key on the
+    // question is what makes the first answer win; delivery columns carry the confirm / retry /
+    // undelivered state (ADR 773 §8).
+    version: 136,
+    sql: QUESTION_ANSWERS_TABLE_SQL,
   },
 ];
 

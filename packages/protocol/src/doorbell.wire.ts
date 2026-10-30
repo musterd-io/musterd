@@ -80,7 +80,21 @@ export function idleRingable(env: IdleRingInput, seat: string): boolean {
   // triggers — an idle opener (mostly an agent) must not pay a turn for every advisory pull.
   if (env.act === 'ask' && isPullAnnouncement(env.meta)) return false;
   if (env.meta?.['urgent'] === true) return true;
+  // ADR 773 §7: the answer to the seat's question rings it — the one `accept` that does.
+  if (isQuestionAnswer(env)) return true;
   return IDLE_RINGS.has(env.act);
+}
+
+/** ADR 773: an `accept` carrying a question's answer and the server's proof of it. */
+export function isQuestionAnswer(env: Pick<IdleRingInput, 'act' | 'meta'>): boolean {
+  if (env.act !== 'accept') return false;
+  const meta = env.meta;
+  return (
+    typeof meta?.['answer'] === 'object' &&
+    meta['answer'] !== null &&
+    typeof meta['answer_proof'] === 'object' &&
+    meta['answer_proof'] !== null
+  );
 }
 
 /** ADR 645: the host's service seat stamps `meta.pull` on the announcement ask. */
