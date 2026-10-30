@@ -1,6 +1,7 @@
 import {
   isLaneReviewGrade,
   isWireAttestationSource,
+  MODEL_UNKNOWN,
   REPORTED_ASKS_WINDOW_MS,
   type Envelope,
   type LaneEvent,
@@ -1684,6 +1685,36 @@ export async function reviewRouting(
     return { routed: undefined, human_required, promised_ms, exempt };
   } catch {
     return unknown; // reachable now that the query no longer parses the JSON for us
+  }
+}
+
+/**
+ * The worker family the ready edge RECORDED at submit time (ADR 303's `review_selection`), or
+ * `undefined` when it recorded none — no ready row, an unparseable one, or a snapshot that itself
+ * abstained (`unknown`). Three-valued like {@link reviewRouting}: the close edge may fall back to
+ * this recorded fact when the worker's live attestation is gone by close time, but a ready row
+ * that abstained is not evidence and must not be resolved into a guess (ADR 173).
+ */
+export async function readyWorkerFamily(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<string | undefined> {
+  const row = await db.get<{ detail: string | null }>(
+    `SELECT detail FROM audit
+        WHERE team_id = ? AND action = 'lane.ready_for_review' AND target = ?
+      ORDER BY ts DESC, id DESC LIMIT 1`,
+    [teamId, laneId],
+  );
+  if (!row?.detail) return undefined;
+  try {
+    const d = JSON.parse(row.detail) as {
+      review_selection?: { worker_family?: unknown };
+    };
+    const f = d.review_selection?.worker_family;
+    return typeof f === 'string' && f.length > 0 && f !== MODEL_UNKNOWN ? f : undefined;
+  } catch {
+    return undefined;
   }
 }
 
