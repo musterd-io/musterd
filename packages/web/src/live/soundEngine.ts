@@ -658,39 +658,88 @@ export class RoomTone {
     src.stop(t0 + 0.45);
   }
 
-  /** The espresso machine at the island (lane 01M5XS6KAD): a pump hum with a hiss over it, held for
-   *  the pour's beat, then the hiss falling away. */
+  /** The espresso machine at the island (lane 01M5XS6KAD; re-voiced 2026-10-30, lane 01M65FSKR7).
+   *  The first voice — a steady 58 Hz sawtooth under a flat 2.4 kHz hiss — was mains hum and
+   *  tape hiss, the sound of a bad A/V cable (nick: "too much like some a/v static"). A machine is
+   *  made of events, not a held tone: the switch clunks, a vibratory pump buzzes in pulses and
+   *  labours up a little as the pressure builds, coffee trickles into the cup, and it ends on a
+   *  few drips. Nothing in it is steady, which is what keeps it from reading as noise on the line. */
   private machine(ctx: AudioContext, out: AudioNode): void {
     const t0 = ctx.currentTime + 0.02;
-    const dur = 1.6;
-    const hum = ctx.createOscillator();
-    hum.type = 'sawtooth';
-    hum.frequency.value = 58;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 180;
-    const hg = ctx.createGain();
-    hg.gain.setValueAtTime(0.0001, t0);
-    hg.gain.exponentialRampToValueAtTime(0.045, t0 + 0.15);
-    hg.gain.setValueAtTime(0.045, t0 + dur - 0.2);
-    hg.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    hum.connect(lp).connect(hg).connect(out);
-    hum.start(t0);
-    hum.stop(t0 + dur + 0.05);
+    const pumpOn = t0 + 0.12;
+    const pumpOff = t0 + 1.9;
+    // 1 · the switch: one low clunk, then the pump answers it.
+    this.click(ctx, out, t0, 210, 0.05, 0.07);
+    // 2 · the pump: a buzzing square in the body's band (not the 50/60 Hz floor a hum lives on),
+    //     beaten by a fast tremolo so it rattles instead of droning, and rising slightly under load.
+    const pump = ctx.createOscillator();
+    pump.type = 'square';
+    pump.frequency.setValueAtTime(96, pumpOn);
+    pump.frequency.linearRampToValueAtTime(112, pumpOff);
+    const body = ctx.createBiquadFilter();
+    body.type = 'bandpass';
+    body.frequency.value = 420;
+    body.Q.value = 1.4;
+    const pg = ctx.createGain();
+    pg.gain.setValueAtTime(0.0001, pumpOn);
+    pg.gain.exponentialRampToValueAtTime(0.03, pumpOn + 0.08);
+    pg.gain.setValueAtTime(0.03, pumpOff - 0.12);
+    pg.gain.exponentialRampToValueAtTime(0.0001, pumpOff);
+    const rattle = ctx.createOscillator();
+    rattle.frequency.value = 13;
+    const depth = ctx.createGain();
+    depth.gain.value = 0.012; // ±40% of the pump's level: a rattle, not a vibrato
+    rattle.connect(depth).connect(pg.gain);
+    pump.connect(body).connect(pg).connect(out);
+    pump.start(pumpOn);
+    rattle.start(pumpOn);
+    pump.stop(pumpOff + 0.05);
+    rattle.stop(pumpOff + 0.05);
+    // 3 · the pour: a thin trickle — narrow, low-mid, wobbling — that starts once the pump has
+    //     built pressure and stops a moment after it.
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer(ctx);
     src.loop = true;
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.Q.value = 0.8;
-    bp.frequency.value = 2400;
+    const stream = ctx.createBiquadFilter();
+    stream.type = 'bandpass';
+    stream.frequency.value = 1100;
+    stream.Q.value = 4;
     const sg = ctx.createGain();
-    sg.gain.setValueAtTime(0.0001, t0 + 0.3);
-    sg.gain.exponentialRampToValueAtTime(0.018, t0 + 0.6);
-    sg.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    src.connect(bp).connect(sg).connect(out);
-    src.start(t0 + 0.3);
-    src.stop(t0 + dur + 0.05);
+    const pourOn = t0 + 0.55;
+    sg.gain.setValueAtTime(0.0001, pourOn);
+    sg.gain.exponentialRampToValueAtTime(0.014, pourOn + 0.25);
+    sg.gain.setValueAtTime(0.014, pumpOff - 0.1);
+    sg.gain.exponentialRampToValueAtTime(0.0001, pumpOff + 0.15);
+    const wobble = ctx.createOscillator();
+    wobble.frequency.value = 5.5;
+    const wd = ctx.createGain();
+    wd.gain.value = 180; // the stream's pitch wanders ±180 Hz — liquid, not a fixed band
+    wobble.connect(wd).connect(stream.frequency);
+    src.connect(stream).connect(sg).connect(out);
+    src.start(pourOn);
+    wobble.start(pourOn);
+    src.stop(pumpOff + 0.2);
+    wobble.stop(pumpOff + 0.2);
+    // 4 · the drips: a few short rising blips after the pump stops, spaced out like the last of
+    //     the cup — the cue that it was liquid all along.
+    for (const [dt, f] of [
+      [0.12, 820],
+      [0.42, 980],
+      [0.85, 760],
+    ] as const) {
+      const at = pumpOff + dt;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f, at);
+      o.frequency.exponentialRampToValueAtTime(f * 1.6, at + 0.04);
+      const dg = ctx.createGain();
+      dg.gain.setValueAtTime(0.0001, at);
+      dg.gain.exponentialRampToValueAtTime(0.007, at + 0.006);
+      dg.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
+      o.connect(dg).connect(out);
+      o.start(at);
+      o.stop(at + 0.08);
+    }
   }
 
   /** The confetti pop: one bright click, then a sparkle of three high ticks. */
