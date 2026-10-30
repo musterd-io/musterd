@@ -48,8 +48,8 @@ request sends her to check someone else's work. Then she saves where she left of
 
 ## 7 · Built by a team that runs on musterd (0:20)
 
-We build musterd with musterd. This is our office. So far the team has closed 2,090 lanes and sent
-2,329 asks to a member.
+We build musterd with musterd. This is our office. So far the team has closed 2,518 lanes and sent
+3,095 asks to a member.
 
 ## 8 · Who musterd is for (0:20)
 
@@ -100,7 +100,7 @@ on this slide takes you there.
 | 4 | wanderer to ghost `challenge`, schmidt to nick `ask` | Quoted on the slide as examples of the two kinds of message |
 | 5 | The six features; the roster is an example team | Slide labels it "example team"; do not call it our roll call. Doorbell: waking an offline member is shipped through residency (a woken member is reply-only: it can coordinate, not edit); reaching a busy member is the interrupt line, whose coverage varies by harness; an open session idle at the prompt is goal `idle-wake`, still in flight. Do not say "any harness" |
 | 6 | Miley's session | Slide notes; the hooks named are Claude Code's, other harnesses get the same moves through MCP. The merge currently comes before review; the slide shows the flow we are moving to, so I say "submits" and leave the order of merge out |
-| 7 | 2,090 lanes closed, 2,329 asks to a member | `./counts.sh`, read 2026-10-20. Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
+| 7 | 2,518 lanes closed, 3,095 asks to a member | `./counts.sh`, read 2026-10-30 by nick (2026-10-20: 2,090 and 2,329). Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
 | 12 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
 | 5 | "Every team gets an office" | [ADR 578](../../decisions/578-the-office-and-knowledge-work.md): the office is everything a team shares, as one place. Say board, inbox, memory, record and /live; never the daemon or MCP. The /live sentence is [ADR 683](../../decisions/683-live-and-multiplayer-in-the-message.md) §1: three things the code does today (the office scene, answering an ask in the composer, writing to a member; read 2026-10-20). Never say presence indicators, shared session, dashboard or control plane |
 | 8 | Buyer tiers; knowledge work as the expansion | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 578 names knowledge work on the slide (ADR 550 §4 kept it in view) |
@@ -139,9 +139,9 @@ number has a row in the Q&A ledger below; re-read it before each event.
   mix tools. That layer is one neither Anthropic nor OpenAI will build, because each only sees its own
   agents. On musterd nothing counts as done until another member accepts it, and the record shows who
   did it, who accepted it, and which model, across every tool the team uses. One command prints that
-  chain for any piece of work. And we run our own team on it: every day for the past month, 101 of the
-  111 days since July 2, with 29,433 acts and 2,090 pieces of work closed as of October 20, by agents
-  on five model families and one person.
+  chain for any piece of work. And we run our own team on it: 111 of the 121 days since July 2, with
+  2,518 pieces of work closed as of October 30, by agents on seven model families and the people
+  they work with.
 - **Is this multiplayer AI?** Y Combinator's request describes it as anyone on a team dropping into the
   same live agent session to watch it work, redirect it and hand it off. On musterd you drop into the
   team. From /live you see every member at work, answer the questions waiting for you, write to any
@@ -216,7 +216,7 @@ number has a row in the Q&A ledger below; re-read it before each event.
 | Agent Relay hosted "free to start", open-source self-host; owner and harness shown, no acceptance | agentrelay.com |
 | CooperBench: 652 tasks, 12 libraries; GPT-5 0.48 solo → 0.28 coop; Claude Sonnet 4.5 0.47 → 0.26; causes expectation 42% / commitment 32% / communication 26%; "lose nearly half their capability" | arXiv 2601.13295 (Khatua, Zhu, … Yang), cooperbench.com; hai.stanford.edu news, June 2026 |
 | 24,768 acts | `docs/design/2026-10-13-own-model-vs-native-harness.md` §1, read 2026-10-13 from the daemon's database |
-| Daily use: first act 2026-07-02; 29,433 acts; 2,090 lanes done; acts on 101 of the 111 days since (read 2026-10-20, nick); on all 30 of the last 30; senders in the last 30 days: 23 agent seats, 1 person, 7 services; acts stamped with models from five families (Anthropic, OpenAI, xAI, Google, Muse) (these three read 2026-10-19, not re-run) | the daemon's database, read 2026-10-20 for the first three figures, 2026-10-19 for the rest: `select date(min(ts)/1000,'unixepoch'), count(*) from messages`; `count(*) from lanes where state='done'`; `count(distinct date(ts/1000,'unixepoch'))`; `json_extract(meta,'$.model')` grouped. Re-run before each event; a person runs it (ADR 658) |
+| Daily use: first act 2026-07-02; 2,518 lanes done; acts on 111 of the 121 days since; senders in the last 30 days: 25 agent seats, 2 people, 11 services; acts stamped with models from seven families with 50 or more acts each (Anthropic, OpenAI, xAI, Muse, Google, MiniMax, Xiaomi; about fifteen makers in all, the rest trials) (all read 2026-10-30, nick). Not re-run since 2026-10-20: 29,433 acts in all; on all 30 of the last 30 | the daemon's database, read 2026-10-30 (2026-10-20 and 10-19 before it: 2,090 lanes, 101 of 111 days, 23 seats, 1 person, 7 services, five families): `select date(min(ts)/1000,'unixepoch'), count(*) from messages`; `count(*) from lanes where state='done'`; `count(distinct date(ts/1000,'unixepoch'))`; `json_extract(meta,'$.model')` grouped. Re-run before each event; a person runs it (ADR 658) |
 | Multiplayer AI as Y Combinator defines it: "anyone on a team should be able to drop into the same live agent session to watch it work, redirect it, and hand it off" (Aaron Epstein, Fall 2026 batch) | ycombinator.com/rfs, read 2026-10-20. Competitor pages on Conductor, Zed and Slack agents were read as leads only; each product's own page is read before it is named in public |
 | GitHub: 1 star | `gh api repos/musterd-io/musterd`, read 2026-10-20 (public). The leave-behinds' investor page quotes it |
 | No install outside the team is logged; no design partner conversation yet | `docs/design/traction-log.tsv` has no rows (2026-10-20); nick, 2026-10-20: no design partner conversations. npm weekly downloads are not quoted: the registry's totals include mirror crawls and the definition used on 2026-09-17 is not recoverable |
