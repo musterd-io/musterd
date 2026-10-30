@@ -16,7 +16,7 @@ const ULID = /\b([0-9A-HJKMNP-TV-Z]{10})[0-9A-HJKMNP-TV-Z]{16}\b/g;
 export function plain(text: string): string {
   return text
     .replace(/^\s*\[[a-z-]+\]\s*/, '')
-    .replace(/```[^\n]*\n?/g, '')
+    .replace(/```/g, '')
     .replace(/`([^`\n]+)`/g, '$1')
     .replace(/\*\*([^*\n]+)\*\*/g, '$1')
     .replace(/__([^_\n]+)__/g, '$1')
@@ -49,7 +49,7 @@ export function blocks(text: string): Block[] {
     if (para.length) out.push({ kind: 'para', spans: spans(para.join(' ')) });
     para = [];
   };
-  const body = text.replace(/^\s*\[[a-z-]+\]\s*/, '').replace(/```[^\n]*\n?/g, '');
+  const body = text.replace(/^\s*\[[a-z-]+\]\s*/, '').replace(/```/g, '');
   for (const raw of body.split('\n')) {
     const line = raw.trim();
     const bullet = /^(?:[-*•]|\d+[.)])\s+(.*)$/.exec(line);

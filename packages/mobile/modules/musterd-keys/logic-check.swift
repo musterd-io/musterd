@@ -102,6 +102,8 @@ check(PinBinding.withBinding(json: waitingPin, routeBinding: longBinding) == nil
 let shown = Notice.render(body: ask, verdict: .fresh)
 check(shown.body == "Ship it?" && shown.category == Notice.advisoryCategory, "advisory actions")
 check(shown.title == "wallow", "the asker is the title")
+let long = Notice.Body.ask(text: String(repeating: "word ", count: 60), from: "wallow", actionClass: "advisory", hasApproval: false, waiting: 0, nonce: "n")
+check(!(Notice.render(body: long, verdict: .fresh).body.hasSuffix("…")), "an answerable ask is never cut")
 check(shown.subtitle == "\(Notice.answerHint) · 2 more waiting" && shown.sound, "waiting subtitle")
 
 let listed = Notice.Body.ask(
