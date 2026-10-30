@@ -8,6 +8,75 @@
 
 > **Status: EXECUTED** (2026-06-10, see [ADR 008](../decisions/008-ui-ux-figma-execution.md); integration-doctor frames added 2026-09-06 under [ADR 385](../decisions/385-optional-tailscale-aperture-doctor.md)). File: [musterd / Terminal UX](https://figma.com/design/tgJ7dUNgGmlIMYBVVA5qIQ). The frames mirror the **already-shipped CLI** (reality wins): `cmd/team-add` shows the MCP env block the CLI actually emits (not a generic join token), and `cmd/claim` shows the default `cli` surface.
 
+## Coherent terminal journeys — the design record (2026-10-30, lane `01M61VTWD`)
+
+This section is the decision record for goal `cli-experience`. It lives here, in the brief, by the
+asker's decision (2026-10-30): an ADR is owed only when a proposal below changes an accepted frame,
+the JSON shapes, the inbox read semantics, or a protocol schema — and then the ADR comes first, in
+its own lane, before any implementation. Twelve lanes carried the goal; eleven have landed. This
+record maps them to the journeys they were for, states what the shipped CLI now does as one
+experience, and names the seams that remain. Designer input: miley (2026-10-30, ran `status`,
+`next`, `inbox` and bare `musterd` live at 80 columns, `NO_COLOR`). Comms input: sloane
+(2026-10-30, grep-sampled ~535 `CliError` sites; leads, each verified below only where cited).
+
+### The twelve lanes, mapped to journeys
+
+| Journey | Lanes | What shipped (evidence) |
+| --- | --- | --- |
+| First run | `01M61VT438` watch path binds the human · `01M61VT9VV` passkeys · frames 31–37 (tour, connect) | `init`'s connect path, the tour, the 5-minute first run; finding F1 (orphaned team on a fresh home) fixed in `01M64D0JSY` |
+| Orientation | `01M61VTTB6` daily `status` (+ `01M62CM4Y` frames, `01M64626WK` catch-up, ADR 757) · `01M61VT7NF` help · frame 24 (`cmd/next`) | The daily view is the default `status`; the full roster moved behind `--all` (#3526) |
+| Messaging | `01M61VT6BJ` inbox semantics (ADR 752) · frames 5–6 | One read model, honest empty states (`No unread messages.` / `Your inbox is empty.`, ADR 752); `send` naming its recipient fixed in `01M64D0N77` |
+| Completion | `01M61VT525` `done` receipts · `01M61VTS84` JSON for writes (ADR 758) · `01M64CN3VY` `--json` refused where unimplemented | A write ends with a receipt that says what the daemon recorded; `done --pr --sha` runs the ADR 585 check (`01M64D0VC4`) |
+| Recovery | `01M61VT94X` actionable errors · the daemon-down paths in the journeys review | One line naming the server and `musterd serve`, exit 7, the unsent body handed back ("nothing was lost but the delivery") |
+| Legibility | `01M61VTVH6` narrow widths, display cells · `01M61VTB70` responsiveness measured | Daily view holds at 40 columns; slow paths measured rather than assumed |
+| Review | `01M61VTA64` journeys run end to end | `docs/wiki/cli-journeys-review.md`: four findings became lanes, all landed; three paths remain human-only (passkey ceremony, interactive `init`, first agent launch) |
+| This record | `01M61VTWD` (this section) | — |
+| Validation | `01M61VV4TX` (open, depends on this lane) | The end-to-end evaluation, including the warmth-and-feel call only a human can make |
+
+### What reads as one journey today
+
+First run into orientation holds: a person connects agents, takes the tour, and lands on a daily
+view that answers three questions in order — what waits on you, what you hold, what is next — in
+the brand's ANSI roles (§2), cut at the column edge, with ages right-aligned (ADR 757). Completion
+is honest: a write's receipt says what was recorded, and a submission nobody can accept says why
+nobody was asked. Recovery is the CLI's best copy: the transport error says what happened, why it
+matters, and the exact commands to check (comms' standard, `errors.ts`).
+
+### The seams (each is a lane; none is fixed here)
+
+1. **`next` speaks a different register than `status`.** Full 26-character ids where the daily view
+   uses 10, `owner=<name>` key=value pairs, titles that wrap and are never cut, and
+   `↳ NO WAKE DUE — …` saying one thing twice (`packages/cli/src/commands/next.ts:154,229`).
+   → lane `01M653W2N4`: adopt the daily-view row grammar. Frame change; the `cmd/next` frame is
+   updated in that lane's own change.
+2. **The waiting count does not land on what it counts.** `status` says `⚑ N waiting on you`
+   (`render/rows.ts:893`) and points at `musterd inbox`, which opens every unread, oldest first —
+   measured live: 21 directed acts buried in 493 unread. Changing this changes the inbox read
+   semantics (ADR 752), so the decision is an ADR first and code second.
+   → lane `01M653W2VK` (ADR-gated; no implementation before the ADR).
+3. **Small daily-view and help faults** (miley, live observation 2026-10-30). Two pointers to one
+   destination in a row; a merged-but-unsubmitted lane reading `blocked`; bare `musterd` listing
+   `next` twice (`START_HERE` at `packages/cli/src/help/catalog.ts:104` plus a second group).
+   → lane `01M653WK0K`.
+4. **Copy drift against brand §4 and §5.** The contrast frame the brand bans ("a bug, not skew",
+   "not a git checkout"); eleven capitalised errors against the lowercase pattern; "team server"
+   and "daemon" in one sentence; `session` where the glossary says Presence or seat; `worktree` as
+   plain prose in a user-facing string (`config.ts:228`); `agents` for members (`init.ts:607`).
+   → lane `01M653WKTK`.
+5. **Errors below the floor.** The `server error (<status>)` fallback and `claim`'s raw server
+   passthroughs say what happened with no why and no next step — on the first-run path, where it
+   costs most. → lane `01M653WNCD`.
+
+### What this record does not change
+
+No accepted frame's strings move here. Corrections below (frames 5 and 7, the checklist) describe
+what already shipped — reality wins, as the status line above has always said. Every proposal that
+would move a frame, a JSON shape, or the read semantics is a `Follows-up:` lane with its gate named,
+per the asker's decision.
+
+Follows-up: `01M653W2N4`, `01M653W2VK`, `01M653WK0K`, `01M653WKTK`, `01M653WNCD` (all opened
+2026-10-30 from this lane). Validation stays `01M61VV4TX`.
+
 ## File
 
 - **Figma file name:** `musterd / Terminal UX`
@@ -42,9 +111,9 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
 2. `cmd/team-add` — `$ musterd team add Ada --kind agent --role backend` → `✓ added Ada (agent, backend) to dawn` + a dim MCP env block: `connect this agent via MCP with its scoped key:` then `  MUSTERD_TEAM=… MUSTERD_AGENT_KEY=mskey_… MUSTERD_CLAIM=seat:Ada MUSTERD_LAUNCH_SURFACE=claude-code` (ADR 344: the shown-once key can bootstrap only Ada; a human member instead gets a `musterd claim …` hint).
 3. `cmd/claim` — `$ musterd claim Ada --team dawn --detach --key …` → `✓ Ada — occupied on dawn` + presence line `● Ada online via cli` (default surface is `cli`).
 4. `cmd/send` — `$ musterd send --to Lin --act handoff "auth module ready for wiring"` → echoes the sent `message-row` with `✓ sent`.
-5. `cmd/inbox` — `$ musterd inbox` → header `inbox — dawn (2 unread)`, then 2–4 `message-row`s, newest last; unread marked with a leading accent `▌`. Footer dim: `musterd inbox --watch to follow live`.
+5. `cmd/inbox` — `$ musterd inbox` → header `inbox — <team> · N unread` (plus `· N of M` when windowed; `packages/cli/src/commands/inbox.ts:271`, corrected 2026-10-30 — the earlier `inbox — dawn (2 unread)` shape predates ADR 752), then `message-row`s grouped by day, newest last; unread marked with a leading accent `▌`. Footer dim: `musterd inbox --watch to follow live`.
 6. `cmd/inbox-watch` — `$ musterd inbox --watch` → same header with a live indicator `◉ watching` (green), a stream of rows, and a blinking-cursor affordance at the bottom. Show one incoming `request_help` highlighted (yellow-bold badge) to demonstrate the flagship moment.
-7. `cmd/status` — `$ musterd status` → table: columns `MEMBER` (member-chip), `KIND`, `ROLE`, `MODEL` (occupancy-attested model id, ADR 101; absent → `unknown`), `LIFECYCLE`, `ACTIVITY` (presence-dot + surface / working label). One row per member. Header row in bright-black, aligned to 80 cols. (The shipped frame still says `PRESENCE` before LIFECYCLE — frame update tracked with ADR 008 lockstep; code is the source of truth.)
+7. `cmd/status` — `$ musterd status` → **the daily view** (see "Daily view frames" below, which supersedes this frame as the default; corrected 2026-10-30). This roster table is now `musterd status --all`: columns `MEMBER` (member-chip), `KIND`, `ROLE`, `MODEL` (occupancy-attested model id, ADR 101; absent → `unknown`), `LIFECYCLE`, `ACTIVITY` (presence-dot + surface / working label). One row per member. Header row in bright-black, aligned to 80 cols. (The shipped frame still says `PRESENCE` before LIFECYCLE — frame update tracked with ADR 008 lockstep; code is the source of truth.)
 
 ### Multi-harness frames (ADR 281/282/286)
 
@@ -600,7 +669,7 @@ For every error frame, annotate the **exit code** in a Figma comment/sticky so t
 
 - [ ] `terminal/frame` plus all 7 components exist with the listed variants.
 - [ ] ANSI color styles exist and match `brand.md` §2 exactly.
-- [ ] All 15 `cmd/*` frames exist, 80-col aligned, using the shared components and the canonical sample data.
+- [ ] Every `cmd/*` frame on the Commands page exists, 80-col aligned, using the shared components and the canonical sample data (the count is deliberately not stated — it went stale at 15; corrected 2026-10-30).
 - [ ] All 6 `state/*` frames exist; each error frame annotates its exit code and uses the verbatim strings above.
 - [ ] No glyph or color is used that the CLI can't reproduce in a 16-color ANSI terminal.
 - [ ] Every literal string a frame shows is reproducible character-for-character (these are the spec for CLI copy).
