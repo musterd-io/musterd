@@ -1,6 +1,6 @@
 # 770 — The daily view's waiting count lands on the directed acts
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-30
 
 ## Context
