@@ -9,7 +9,7 @@ import { getMemberByName } from '../store/members.js';
 import type { TeamRow } from '../store/rows.js';
 import { getTeamById, listActiveTeams } from '../store/teams.js';
 import { joinerEnrollment } from '../sync/claim.js';
-import { listPrsByBranch, runGh, type GhRunner, type ListedPr } from './prState.js';
+import { listPrsByBranch, prWatchRepos, runGh, type GhRunner, type ListedPr } from './prState.js';
 import { routeEnvelope } from './route.js';
 
 /**
@@ -66,12 +66,16 @@ export async function sweepTeamPrs(
   team: TeamRow,
   now: number = Date.now(),
   run: GhRunner = runGh,
+  repos: Map<string, string> = prWatchRepos(),
 ): Promise<number> {
   const lanes = (
     await listLanes(ctx.db, team.id, team.slug, { states: [...WATCHED_STATES] })
   ).filter((l) => l.owner_seat && l.branch);
   if (lanes.length === 0) return 0;
-  const prs = await listPrsByBranch(run);
+  // Only a team mapped to its repository is watched, and only against that repository.
+  const repo = repos.get(team.slug);
+  if (!repo) return 0;
+  const prs = await listPrsByBranch(repo, run);
   if (!(prs instanceof Map)) {
     const last = await ctx.db.get<{ ts: number }>(
       `SELECT MAX(ts) AS ts FROM audit WHERE team_id = ? AND action = 'pr_watch.unavailable'`,

@@ -9,6 +9,8 @@ import { createTeam } from '../store/teams.js';
 import type { ListedPr } from './prState.js';
 import { prEventFor, sweepTeamPrs } from './prWatch.js';
 
+const REPOS = new Map([['revive', 'musterd-io/musterd']]);
+
 let openStore: () => Promise<Driver>;
 
 function stubCtx(db: Driver): Ctx {
@@ -82,8 +84,8 @@ withDrivers('the PR watch', (o) => {
 
   it('tells the owner once that the PR merged, across sweeps', async () => {
     const { db, team, lane, ctx } = await seed();
-    expect(await sweepTeamPrs(ctx, team, 1_000, gh([row('MERGED', 'SUCCESS')]))).toBe(1);
-    expect(await sweepTeamPrs(ctx, team, 61_000, gh([row('MERGED', 'SUCCESS')]))).toBe(0);
+    expect(await sweepTeamPrs(ctx, team, 1_000, gh([row('MERGED', 'SUCCESS')]), REPOS)).toBe(1);
+    expect(await sweepTeamPrs(ctx, team, 61_000, gh([row('MERGED', 'SUCCESS')]), REPOS)).toBe(0);
     const ev = await events(db, team.id);
     expect(ev).toHaveLength(1);
     expect(JSON.parse(ev[0]!.meta).pr_event).toMatchObject({
@@ -99,10 +101,10 @@ withDrivers('the PR watch', (o) => {
 
   it('red, then green, then red again is three events', async () => {
     const { db, team, ctx } = await seed();
-    await sweepTeamPrs(ctx, team, 1_000, gh([row('OPEN', 'FAILURE')]));
-    await sweepTeamPrs(ctx, team, 2_000, gh([row('OPEN', 'FAILURE')]));
-    await sweepTeamPrs(ctx, team, 3_000, gh([row('OPEN', 'SUCCESS')]));
-    await sweepTeamPrs(ctx, team, 4_000, gh([row('OPEN', 'FAILURE')]));
+    await sweepTeamPrs(ctx, team, 1_000, gh([row('OPEN', 'FAILURE')]), REPOS);
+    await sweepTeamPrs(ctx, team, 2_000, gh([row('OPEN', 'FAILURE')]), REPOS);
+    await sweepTeamPrs(ctx, team, 3_000, gh([row('OPEN', 'SUCCESS')]), REPOS);
+    await sweepTeamPrs(ctx, team, 4_000, gh([row('OPEN', 'FAILURE')]), REPOS);
     const states = (await events(db, team.id)).map((e) => JSON.parse(e.meta).pr_event.state);
     expect(states).toEqual(['ci_red', 'ci_green', 'ci_red']);
   });
@@ -111,9 +113,23 @@ withDrivers('the PR watch', (o) => {
     const { db, team, ctx } = await seed();
     const noGh = () =>
       Promise.reject(Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }));
-    await sweepTeamPrs(ctx, team, 1_000, noGh);
-    await sweepTeamPrs(ctx, team, 61_000, noGh);
+    await sweepTeamPrs(ctx, team, 1_000, noGh, REPOS);
+    await sweepTeamPrs(ctx, team, 61_000, noGh, REPOS);
     expect(await events(db, team.id)).toHaveLength(0);
     expect(await listAuditByAction(db, team.id, 'pr_watch.unavailable', 5)).toHaveLength(1);
+  });
+
+  it('a team with no mapped repo is not watched, and a fork PR on the same branch is ignored', async () => {
+    const { db, team, ctx } = await seed();
+    let called = false;
+    const spy = async () => {
+      called = true;
+      return '[]';
+    };
+    expect(await sweepTeamPrs(ctx, team, 1_000, spy, new Map())).toBe(0);
+    expect(called).toBe(false);
+    const fork = { ...row('MERGED', 'SUCCESS'), isCrossRepository: true };
+    expect(await sweepTeamPrs(ctx, team, 2_000, gh([fork]), REPOS)).toBe(0);
+    expect(await events(db, team.id)).toHaveLength(0);
   });
 });

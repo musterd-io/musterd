@@ -17,7 +17,7 @@ export type QuickActionPr =
       state: 'open' | 'merged' | 'closed';
       checks: 'green' | 'red' | 'pending' | 'none';
     }
-  | { unknown: 'no_pr' | 'no_gh' | 'gh_error' };
+  | { unknown: 'no_pr' | 'no_gh' | 'gh_error' | 'no_repo' };
 
 /** A structured field is only interpolated when it is a plain token (ADR 558's idle-seam rule). */
 function token(s: string | undefined): string | undefined {
@@ -31,6 +31,8 @@ function prPhrase(pr: QuickActionPr | undefined, branch: string | undefined): st
       ? `check your lane's PR yourself (gh pr view ${branch})`
       : 'no PR on your lane yet';
   if ('unknown' in pr && pr.unknown === 'no_pr') return 'no PR on your lane yet';
+  if ('unknown' in pr && pr.unknown === 'no_repo')
+    return "musterd isn't watching this team's GitHub repo — check it yourself";
   if ('unknown' in pr)
     return pr.unknown === 'no_gh'
       ? 'musterd could not read GitHub here (no gh login on the hub) — check it yourself'

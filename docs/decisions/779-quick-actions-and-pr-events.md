@@ -88,6 +88,12 @@ going red without being asked, and each person should decide how loud questions 
   - The watch makes one `gh pr list` call per team per sweep, not one per lane.
   - A red after a green is told again, so a flapping PR reaches its owner each time it turns.
   - The loop is named `pr_watch` and does not run on Cloud.
+  - From the commit security review:
+    - A team is watched only when it is mapped to its repository in `MUSTERD_PR_WATCH_REPOS`
+      (`revive=musterd-io/musterd,…`). Every `gh` call names that repository with `--repo`, so one
+      team's lanes are never matched against another's. An unmapped team is not watched, and Check
+      PR tells the seat so (`no_repo`).
+    - A PR from a fork is ignored, since anyone can name a fork's branch the same as a lane's.
 
 ## Observability & Evaluation
 

@@ -7,6 +7,27 @@ import type { QuickActionPr } from '@musterd/protocol';
  * so (`no_gh`), and the caller tells the seat and the card instead of failing silently.
  */
 
+/**
+ * Which GitHub repository each team's lanes live in (security review, 2026-10-30): the hub reads
+ * PRs only for a team an operator mapped, and always with `--repo`, so one team's lanes are never
+ * matched against another's repository. `MUSTERD_PR_WATCH_REPOS="revive=musterd-io/musterd,…"`.
+ * Unset, nothing is watched and Check PR says so.
+ */
+export function prWatchRepos(env: NodeJS.ProcessEnv = process.env): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const pair of (env['MUSTERD_PR_WATCH_REPOS'] ?? '').split(',')) {
+    const [team, repo] = pair.trim().split('=');
+    if (
+      team &&
+      repo &&
+      /^[a-z0-9-]{1,32}$/.test(team) &&
+      /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)
+    )
+      out.set(team, repo);
+  }
+  return out;
+}
+
 /** Runs `gh` with arguments; injected so tests never shell out. Resolves stdout, rejects with the error. */
 export type GhRunner = (args: string[]) => Promise<string>;
 
@@ -23,6 +44,8 @@ export const runGh: GhRunner = (args) =>
 interface GhPr {
   number: number;
   state: string;
+  /** A PR from a fork. Never the lane's own: a stranger can name a fork branch anything. */
+  isCrossRepository?: boolean;
   statusCheckRollup?: Array<{
     conclusion?: string | null;
     status?: string | null;
@@ -64,12 +87,23 @@ export function isSafeRef(ref: string | number): boolean {
 /** The PR for a branch (or a PR number). */
 export async function readPrState(
   ref: string | number,
+  repo: string | undefined,
   run: GhRunner = runGh,
 ): Promise<QuickActionPr> {
+  if (!repo) return { unknown: 'no_repo' };
   if (!isSafeRef(ref)) return { unknown: 'gh_error' };
   let out: string;
   try {
-    out = await run(['pr', 'view', '--json', 'number,state,statusCheckRollup', '--', String(ref)]);
+    out = await run([
+      'pr',
+      'view',
+      '--repo',
+      repo,
+      '--json',
+      'number,state,statusCheckRollup,isCrossRepository',
+      '--',
+      String(ref),
+    ]);
   } catch (err) {
     const e = err as NodeJS.ErrnoException & { stderr?: string };
     if (e.code === 'ENOENT') return { unknown: 'no_gh' };
@@ -84,6 +118,7 @@ export async function readPrState(
   }
   try {
     const pr = JSON.parse(out) as GhPr;
+    if (pr.isCrossRepository) return { unknown: 'no_pr' };
     const state =
       pr.state.toUpperCase() === 'MERGED'
         ? 'merged'
@@ -110,6 +145,7 @@ export interface ListedPr {
  * (ADR 779 §4), so a team of twenty lanes costs one API request a minute.
  */
 export async function listPrsByBranch(
+  repo: string,
   run: GhRunner = runGh,
 ): Promise<Map<string, ListedPr> | { unknown: 'no_gh' | 'gh_error' }> {
   let out: string;
@@ -117,12 +153,14 @@ export async function listPrsByBranch(
     out = await run([
       'pr',
       'list',
+      '--repo',
+      repo,
       '--state',
       'all',
       '--limit',
       '200',
       '--json',
-      'number,headRefName,state,statusCheckRollup,url',
+      'number,headRefName,state,statusCheckRollup,url,isCrossRepository',
     ]);
   } catch (err) {
     const e = err as NodeJS.ErrnoException & { stderr?: string };
@@ -135,6 +173,7 @@ export async function listPrsByBranch(
     const rows = JSON.parse(out) as Array<GhPr & { headRefName: string; url?: string }>;
     const byBranch = new Map<string, ListedPr>();
     for (const r of rows) {
+      if (r.isCrossRepository) continue; // a fork's branch name proves nothing about our lanes
       if (byBranch.has(r.headRefName)) continue; // newest first: keep the first seen per branch
       const s = r.state.toUpperCase();
       byBranch.set(r.headRefName, {
