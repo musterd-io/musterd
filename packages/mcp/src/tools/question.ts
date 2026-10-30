@@ -1,15 +1,6 @@
 import { execFile } from 'node:child_process';
 import type { McpServer } from '@modelcontextprotocol/server';
-import {
-  QUESTION_CONSEQUENCE_MAX,
-  QUESTION_LABEL_MAX,
-  QUESTION_MAX_OPTIONS,
-  QUESTION_TEXT_MAX,
-  QUESTION_WHY_MAX,
-  makeEnvelope,
-  type Lane,
-  type Question,
-} from '@musterd/protocol';
+import { makeEnvelope, type Lane, type Question } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
@@ -17,11 +8,11 @@ import type { McpConfig } from '../config.js';
 import { withTraceContext } from '../otel.js';
 import { errorResult, notReadyMessage, textResult } from './format.js';
 
+// Limits (280-char text, 9 options, …) are the envelope's: a send past them is refused with the
+// field named, so the schema here stays small — it rides every turn's tool list (ADR 085).
 const DESCRIPTION =
-  'Ask a person a question you need answered to go on (ADR 773). It returns at once: end your turn ' +
-  "then — don't wait or poll. The answer arrives as your next turn, quoted after «…». Give options " +
-  '(up to 9, each with its consequence) when there are clear choices, and why you are asking. Use ' +
-  'this instead of ending a turn on a question in chat. Lane, PR and branch default from your claim.';
+  'Ask a person a question (ADR 773), then end your turn: the answer arrives as your next turn. ' +
+  'Not a question in chat. Options carry a one-line consequence.';
 
 /** Where the question sits: the seat's one live claimed lane and the workspace's branch. */
 export async function defaultContext(
@@ -63,39 +54,19 @@ export function registerQuestion(
     {
       description: DESCRIPTION,
       inputSchema: {
-        to: z.string().describe("the person to ask, or '@team' for any person on the team"),
-        text: z.string().min(1).max(QUESTION_TEXT_MAX).describe('the question, one line'),
-        why: z
-          .string()
-          .max(QUESTION_WHY_MAX)
-          .optional()
-          .describe('why you are asking, in a line or two'),
+        to: z.string().describe("a person, or '@team'"),
+        text: z.string(),
+        why: z.string().optional(),
         options: z
           .array(
             z.object({
-              label: z.string().min(1).max(QUESTION_LABEL_MAX),
-              consequence: z.string().min(1).max(QUESTION_CONSEQUENCE_MAX).optional(),
+              label: z.string(),
+              consequence: z.string().optional(),
             }),
           )
-          .max(QUESTION_MAX_OPTIONS)
-          .optional()
-          .describe('the choices, each with a one-line consequence'),
-        blocking: z
-          .boolean()
-          .optional()
-          .describe('true when you cannot go on without the answer (it buzzes their phone)'),
-        anyone: z
-          .boolean()
-          .optional()
-          .describe('true lets any person on the team answer, not only `to`'),
-        context: z
-          .object({
-            lane: z.string().optional(),
-            pr: z.number().int().positive().optional(),
-            branch: z.string().optional(),
-          })
-          .optional()
-          .describe('defaults to your claimed lane and current branch'),
+          .optional(),
+        blocking: z.boolean().optional().describe('you cannot go on without it'),
+        anyone: z.boolean().optional().describe('any person may answer'),
       },
     },
     async (args) => {
@@ -114,7 +85,7 @@ export function registerQuestion(
           );
         }
       }
-      const context = args.context ?? (await defaultContext(client, deps.branchOf));
+      const context = await defaultContext(client, deps.branchOf);
       const question: Question = {
         text: args.text,
         ...(args.why ? { why: args.why } : {}),
