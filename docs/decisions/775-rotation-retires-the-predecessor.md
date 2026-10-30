@@ -47,8 +47,10 @@ old key stops working. The rule must hold on the hub and on every joiner.
    inventory keeps its history, and they can still be revoked to tidy the list.
 3. **A joiner follows the hub's rotation.** When the fold projects a hub `credential.accepted`
    for a `host` or `claim_seat` scope, it first marks older projected rows of the same scope
-   (`replicated_from` set, `created_at` earlier than the new row) `rotated` at fold time. The
-   joiner's predecessor then lapses on the same window. Only older rows are touched, so a
+   (`replicated_from` set, `created_at` earlier than the new row) `rotated`, with `rotated_at` set to
+   the successor's hub `created_at`: the moment the hub rotated, not the moment this joiner
+   happened to pull. The joiner's predecessor then lapses at the same instant as the hub's, and a
+   joiner that was offline for a while grants it no extra time. Only older rows are touched, so a
    replayed acceptance never rotates the successor that came after it.
 4. **This narrows ADR 344 §6, which is otherwise unchanged.** Revoking at once after verifying a
    successor is still the right move, and still possible. The window only removes the

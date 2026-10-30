@@ -226,6 +226,8 @@ withDrivers('credentials', (_o, kind) => {
         [first.json.credential.id],
       );
       expect(row?.state).toBe('rotated');
+      // Anchored on the hub's rotation (the successor's mint), not on when the joiner folded it.
+      expect(row?.rotated_at).toBe(second.json.credential.created_at);
       const rotatedAt = row!.rotated_at!;
       // Inside the window both keys still poll, so a staged move is not cut off mid-flight.
       for (const key of [firstKey, secondKey]) {

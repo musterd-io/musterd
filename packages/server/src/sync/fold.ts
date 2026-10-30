@@ -1066,14 +1066,15 @@ async function projectCredentialLedger(
   if (typeof keyHash !== 'string' || !keyHash) return;
   // The hub's same-scope mint rotated its predecessor there; rotate the projected one here too, so
   // it runs out on ADR 775's grace window instead of staying active on this joiner for good. Only
-  // older rows: a replayed acceptance must never rotate the successor that came after it.
-  const now = Date.now();
-  const createdAt = typeof d['created_at'] === 'number' ? d['created_at'] : now;
+  // older rows: a replayed acceptance must never rotate the successor that came after it. The
+  // window is anchored on the hub's rotation (the successor's created_at), not on when this joiner
+  // happened to fold it, so a late pull grants the predecessor no extra time here.
+  const createdAt = typeof d['created_at'] === 'number' ? d['created_at'] : Date.now();
   await db.run(
     `UPDATE agent_bootstrap_credentials SET state = 'rotated', rotated_at = ?
      WHERE team_id = ? AND use_kind = ? AND target = ? AND state = 'active'
        AND replicated_from IS NOT NULL AND id <> ? AND created_at < ?`,
-    [now, teamId, use, target, id, createdAt],
+    [createdAt, teamId, use, target, id, createdAt],
   );
   await db.run(
     `INSERT INTO agent_bootstrap_credentials
