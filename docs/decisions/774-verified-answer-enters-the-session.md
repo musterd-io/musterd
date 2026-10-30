@@ -88,6 +88,11 @@ questions: an answer straight from the notification, with no Face ID (2026-10-30
   the binding.
 - ADR 088, ADR 618 and ADR 676 each gain a dated amendment marker pointing here. Their Decision text
   is unchanged.
+- 2026-10-30 (lane `01M674N9XE`): the phone's question answer is its own schema,
+  `AppQuestionAnswerSchema`, signed over `appQuestionAnswerSigningBytes` under the domain tag
+  `musterd-app-question-answer/v1` — not over `appAnswerSigningBytes` as decision 4 words it — so a
+  question-key signature can never verify as an approve/reject. The answer line's helpers live in
+  `question.wire.ts`, beside the shape, rather than in `idleWake.ts`.
 
 ## Observability & Evaluation
 
