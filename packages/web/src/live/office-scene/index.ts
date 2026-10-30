@@ -3203,7 +3203,8 @@ export function mountOffice(
       // micro-gestures above keep them from reading as a statue.
       ...(mayErrand
         ? ([
-            [15, () => coffeeStroll(who, slot)],
+            // 15 → 4 (nick, 2026-10-30, lane 01M67D: the coffee run was the room's most frequent trip)
+            [4, () => coffeeStroll(who, slot)],
             [9, () => actors.errandPhone(who, slotRng(teamName, slot, 'phone'))], // gets up, takes a call, paces, comes back
             // A meal is the one errand the dog cares about: it drops whatever it was doing and follows the
             // plate to the lounge to sit and stare at it. Not every time — a dog that never misses a meal is
@@ -3232,18 +3233,26 @@ export function mountOffice(
       // The floor's beat is a trip, not a fidget: the same weighted pick, over the errands only. Water
       // needs a bottle on that desk, so a lounging member draws from the other three.
       const errands: Array<[number, () => boolean]> = [
-        [15, () => coffeeStroll(who, slot)],
+        [4, () => coffeeStroll(who, slot)],
         [9, () => actors.errandPhone(who, slotRng(teamName, slot, 'phone'))],
         [7, () => actors.errandFridge(who, slotRng(teamName, slot, 'fridge')) !== null],
       ];
       if (water) errands.push([8, () => waterStroll(who, slot)]);
       // A floor walk must WALK. A trip this browser cannot start (the lounge full for the fridge, say)
-      // falls back to the coffee run, which needs nothing but a free path. Which errand plays can then
+      // falls back to a phone call, then to the coffee run, which needs nothing but a free path — the
+      // phone first so coffee stops soaking up every refused trip (lane 01M67D). Which errand plays can then
       // differ between viewers for one slot; that someone walks cannot.
       beats.splice(
         0,
         beats.length,
-        ...errands.map(([w, play]) => [w, () => play() || coffeeStroll(who, slot)] as [number, () => boolean]),
+        ...errands.map(
+          ([w, play]) =>
+            [
+              w,
+              () =>
+                play() || actors.errandPhone(who, slotRng(teamName, slot, 'phone')) || coffeeStroll(who, slot),
+            ] as [number, () => boolean],
+        ),
       );
     }
     let total = 0;
