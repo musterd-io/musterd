@@ -369,7 +369,7 @@ describe('musterd huddle', () => {
       // the guard must not convert an outage into a verdict about the id.
       await server.close();
       await expect(huddleCommand(parseArgs(['say', id, 'a turn']))).rejects.toThrow(
-        /can't reach team server/,
+        /can't reach the daemon/,
       );
       await expect(huddleCommand(parseArgs(['say', id, 'a turn']))).rejects.not.toThrow(
         /no huddle/,

@@ -614,7 +614,7 @@ so a box is never wider than the screen.
     picker`. A terminal shrunk under 60 mid-session shows one dim line, `widen the terminal to 60
     columns · esc quits`.
 40. `cmd/pick-blocked` — `tab` shows the blocked lanes; `⏎` on one replaces the filter line with a
-    yellow notice, `blocked on 01M1T6DJ7J (owner miley) — it can be viewed, not picked`, and the brief
+    yellow notice, `blocked on 01M1T6DJ7J (owner miley) — it stays viewable while blocked`, and the brief
     adds a yellow `blocked: <detail>` line. A lane taken while the screen was open gets the same yellow
     line: `<id> was taken by <seat> 12s ago — pick another`.
 41. `cmd/pick-table` — no TTY (an agent's shell tool) or `--open`: the same board as plain text with

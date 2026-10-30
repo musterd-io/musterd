@@ -112,7 +112,7 @@ describe('renderLanePicker (no color)', () => {
   it('cmd/pick-blocked — tab, then ⏎ on a blocked lane: viewed, not picked', () => {
     const s = reducePick(reducePick(s0, key('tab')).state, key('return')).state;
     const out = renderLanePicker(s, { cols: 90, rows: 16 });
-    expect(out[1]).toBe('blocked on 01M1T6DJ7J (owner miley) — it can be viewed, not picked');
+    expect(out[1]).toBe('blocked on 01M1T6DJ7J (owner miley) — it stays viewable while blocked');
     expect(out).toContain('▸ 01M2H2MP1F Two humans, two machines, one team');
     expect(out).toContain('blocked: policy replication');
   });
