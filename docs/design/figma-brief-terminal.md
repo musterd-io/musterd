@@ -369,7 +369,10 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
    areas and branch ride the dim line under it and are cut there, the stale-goal warning is
    `⚠ <goal> · quiet <N>d` with its lane as a short-id row under it, the `↳ no wake due`
    detail and seed summaries are cut at the edge — every line pinned ≤80 columns by
-   `orient.test.ts`.
+   `orient.test.ts`. Third landing (same lane): the whole page holds the edge — owed,
+   review-debt, open-lane, shipped and why rows budget their suffixes inside the cut, the
+   why-tags ride the dim line, and the up-next counts drop to a dim line of their own. The
+   one exception: `answer:` lines carry a copy-paste command and are never cut (81 cells).
 
     ```
     next — as Ada
