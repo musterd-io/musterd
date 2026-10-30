@@ -290,6 +290,49 @@ describe('inbox command', () => {
     expect(await unreadCount()).toBe(0);
   });
 
+  it('leads with the directed acts the daily view counts (ADR 770)', async () => {
+    await seed(2); // two @team broadcasts
+    await ada.send(
+      'dawn',
+      makeEnvelope({
+        id: ulid(),
+        team: 'dawn',
+        from: 'Ada',
+        to: { kind: 'member', name: 'nick' },
+        act: 'request_help',
+        body: 'directed: look at this',
+        ts: base + 3 * 60_000,
+        thread: null,
+        meta: null,
+      }),
+    );
+    const res = await capture(() => inboxCommand(parseArgs([])));
+    expect(res.out).toContain('waiting on you — 1');
+    // The directed act shows once, in the section, before the general list.
+    expect((res.out.match(/directed: look at this/g) ?? []).length).toBe(1);
+    expect(res.out.indexOf('waiting on you — 1')).toBeLessThan(res.out.indexOf('msg 0'));
+    // And the read consumed exactly what was shown (ADR 752/117 unchanged).
+    expect(await unreadCount()).toBe(0);
+    // A peek renders the same section and consumes nothing (ADR 752).
+    await ada.send(
+      'dawn',
+      makeEnvelope({
+        id: ulid(),
+        team: 'dawn',
+        from: 'Ada',
+        to: { kind: 'member', name: 'nick' },
+        act: 'request_help',
+        body: 'directed: and this',
+        ts: base + 4 * 60_000,
+        thread: null,
+        meta: null,
+      }),
+    );
+    const peeked = await capture(() => inboxCommand(parseArgs(['--peek'])));
+    expect(peeked.out).toContain('waiting on you — 1');
+    expect(await unreadCount()).toBe(1);
+  });
+
   it('names an empty unread or filtered view without claiming nobody communicated', async () => {
     await seed(1);
     await capture(() => inboxCommand(parseArgs([])));
