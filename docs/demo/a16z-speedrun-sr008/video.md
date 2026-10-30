@@ -1,4 +1,4 @@
-# SR008 team video — talking points (2026-10-30)
+# SR008 team video — talking points and the final cut (2026-10-30)
 
 The form's one video is "Team Video (MP4)", optional, no length or guidance (read 2026-10-30).
 speedrun's own advice (2026-10-07): "We just need you … talking earnestly about what you're
@@ -39,3 +39,14 @@ Only the numbers are fixed. Take it two or three times and keep the one that sou
 
 Delivery notes: look at the lens. The numbers are rows in [the record](README.md#sources). The arc (beat 2) is the part reviewers weigh most, so don't rush
 it; it is fine if it runs long and beat 5 gets short. Numbers read 2026-10-30.
+
+## The final cut
+
+The form's video box, once opened, does carry guidance: up to 3 minutes, "at least half on you and your
+team", the rest on what you're building, why it is a big, underserved opportunity, and the progress so far.
+nick recorded the beats above as many short takes in two Zoom recordings and alfie cut them together (edit 10,
+2:14, uploaded 2026-10-30). Every cut sits in a pause, found from a 10 ms loudness track, except two where nick
+ran the words together; each join was transcribed to check for whole words. Kept: the self-taught path with
+the shadowing line, the $300M launch, the morning reading and the podcast, "building my own projects" into the
+colliding agents, what musterd does, staying on strategy and vision, the team and the daily Twitch stream,
+the demos, and the close. The "big, underserved opportunity" beat was not recorded.
