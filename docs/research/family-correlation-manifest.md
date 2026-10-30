@@ -263,6 +263,11 @@ never found out at item 70 (lazara).
 - The in-team arm: the same items reviewed by seats on revive.
 - The live close rows. Reading them later needs a fix for the 9 close rows in finding 020 with no
   `worker_family`. That fix is its own lane and does not block this one.
+  _(Landed 2026-10-29, lane `01M61Q1474`: the close edge now falls back to the family the ready
+  edge recorded at submit when the worker's live attestation is gone at close, marked
+  `worker_family_provenance: 'ready_row'`. The 9 historical rows keep `unknown` in the ledger —
+  history is not rewritten — and are recoverable by joining each lane's ready row, where all 9
+  carry an attested family.)_
 
 Follows-up: the tooling lane (procedure step 1) and the `worker_family` fix lane are opened when
 this manifest lands, under goal `family-correlation`.

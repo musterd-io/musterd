@@ -3,10 +3,17 @@ import {
   type Lane,
   humanReviewRequired,
   isAwaitingAcceptance,
+  MODEL_UNKNOWN,
   reviewGrade,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
-import { appendAudit, appendLaneEventRequired, peerReviewGradeOf, reviewRouting } from './audit.js';
+import {
+  appendAudit,
+  appendLaneEventRequired,
+  peerReviewGradeOf,
+  readyWorkerFamily,
+  reviewRouting,
+} from './audit.js';
 import { storedClaims } from './lanes.js';
 import { memberIsHuman, memberModelByName, workerFamily } from './review.js';
 
@@ -204,6 +211,20 @@ export async function recordLaneClose(
                   // opposite failures this was, and abstains when the promise is unknowable.
                   waitVerdict
             : 'self_close';
+  // The worker's family, for the same/cross-family split over the record (ADR 056). The LIVE
+  // attestation wins — the close row grades what seats run at close, and a seat that changed
+  // model since submit must read as it is now. But live presence is reaped when a seat goes
+  // offline, so a worker whose seat stopped before the close recorded `unknown` even though the
+  // ready edge had already written the family attested at submit (ADR 303) — finding 020's 9
+  // rows, every one of them recoverable from its ready row. Fall back to that RECORDED fact and
+  // name the provenance; where neither attests, `unknown` stands (ADR 173: an abstention is a
+  // fact, a guess is not). This deliberately does NOT touch the picker, whose family read stays
+  // live-only (ADR 187): routing on a stale memory could certify a false cross-family review,
+  // while this row only reports history.
+  const liveWorkerFamily = ownerAtClose ? await workerFamily(db, teamId, ownerAtClose) : null;
+  const recordedWorkerFamily =
+    liveWorkerFamily === MODEL_UNKNOWN ? await readyWorkerFamily(db, teamId, lane.id) : undefined;
+  const workerFamilyAtClose = recordedWorkerFamily ?? liveWorkerFamily;
   // The close is a lane transition, so it is the replicated, required form (lane-replication spec
   // §Hole 3): if the record cannot be written, the close does not happen.
   await appendLaneEventRequired(db, teamId, {
@@ -259,7 +280,13 @@ export async function recordLaneClose(
       // only; the claims themselves stay on the lane row.
       // Counted from the full stored list, not the served (capped) view (lane 01M5ZFZBCD).
       ...(closeClaims.length > 0 ? { claims: summariseClaims(closeClaims) } : {}),
-      worker_family: ownerAtClose ? await workerFamily(db, teamId, ownerAtClose) : null,
+      worker_family: workerFamilyAtClose,
+      // Present only when the value came from the submit's record rather than a live reading, so
+      // a consumer can tell a recovered row from a contemporaneous one (ADR 173's distinction,
+      // recorded where it is known).
+      ...(recordedWorkerFamily !== undefined
+        ? { worker_family_provenance: 'ready_row' as const }
+        : {}),
       ...(verified ? { reviewer_family: await workerFamily(db, teamId, closer.name) } : {}),
       // ADR 188 two-stage: which peer review a RISKY lane actually got — the newest
       // lane.review_peer_confirmed row's grade, or 'none'. Only written on risky lanes; the human
