@@ -64,6 +64,7 @@ const EXTENSION_SOURCES = [
   'PhoneKeys.swift',
   'extension/RouteJson.swift',
   'extension/SeenNonce.swift',
+  'extension/AskRoutes.swift',
   'extension/SharedStore.swift',
   'extension/Notice.swift',
   'extension/DeliveryOpen.swift',

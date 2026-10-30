@@ -7,7 +7,7 @@ import {
 import { AppCallbackSchema } from '@musterd/protocol/app-channel';
 import { canonicalJson } from '@musterd/protocol/approval';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadAsks, requestRedelivery, settledRefs } from './asks';
+import { loadAsks, markShown, requestRedelivery, settledRefs } from './asks';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys } from './phoneKeys';
 import type { PushRoute } from './push';
@@ -18,6 +18,9 @@ vi.mock('./phoneKeys', () => ({
     verifyEd25519: vi.fn(),
     deliveredPushes: vi.fn(),
     clearDelivered: vi.fn(async () => undefined),
+    knownAsks: vi.fn(() => []),
+    markSeen: vi.fn(),
+    forgetAsks: vi.fn(),
   },
   phoneKeysErrorCode: () => null,
 }));
@@ -151,8 +154,25 @@ describe('loadAsks', () => {
     expect(view.held).toBeNull();
     // One fetch per ref, never two for the same ask.
     expect(fetchImpl).toHaveBeenCalledTimes(3);
-    // The settled ask's notification is cleared; the live ones stay.
+    // The settled ask leaves Notification Center and the phone's list; the live ones stay.
     expect(phoneKeys.clearDelivered).toHaveBeenCalledWith(['gone']);
+    expect(phoneKeys.forgetAsks).toHaveBeenCalledWith(['gone']);
+  });
+
+  it('lists an ask from the phone’s own record once its notification is gone (ADR 772)', async () => {
+    live.set('a1', ask('a1', 10));
+    live.set('a2', ask('a2', 20));
+    vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue([notification('n1', route('a1'), 1)]);
+    vi.mocked(phoneKeys.knownAsks).mockReturnValueOnce([
+      { ...route('a1'), seen: true },
+      // Tapped or cleared: no notification left, still open.
+      { ...route('a2'), seen: true },
+      // Another binding's record is not this phone's to list.
+      { ...route('a3'), binding: 'other', seen: false },
+    ]);
+    const view = await loadAsks({ pin, now: 1, fetchImpl });
+    expect(view.asks.map((e) => e.delivery.ask.id)).toEqual(['a2', 'a1']);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the notifications of an ask it could not reach: it may still be open', async () => {
@@ -202,6 +222,19 @@ describe('loadAsks', () => {
     live.set('a1', ask('swapped', 10));
     vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue([notification('n1', route('a1'), 1)]);
     expect((await loadAsks({ pin, now: 1, fetchImpl })).asks).toEqual([]);
+  });
+});
+
+describe('markShown', () => {
+  it('marks the shown asks seen and clears their notifications', async () => {
+    await markShown(['a1', 'a2']);
+    expect(phoneKeys.markSeen).toHaveBeenCalledWith(['a1', 'a2']);
+    expect(phoneKeys.clearDelivered).toHaveBeenCalledWith(['a1', 'a2']);
+  });
+
+  it('does nothing for an empty list', async () => {
+    await markShown([]);
+    expect(phoneKeys.markSeen).not.toHaveBeenCalled();
   });
 });
 

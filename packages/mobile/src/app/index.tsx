@@ -42,10 +42,14 @@ export default function AsksScreen() {
         setView(null);
         return;
       }
-      const { loadAsks, requestRedelivery } = await import('../native/asks');
+      const { loadAsks, markShown, requestRedelivery } = await import('../native/asks');
       if (redeliver) void requestRedelivery({ pin: current });
       const next = await loadAsks({ pin: current });
-      if (alive.current) setView(next);
+      if (!alive.current) return;
+      setView(next);
+      // Shown to you, so their notifications go; the asks stay here until settled (ADR 772).
+      if (focused.current && AppState.currentState === 'active')
+        void markShown(next.asks.map((entry) => entry.route.ref));
     } catch {
       // Expo Go has no native module; the shell still opens and links to pairing.
       if (alive.current) setPin(null);

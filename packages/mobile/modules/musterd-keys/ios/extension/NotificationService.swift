@@ -136,6 +136,19 @@ final class NotificationService: UNNotificationServiceExtension {
       expiresAt: opened.route.expiresAt,
       now: now
     ) else { return Notice.unverified() }
+    // ADR 772: the app's list reads its own record of the asks that reached this phone, so a
+    // notification can be cleared without the ask leaving the list. A failed write still shows.
+    if case .ask = body, verdict == .fresh {
+      let route = opened.route
+      SharedStore.updateAskRoutes {
+        AskRoutes.record(
+          records: $0,
+          adding: AskRoutes.Record(team: route.team, binding: route.binding, ref: route.ref,
+            expiresAt: route.expiresAt, seen: false),
+          now: now
+        )
+      }
+    }
     return Notice.render(body: body, verdict: verdict)
   }
 

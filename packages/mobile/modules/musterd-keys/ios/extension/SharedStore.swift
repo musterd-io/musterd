@@ -25,6 +25,7 @@ enum SharedStore {
   static let seenAccount = "seen-nonces"
   static let pushAccount = "push-token"
   static let pinAccount = "pairing-pin"
+  static let askRoutesAccount = "ask-routes"
 
   struct PushToken {
     var token: String
@@ -50,6 +51,23 @@ enum SharedStore {
       _ = saveRecords(result.records)
     }
     return result.verdict
+  }
+
+  /// The phone's own list of the asks that reached it (ADR 772). Missing or unreadable is empty:
+  /// the list still has Notification Center, and the next redelivery restores a lost record.
+  static func loadAskRoutes() -> [AskRoutes.Record] {
+    guard case .data(let data) = load(account: askRoutesAccount) else { return [] }
+    return AskRoutes.decode(data) ?? []
+  }
+
+  /// Read, change, write. False when the write fails; the caller carries on either way.
+  @discardableResult
+  static func updateAskRoutes(_ change: ([AskRoutes.Record]) -> [AskRoutes.Record]) -> Bool {
+    let current = loadAskRoutes()
+    let next = change(current)
+    if next == current { return true }
+    guard let data = AskRoutes.encode(next) else { return false }
+    return save(data, account: askRoutesAccount)
   }
 
   static func savePushToken(token: String, environment: String) {

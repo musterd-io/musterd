@@ -7,7 +7,7 @@
 //
 //    swiftc -o /tmp/nse-logic-check \
 //      ios/extension/RouteJson.swift ios/extension/SeenNonce.swift ios/extension/Notice.swift \
-//      ios/extension/PinBinding.swift logic-check.swift
+//      ios/extension/PinBinding.swift ios/extension/AskRoutes.swift logic-check.swift
 //    /tmp/nse-logic-check
 //
 //  A multi-file swiftc invocation has no top-level entry unless one file is named main.swift,
@@ -100,7 +100,7 @@ check(PinBinding.withBinding(json: waitingPin, routeBinding: longBinding) == nil
 
 let shown = Notice.render(body: ask, verdict: .fresh)
 check(shown.body == "Ship it?" && shown.category == Notice.advisoryCategory, "advisory actions")
-check(shown.subtitle == "2 more waiting" && shown.sound, "waiting subtitle")
+check(shown.subtitle == "\(Notice.answerHint) · 2 more waiting" && shown.sound, "waiting subtitle")
 
 let listed = Notice.Body.ask(
   text: "Ship it?",
@@ -124,9 +124,31 @@ let stale = Notice.render(body: ask, verdict: .replay)
 check(stale.body == Notice.staleText && stale.category == nil && !stale.sound, "replay is stale")
 check(Notice.render(body: .held(count: 1), verdict: .fresh).body == "1 ask is held.", "one held")
 check(Notice.render(body: .held(count: 3), verdict: .fresh).body == "3 asks are held.", "many held")
-check(Notice.render(body: .paired(member: "nick"), verdict: .fresh).body == "Paired as nick.", "paired")
+check(Notice.render(body: .paired(member: "nick", deviceKeyId: "k"), verdict: .fresh).body == "Paired as nick.", "paired")
 check(Notice.seenKey(body: ask, ref: "ref") == "n", "an ask is keyed by its nonce")
 check(Notice.seenKey(body: .held(count: 1), ref: "ref") == "ref", "a summary is keyed by its ref")
+
+// ADR 772: the phone's own list of the asks that reached it.
+let a = AskRoutes.Record(team: "t", binding: "b", ref: "a", expiresAt: 100, seen: false)
+let one = AskRoutes.record(records: [], adding: a, now: 50)
+check(one == [a], "an admitted ask is recorded unseen")
+let seenA = AskRoutes.markSeen(records: one, refs: ["a"], now: 50)
+check(seenA.first?.seen == true, "the list marks it seen")
+var again = a
+again.expiresAt = 200
+let repushed = AskRoutes.record(records: seenA, adding: again, now: 60)
+check(repushed.count == 1 && repushed[0].seen && repushed[0].expiresAt == 200,
+  "a re-push keeps seen and takes the later expiry")
+check(AskRoutes.record(records: seenA, adding: a, now: 150).isEmpty, "expired is pruned, not added")
+check(AskRoutes.forget(records: repushed, refs: ["a"], now: 60).isEmpty, "a gone ask is forgotten")
+let many = (0..<60).reduce([AskRoutes.Record]()) { list, i in
+  AskRoutes.record(records: list,
+    adding: AskRoutes.Record(team: "t", binding: "b", ref: "r\(i)", expiresAt: 1000, seen: false),
+    now: 0)
+}
+check(many.count == AskRoutes.cap && many.first?.ref == "r10", "the newest fifty are kept")
+check(AskRoutes.decode(AskRoutes.encode(repushed)!) == repushed, "records round-trip")
+check(AskRoutes.decode(Data("[{\"ref\":1}]".utf8)) == nil, "a bad record fails the read")
 
 fputs("ok\n", stdout)
 }
