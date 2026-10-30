@@ -110,7 +110,8 @@ questions: an answer straight from the notification, with no Face ID (2026-10-30
   - A second review pass (same day): enrollments are accepted in order. The sealed `expires_at`
     (which the relay cannot change) must be later than the last accepted one, and the check and
     the write share one transaction. So an older enrollment held back by the relay cannot roll the
-    key back.
+    key back. The write is a compare-and-swap on the keys just read (Postgres's READ COMMITTED
+    would otherwise let two racing enrollments both pass the check); the loser is `replayed`.
 
 ## Observability & Evaluation
 

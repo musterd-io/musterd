@@ -381,8 +381,13 @@ export async function setAppQuestionKey(
   now: number,
 ): Promise<'ok' | 'binding_stale' | 'replayed'> {
   return db.tx(async (t) => {
-    const keys = await appBindingKeys(t, teamId, bindingId);
-    if (!keys) return 'binding_stale';
+    const row = await t.get<{ app_keys: string | null; channel: string; status: string }>(
+      'SELECT app_keys, channel, status FROM channel_bindings WHERE id = ? AND team_id = ?',
+      [bindingId, teamId],
+    );
+    if (!row || row.channel !== APP_CHANNEL || row.status !== 'active' || !row.app_keys)
+      return 'binding_stale';
+    const keys = JSON.parse(row.app_keys) as AppKeys;
     if (
       (keys.question_key_nonces ?? []).includes(enroll.nonce) ||
       enroll.expiresAt <= (keys.question_key_expires_at ?? 0)
@@ -395,11 +400,12 @@ export async function setAppQuestionKey(
       question_key_expires_at: enroll.expiresAt,
       question_key_nonces: [...(keys.question_key_nonces ?? []), enroll.nonce].slice(-32),
     };
-    await t.run('UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ?', [
-      JSON.stringify(next),
-      bindingId,
-      teamId,
-    ]);
-    return 'ok';
+    // Compare-and-swap on the value just read: Postgres's READ COMMITTED lets two enrollments read
+    // the same keys, and only the first write may land. The loser saw a stale order — `replayed`.
+    const swapped = await t.run(
+      'UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ? AND app_keys = ?',
+      [JSON.stringify(next), bindingId, teamId, row.app_keys],
+    );
+    return swapped.changes === 1 ? 'ok' : 'replayed';
   });
 }
