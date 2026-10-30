@@ -6,10 +6,12 @@ import type { AskEntry } from '../../native/asks';
 import { STALE_TEXT, UNVERIFIED_TEXT, waitingSubtitle } from '../../native/notice';
 import { showOffer, type ShownOffer } from '../../native/offer';
 import type { PairingPin } from '../../native/pairingPin';
+import { Button } from '../../ui/button';
 import { Backdrop, Glass } from '../../ui/glass';
 import { success, warning } from '../../ui/haptics';
 import { Icon } from '../../ui/icon';
-import { Breathe, Pop, Rise, Squish } from '../../ui/motion';
+import { Moment } from '../../ui/moment';
+import { Rise, Squish } from '../../ui/motion';
 import { ago, Seat } from '../../ui/seat';
 import { font, radius, space, usePalette } from '../../ui/theme';
 
@@ -43,13 +45,13 @@ function noteFor(outcome: AnswerOutcome): string {
     case 'stale':
       return STALE_TEXT;
     case 'unpaired':
-      return 'This phone has not finished pairing, so it cannot sign this. Pair it again.';
+      return 'This phone hasn’t finished pairing, so it can’t sign this. Pair it again.';
     case 'refused':
       return 'This ask cannot be answered from the app.';
     case 'undelivered':
-      return 'The answer did not leave this phone. Try again.';
+      return 'Your answer didn’t leave this phone. Try again.';
     case 'cancelled':
-      return 'Face ID did not confirm the answer.';
+      return 'Face ID didn’t confirm. Nothing was sent.';
   }
 }
 
@@ -142,7 +144,7 @@ export default function AskScreen() {
       offers &&
       Math.min(offers.approve.descriptor.expiry, offers.reject.descriptor.expiry) <= Date.now()
     ) {
-      setNote('This had expired, so it was fetched again. Check it, then answer.');
+      setNote('It had expired, so here it is fresh. Check it, then answer.');
       await load();
       return;
     }
@@ -169,92 +171,48 @@ export default function AskScreen() {
     else setPhase({ kind: 'unverified' });
   };
 
-  if (phase.kind === 'loading' || phase.kind === 'sending') {
-    return (
-      <View style={[styles.center, { backgroundColor: p.bg }]}>
-        <View style={styles.dots}>
-          {[0, 1, 2].map((i) => (
-            <Breathe key={i} delay={i * 220}>
-              <View style={[styles.dot, { backgroundColor: p.accent }]} />
-            </Breathe>
-          ))}
-        </View>
-        <Text style={[styles.muted, { color: p.muted }]}>
-          {phase.kind === 'loading' ? 'Opening the ask…' : 'Sealing your answer…'}
-        </Text>
-      </View>
-    );
-  }
+  if (phase.kind === 'loading') return <Moment title="Opening the ask…" />;
+  if (phase.kind === 'sending') return <Moment title="Sealing your answer…" />;
   if (phase.kind === 'sent') {
     return (
-      <View style={[styles.center, { backgroundColor: p.bg }]}>
-        <Pop style={[styles.done, { backgroundColor: p.accent }]}>
-          <Icon name="checkmark" color={p.onAccent} size={34} fallback="✓" bounce />
-        </Pop>
-        <Rise index={2}>
-          <Text style={[styles.title, { color: p.text }]}>Sent</Text>
-        </Rise>
-        <Rise index={3}>
-          <Text style={[styles.centerCopy, { color: p.muted }]}>
-            Signed on this phone and sealed for your team. The ask closes once the daemon records
-            your answer.
-          </Text>
-        </Rise>
-        <Rise index={4}>
-          <Squish
-            accessibilityRole="button"
-            accessibilityLabel="Back to asks"
-            onPress={() => router.back()}
-            style={[styles.secondary, { backgroundColor: p.raised }]}
-          >
-            <Text style={[styles.secondaryText, { color: p.text }]}>Back to asks</Text>
-          </Squish>
-        </Rise>
-      </View>
+      <Moment
+        icon="checkmark"
+        tone="done"
+        title="Sent"
+        copy="Signed here and sealed for your team. It closes when the daemon records it."
+      >
+        <Button label="Back to asks" kind="secondary" onPress={() => router.back()} />
+      </Moment>
     );
   }
-  if (phase.kind !== 'ready') {
-    const gone = phase.kind === 'gone';
-    const unreachable = phase.kind === 'unreachable';
+  if (phase.kind === 'gone') {
     return (
-      <View style={[styles.center, { backgroundColor: p.bg }]}>
-        <Rise>
-          <Text style={[styles.title, { color: p.text }]}>
-            {gone ? 'Already settled' : unreachable ? 'Couldn’t reach your team' : 'Not shown'}
-          </Text>
-        </Rise>
-        <Rise index={1}>
-          <Text style={[styles.centerCopy, { color: p.muted }]}>
-            {gone
-              ? 'This ask is no longer open. It was answered somewhere else, or it expired.'
-              : unreachable
-                ? 'The ask may still be open. Check your connection and try again.'
-                : (note ?? UNVERIFIED_TEXT)}
-          </Text>
-        </Rise>
-        {unreachable ? (
-          <Rise index={2}>
-            <Squish
-              accessibilityRole="button"
-              accessibilityLabel="Try again"
-              onPress={() => void load()}
-              style={[styles.primary, { backgroundColor: p.accent }]}
-            >
-              <Text style={[styles.primaryText, { color: p.onAccent }]}>Try again</Text>
-            </Squish>
-          </Rise>
-        ) : null}
-        <Rise index={3}>
-          <Squish
-            accessibilityRole="button"
-            accessibilityLabel="Back to asks"
-            onPress={() => router.back()}
-            style={[styles.secondary, { backgroundColor: p.raised }]}
-          >
-            <Text style={[styles.secondaryText, { color: p.text }]}>Back to asks</Text>
-          </Squish>
-        </Rise>
-      </View>
+      <Moment
+        icon="checkmark.circle"
+        title="Already settled"
+        copy="Answered somewhere else, or it expired."
+      >
+        <Button label="Back to asks" kind="secondary" onPress={() => router.back()} />
+      </Moment>
+    );
+  }
+  if (phase.kind === 'unreachable') {
+    return (
+      <Moment
+        icon="wifi.exclamationmark"
+        title="Couldn’t reach your team"
+        copy="It may still be open. Check your connection."
+      >
+        <Button label="Try again" icon="arrow.clockwise" onPress={() => void load()} />
+        <Button label="Back to asks" kind="secondary" onPress={() => router.back()} />
+      </Moment>
+    );
+  }
+  if (phase.kind === 'unverified') {
+    return (
+      <Moment icon="eye.slash" title="Not shown" copy={note ?? UNVERIFIED_TEXT}>
+        <Button label="Back to asks" kind="secondary" onPress={() => router.back()} />
+      </Moment>
     );
   }
 
@@ -321,7 +279,7 @@ export default function AskScreen() {
         </View>
         {entry.delivery.lane ? (
           <Text style={[styles.muted, { color: p.muted }]}>
-            Lane title, as its seat wrote it: {entry.delivery.lane.title}
+            Lane, as its seat named it: {entry.delivery.lane.title}
           </Text>
         ) : null}
         {waiting ? <Text style={[styles.muted, { color: p.muted }]}>{waiting}</Text> : null}
@@ -334,25 +292,12 @@ export default function AskScreen() {
       ) : null}
 
       <Rise index={3} style={styles.actions}>
-        <Squish
-          accessibilityRole="button"
-          accessibilityLabel={offers ? 'Approve with Face ID' : 'Approve'}
+        <Button
+          label={offers ? 'Approve with Face ID' : 'Approve'}
+          {...(offers ? { icon: 'faceid' as const } : {})}
           onPress={() => void answer('approve', false)}
-          style={[styles.primary, { backgroundColor: p.accent }]}
-        >
-          {offers ? <Icon name="faceid" color={p.onAccent} size={19} /> : null}
-          <Text style={[styles.primaryText, { color: p.onAccent }]}>
-            {offers ? 'Approve with Face ID' : 'Approve'}
-          </Text>
-        </Squish>
-        <Squish
-          accessibilityRole="button"
-          accessibilityLabel="Decline"
-          onPress={() => void answer('reject', false)}
-          style={[styles.secondary, { backgroundColor: p.raised }]}
-        >
-          <Text style={[styles.secondaryText, { color: p.text }]}>Decline</Text>
-        </Squish>
+        />
+        <Button label="Decline" kind="secondary" onPress={() => void answer('reject', false)} />
         <Squish
           accessibilityRole="button"
           accessibilityLabel="Decline — I did not expect this"
@@ -367,7 +312,7 @@ export default function AskScreen() {
             Decline — I did not expect this
           </Text>
           <Text style={[styles.muted, { color: p.muted, textAlign: 'center' }]}>
-            Records it and flags {ask.from} on /live. It locks nothing.
+            Flags {ask.from} on /live. It locks nothing.
           </Text>
         </Squish>
       </Rise>
@@ -386,31 +331,6 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: space.xl,
-    gap: space.md,
-  },
-  centerCopy: {
-    fontFamily: font.regular,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    maxWidth: 320,
-  },
-  dots: { flexDirection: 'row', gap: space.sm },
-  dot: { width: 10, height: 10, borderRadius: radius.pill },
-  done: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: space.sm,
-  },
-  title: { fontSize: 22, fontFamily: font.bold, textAlign: 'center', letterSpacing: -0.3 },
   page: { padding: space.lg, gap: space.lg, paddingBottom: space.xl * 2 },
   who: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   whoText: { flex: 1, gap: 2 },
@@ -446,24 +366,6 @@ const styles = StyleSheet.create({
   banner: { borderRadius: radius.md, padding: space.lg },
   bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
   actions: { gap: space.sm, marginTop: space.sm },
-  primary: {
-    flexDirection: 'row',
-    gap: space.sm,
-    minHeight: 52,
-    borderRadius: radius.md,
-    paddingHorizontal: space.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryText: { fontSize: 17, fontFamily: font.bold },
-  secondary: {
-    minHeight: 48,
-    borderRadius: radius.md,
-    paddingHorizontal: space.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryText: { fontSize: 17, fontFamily: font.semibold },
   link: {
     minHeight: 44,
     alignItems: 'center',
