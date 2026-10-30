@@ -16,7 +16,9 @@ import {
   composeAnswerLine,
   isPushableAnswerLine,
   isQuestion,
+  QuestionMeasuresSchema,
   questionOf,
+  questionsHeadline,
 } from './question.js';
 import { PROTOCOL_VERSION } from './version.js';
 
@@ -214,5 +216,30 @@ describe("the app's question answer (ADR 774 §4–5)", () => {
       reported: false,
     });
     expect(decision.startsWith('musterd-app-answer/v1\n')).toBe(true);
+  });
+});
+
+describe('questionsHeadline (ADR 773 Experiment)', () => {
+  const base = {
+    window_days: 7,
+    asked: 12,
+    answered: 10,
+    answered_off_terminal: 9,
+    inferred: 1,
+    delivered: 9,
+    undelivered: 1,
+    unflagged_undelivered: 0,
+    resume_p50_ms: 14_200,
+  };
+  it('reads the loop in one line', () => {
+    expect(questionsHeadline(base)).toBe(
+      '12 asked · 10 answered (9 off the terminal) · resume p50 14.2s · 1 undelivered (7d)',
+    );
+    expect(QuestionMeasuresSchema.safeParse(base).success).toBe(true);
+  });
+  it('names a lost answer, and shows no p50 with nothing delivered', () => {
+    expect(questionsHeadline({ ...base, unflagged_undelivered: 2, resume_p50_ms: null })).toBe(
+      '12 asked · 10 answered (9 off the terminal) · resume p50 — · 1 undelivered · ⚠ 2 lost (7d)',
+    );
   });
 });

@@ -112,6 +112,9 @@ The design, approved by nick on 2026-10-30, is
   to a person: `team_question`, then end your turn — never a question in chat" (+102 B, with the
   context budget raised and a falsifier). The tool refuses a seat as `to`. Every fresh-spawn host
   backend uses `composed_recap_line` when the order carries one.
+- 2026-10-30 (lane `01M67CTQKK`): `team_report` carries `questions` (`QuestionMeasuresSchema`, last 7
+  days), and the CLI and MCP readouts print one `questionsHeadline` line once a seat has asked
+  anything. This is the Experiment's numbers, readable without a database.
 
 ## Observability & Evaluation
 

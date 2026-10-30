@@ -11,6 +11,7 @@ import {
   type PeerDemand,
   type TraceReport,
   type WakeHold,
+  questionsHeadline,
 } from '@musterd/protocol';
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
@@ -225,6 +226,11 @@ function render(r: Report, altitude: Altitude, liveness?: SweepFinding): void {
   if (r.ci && (r.ci.current.main_runs > 0 || r.ci.previous.main_runs > 0)) {
     w(`\n${theme.accent('ci')}:\n`);
     w(`  ${ciHeadline(r.ci)}\n`);
+  }
+  // ADR 773: one line for the question loop, once a seat has asked anything.
+  if (r.questions && r.questions.asked > 0) {
+    w(`\n${theme.accent('questions')}:\n`);
+    w(`  ${questionsHeadline(r.questions)}\n`);
   }
   w(`\n${theme.accent('waiting on')}:\n`);
   renderWaitingOn(r, w);

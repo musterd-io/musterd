@@ -37,6 +37,7 @@ import { listBlockedLanes } from './lanes.js';
 import { deriveMast } from './mast.js';
 import { getMemberByName } from './members.js';
 import { listTeamMessages, longDeferred } from './messages.js';
+import { questionMeasures } from './questions.js';
 import {
   effectiveWakePolicy,
   getResidency,
@@ -1340,6 +1341,8 @@ export async function deriveReport(
     tool_calls: await deriveToolCallMetrics(db, teamId, now),
     // ADR 610: the CI trend, this window beside the last.
     ci: await deriveCiTrend(db, teamId, now),
+    // ADR 773's Experiment: asked / answered off the terminal / undelivered / resume p50, 7 days.
+    questions: { window_days: 7, ...(await questionMeasures(db, teamId, now - WEEK_MS, now)) },
     review: await deriveReviewMetrics(db, teamId, now),
     long_deferred: await deriveLongDeferred(db, teamId, teamSlug, now),
     disputes: await deriveDisputes(db, teamId, now),

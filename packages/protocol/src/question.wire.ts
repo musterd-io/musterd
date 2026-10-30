@@ -126,3 +126,30 @@ export function composeAnswerLine(p: {
   const answer = capChars(fenceText(p.answer), Math.min(ANSWER_LINE_ANSWER_MAX, budget));
   return `${head}${recap}«${answer}»${tail}`;
 }
+
+/** The ADR 773 Experiment's numbers over a window, as `team_report` carries them. */
+export interface QuestionMeasures {
+  window_days: number;
+  asked: number;
+  answered: number;
+  /** Answered from a card (`/live`, the phone, Slack) rather than a terminal. */
+  answered_off_terminal: number;
+  /** Raised by the fallback catcher rather than `team_question` (phase 3). */
+  inferred: number;
+  delivered: number;
+  undelivered: number;
+  /** Undelivered answers with no flag — the design's zero target. */
+  unflagged_undelivered: number;
+  /** Median answer → delivery, ms; null with nothing delivered. Target under 30 s. */
+  resume_p50_ms: number | null;
+}
+
+/** One report line for the question loop — shared by the CLI and the MCP readout. */
+export function questionsHeadline(q: QuestionMeasures): string {
+  const p50 = q.resume_p50_ms === null ? '—' : `${(q.resume_p50_ms / 1000).toFixed(1)}s`;
+  const flag = q.unflagged_undelivered > 0 ? ` · ⚠ ${q.unflagged_undelivered} lost` : '';
+  return (
+    `${q.asked} asked · ${q.answered} answered (${q.answered_off_terminal} off the terminal) · ` +
+    `resume p50 ${p50} · ${q.undelivered} undelivered${flag} (${q.window_days}d)`
+  );
+}
