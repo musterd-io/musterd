@@ -1325,7 +1325,10 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
         s.team,
         callback(
           'qk-1',
-          await enrollBody(s, k2.publicKey, s.phone.signing, { nonce: 'b'.repeat(24) }),
+          await enrollBody(s, k2.publicKey, s.phone.signing, {
+            nonce: 'b'.repeat(24),
+            expiresAt: NOW + 70_000,
+          }),
         ),
         NOW,
       ),
@@ -1356,5 +1359,48 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
       ok: false,
       reason: 'expired',
     });
+  });
+
+  it('an older enrollment the relay held back cannot land after a newer one (no rollback)', async () => {
+    const s = await seed();
+    const k1 = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const k2 = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const older = await enrollBody(s, k1.publicKey, s.phone.signing, {
+      nonce: 'o'.repeat(24),
+      expiresAt: NOW + 60_000,
+    });
+    const newer = await enrollBody(s, k2.publicKey, s.phone.signing, {
+      nonce: 'w'.repeat(24),
+      expiresAt: NOW + 120_000,
+    });
+    await expect(handleRelayCallback(s.ctx, s.team, callback('qk-1', newer), NOW)).resolves.toEqual(
+      {
+        ok: true,
+      },
+    );
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('qk-1', older), NOW + 1),
+    ).resolves.toEqual({
+      ok: false,
+      reason: 'replayed',
+    });
+    // The key in force is still the newer one: k2 answers, k1 does not.
+    const d = await delivered(s, await raiseQuestion(s, 'q-1'));
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, k1.privateKey)),
+        NOW + 2,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'bad_signature' });
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, k2.privateKey)),
+        NOW + 3,
+      ),
+    ).resolves.toEqual({ ok: true });
   });
 });
