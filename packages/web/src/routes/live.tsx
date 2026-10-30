@@ -106,6 +106,8 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
 /** The log drawer hosts today's `Stream` unchanged (ADR 464 lane 2) — fetched the first time it
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
 /** The log drawer only exists while open (L, or the log button); its chunk loads then. */
+// Seats ask 1e: the "Waiting on you" list and its triage sheet — downloaded only once a question is open.
+const LazyWaitingOnYou = lazy(() => import('../live/WaitingOnYou').then((m) => ({ default: m.WaitingOnYou })));
 const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })));
 /** "Who is here" (ADR 692) is chrome the room does not need to paint: it follows the first roster
  *  read in its own chunk, so the faces and their cards stay off /live's eager graph. */
@@ -654,6 +656,12 @@ function LivePage() {
   // The ask banner (ADR 464 §6). Inside the office on a desk; on a phone the office is hidden, so
   // the banner sits ABOVE the team list instead — spec §2's phone order, and the answer to dolly's
   // note that a phone could not see an open question at all.
+  // Seats ask 1e: derives and renders inside its own lazy chunk, so the eager graph pays only the stub.
+  const waitingOnYou = connected ? (
+    <Suspense fallback={null}>
+      <LazyWaitingOnYou roster={roster} cfg={cfg} envelopes={envelopes} board={board} />
+    </Suspense>
+  ) : null;
   const asksStrip = connected ? (
     <AsksStrip
       loading={loading}
@@ -762,7 +770,12 @@ function LivePage() {
               {error} <button onClick={reset}>reset &amp; reconnect</button>
             </div>
           )}
-          {phone && <div className="lc__phone-asks">{asksStrip}</div>}
+          {phone && (
+            <div className="lc__phone-asks">
+              {waitingOnYou}
+              {asksStrip}
+            </div>
+          )}
           {/* On a phone the room is inert (below), so its wall board and bookshelf are not doors any
               more. These two are: the same overlays, opened from the button instead of the
               furniture (lane 01M61QMGJC). */}
@@ -829,7 +842,14 @@ function LivePage() {
                 settingsSpot={{ enabled: settingsHuman, flagged: pairings.length > 0 }}
                 // The asks & approvals rail (ADR 149) rides the top of the room itself — the office
                 // frames its own asks (nick, 2026-07-28). Still renders nothing until an ask exists.
-                topSlot={phone ? null : asksStrip}
+                topSlot={
+                  phone ? null : (
+                    <>
+                      {waitingOnYou}
+                      {asksStrip}
+                    </>
+                  )
+                }
                 workCues={WORK_CUES}
                 onCaption={setCaption}
                 linked={lit ?? linked}

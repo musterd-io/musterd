@@ -5,6 +5,7 @@ import {
   askTierHolds,
   askTierOf,
   isAwaitingAcceptance,
+  isQuestion,
   type AskSpecies,
   type AskTier,
 } from '@musterd/protocol/wire';
@@ -169,6 +170,8 @@ export function deriveAsks(envelopes: Envelope[]): AskView[] {
     if (seen.has(env.id)) continue;
     seen.add(env.id);
     if (env.act === 'ask') {
+      // A question (ADR 773) has its own card in "Waiting on you" — one card per question, never both.
+      if (isQuestion(env.meta)) continue;
       const species = askSpeciesOf(env.meta?.['species']);
       const tier = askTierOf(env.meta?.['tier']);
       if (!species || !tier) continue; // not a well-formed ask; the stream still shows it
