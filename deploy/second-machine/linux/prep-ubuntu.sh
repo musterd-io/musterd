@@ -62,6 +62,21 @@ npm install -g @anthropic-ai/claude-code @openai/codex
 grep -q npm-global "$HOME/.bashrc" || echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >>"$HOME/.bashrc"
 EOF
 
+# Ubuntu 24.04 sets kernel.apparmor_restrict_unprivileged_userns=1, and bubblewrap needs a user
+# namespace: Codex's own sandbox (its vendored bwrap) fails "bwrap: loopback: Failed RTM_NEWADDR:
+# Operation not permitted", so every Codex wake dies ("thread id missing"), and the resident
+# engine's bash sandbox is bwrap too (musterd-joiner-1, 2026-10-29). Exempt only the two bwrap
+# binaries; the restriction stays on for everything else.
+CODEX_BWRAP="/home/$USER_NAME/.npm-global/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap"
+if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; then
+  {
+    printf 'abi <abi/4.0>,\ninclude <tunables/global>\n'
+    printf 'profile musterd-bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n}\n'
+    printf 'profile musterd-codex-bwrap %s flags=(unconfined) {\n  userns,\n}\n' "$CODEX_BWRAP"
+  } >/etc/apparmor.d/musterd-bwrap-userns
+  apparmor_parser -r /etc/apparmor.d/musterd-bwrap-userns
+fi
+
 echo
 tailscale status >/dev/null 2>&1 || echo "tailscale is not up: as root, \`tailscale up\` (or re-run with TS_AUTHKEY set)"
 echo "prep done. Next, as $USER_NAME (ssh $USER_NAME@<this box>):"
