@@ -13,7 +13,7 @@ import { findBinding, wsBase, type Identity } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
 import { pendingPickLine, takePendingPick } from '../pick/marker.js';
-import { isActionNeeded, renderInbox, renderMessageRow } from '../render/rows.js';
+import { isActionNeeded, openActionNeeded, renderInbox, renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { tapHook } from '../trace/hook.js';
 import { findWorkspaceDir, kindLookup, resolve, resolveRead, viewerFlags } from './helpers.js';
@@ -287,7 +287,28 @@ export async function inboxCommand(parsed: Parsed): Promise<number> {
       { ...(d.by ? { by: d.by } : {}), ...(d.reason ? { reason: d.reason } : {}) },
     ]),
   );
-  process.stdout.write('\n' + renderInbox(messages, kindOf, { cursorTs, discharged }) + '\n');
+  // ADR 770: lead with the directed section, so the daily view's `⚑ N waiting on you` arrow
+  // lands on the acts it counted. Same projection family as status (openActionNeeded over the
+  // unread rows), deduped by act id against the general list below. Shown rows are consumed
+  // exactly as before (ADR 752/117) — this only reorders the page.
+  const viewer = await viewerFlags(http, team, identity.name);
+  const directed = filtering
+    ? []
+    : openActionNeeded(
+        messages,
+        identity.name,
+        res.answered ?? [],
+        [...discharged.keys()],
+        viewer,
+      ).filter((m) => envelopePosition(m) > cursorTs);
+  const directedIds = new Set(directed.map((m) => m.id));
+  const rest = directedIds.size > 0 ? messages.filter((m) => !directedIds.has(m.id)) : messages;
+  if (directed.length > 0) {
+    process.stdout.write(`\n${theme.accent(`waiting on you — ${directed.length}`)}\n`);
+    process.stdout.write(renderInbox(directed, kindOf, { cursorTs, discharged }) + '\n');
+  }
+  if (rest.length > 0)
+    process.stdout.write('\n' + renderInbox(rest, kindOf, { cursorTs, discharged }) + '\n');
 
   // Advance the read cursor to the NEWEST UNREAD we actually displayed — never past an unshown unread
   // (the bounded-inbox invariant), and never at all when peeking or filtering (a lens must not consume).
