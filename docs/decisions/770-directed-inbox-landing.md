@@ -30,15 +30,18 @@ existing flag's contract.
 `musterd inbox` (text form, no filter flags) leads with a directed section before the general
 list:
 
-- The section header is `⚑ waiting on you — N` — the daily view's glyph, in its accent —
-  where N is computed by the same projection the daily view's waiting count uses, over the
-  same window. One query, two surfaces: the number in `status` and the number at the top of
-  `inbox` cannot drift apart.
-- The section shows exactly the rows that projection returns, whether read or unread, in the
-  same `message-row` rendering and the same newest-last order as the general list. A read row
-  in it is shown but consumes nothing new, since the ADR 117 cursor only moves past unread
-  rows. A row shown in the section is not repeated in the general list below it (dedupe by
-  act id).
+- The section header is `waiting on you — N`, where N is computed by the same projection the
+  daily view's waiting count uses, over the same window. One query, two surfaces: the number
+  in `status` and the number at the top of `inbox` cannot drift apart.
+  _(Amended 2026-10-30: the header is spelled `⚑ waiting on you — N` — the daily view's
+  glyph, in its accent.)_
+- The section shows the directed unread acts in the same `message-row` rendering and the same
+  newest-last order as the general list. A row shown in the section is not repeated in the
+  general list below it (dedupe by act id).
+  _(Amended 2026-10-30: the section renders exactly the rows the projection above returns,
+  whether read or unread — "the directed unread acts" named a narrower set than the count,
+  since an act read but not yet answered still waits. A read row in the section is shown but
+  consumes nothing new, since the ADR 117 cursor only moves past unread rows.)_
 - Everything below the section is today's inbox, unchanged: same window, same grouping, same
   rows.
 - Read semantics are untouched. The section's rows are shown rows, so an ordinary read
