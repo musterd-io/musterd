@@ -1180,3 +1180,33 @@ board and a card that nobody moved does not move.
 - A move to a state with no column MUST clear the card.
 - A change of `card` is a `lane.updated` change like any audited field.
 
+
+## A.31 Question asks and the answer line (unreleased — ADR 773, ADR 774)
+
+A seat's question to a person, with options and no clock, and the one wake line that may carry an
+answer's text.
+
+- An `ask` carrying `meta.question` is a **question**. It MUST carry `meta.species: 'consult'` and
+  MUST NOT carry `meta.tier`; a server MUST refuse a question with a tier. `meta.question` is
+  `{text (1–280), why? (≤ 600), options? (0–9 of {label (1–80), consequence? (≤ 140)}), context?
+  {lane?, pr?, branch?}, blocking (default false), audience ('addressee' | 'team', default
+  'addressee'), inferred (default false)}`.
+- A question is open until answered, withdrawn (a `resolve` on its thread by the asker), or its
+  `context.lane` goes `done`/`abandoned`, when the server MUST write that `resolve` with
+  `meta.withdrawn: 'lane_closed'`.
+- An answer is an `accept` with `meta.in_reply_to` naming the question and `meta.answer {choice?
+  (0–8), text? (1–4000)}`, at least one present. A server MUST refuse `meta.answer` on any other
+  act or target, MUST refuse an answer from anyone but the addressee when `audience` is
+  `'addressee'`, and MUST refuse a second answer with `409 question_already_answered`. An answer
+  after a withdrawal is recorded with `late: true`.
+- `meta.answer_proof {channel: 'live'|'app'|'slack'|'cli', verified, by, late?}` is
+  server-controlled; a server MUST strip a client-supplied copy. A question answer is advisory and
+  authorizes nothing.
+- An answer carrying `answer_proof` is `idleRingable` for the asker and a wake reason on the
+  immediate lane for an asker with no live presence.
+- When `answer_proof.verified` is true and the woken seat is the asker, the wake line MUST be the
+  **answer line**: `⚡ musterd [<team>]: <person> answered your question <qid> (via <channel>) —
+  «<answer>» — act on it; ack with team_wake_context {act_id: "<answer id>"}`, with newlines folded
+  to ` ⏎ `, `«`/`»` escaped as `‹‹`/`››`, the answer capped at 2,000 characters and the line at
+  2,400. Every other wake line keeps ADR 088 §4's ids-only rule. The recap form, for a session that
+  cannot be resumed, inserts `you asked: «<question text>» —` before the answer.
