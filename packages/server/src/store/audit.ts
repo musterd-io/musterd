@@ -551,6 +551,7 @@ export type AuditAction =
   | 'question.withdrawn'
   | 'question.answer_delivered'
   | 'question.answer_undelivered'
+  | 'app.question_key_enrolled'
   | 'ask.raised'
   | 'ask.deferred'
   | 'ask.held'
@@ -940,6 +941,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'question.withdrawn': 'actor',
   'question.answer_delivered': 'none',
   'question.answer_undelivered': 'none',
+  'app.question_key_enrolled': 'none',
   'ask.raised': 'actor',
   'ask.deferred': 'actor',
   'ask.held': 'actor',

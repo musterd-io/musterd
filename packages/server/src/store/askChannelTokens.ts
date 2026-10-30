@@ -329,3 +329,21 @@ export async function redeemAskChannelToken(
     return { ok: false, reason: err.reason };
   }
 }
+
+/**
+ * Burn a token whose answer went through the act path instead of {@link redeemAskChannelToken}'s
+ * own write — a question's answer (ADR 773), which the send route claims, stamps and wakes on.
+ * Checked first with `preflight`; this is the one write that follows. False when already burned.
+ */
+export async function consumeAskChannelToken(
+  db: Driver,
+  teamId: string,
+  token: string,
+  now: number,
+): Promise<boolean> {
+  const res = await db.run(
+    'UPDATE ask_channel_tokens SET consumed_at = ? WHERE token_hash = ? AND team_id = ? AND consumed_at IS NULL',
+    [now, sha256(token), teamId],
+  );
+  return res.changes === 1;
+}

@@ -1,5 +1,6 @@
 import {
   AnswerProofSchema,
+  classifyAskAction,
   type AnswerChannel,
   type AnswerProof,
   type Envelope,
@@ -49,6 +50,25 @@ export async function prepareQuestionAnswer(
   const view = typeof questionId === 'string' ? await questionView(db, team.id, questionId) : null;
   if (!view) {
     throw new MusterdError('bad_request', 'meta.answer answers a question ask only (ADR 773)');
+  }
+  // Defence in depth (security review, 2026-10-30): an answer is advice, never authority (ADR 773
+  // §6). Every consumer that treats a human `accept` as authority keys on its ask — a lane review,
+  // a gate, a hold, a policy review — and none of those can be a question. Refuse if one ever is.
+  const askMeta = await db.get<{ meta: string | null }>(
+    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, view.id],
+  );
+  const parsedAsk = askMeta?.meta ? (JSON.parse(askMeta.meta) as Record<string, unknown>) : null;
+  if (
+    classifyAskAction(parsedAsk) !== 'advisory' ||
+    ['lane_review', 'gate', 'hold', 'policy_review', 'lane_handoff'].some(
+      (k) => parsedAsk?.[k] !== undefined,
+    )
+  ) {
+    throw new MusterdError(
+      'forbidden',
+      'this ask is not an advisory question; an answer cannot act on it',
+    );
   }
   if (env.to.kind !== 'member' || env.to.name !== view.asker) {
     // The asker is the answer's addressee: the ring and the wake follow `to` (ADR 773 §7).
