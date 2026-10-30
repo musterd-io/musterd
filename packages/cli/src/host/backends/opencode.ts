@@ -271,6 +271,10 @@ async function attempt(
         )
       : undefined;
   let sessionId: string | undefined;
+  let sessionSeen: () => void = () => {};
+  const firstSession = new Promise<void>((resolve) => {
+    sessionSeen = resolve;
+  });
   let usage: WakeUsage | undefined;
   let harnessCost: number | undefined;
   let buffer = '';
@@ -280,7 +284,10 @@ async function attempt(
     buffer = lines.pop() ?? '';
     for (const line of lines) {
       sessionId ??= parseOpencodeSessionLine(line);
-      if (sessionId) lease?.setSession(sessionId);
+      if (sessionId) {
+        lease?.setSession(sessionId);
+        sessionSeen();
+      }
       const step = parseOpencodeStepLine(line);
       if (step) {
         usage = addUsage(usage, step.usage);
@@ -341,6 +348,13 @@ async function attempt(
       ),
     ),
   ]);
+  // The musterd adapter attests the lease as soon as it starts, but OpenCode v2 names its session
+  // only with the first `step_start`, after the model's first reply — seconds later over a slow
+  // link. Judged at the attest, `exact` read "session id missing" and the run was killed (exit 130,
+  // every wake on musterd-joiner-1, 2026-10-29). A lease-attested run that is still alive gets until
+  // its first session line, its exit, or the watchdog — whichever comes first.
+  if (sessionId === undefined && verified.occupied && verified.lease_matched && !timedOut)
+    await Promise.race([firstSession, exited]);
   sessionId ??= parseOpencodeSessionLine(buffer);
   const exact = sessionId !== undefined && (expectedId === undefined || sessionId === expectedId);
   if (label === 'fresh' && sessionId)
