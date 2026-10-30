@@ -61,6 +61,7 @@ import {
   recordBootstrapCredentialUse,
   requireTeam,
   revokeBootstrapCredential,
+  ROTATION_GRACE_MS,
   rotateAgentKey,
 } from './teams.js';
 
@@ -471,6 +472,39 @@ withDrivers('store', (o) => {
       expect(await findBootstrapCredential(db, team.id, successor.agent_key)).toMatchObject({
         state: 'active',
       });
+    });
+
+    it('refuses a rotated predecessor once the grace window has run out (ADR 775)', async () => {
+      const { db, team } = await freshTeam();
+      const predecessor = await mintBootstrapCredential(db, {
+        teamId: team.id,
+        useKind: 'host',
+        target: 'mac.lan',
+      });
+      const successor = await mintBootstrapCredential(db, {
+        teamId: team.id,
+        useKind: 'host',
+        target: 'mac.lan',
+      });
+      const row = await db.get<{ rotated_at: number }>(
+        'SELECT rotated_at FROM agent_bootstrap_credentials WHERE id = ?',
+        [predecessor.credential.id],
+      );
+      const rotatedAt = row!.rotated_at;
+
+      const inside = rotatedAt + ROTATION_GRACE_MS - 1;
+      const past = rotatedAt + ROTATION_GRACE_MS;
+      expect(
+        await findBootstrapCredential(db, team.id, predecessor.agent_key, inside),
+      ).toMatchObject({ id: predecessor.credential.id, state: 'rotated' });
+      expect(await findBootstrapCredential(db, team.id, predecessor.agent_key, past)).toBeNull();
+      // The successor is untouched by its predecessor's window.
+      expect(await findBootstrapCredential(db, team.id, successor.agent_key, past)).toMatchObject({
+        id: successor.credential.id,
+        state: 'active',
+      });
+      // A lapsed predecessor can still be revoked, so inventory can be cleaned up.
+      expect(await revokeBootstrapCredential(db, team.id, predecessor.credential.id)).toBe(true);
     });
 
     it('rejects a duplicate slug with conflict', async () => {

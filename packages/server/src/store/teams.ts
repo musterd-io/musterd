@@ -241,9 +241,9 @@ export async function mintBootstrapCredential(
         [input.teamId, input.useKind, input.target],
       )
     ).map((row) => row.id);
-    // A same-scope mint is the explicit start of a staged rotation. The predecessor remains valid
-    // until the admin revokes it, but inventory names the overlap rather than showing two unrelated
-    // active records (ADR 344 §5–6).
+    // A same-scope mint is the explicit start of a staged rotation. The predecessor stays valid
+    // for ROTATION_GRACE_MS so the successor can be distributed, then fails closed (ADR 775,
+    // narrowing ADR 344 §6); inventory names the overlap rather than showing two active records.
     await t.run(
       `UPDATE agent_bootstrap_credentials
        SET state = 'rotated', rotated_at = ?
@@ -275,19 +275,31 @@ export async function mintBootstrapCredential(
   return { credential, agent_key, rotated };
 }
 
-/** Resolve an active, unexpired scoped bootstrap credential by its presented secret. */
+/**
+ * How long a rotated predecessor keeps authenticating after its successor is minted (ADR 775).
+ * Long enough to carry a host successor to another machine by hand; past it the old key fails
+ * closed whether or not an administrator revoked it.
+ */
+export const ROTATION_GRACE_MS = 60 * 60 * 1000;
+
+/**
+ * Resolve an active, unexpired scoped bootstrap credential by its presented secret. A rotated
+ * predecessor resolves only inside ROTATION_GRACE_MS of its rotation (ADR 775).
+ */
 export async function findBootstrapCredential(
   db: Driver,
   teamId: string,
   agentKey: string,
+  now: number = Date.now(),
 ): Promise<BootstrapCredential | null> {
   return (
     (await db.get<BootstrapCredential>(
       `SELECT * FROM agent_bootstrap_credentials
-         WHERE team_id = ? AND key_hash = ? AND state IN ('active', 'rotated')
+         WHERE team_id = ? AND key_hash = ?
+           AND (state = 'active' OR (state = 'rotated' AND rotated_at > ?))
            AND (expires_at IS NULL OR expires_at > ?)
          LIMIT 1`,
-      [teamId, hashToken(agentKey), Date.now()],
+      [teamId, hashToken(agentKey), now - ROTATION_GRACE_MS, now],
     )) ?? null
   );
 }

@@ -92,6 +92,10 @@ claim authentication or making key distribution unauditable.
   exit: authenticated agent Workspace migration, administrator-distributed host successors,
   observed-use readiness, and transactional per-Team cutover. Legacy lookup code remains until
   every extant Team has recorded cutover.
+- 2026-10-30: the staged overlap was never closed in practice. Rotated predecessors kept
+  authenticating for weeks because §6's revoke-after-verify step was left to discipline.
+  [ADR 775](./775-rotation-retires-the-predecessor.md) bounds the overlap: a rotated predecessor
+  authenticates only for one hour after rotation, on the hub and on joiners.
 
 ## Observability & Evaluation
 
