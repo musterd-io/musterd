@@ -5,7 +5,7 @@
  * A layer whose sheet is missing is skipped, so a new hair style or hat added to `appearance.ts`
  * before its sheet is rendered draws the figure without it, never nothing (Review Focus 2).
  */
-import { type Accessory, type Appearance, type Ears, type Eyes, type FacialHair, type Hat, type HairStyle, lookFor, type Neck, type Smile, type TopCut, type Wrist } from '../appearance';
+import { type Accessory, type Appearance, type Ears, type Eyes, type FacialHair, type Hat, type HairStyle, lookFor, type Neck, type Outer, type Smile, type TopCut, type Wrist } from '../appearance';
 import { project, type Fit } from '../iso';
 import type { CarryKind, OfficeNode } from '../types';
 import { type Anim, type Dir8, frameCell, type SheetSpec } from './figureSheet';
@@ -26,6 +26,7 @@ export type LayerId =
   | `acc/${Ears}`
   | `acc/${Wrist}`
   | `acc/${Neck}`
+  | `outer/${Exclude<Outer, 'none'>}`
   | 'tell/eyes'
   | 'tell/collar'
   | `carry/${CarryLayer}`
@@ -107,7 +108,9 @@ export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: str
   out.push({ id: `mouth/${a.smile}`, color: a.skin });
   out.push({ id: 'shoes', color: a.shoes });
   out.push({ id: 'bottom', color: a.bottom });
-  out.push({ id: `top/${a.cut}`, color: topColor });
+  // the outermost top carries the hue (v2-5b, spec §2.5): under an outer layer the top runs free
+  out.push({ id: `top/${a.cut}`, color: a.outer === 'none' ? topColor : a.underColor });
+  if (a.outer !== 'none') out.push({ id: `outer/${a.outer}`, color: topColor });
   out.push(...carried(held));
   if (held.lanyard) out.push({ id: 'lanyard', color: held.lanyard }, { id: 'lanyard-card', color: null });
   if (agent) out.push({ id: 'tell/collar', color: topColor });

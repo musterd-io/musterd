@@ -57,6 +57,8 @@ HAIR = ["buzz", "short", "side", "bob", "long", "ponytail", "afro", "bun", "slic
 FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band", "bucket"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
+# outer layers (v2-5b): worn over a top; the outermost carries the identity hue
+OUTERS = ["cardigan"]
 ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet", "headphones-neck"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
@@ -67,6 +69,7 @@ LAYERS = (
     + [f"hair/{h}" for h in HAIR]
     + [f"facial/{f}" for f in FACIAL]
     + [f"top/{t}" for t in TOPS]
+    + [f"outer/{o}" for o in OUTERS]
     + ["bottom", "shoes"]
     + [f"hat/{h}" for h in HATS]
     + [f"acc/{a}" for a in ACCS]
@@ -94,7 +97,7 @@ def layer_id_byte(layer: str) -> int:
 # cells) — every mesh on a shoulder, elbow or wrist joint, plus the whole of a prop held at the desk —
 # which `drawFigureFrame(part: 'arms')` draws again over the slab.
 # the wrist pieces (v2-4c) ride the forearm, so the seated overlay and the carrying poses keep them
-ARM_LAYERS = ["skin"] + [f"top/{t}" for t in TOPS] + ["carry/mug", "carry/plate", "acc/watch", "acc/bracelet"]
+ARM_LAYERS = ["skin"] + [f"top/{t}" for t in TOPS] + ["carry/mug", "carry/plate", "acc/watch", "acc/bracelet"] + [f"outer/{o}" for o in OUTERS]
 
 
 # ── materials ──────────────────────────────────────────────────────────────────────────────
@@ -567,6 +570,37 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     for side, sy in (("L", 1), ("R", -1)):
         r.torus("armhole", "spine", "top/vest", rib, 0.3, sy * (SHOULDER_W - 1.0 * FIG), SHOULDER - 2.6 * FIG,
                 3.5 * FIG, 0.8, (math.radians(90), 0, 0))
+
+    # ── outer layers (v2-5b, spec §2.4): a size up over any top — a fuller body that reaches past the
+    # trouser top, long sleeves over the top's — with each garment's own finishing. One layer each.
+    def outer_body(layer, mat=cloth, drop=1.5):
+        z0 = HIP - (1.5 + drop) * FIG
+        r.frustum("torso", "spine", layer, mat, 0.3, 0, z0, 5.8 * FIG, 7.1 * FIG, SHOULDER - z0, sy=1.7)["fuse"] = layer
+        r.orb("yoke", "spine", layer, mat, 0.3, 0, SHOULDER, 6.6 * FIG, 13.2 * FIG, 3.7 * FIG, layer)
+        r.orb("belly", "hips", layer, mat, 0.5, 0, HIP + 2 * FIG, 6.0 * FIG, 8.9 * FIG, 4.3 * FIG, layer)
+        for sy in (1, -1):
+            r.turn(r.orb("trap", "spine", layer, mat, -0.4 * FIG, sy * 4.7 * FIG, SHOULDER + 1.2 * FIG, 3.9 * FIG, 5.7 * FIG, 2.6 * FIG, layer),
+                   (math.radians(sy * 18), 0, 0))
+        for side, sy in (("L", 1), ("R", -1)):
+            y = sy * SHOULDER_W
+            r.orb("cap", f"shoulder{side}", layer, mat, 0, y, SHOULDER - 0.5 * FIG, 4.1 * FIG, 4.0 * FIG, 4.0 * FIG, layer)
+            r.cyl("sleeve", f"shoulder{side}", layer, mat, 0, y, SHOULDER - UPPER_ARM, 3.5 * FIG, 4.1 * FIG, UPPER_ARM)["fuse"] = layer
+            r.orb("elbow", f"elbow{side}", layer, mat, 0, y, SHOULDER - UPPER_ARM, 3.4 * FIG, 3.4 * FIG, 3.4 * FIG, layer)
+            r.cyl("cuff", f"elbow{side}", layer, mat, 0, y, WRIST + 1.6 * FIG, 2.9 * FIG, 3.4 * FIG, FORE_ARM - 1.6 * FIG)["fuse"] = layer
+
+    front = 0.3 + 7.0 * FIG  # the outer body's front at the chest
+    # the cardigan: soft knit, a deep V edged in rib, buttons down the placket, ribbed hem and cuffs
+    outer_body("outer/cardigan", drop=2.5)
+    for sy in (1, -1):
+        r.turn(r.box("v-edge", "spine", "outer/cardigan", rib, front - 0.4, sy * 1.6 * FIG, CHEST - 2 * FIG, 0.7, 1.0 * FIG, 9 * FIG),
+               (math.radians(sy * -16), 0, 0))
+    for i in range(4):
+        r.orb("button", "spine", "outer/cardigan", rib, front - 0.1 - i * 0.25, 0, CHEST - 4 * FIG - i * 3.2 * FIG, 0.55, 0.55, 0.55)
+    r.cyl("placket", "spine", "outer/cardigan", rib, front - 0.6, 0, HIP - 3.5 * FIG, 0.5 * FIG, 0.5 * FIG, CHEST - HIP)
+    o = r.torus("hem", "hips", "outer/cardigan", rib, 0.45, 0, HIP - 3.2 * FIG, 5.9 * FIG, 1.1)
+    o.scale = (1.0, 1.5, o.scale.z)
+    for side, sy in (("L", 1), ("R", -1)):
+        r.cyl("cuffrib", f"elbow{side}", "outer/cardigan", rib, 0, sy * SHOULDER_W, WRIST + 0.9 * FIG, 3.0 * FIG, 3.0 * FIG, 1.5 * FIG)
 
     # ── bottom: a pelvis with a seat and trouser legs that taper to the ankle, one fused shape
     r.orb("pelvis", "hips", "bottom", denim, 0, 0, HIP + 2.5 * FIG, 5.6 * FIG, 8.2 * FIG, 5.0 * FIG, "bottom")
@@ -1094,7 +1128,7 @@ CARRY_BASE = {"walk-hold2": "walk", "walk-hold1": "walk", "walk-call": "walk", "
               "sit-hand": "sit-idle",
               # office v3-6: the lap arms over the seated idle
               "sit-lap": "sit-idle"}
-CARRY_OWN = ("skin", "top/", "carry/", "lanyard", "acc/watch", "acc/bracelet")
+CARRY_OWN = ("skin", "top/", "outer/", "carry/", "lanyard", "acc/watch", "acc/bracelet")
 # Layers a carrying clip stores beyond CARRY_OWN: the lap arms lie across the trousers, so sit-lap's
 # `bottom` cells are its own (spec §8); every other carrying clip keeps the base clip's.
 CARRY_OWN_EXTRA = {"sit-lap": ("bottom",)}

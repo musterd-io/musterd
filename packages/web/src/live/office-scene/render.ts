@@ -1788,6 +1788,8 @@ const RECEPTIONIST_LOOK: Appearance = {
   ears: 'none',
   neck: 'none',
   wrist: 'none',
+  outer: 'none',
+  underColor: null,
   accessory: 'none',
   accessoryColor: '#2f7f6a',
   metal: '#cfd3d8',
