@@ -806,7 +806,7 @@ const ACT_WORD: Record<string, string> = {
 };
 
 /** Cut plain text to `max` visible columns with `…`; never wraps. */
-function cut(s: string, max: number): string {
+export function cut(s: string, max: number): string {
   if (visibleLen(s) <= max) return s;
   let out = '';
   for (const ch of s) {

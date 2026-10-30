@@ -361,7 +361,11 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
 24. [`cmd/next`](https://figma.com/design/tgJ7dUNgGmlIMYBVVA5qIQ?node-id=24-2) — `$ musterd next` as Ada, no color, 80 columns, with one review promise in each of the
     three ADR 490 sections and nothing else in flight. The renderer (`packages/cli/src/commands/next.ts`,
     `renderNext`) and this frame match character-for-character — pinned by `orient.test.ts` with a
-    fixed clock (`2h` / `3d` / `1h` are `shortDuration` of the fixture's ages):
+    fixed clock (`2h` / `3d` / `1h` are `shortDuration` of the fixture's ages). Lane rows outside
+   this frame's sections (carrying, up next, owed, review debt) use the daily view's grammar
+   since lane `01M653W2N4` (2026-10-30): state first, title cut at the column edge, 10-character
+   lane prefix, owner and age on a dim line of their own; the stalled-continuation line says
+   `no wake due:` once.
 
     ```
     next — as Ada
