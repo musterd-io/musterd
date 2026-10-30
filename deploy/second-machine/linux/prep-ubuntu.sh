@@ -70,19 +70,26 @@ npm install -g @openai/codex
 # Ubuntu 24.04 sets kernel.apparmor_restrict_unprivileged_userns=1, and bubblewrap needs a user
 # namespace: Codex's sandbox fails "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
 # so every Codex wake dies ("thread id missing"), and the resident engine's bash sandbox is bwrap
-# too (musterd-joiner-1, 2026-10-29). Plainly: an UNCONFINED bwrap lets anything launched through
-# bwrap create user namespaces, which on this single-tenant box is close to lifting the
-# restriction for that user, not a narrow exemption. Its children are not stripped of capabilities
-# the way Ubuntu's stock bwrap-userns-restrict profile does; that profile is not installed on this
-# image, and adopting it is the stronger follow-up. Both paths are root-owned.
-CODEX_BWRAP="$(npm root -g)/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap"
+# too (musterd-joiner-1, 2026-10-29). Install Ubuntu's own bwrap-userns-restrict profile from the
+# apparmor-profiles package: bwrap may use the namespace to build its sandbox, but everything it
+# runs is stacked under unpriv_bwrap and denied every capability, so plain `unshare -Ur` stays
+# refused (lane 01M654MHYJ). Only the attachment is widened, to cover Codex's vendored bwrap too
+# (root-owned: Codex is installed system-wide above).
 if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; then
-  {
-    printf 'abi <abi/4.0>,\ninclude <tunables/global>\n'
-    printf 'profile musterd-bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n}\n'
-    printf 'profile musterd-codex-bwrap %s flags=(unconfined) {\n  userns,\n}\n' "$CODEX_BWRAP"
-  } >/etc/apparmor.d/musterd-bwrap-userns
+  tmp="$(mktemp -d)"
+  (cd "$tmp" && apt-get download -q apparmor-profiles && dpkg -x apparmor-profiles_*.deb x)
+  sed 's#^profile bwrap /usr/bin/bwrap #profile bwrap /{usr/bin/bwrap,usr/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*/codex-resources/bwrap} #' \
+    "$tmp/x/usr/share/apparmor/extra-profiles/bwrap-userns-restrict" >/etc/apparmor.d/musterd-bwrap-userns
+  rm -rf "$tmp"
+  grep -q '^profile bwrap /{usr/bin/bwrap,' /etc/apparmor.d/musterd-bwrap-userns
+  # A box prepared by an earlier version of this script loaded UNCONFINED profiles under these
+  # names; the exact-path Codex one would outrank the new pattern. Unload them first.
+  printf 'profile musterd-bwrap {}\nprofile musterd-codex-bwrap {}\n' | apparmor_parser -R 2>/dev/null || true
   apparmor_parser -r /etc/apparmor.d/musterd-bwrap-userns
+  if aa-status 2>/dev/null | grep -qE '^\s+musterd-(codex-)?bwrap$'; then
+    echo "stale unconfined bwrap profile still loaded" >&2
+    exit 1
+  fi
 fi
 
 echo
