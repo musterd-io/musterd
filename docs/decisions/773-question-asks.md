@@ -108,6 +108,10 @@ The design, approved by nick on 2026-10-30, is
   at 5 minutes (`ANSWER_UNDELIVERED_MS`). `questionMeasures` computes the Experiment's numbers
   from `question_answers`. Surfacing them in `team_report` follows with the `/live` increment.
   Follows-up: lane `01M674NR7Q`.
+- 2026-10-30 (lane `01M674NDXX`), decision 10: the primer's ask bullet gains one clause, "A question
+  to a person: `team_question`, then end your turn — never a question in chat" (+102 B, with the
+  context budget raised and a falsifier). The tool refuses a seat as `to`. Every fresh-spawn host
+  backend uses `composed_recap_line` when the order carries one.
 
 ## Observability & Evaluation
 
