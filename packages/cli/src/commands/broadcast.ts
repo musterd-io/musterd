@@ -1459,7 +1459,11 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
     await new Promise((r) => setTimeout(r, 200));
   }
   const page = targets?.find((t) => t.type === 'page');
-  if (!page) throw new CliError('headless Chrome never exposed a page target', 1);
+  if (!page)
+    throw new CliError(
+      'headless Chrome never exposed a page target — the broadcast browser started without a usable page; run `musterd stream start` to relaunch it, and if it repeats check the Chrome binary (`CHROME_BIN`)',
+      1,
+    );
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise<void>((res, rej) => {
     ws.onopen = () => res();
@@ -1491,8 +1495,20 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
   // moment we attached, which is the only "has this run ever worked" signal available here.
   const attachedAt = Date.now();
   const lossCode = (): number => socketLossExitCode(Date.now() - attachedAt);
-  ws.onclose = () => failAll(new CliError('the Chrome DevTools socket closed', lossCode()));
-  ws.onerror = () => failAll(new CliError('the Chrome DevTools socket errored', lossCode()));
+  ws.onclose = () =>
+    failAll(
+      new CliError(
+        'the Chrome DevTools socket closed — the broadcast browser went away; run `musterd stream start` to relaunch it',
+        lossCode(),
+      ),
+    );
+  ws.onerror = () =>
+    failAll(
+      new CliError(
+        'the Chrome DevTools socket errored — the broadcast browser went away; run `musterd stream start` to relaunch it',
+        lossCode(),
+      ),
+    );
   ws.onmessage = (e) => {
     const m = JSON.parse(String(e.data)) as {
       id?: number;
@@ -2144,7 +2160,13 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     const chromeDied = new Promise<never>((_, reject) => {
       chrome.once('exit', () => {
         if (cap.retired) return;
-        if (!ready) reject(new CliError('headless Chrome exited before the page was ready', 1));
+        if (!ready)
+          reject(
+            new CliError(
+              'headless Chrome exited before the page was ready — the browser died during startup; run `musterd stream start` to relaunch it, and if it repeats check the Chrome binary (`CHROME_BIN`)',
+              1,
+            ),
+          );
         else if (!stopping) void relaunchCapture('headless Chrome exited');
       });
     });
