@@ -115,6 +115,10 @@ public final class MusterdKeysModule: Module {
       await DeliveredPushes.list()
     }
 
+    AsyncFunction("clearDelivered") { (refs: [String]) async in
+      await DeliveredPushes.clear(refs: refs)
+    }
+
     OnCreate {
       PendingAnswers.emitter = self
     }

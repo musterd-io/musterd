@@ -78,6 +78,19 @@ enum DeliveredPushes {
     }
   }
 
+  /// Take every notification for these asks out of Notification Center: each is settled, so its
+  /// notification only says something that is no longer true (nick, 2026-10-30).
+  static func clear(refs: [String]) async {
+    let settled = Set(refs)
+    guard !settled.isEmpty else { return }
+    let center = UNUserNotificationCenter.current()
+    let ids = await center.deliveredNotifications().compactMap { notification in
+      ref(notification.request.content.userInfo).map { settled.contains($0) } == true
+        ? notification.request.identifier : nil
+    }
+    if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
+  }
+
   /// The ask a push carries, by its ref; nil for anything that is not a musterd push.
   static func ref(_ userInfo: [AnyHashable: Any]) -> String? {
     (userInfo["musterd"] as? [String: Any])?["ref"] as? String

@@ -83,7 +83,7 @@ export default function AskScreen() {
     setPhase({ kind: 'loading' });
     try {
       const { loadPairingPin } = await import('../../native/pairingPin');
-      const { fetchAskOrMiss } = await import('../../native/asks');
+      const { fetchAskOrMiss, clearSettled } = await import('../../native/asks');
       const current = await loadPairingPin();
       setPin(current);
       const expiresAt = Number(params.expires_at);
@@ -111,6 +111,7 @@ export default function AskScreen() {
         entry = await fetchAskOrMiss({ pin: current, route });
       }
       if ('miss' in entry) {
+        if (entry.miss === 'gone') void clearSettled([route.ref]);
         setPhase({ kind: entry.miss });
         return;
       }
@@ -160,6 +161,9 @@ export default function AskScreen() {
       now: Date.now(),
     });
     if (outcome === 'sent') {
+      // Answered: the ask is settled, so its notifications go too.
+      const { clearSettled } = await import('../../native/asks');
+      void clearSettled([entry.route.ref]);
       success();
       setPhase({ kind: 'sent' });
       return;

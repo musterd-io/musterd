@@ -7,13 +7,18 @@ import {
 import { AppCallbackSchema } from '@musterd/protocol/app-channel';
 import { canonicalJson } from '@musterd/protocol/approval';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadAsks, requestRedelivery } from './asks';
+import { loadAsks, requestRedelivery, settledRefs } from './asks';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys } from './phoneKeys';
 import type { PushRoute } from './push';
 
 vi.mock('./phoneKeys', () => ({
-  phoneKeys: { open: vi.fn(), verifyEd25519: vi.fn(), deliveredPushes: vi.fn() },
+  phoneKeys: {
+    open: vi.fn(),
+    verifyEd25519: vi.fn(),
+    deliveredPushes: vi.fn(),
+    clearDelivered: vi.fn(async () => undefined),
+  },
   phoneKeysErrorCode: () => null,
 }));
 
@@ -146,6 +151,22 @@ describe('loadAsks', () => {
     expect(view.held).toBeNull();
     // One fetch per ref, never two for the same ask.
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+    // The settled ask's notification is cleared; the live ones stay.
+    expect(phoneKeys.clearDelivered).toHaveBeenCalledWith(['gone']);
+  });
+
+  it('keeps the notifications of an ask it could not reach: it may still be open', async () => {
+    live.set('a1', ask('a1', 10));
+    vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue([
+      notification('n1', route('a1'), 1),
+      notification('n2', route('asleep'), 2),
+    ]);
+    const asleep = vi.fn(async (url: string, init?: RequestInit) =>
+      String(url).endsWith('/asleep') ? new Response('', { status: 503 }) : fetchImpl(url, init),
+    ) as unknown as typeof fetch;
+    const view = await loadAsks({ pin, now: 1, fetchImpl: asleep });
+    expect(view.asks.map((e) => e.delivery.ask.id)).toEqual(['a1']);
+    expect(phoneKeys.clearDelivered).not.toHaveBeenCalled();
   });
 
   it('shows the newest held summary inside its hour, and fetches nothing for it', async () => {
@@ -181,6 +202,17 @@ describe('loadAsks', () => {
     live.set('a1', ask('swapped', 10));
     vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue([notification('n1', route('a1'), 1)]);
     expect((await loadAsks({ pin, now: 1, fetchImpl })).asks).toEqual([]);
+  });
+});
+
+describe('settledRefs', () => {
+  it('names only the refs the daemon called gone', () => {
+    expect(
+      settledRefs([
+        { ref: 'a', got: { miss: 'gone' } },
+        { ref: 'b', got: { miss: 'unreachable' } },
+      ]),
+    ).toEqual(['a']);
   });
 });
 

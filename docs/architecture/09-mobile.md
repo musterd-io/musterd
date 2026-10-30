@@ -74,6 +74,11 @@ small change.
   on this binding, re-issued with a fresh token (the old one is spent), so a decided or expired ask
   drops out. Because a fetch spends the previous token, the list does not refresh while the ask
   screen — which holds its own token — is in front.
+- **A settled ask's notifications clear.** When a fetch says gone (a relay 404: answered in the
+  app, on /live or in Slack, or expired), and when the app sends an answer, every notification for
+  that ask is removed from Notification Center (`clearDelivered`). A 503, 504 or no network clears
+  nothing: the ask may still be open. Asks seen in the list but still open keep their
+  notifications.
 - **A listed act.** The ask screen fetches the ask again for fresh descriptors (they live five
   minutes), hashes each offer's payload on the phone (`offer.ts`), shows nothing whose digest does not
   match, and words the header with `approvalWording`. Approving signs the answer bytes and the
