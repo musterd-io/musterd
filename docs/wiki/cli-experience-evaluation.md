@@ -51,9 +51,9 @@ where that is the meaning, and the roster-home string no longer says "worktree"
 capitals, and "is the daemon running?" keeps the daemon named twice rather than thinning to
 "is it running?" — the retry suite pins the fuller form and it reads clearer.
 
-## The one defect this pass found — fixed
+## The one defect this pass found
 
-`status` said **5** waiting; the inbox section said **6**. Both surfaces used
+Fixed since (#3615). `status` said **5** waiting; the inbox section said **6**. Both surfaces used
 `openActionNeeded`, but `status`'s count unions the answered/discharged sets across every
 drained unread page (helpers.ts), while the directed section read them from the first
 bounded inbox response only. That was ADR 770's core promise — the two counts cannot
