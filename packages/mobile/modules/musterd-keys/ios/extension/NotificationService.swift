@@ -44,6 +44,7 @@ final class NotificationService: UNNotificationServiceExtension {
     delivered = true
     lock.unlock()
     guard !already else { return }
+    SharedStore.recordRefusal("timeout", at: Int(Date().timeIntervalSince1970 * 1000))
     Self.apply(Notice.unverified(), to: bestAttempt)
     contentHandler?(bestAttempt)
   }
@@ -58,13 +59,19 @@ final class NotificationService: UNNotificationServiceExtension {
     contentHandler?(bestAttempt)
   }
 
+  /// Refuse with the lock-screen fallback and record the coarse reason (ADR 777). Every
+  /// cryptographic or route check is `check`: which one refused is never told apart.
+  private static func refuse(_ reason: String) -> Notice.Rendered {
+    SharedStore.recordRefusal(reason, at: Int(Date().timeIntervalSince1970 * 1000))
+    return Notice.unverified()
+  }
+
   /// The whole decision, off the main thread's budget. Never throws.
   private static func render(_ userInfo: [AnyHashable: Any]) async -> Notice.Rendered {
-    guard let block = PushBlock.parse(userInfo), let pin = Pin.parse(SharedStore.loadPairingPin()) else {
-      return Notice.unverified()
-    }
+    guard let block = PushBlock.parse(userInfo) else { return refuse("malformed") }
+    guard let pin = Pin.parse(SharedStore.loadPairingPin()) else { return refuse("not-paired") }
     if pin.team != block.team || !PinBinding.matches(stored: pin.binding, route: block.binding) {
-      return Notice.unverified()
+      return refuse("check")
     }
 
     let opened: (route: RouteFields, enc: String, ct: String)
@@ -74,11 +81,11 @@ final class NotificationService: UNNotificationServiceExtension {
       if fetched.route.team != pin.team
         || !PinBinding.matches(stored: pin.binding, route: fetched.route.binding)
       {
-        return Notice.unverified()
+        return refuse("check")
       }
       opened = fetched
     } else {
-      return Notice.unverified()
+      return refuse("fetch")
     }
 
     let body: Notice.Body
@@ -93,30 +100,30 @@ final class NotificationService: UNNotificationServiceExtension {
     } catch DeliveryOpenError.expired {
       return Notice.stale()
     } catch {
-      return Notice.unverified()
+      return refuse("check")
     }
 
     // The signature held for this route. Remember its binding the first time, and never replace one.
     if pin.binding == nil {
       guard let current = SharedStore.loadPairingPin(),
         let updated = PinBinding.withBinding(json: current, routeBinding: opened.route.binding)
-      else { return Notice.unverified() }
+      else { return refuse("keychain") }
       do {
         try SharedStore.savePairingPin(json: updated)
       } catch {
-        return Notice.unverified()
+        return refuse("keychain")
       }
     }
     // The signed `paired` delivery is the one place the phone learns its device key id.
     if case .paired(_, let deviceKeyId) = body {
       guard let current = SharedStore.loadPairingPin(),
         let updated = PinBinding.withDeviceKey(json: current, deviceKeyId: deviceKeyId)
-      else { return Notice.unverified() }
+      else { return refuse("keychain") }
       if updated != current {
         do {
           try SharedStore.savePairingPin(json: updated)
         } catch {
-          return Notice.unverified()
+          return refuse("keychain")
         }
       }
     }
@@ -126,7 +133,7 @@ final class NotificationService: UNNotificationServiceExtension {
     case .stale:
       return Notice.stale()
     case .unverified:
-      return Notice.unverified()
+      return refuse("check")
     case .open:
       break
     }
@@ -135,7 +142,7 @@ final class NotificationService: UNNotificationServiceExtension {
       key: Notice.seenKey(body: body, ref: opened.route.ref),
       expiresAt: opened.route.expiresAt,
       now: now
-    ) else { return Notice.unverified() }
+    ) else { return refuse("keychain") }
     // ADR 772: the app's list reads its own record of the asks that reached this phone, so a
     // notification can be cleared without the ask leaving the list. A failed write still shows.
     if case .ask = body, verdict == .fresh {

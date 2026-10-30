@@ -11,7 +11,8 @@ import Foundation
 
 enum Notice {
   static let title = "musterd"
-  static let unverifiedText = "an ask could not be verified"
+  /// The lock screen's fallback when a check refuses (ADR 777). Which check is never said here.
+  static let unverifiedText = "New ask — open musterd to see it."
   static let staleText = "This ask is no longer available."
   static let answerHint = "Press and hold to answer"
   static let advisoryCategory = "musterd.ask.advisory"
