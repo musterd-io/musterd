@@ -334,7 +334,7 @@ describe('inbox command', () => {
     expect(await unreadCount()).toBe(1);
   });
 
-  it('prints the daily view\'s N, with exactly N rows under it (ADR 770 eval)', async () => {
+  it("prints the daily view's N, with exactly N rows under it (ADR 770 eval)", async () => {
     await seed(2); // two @team broadcasts — not directed, never counted
     const ask = (id: string, body: string, ts: number) =>
       ada.send(
