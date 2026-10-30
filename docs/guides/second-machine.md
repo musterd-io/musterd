@@ -131,6 +131,19 @@ codex login --device-auth                       # writes ~/.codex/auth.json; the
 bash bootstrap.sh machine                       # then the hub-side invite and trust, exactly as below
 ```
 
+Three things the first VM (`musterd-joiner-1`, 2026-10-29) needed beyond that, now in the script or
+noted here. Ubuntu 24.04 restricts unprivileged user namespaces, which broke Codex's bwrap sandbox
+(every Codex wake died "thread id missing"); `prep-ubuntu.sh` now installs Codex system-wide (root-owned, so
+an agent cannot swap the binary) and writes an AppArmor profile letting the system and Codex bwrap
+create user namespaces, unconfined: close to lifting the restriction for anything run through
+bwrap, not a narrow exemption; Ubuntu's stock `bwrap-userns-restrict` profile is the stronger
+follow-up. OpenCode v2 needs its own installer, then
+`opencode upgrade --major`, and lives in `~/.opencode/bin`, which the host unit's PATH includes. A
+seat on musterd's own engine reads its model from `binding.model`, not a box-wide
+`MUSTERD_MODEL`, which would mislabel the Claude Code seats' attested model; keep its API key under
+its own variable name (`MUSTERD_RESIDENT_KEY` in the host's `EnvironmentFile`), since an
+`ANTHROPIC_API_KEY` in the host's env would move every Claude Code seat onto per-token billing.
+
 The refresher (`musterd-refresh.timer`, every 2 minutes) fast-forwards `~/.musterd/runtime` to
 `main`, rebuilds when `dist/build.json` is behind, and restarts the daemon and the actuator. The
 actuator unit uses `KillMode=process`, so a restart never kills a seat mid-wake. Seats then arrive by
