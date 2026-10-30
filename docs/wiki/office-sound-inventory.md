@@ -4,7 +4,7 @@ Every sound the office can play on `/live` and `/broadcast` as of 2026-10-28 (so
 
 ## How sound reaches a viewer
 
-- **Two engines, both opt-in and default OFF on `/live`** (`live/sound.ts`): the *act cues* (`firehoseSound`, one of five gestures per act — `gestureFor`; the rest are silent) and the *room tone* (`roomTone`, a bed plus small life noises plus placed "moments"). Each has its own toggle and stored preference; a hidden tab never plays either.
+- **Two engines, both opt-in and default OFF on `/live`** (`live/sound.ts`): the *act cues* (`firehoseSound`, one of five gestures per act — `gestureFor`; the rest are silent) and the *room tone* (`roomTone`, a bed plus small life noises plus placed "moments"). Each keeps its own stored preference, but since 2026-10-28 one button drives both. Since 2026-10-30 that button has three states, clicked in order: off, then on only while the tab is in front, then on even in a background tab (`musterd.live.sound.background`, per browser; lane 01M65533H8). Only that third state lifts the hidden-tab gate, so by default a hidden tab still plays neither.
 - **`/broadcast` turns both on** without persisting (`enableForBroadcast`, ADR 228) and runs the whole mix through a ×4 master (+12 dB) measured against the hosted pipeline so the bed sits near −30 LUFS: audible, still background. Act cues on the stream are throttled to one per 700 ms (`BROADCAST_CUE_GAP_MS`); moments to one per 400 ms — except the chimes, which queue a beat apart instead of dropping (lane 01M625KHCN, 2026-10-28).
 - **Everything is synthesized** in WebAudio. There are no audio files (ADR 151 bytes).
 
