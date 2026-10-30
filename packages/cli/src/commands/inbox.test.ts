@@ -10,6 +10,7 @@ import { HttpClient } from '../client.js';
 import { loadConfig } from '../config.js';
 import { claimAgentHttp } from '../test-auth.js';
 import { inboxCommand } from './inbox.js';
+import { statusCommand } from './status.js';
 import { teamCommand } from './team.js';
 
 /**
@@ -307,10 +308,10 @@ describe('inbox command', () => {
       }),
     );
     const res = await capture(() => inboxCommand(parseArgs([])));
-    expect(res.out).toContain('waiting on you — 1');
+    expect(res.out).toContain('⚑ waiting on you — 1');
     // The directed act shows once, in the section, before the general list.
     expect((res.out.match(/directed: look at this/g) ?? []).length).toBe(1);
-    expect(res.out.indexOf('waiting on you — 1')).toBeLessThan(res.out.indexOf('msg 0'));
+    expect(res.out.indexOf('⚑ waiting on you — 1')).toBeLessThan(res.out.indexOf('msg 0'));
     // And the read consumed exactly what was shown (ADR 752/117 unchanged).
     expect(await unreadCount()).toBe(0);
     // A peek renders the same section and consumes nothing (ADR 752).
@@ -329,8 +330,58 @@ describe('inbox command', () => {
       }),
     );
     const peeked = await capture(() => inboxCommand(parseArgs(['--peek'])));
-    expect(peeked.out).toContain('waiting on you — 1');
+    expect(peeked.out).toContain('⚑ waiting on you — 1');
     expect(await unreadCount()).toBe(1);
+  });
+
+  it("prints the daily view's N, with exactly N rows under it (ADR 770 eval)", async () => {
+    await seed(2); // two @team broadcasts — not directed, never counted
+    const ask = (id: string, body: string, ts: number) =>
+      ada.send(
+        'dawn',
+        makeEnvelope({
+          id,
+          team: 'dawn',
+          from: 'Ada',
+          to: { kind: 'member', name: 'nick' },
+          act: 'request_help',
+          body,
+          ts,
+          thread: null,
+          meta: null,
+        }),
+      );
+    const answered = ulid();
+    const waiting = ulid();
+    await ask(answered, 'directed: answered one', base + 3 * 60_000);
+    await ask(waiting, 'directed: still waiting', base + 4 * 60_000);
+    // Nick answers the first ask — it leaves the waiting set on both surfaces.
+    await nick.send(
+      'dawn',
+      makeEnvelope({
+        id: ulid(),
+        team: 'dawn',
+        from: 'nick',
+        to: { kind: 'member', name: 'Ada' },
+        act: 'accept',
+        body: 'on it',
+        ts: base + 5 * 60_000,
+        thread: null,
+        meta: { in_reply_to: answered },
+      }),
+    );
+    const inbox = await capture(() => inboxCommand(parseArgs(['--peek'])));
+    expect(inbox.out).toContain('⚑ waiting on you — 1');
+    // Exactly one row under the header: the still-waiting ask, once on the page.
+    expect((inbox.out.match(/directed: still waiting/g) ?? []).length).toBe(1);
+    // The answered ask is not in the section; it shows once, in the general list below.
+    expect((inbox.out.match(/directed: answered one/g) ?? []).length).toBe(1);
+    expect(inbox.out.indexOf('directed: answered one')).toBeGreaterThan(
+      inbox.out.indexOf('directed: still waiting'),
+    );
+    // The falsifier: the two surfaces print the same N (ADR 770's eval, seeded team).
+    const status = await capture(() => statusCommand(parseArgs([])));
+    expect(status.out).toContain('⚑ 1 waiting on you');
   });
 
   it('names an empty unread or filtered view without claiming nobody communicated', async () => {
