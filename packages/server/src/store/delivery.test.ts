@@ -196,6 +196,25 @@ withDrivers('delivery', (o) => {
       expect(await openDirectedLedger(db, team.id, 10_000)).toHaveLength(0);
     });
 
+    it('serves a repeat read from the row cache until a message lands (lane 01M654E2GD)', async () => {
+      // Every wake host polls this read every 10 s; on the revive hub the scan averaged ~770 ms of
+      // event-loop stall. With no new message the open set cannot have changed.
+      const { db, team, nick, ada } = await seed();
+      await msg(db, team, nick, ada, 'handoff', 'h1', 1_000);
+      const all = db.all.bind(db);
+      let scans = 0;
+      (db as unknown as { all: typeof db.all }).all = (async (sql: string, params?: unknown[]) => {
+        if (sql.includes("act IN ('request_help','handoff')")) scans += 1;
+        return await all(sql as never, params as never);
+      }) as typeof db.all;
+      await openDirectedLedger(db, team.id, 10_000);
+      await openDirectedLedger(db, team.id, 10_000);
+      expect(scans).toBe(1);
+      await msg(db, team, ada, nick, 'accept', 'a1', 3_000, { meta: { in_reply_to: 'h1' } });
+      expect(await openDirectedLedger(db, team.id, 10_000)).toHaveLength(0);
+      expect(scans).toBe(2);
+    });
+
     it('reports the same raise and nudge counts per recipient as the single-act ledger', async () => {
       const { db, team, nick, ada } = await seed();
       await msg(db, team, nick, null, 'request_help', 'r1', 1_000);

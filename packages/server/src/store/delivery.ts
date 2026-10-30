@@ -590,12 +590,44 @@ export async function actDelivery(
  * its thread. This is the `open_loops` gauge made answerable (which act, whose inbox, seen or
  * ignored), and the two derivations must reconcile (the ADR's no-drift guard). Oldest first.
  */
+/**
+ * Lane 01M654E2GD: the ledger's row scan, keyed on the team's message log. Every wake host polls
+ * this read every 10 s, and on the revive hub the scan averaged ~770 ms of synchronous stall (804
+ * calls, 617 s in one window) — the main reason the lane gate's 1.5 s hook missed its window. The
+ * rows depend on `messages` alone (the undischarged subqueries read only `messages` too), and
+ * messages are append-only, so (row count, newest receipt) changes whenever anything that could
+ * open or close a loop lands — an accept, a resolve, a new ask. Per driver and team; the
+ * per-delivery derivation below still runs each call, since it reads `now` and the audit tallies.
+ */
+const ledgerRowsCache = new WeakMap<Driver, Map<string, { key: string; rows: MessageRow[] }>>();
+
+async function ledgerRowsKey(db: Driver, teamId: string): Promise<string> {
+  const r = await db.get<{ n: number; t: number | null }>(
+    'SELECT COUNT(*) AS n, MAX(created_at) AS t FROM messages WHERE team_id = ?',
+    [teamId],
+  );
+  return `${r?.n ?? 0}:${r?.t ?? 0}`;
+}
+
 export async function openDirectedLedger(
   db: Driver,
   teamId: string,
   now: number = Date.now(),
 ): Promise<ActDelivery[]> {
-  const rows = await db.all<MessageRow>(
+  const key = await ledgerRowsKey(db, teamId);
+  let byTeam = ledgerRowsCache.get(db);
+  if (!byTeam) ledgerRowsCache.set(db, (byTeam = new Map()));
+  const hit = byTeam.get(teamId);
+  const rows = hit && hit.key === key ? hit.rows : await scanOpenDirectedRows(db, teamId);
+  if (!hit || hit.key !== key) byTeam.set(teamId, { key, rows });
+  if (rows.length === 0) return [];
+  const tallies = await auditTallies(db, teamId);
+  const memo = ledgerMemo(db);
+  return Promise.all(rows.map((m) => actDeliveryOf(db, m, now, memo, tallies)));
+}
+
+async function scanOpenDirectedRows(db: Driver, teamId: string): Promise<MessageRow[]> {
+  return await db.all<MessageRow>(
     `SELECT m.* FROM messages m
         WHERE m.team_id = ?
           AND (m.act IN ('request_help','handoff')
@@ -605,8 +637,4 @@ export async function openDirectedLedger(
         ORDER BY m.ts ASC`,
     [teamId],
   );
-  if (rows.length === 0) return [];
-  const tallies = await auditTallies(db, teamId);
-  const memo = ledgerMemo(db);
-  return Promise.all(rows.map((m) => actDeliveryOf(db, m, now, memo, tallies)));
 }
