@@ -27,16 +27,10 @@ const shortId = (id: string) => id.slice(0, 10);
  */
 
 /**
- * ADR 536 §4.5 — the `up next` count: the same words as `team_next`'s render (each surface keeps
- * its own copy, as every brief section does — ADR 084 shares the derivation, not the string).
- * Empty when the daemon reports no total (an epoch-30 daemon), so nothing is zero-filled.
+ * ADR 536 §4.5 — the `up next` count's words: the same as `team_next`'s render (each surface
+ * keeps its own copy, as every brief section does — ADR 084 shares the derivation, not the
+ * string). Empty when the daemon reports no total, so nothing is zero-filled.
  */
-function upNextCount(brief: NextBrief): string {
-  const copy = upNextCountCopy(brief);
-  return copy ? theme.meta(` (${copy})`) : '';
-}
-
-/** The words inside the parenthesis. Exported for the render test. */
 export function upNextCountCopy(brief: {
   up_next: readonly unknown[];
   up_next_total?: number;
@@ -51,21 +45,23 @@ export function upNextCountCopy(brief: {
   return `${window}${wait}`;
 }
 
-function laneLine(l: Lane, tail = ''): string {
+function laneLine(l: Lane, dimTail = ''): string {
   // The daily view's row grammar (lane 01M653W2N4): state first, the title cut at the column
-  // edge, the short id after it. The title wins the line: the goal, areas and branch ride the
-  // dim second line and are cut there instead — the first landing cut the title to a stub to
-  // make room for the tail and the line still ran past the edge (acceptance measured
-  // `blocked · First-r… — … ⎇ copy/tour-cold-read` at 104 cells on an 80-column terminal).
+  // edge, the short id after it. The title wins the line: the goal, areas, branch and any
+  // why-tag ride the dim second line and are cut there instead — the first landing cut the
+  // title to a stub to make room for the tail and the line still ran past the edge
+  // (acceptance measured `blocked · First-r… — … ⎇ copy/tour-cold-read` at 104 cells, and
+  // the open-lane rows repeated the fault at 92 through their why-tags).
   const width = termWidth();
   const head = `  ${l.state} · `;
   const idPart = ` — ${shortId(l.id)}`;
-  const title = cut(l.title, Math.max(8, width - visibleLen(head + idPart + tail)));
-  let out = `  ${l.state} ${theme.meta('·')} ${title}` + theme.meta(idPart) + tail;
+  const title = cut(l.title, Math.max(8, width - visibleLen(head + idPart)));
+  let out = `  ${l.state} ${theme.meta('·')} ${title}` + theme.meta(idPart);
   const hint = [
     l.goal_id ? `◆ ${l.goal_id}` : '',
     l.areas?.length ? l.areas.join(', ') : '',
     l.branch ? `⎇ ${l.branch}` : '',
+    dimTail,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -80,7 +76,7 @@ function laneLine(l: Lane, tail = ''): string {
  */
 function whyTag(brief: NextBrief, laneId: string): string {
   const reasons = (brief.up_next_why ?? []).find((w) => w.lane === laneId)?.reasons ?? [];
-  return reasons.length ? theme.meta(` · ${reasons.join(' · ')}`) : '';
+  return reasons.join(' · ');
 }
 
 /** ADR 490: the artifact a review promise names, one short token — never a credential. */
@@ -133,8 +129,13 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
   if (owed.length > 0) {
     w(`\n${theme.accent('owed by you')} — ${owed.length} lane(s) waiting on your verdict:\n`);
     for (const r of owed) {
+      // The suffix is inside the cut (lane 01M653W2N4, third landing): budget the title
+      // against the whole line, so `— <owner> has waited …` cannot push it past the edge
+      // (acceptance measured 101 cells).
+      const head = `  ${shortId(r.lane.id)} "`;
+      const suffix = `" — ${r.from} has waited ${shortDuration(now - r.ts)}`;
       w(
-        `  ${theme.meta(shortId(r.lane.id))} "${cut(r.lane.title, Math.max(8, termWidth() - 16))}" — ${theme.memberName(r.from, 'agent')} has waited ${shortDuration(now - r.ts)}\n`,
+        `  ${theme.meta(shortId(r.lane.id))} "${cut(r.lane.title, Math.max(8, termWidth() - visibleLen(head + suffix)))}" — ${theme.memberName(r.from, 'agent')} has waited ${shortDuration(now - r.ts)}\n`,
       );
       w(theme.meta(`    answer: \`musterd send --act accept --reply-to ${r.ask_id} "…"\``) + '\n');
     }
@@ -147,8 +148,11 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
       `\n${theme.accent('disputed')} — ${disputed.length} rejection(s) on your lanes waiting on your answer:\n`,
     );
     for (const d of disputed) {
+      const head = `  ${shortId(d.lane.id)} "`;
+      const note = cut(d.note, 30);
+      const suffix = `" — ${d.from} rejected ${shortDuration(now - d.ts)} ago: ${note}`;
       w(
-        `  ${theme.meta(shortId(d.lane.id))} "${cut(d.lane.title, Math.max(8, termWidth() - 16))}" — ${theme.memberName(d.from, 'agent')} rejected ${shortDuration(now - d.ts)} ago: ${d.note}\n`,
+        `  ${theme.meta(shortId(d.lane.id))} "${cut(d.lane.title, Math.max(8, termWidth() - visibleLen(head + suffix)))}" — ${theme.memberName(d.from, 'agent')} rejected ${shortDuration(now - d.ts)} ago: ${note}\n`,
       );
       w(
         theme.meta(
@@ -170,8 +174,10 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     const more = total > debt.length ? theme.meta(` (showing ${debt.length} of ${total})`) : '';
     w(`\n${theme.accent('review debt')} — waiting on any seat's acceptance${more}:\n`);
     for (const r of debt) {
+      // Suffix inside the cut, as owed above (rows measured 81 — one cell of indent).
+      const debtSuffix = ` — ${shortId(r.id)}`;
       w(
-        `  "${cut(r.title, Math.max(8, termWidth() - 16))}"${theme.meta(` — ${shortId(r.id)}`)}\n` +
+        `  "${cut(r.title, Math.max(8, termWidth() - 4 - visibleLen(debtSuffix)))}"${theme.meta(debtSuffix)}\n` +
           theme.meta(
             `    ${r.owner ? `${r.owner} · ` : ''}waiting ${Math.floor(r.waited_ms / 3_600_000)}h`,
           ) +
@@ -283,25 +289,33 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
   if (brief.up_next.length > 0) {
     // ADR 536: the window says how much it is a window on. Absent on an older daemon (both counts
     // default to 0) → no parenthetical, not a zero-filled one.
-    w(`\n${theme.accent('up next')} — open lanes you could pick up${upNextCount(brief)}:\n`);
+    // The count parenthetical can carry the header past the edge (measured 90 cells):
+    // it drops to its own dim line instead of being cut — the counts are the point of it.
+    const upNextCopy = upNextCountCopy(brief);
+    w(`\n${theme.accent('up next')} — open lanes you could pick up:\n`);
+    if (upNextCopy) w(theme.meta(`  (${upNextCopy})`) + '\n');
     for (const l of brief.up_next) w(laneLine(l, whyTag(brief, l.id)) + '\n');
   }
   if ((brief.parked_total ?? 0) > 0)
     w(theme.meta(`\nparked: ${brief.parked_total} — kept, not offered (\`musterd lanes\`)`) + '\n');
   if (brief.shipped.length > 0) {
     w(`\n${theme.meta('recently shipped:')}\n`);
-    for (const l of brief.shipped)
+    for (const l of brief.shipped) {
+      // The title is cut at the edge like every other title on the page (rows measured
+      // 113–184 cells uncut); the badges ride after it, inside the same budget.
+      const badges =
+        (l.goal_id ? ` ◆ ${l.goal_id}` : '') +
+        // ADR 192's copy, matching the web board's chip (ADR 169). Only on an explicit `false`:
+        // an absent verdict is unknown, not unconfirmed.
+        (l.verified === false ? ' — unconfirmed' : '') +
+        // ADR 283: and WHY — "chase a person" and "look at the roster" are different next moves.
+        (l.close_reason !== undefined && closeReasonCopy(l.close_reason) !== null
+          ? ` (${closeReasonCopy(l.close_reason)!})`
+          : '');
       w(
-        `  ${theme.ok('✓')} "${l.title}"${l.goal_id ? theme.meta(` ◆ ${l.goal_id}`) : ''}` +
-          // ADR 192's copy, matching the web board's chip (ADR 169). Only on an explicit `false`:
-          // an absent verdict is unknown, not unconfirmed.
-          (l.verified === false ? theme.meta(' — unconfirmed') : '') +
-          // ADR 283: and WHY — "chase a person" and "look at the roster" are different next moves.
-          (l.close_reason !== undefined && closeReasonCopy(l.close_reason) !== null
-            ? theme.meta(` (${closeReasonCopy(l.close_reason)!})`)
-            : '') +
-          '\n',
+        `  ${theme.ok('✓')} "${cut(l.title, Math.max(8, termWidth() - 6 - visibleLen(badges)))}"${theme.meta(badges)}\n`,
       );
+    }
   }
   if (brief.next_goal) {
     const g = brief.next_goal;
@@ -315,9 +329,12 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     w(
       `\n${theme.accent('why')} — handoff from ${theme.memberName(brief.why.from, 'agent')}${goal} ${theme.meta(`(${when})`)}\n`,
     );
-    w(`  ${brief.why.body}\n`);
+    // The handoff body and its check lines cut at the edge (measured 266–290 cells);
+    // the act itself carries the full text.
+    w(`  ${cut(brief.why.body.replace(/\s+/g, ' '), Math.max(8, termWidth() - 2))}\n`);
     // ADR 522: what the handoff says, checked against the Team now.
-    for (const line of claimCheckLines(brief.why.checks ?? [])) w(`  ${theme.warn(line)}\n`);
+    for (const line of claimCheckLines(brief.why.checks ?? []))
+      w(`  ${theme.warn(cut(line, Math.max(8, termWidth() - 2)))}\n`);
   }
 
   if (

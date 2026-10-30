@@ -406,13 +406,66 @@ describe('next / done commands', () => {
             captured_at: 1,
           },
         ],
+        // Third landing (acceptance, cider): the same pin covers every section of the
+        // page — owed, review debt, open lanes, shipped and the why — the sections the
+        // first fixture did not exercise, which is how 81–290-cell rows shipped.
+        owed_reviews: [
+          {
+            lane: lane({ id: '01M65OWED1ZZZZZZZZZZZZZZZZ' }),
+            from: 'fifty',
+            ask_id: '01M65ASKZZZZZZZZZZZZZZZZZZ',
+            ts: -3_600_000,
+          },
+        ],
+        review_debt: [
+          {
+            id: '01M65DEBT1ZZZZZZZZZZZZZZZZ',
+            title: 'A lane with a very long title that waited for any seat to judge it',
+            owner: 'June',
+            waited_ms: 26 * 3_600_000,
+          },
+        ],
+        up_next: [
+          lane({
+            id: '01M65OPEN1ZZZZZZZZZZZZZZZZ',
+            state: 'open',
+            title: 'Phone pairing polish for the ask and pair screens at the home bar',
+          }),
+        ],
+        up_next_total: 30,
+        up_next_blocked_total: 44,
+        up_next_why: [
+          {
+            lane: '01M65OPEN1ZZZZZZZZZZZZZZZZ',
+            tier: 1,
+            reasons: ['role: ios-engineer', 'goal in flight', 'near what you shipped'],
+          },
+        ],
+        shipped: [
+          lane({
+            id: '01M65SHIP1ZZZZZZZZZZZZZZZZ',
+            state: 'done',
+            title: 'CLI orientation seam: the waiting count lands on the directed acts',
+            verified: false,
+          }),
+        ],
+        why: {
+          from: 'nick',
+          body: 'The handoff says the tour script is the thing to fix first because two humans in a row stalled at the same step and the recording keeps showing it',
+          ts: 0,
+          goal_id: 'first-run-10-minutes',
+        },
       });
       const res = await capture(async () => {
         renderNext(brief, 0);
         return 0;
       });
-      for (const line of res.out.split('\n'))
+      for (const line of res.out.split('\n')) {
+        // `answer:` lines carry a copy-paste command; a command is never cut, so they are
+        // the one named exception (81 cells) — everything else holds the edge.
+        if (line.includes('musterd send --act')) continue;
         expect(visibleLen(line), line).toBeLessThanOrEqual(80);
+      }
       // The title survives: cut at the edge, not to a stub for the tail's sake.
       expect(res.out).toContain(
         'blocked · First-run tour cold read with a new human at the keybo… — 01M4V751KR',
@@ -479,7 +532,7 @@ describe('next / done commands', () => {
           up_next_blocked_total: 44,
         }),
       ).toContain(
-        'up next — open lanes you could pick up (2 of 30 claimable · 44 more wait on a dependency):',
+        'up next — open lanes you could pick up:\n  (2 of 30 claimable · 44 more wait on a dependency)',
       );
       expect(
         await render({
@@ -488,7 +541,7 @@ describe('next / done commands', () => {
           up_next_total: 1,
           up_next_blocked_total: 0,
         }),
-      ).toContain('up next — open lanes you could pick up (all 1 claimable):');
+      ).toContain('up next — open lanes you could pick up:\n  (all 1 claimable)');
       // An older daemon sends neither count: the line is as it always was, not zero-filled.
       const old = await render({ ...base, up_next: [open('L1')] });
       expect(old).toContain('up next — open lanes you could pick up:');
@@ -502,9 +555,11 @@ describe('next / done commands', () => {
           { lane: 'L2', tier: 5, reasons: [] },
         ],
       });
+      // The why-tag rides the dim second line (lane 01M653W2N4): the title keeps line one.
       expect(why.split('\n').find((l) => l.includes('nick pointed here'))).toMatch(
-        /open · L1 — L1 · nick pointed here · goal in flight$/,
+        /^ {4}nick pointed here · goal in flight$/,
       );
+      expect(why).toMatch(/open · L1 — L1\n/);
       expect(why).not.toMatch(/L2 — L2 · nick/);
     });
 
