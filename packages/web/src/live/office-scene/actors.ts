@@ -416,8 +416,67 @@ interface Walk {
   /** A handoff's folder or a review's card on its way to `to`'s desk (lane 01M62JK2JS): the desk shows
    *  it only from `leg`, the beat the walker sets it down — not when the data says it is waiting. */
   drop?: { to: string; leg: number };
+  /** Giving way (lane 01M67AVF78): the world-space sidestep currently applied, and how long this walker
+   *  has been held up by someone in its way. */
+  off?: { x: number; y: number };
+  waited?: number;
 }
 type PinState = LaneState;
+
+/** A body this far ahead of a walker, and this close to its line, is in the way (logical units). */
+const GIVE_WAY_AHEAD = 30;
+const GIVE_WAY_WIDTH = 16;
+/** How far a walker steps aside to let someone pass, and how fast it gets there (units/sec). */
+const SIDESTEP = 13;
+const SIDESTEP_SPEED = 55;
+/** The longest a walker waits on someone in its way before going on regardless — a stalemate the
+ *  rules below did not foresee must never freeze the floor. */
+const GIVE_WAY_MAX_S = 2;
+
+/** Who is near a walker this frame: where they stand, and their travel direction when moving. */
+export interface Body {
+  name: string;
+  lx: number;
+  ly: number;
+  /** Unit travel direction, or null for a body that is not moving (seated, standing, on a hold). */
+  dir: { x: number; y: number } | null;
+}
+
+/**
+ * Whether a walker gives way this frame (lane 01M67AVF78): a route is planned around the standing spots
+ * known when it starts, so two people walking at once used to pass straight through each other. Only
+ * bodies ahead of the walker on its own line count, and the rules are asymmetric so a pair always
+ * resolves:
+ * - someone standing or seated in the way: keep walking and step round them (`aside`);
+ * - someone coming the other way: one of the two (by name) stops and steps aside; the other keeps on;
+ * - someone going the same way: wait behind them (`hold`) rather than walk through their back;
+ * - someone crossing: one of the two (by name) waits for the other to clear.
+ * Pure, so the rules are tested without a floor.
+ */
+export function giveWay(me: Body & { dir: { x: number; y: number } }, others: readonly Body[]): { hold: boolean; aside: boolean } {
+  let hold = false;
+  let aside = false;
+  const { x: ux, y: uy } = me.dir;
+  for (const o of others) {
+    if (o.name === me.name) continue;
+    const dx = o.lx - me.lx;
+    const dy = o.ly - me.ly;
+    const ahead = dx * ux + dy * uy;
+    const across = Math.abs(dx * uy - dy * ux);
+    if (ahead <= 0 || ahead > GIVE_WAY_AHEAD || across > GIVE_WAY_WIDTH) continue;
+    if (!o.dir) {
+      aside = true;
+      continue;
+    }
+    const along = o.dir.x * ux + o.dir.y * uy;
+    const mineToGive = me.name > o.name;
+    if (along < -0.3) {
+      if (mineToGive) hold = aside = true;
+    } else if (along > 0.3) hold = true;
+    else if (mineToGive) hold = true;
+  }
+  return { hold, aside };
+}
 type WalkReq = { kind: 'help' | 'handoff'; to: string; urgent: boolean };
 type Req =
   | WalkReq
@@ -944,8 +1003,8 @@ export function createActors(): Actors {
         alpha = w.fade === 'in' ? clamp(prog / 0.35, 0, 1) : clamp((1 - prog) / 0.35, 0, 1);
       }
       out.set(name, {
-        lx: leg.fx + (leg.tx - leg.fx) * e,
-        ly: leg.fy + (leg.ty - leg.fy) * e,
+        lx: leg.fx + (leg.tx - leg.fx) * e + (w.off?.x ?? 0),
+        ly: leg.fy + (leg.ty - leg.fy) * e + (w.off?.y ?? 0),
         dir: dirOfHeading(a.head), // the 4-way legibility read follows the swivel, flipping at 45°
         small: w.small,
         // A WALKING MEMBER HAS THEIR LAPTOP, full stop — the design's biconditional is "docked ⟺
@@ -2011,7 +2070,39 @@ export function createActors(): Actors {
     },
     step(dt) {
       const before = posesNow();
+      // Seated bodies are behind their desks, which the routes already avoid; only standing ones count.
+      const bodies: Body[] = [...before].filter(([, q]) => (q.sit ?? 0) < 0.5).map(([n, q]) => {
+        const ow = walks.get(n);
+        const ol = ow?.legs[ow.i];
+        const len = ol ? Math.hypot(ol.tx - ol.fx, ol.ty - ol.fy) : 0;
+        return {
+          name: n,
+          lx: q.lx,
+          ly: q.ly,
+          dir: ol && len > 0 ? { x: (ol.tx - ol.fx) / len, y: (ol.ty - ol.fy) / len } : null,
+        };
+      });
       for (const [name, w] of [...walks.entries()]) {
+        // Give way to whoever is in the path this frame — the route only knew where people stood when
+        // it was planned (lane 01M67AVF78). A held walker spends the frame standing; the sidestep eases.
+        const me = bodies.find((b) => b.name === name);
+        const fading = w.fade !== undefined || (before.get(name)?.alpha ?? 1) < 1;
+        const way =
+          me?.dir && !fading ? giveWay({ ...me, dir: me.dir }, bodies) : { hold: false, aside: false };
+        w.waited = way.hold ? (w.waited ?? 0) + dt : 0;
+        const held = way.hold && w.waited <= GIVE_WAY_MAX_S;
+        // Step back onto the line before the walk ends, so arriving home is not a jump sideways.
+        const last = w.legs[w.legs.length - 1]!;
+        const arriving =
+          w.i === w.legs.length - 1 && (1 - w.t) * Math.hypot(last.tx - last.fx, last.ty - last.fy) < 25;
+        const out = way.aside && me?.dir && !arriving;
+        const tx = out ? me!.dir!.y * SIDESTEP : 0;
+        const ty = out ? -me!.dir!.x * SIDESTEP : 0;
+        const off = w.off ?? { x: 0, y: 0 };
+        const gap = Math.hypot(tx - off.x, ty - off.y);
+        const stepBy = Math.min(1, gap > 0 ? (SIDESTEP_SPEED * dt) / gap : 1);
+        w.off = { x: off.x + (tx - off.x) * stepBy, y: off.y + (ty - off.y) * stepBy };
+        if (held) continue;
         // Spend the whole frame, carrying the remainder across leg boundaries — discarding it at a
         // boundary (the old `t += dt/dur; if (t>=1) t=0`) froze the walker for up to a frame at every
         // waypoint, a visible hitch on top of any easing.

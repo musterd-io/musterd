@@ -3,6 +3,7 @@ import {
   FIRST_ARRIVAL_HOLD_S,
   GESTURE_DUR,
   createActors,
+  giveWay,
   deskNeighbourPairs,
   homePoses,
   travelDir,
@@ -2053,5 +2054,34 @@ describe('the folder and the card are set down, not conjured (lane 01M62JK2JS)',
     actors.setHomes(placements, byName, true);
     expect(actors.walk('Ada', { kind: 'help', to: 'Bo', urgent: false })).toBe(true);
     expect(actors.incoming().size).toBe(0);
+  });
+});
+
+describe('giveWay — walkers do not pass through each other (lane 01M67AVF78)', () => {
+  const east = { x: 1, y: 0 };
+  const west = { x: -1, y: 0 };
+  const north = { x: 0, y: -1 };
+  const me = (name: string, dir = east) => ({ name, lx: 0, ly: 0, dir });
+  it('ignores anyone behind, beside, or too far ahead', () => {
+    expect(giveWay(me('b'), [{ name: 'a', lx: -10, ly: 0, dir: null }])).toEqual({ hold: false, aside: false });
+    expect(giveWay(me('b'), [{ name: 'a', lx: 10, ly: 30, dir: null }])).toEqual({ hold: false, aside: false });
+    expect(giveWay(me('b'), [{ name: 'a', lx: 80, ly: 0, dir: null }])).toEqual({ hold: false, aside: false });
+  });
+  it('walks round someone standing in the way without stopping', () => {
+    expect(giveWay(me('b'), [{ name: 'a', lx: 20, ly: 3, dir: null }])).toEqual({ hold: false, aside: true });
+  });
+  it('head-on, exactly one of the pair stops and steps aside', () => {
+    const ab = giveWay(me('a'), [{ name: 'b', lx: 20, ly: 0, dir: west }]);
+    const ba = giveWay({ name: 'b', lx: 20, ly: 0, dir: west }, [{ name: 'a', lx: 0, ly: 0, dir: east }]);
+    expect([ab.hold, ba.hold].filter(Boolean)).toHaveLength(1);
+    expect(ab.hold ? ab.aside : ba.aside).toBe(true);
+  });
+  it('waits behind someone going the same way', () => {
+    expect(giveWay(me('a'), [{ name: 'b', lx: 20, ly: 0, dir: east }]).hold).toBe(true);
+  });
+  it('crossing, exactly one of the pair waits', () => {
+    const a = giveWay(me('a'), [{ name: 'b', lx: 20, ly: 5, dir: north }]);
+    const b = giveWay(me('b'), [{ name: 'a', lx: 20, ly: 5, dir: north }]);
+    expect([a.hold, b.hold]).toEqual([false, true]);
   });
 });
