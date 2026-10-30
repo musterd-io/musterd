@@ -449,6 +449,20 @@
   color: var(--lc-dim);
   border-color: var(--lc-border-2);
 }
+/* The third state, sound in a background tab too: a small accent dot on the button's rim, so
+   "on" and "on even when I look away" differ at a glance (nick, 2026-10-30). */
+.lc__sound {
+  position: relative;
+}
+.lc__sound-bg {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--lc-accent);
+}
 .lc__sound--on,
 .lc__pbtn--on {
   color: var(--lc-accent-ink);

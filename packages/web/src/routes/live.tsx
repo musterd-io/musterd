@@ -44,7 +44,7 @@ import {
   loadMemberIdentity,
   saveMemberIdentity,
 } from '../live/memberIdentity';
-import { firehoseSound, roomTone } from '../live/sound';
+import { firehoseSound, roomTone, setSoundInBackground, soundInBackground } from '../live/sound';
 import { useLiveStream } from '../live/useLiveStream';
 import { HealthBanner } from '../live/HealthBanner';
 import { useTeamHolds } from '../live/useTeamHolds';
@@ -1138,15 +1138,28 @@ function WatchLinkButton({ cfg }: { cfg: LiveConfig }) {
   );
 }
 
+/** The sound button's three states, in click order. */
+type SoundMode = 'off' | 'front' | 'always';
+const NEXT_SOUND: Record<SoundMode, SoundMode> = { off: 'front', front: 'always', always: 'off' };
+const SOUND_LABEL: Record<SoundMode, string> = {
+  off: 'Sound off',
+  front: 'Sound on while this tab is in front',
+  always: 'Sound on, even in a background tab',
+};
+
 /**
- * Sound, one switch (nick, 2026-10-28: "get rid of the 2 separate audio buttons"): the act cues and
- * the room tone come on and go off together. Each engine still keeps its own stored preference, so a
- * viewer who had one of them on before keeps that; the button reads "on" when either is. Default OFF:
- * the click is the user gesture that lets the AudioContext start (browser autoplay policy), and the
- * room's own sounds confirm it is live.
+ * Sound, one button (nick, 2026-10-28: "get rid of the 2 separate audio buttons"), three states
+ * (nick, 2026-10-30): off → on while the tab is in front → on in a background tab too → off. The
+ * act cues and the room tone come on and go off together. Each engine still keeps its own stored
+ * preference, so a viewer who had one of them on before keeps that; the button reads "on" when
+ * either is. Default OFF: the click is the user gesture that lets the AudioContext start (browser
+ * autoplay policy), and the room's own sounds confirm it is live.
  */
 function SoundToggle() {
-  const [on, setOn] = useState(() => firehoseSound.enabled || roomTone.enabled);
+  const [mode, setMode] = useState<SoundMode>(() =>
+    firehoseSound.enabled || roomTone.enabled ? (soundInBackground() ? 'always' : 'front') : 'off',
+  );
+  const on = mode !== 'off';
   // A stored `on` from a previous visit needs a gesture before it can make a sound. Any click
   // anywhere on the page is gesture enough, and one is cheaper to catch than to ask for.
   useEffect(() => {
@@ -1156,27 +1169,27 @@ function SoundToggle() {
     return () => window.removeEventListener('pointerdown', wake);
   }, []);
   const toggle = () => {
-    const next = !on;
-    firehoseSound.setEnabled(next);
-    roomTone.setEnabled(next);
-    setOn(next);
+    const next = NEXT_SOUND[mode];
+    setSoundInBackground(next === 'always');
+    firehoseSound.setEnabled(next !== 'off');
+    roomTone.setEnabled(next !== 'off');
+    setMode(next);
   };
   return (
     <button
       type="button"
       className={`lc__sound${on ? ' lc__sound--on' : ''}`}
       onClick={toggle}
-      aria-pressed={on}
-      title={on ? 'Sound off' : 'Sound on: the room, and a sound when something happens'}
+      aria-label={`${SOUND_LABEL[mode]} — click for: ${SOUND_LABEL[NEXT_SOUND[mode]].toLowerCase()}`}
+      title={`${SOUND_LABEL[mode]}. Click: ${SOUND_LABEL[NEXT_SOUND[mode]].toLowerCase()}`}
     >
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <path d="M3 6.2h2.2L8.3 3.6v8.8L5.2 9.8H3z" />
-        {on ? (
-          <path d="M10.4 5.6a3.2 3.2 0 0 1 0 4.8M12.2 4a5.6 5.6 0 0 1 0 8" />
-        ) : (
-          <path d="m10.8 6 3.4 4M14.2 6l-3.4 4" />
-        )}
+        {mode === 'off' && <path d="m10.8 6 3.4 4M14.2 6l-3.4 4" />}
+        {mode === 'front' && <path d="M10.4 5.6a3.2 3.2 0 0 1 0 4.8" />}
+        {mode === 'always' && <path d="M10.4 5.6a3.2 3.2 0 0 1 0 4.8M12.2 4a5.6 5.6 0 0 1 0 8" />}
       </svg>
+      {mode === 'always' && <span className="lc__sound-bg" aria-hidden="true" />}
     </button>
   );
 }

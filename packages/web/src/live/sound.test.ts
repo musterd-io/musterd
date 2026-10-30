@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EMPTY_LIFE, firehoseSound, type LifeContext, roomTone, screenPan } from './sound';
+import {
+  EMPTY_LIFE,
+  firehoseSound,
+  type LifeContext,
+  roomTone,
+  screenPan,
+  setSoundInBackground,
+  soundInBackground,
+} from './sound';
 import { CUES } from './soundEngine';
 import {
   gestureFor,
@@ -416,5 +424,27 @@ describe('the sound re-evaluation (lane 01M6096TA7)', () => {
     expect(gestureFor('message')).toBeNull();
     const peak = (g: string) => Math.max(...CUES[g]!.map((n) => n.gain));
     for (const g of Object.keys(CUES)) expect(peak(g)).toBeLessThanOrEqual(0.09);
+  });
+});
+
+describe('sound in a background tab (the /live button’s third state)', () => {
+  it('is off until chosen, and persists the choice per browser', () => {
+    const store = new Map<string, string>();
+    const localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    };
+    vi.stubGlobal('window', { localStorage });
+    try {
+      expect(soundInBackground()).toBe(false);
+      setSoundInBackground(true);
+      expect(soundInBackground()).toBe(true);
+      expect(store.get('musterd.live.sound.background')).toBe('1');
+      setSoundInBackground(false);
+      expect(soundInBackground()).toBe(false);
+      expect(store.get('musterd.live.sound.background')).toBe('0');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

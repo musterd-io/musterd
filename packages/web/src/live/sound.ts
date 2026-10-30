@@ -24,6 +24,25 @@
 /** Preference keys. Read here, written here, and nowhere else. */
 const PREF_KEY = 'musterd.live.sound';
 const ROOM_PREF_KEY = 'musterd.live.roomtone';
+/** The sound button's third state (nick, 2026-10-30): keep playing while the tab is in the back. */
+const BG_PREF_KEY = 'musterd.live.sound.background';
+
+/**
+ * Whether sound keeps playing in a background tab. Off by default: the room has always gone quiet
+ * when its tab is hidden, and that stays the second state of the button. Read by both façades'
+ * visibility gates; written only by `setSoundInBackground`.
+ */
+let background = readPref(BG_PREF_KEY);
+
+export function soundInBackground(): boolean {
+  return background;
+}
+
+export function setSoundInBackground(on: boolean): void {
+  background = on;
+  writePref(BG_PREF_KEY, on);
+  roomTone.setBackground(on);
+}
 
 /** A stored on/off preference. SSR-safe, and safe in private mode where storage throws on read. */
 function readPref(key: string): boolean {
@@ -157,7 +176,8 @@ class FirehoseSoundFacade {
     // on chimed the whole team's acts from a laptop with no browser window open anywhere. A cue for
     // a room nobody is looking at is noise by definition; the title-count badge still carries the
     // arrival.
-    if (!this.broadcast && typeof document !== 'undefined' && document.hidden) return;
+    // The viewer who chose "in the background too" opted out of exactly this gate.
+    if (!this.broadcast && !background && typeof document !== 'undefined' && document.hidden) return;
     if (this.engine) this.engine.chime(act);
     else this.withEngine(() => {});
   }
@@ -180,6 +200,7 @@ class RoomToneFacade {
       // The scene has been pushing occupancy at us all along; hand over the latest before starting,
       // so the bed's first life event knows who is in the room.
       m.roomToneEngine.setOccupancy(this.occupancy);
+      m.roomToneEngine.setBackground(background);
       run(m.roomToneEngine);
     });
   }
@@ -201,6 +222,12 @@ class RoomToneFacade {
    */
   resumeIfEnabled(): void {
     if (this.enabled) this.withEngine((e) => e.setEnabled(true));
+  }
+
+  /** Lift (or restore) the hidden-tab gate — the button's third state. Forwarded only to a loaded
+   *  engine; one loaded later reads it in `withEngine`. */
+  setBackground(on: boolean): void {
+    this.engine?.setBackground(on);
   }
 
   /** Turn the bed on for a capture, without persisting and without the visibility gate (ADR 228). */

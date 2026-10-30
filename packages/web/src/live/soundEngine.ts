@@ -337,9 +337,18 @@ export class RoomTone {
     this.start();
   }
 
-  /** Visibility, as broadcast sees it: never hidden. */
+  /** The viewer asked for sound in a background tab too (the /live button's third state). */
+  private background = false;
+
+  /** Lift or restore the hidden-tab gate, and act on it now — the tab may already be hidden. */
+  setBackground(on: boolean): void {
+    this.background = on;
+    this.onVisibility();
+  }
+
+  /** Visibility, as broadcast (or a viewer who chose background sound) sees it: never hidden. */
   private isHidden(): boolean {
-    return !this.broadcast && document.hidden;
+    return !this.broadcast && !this.background && document.hidden;
   }
 
   /** The scene pushes who is near whom (and where the dog is). One-way by design — see LifeContext. */
