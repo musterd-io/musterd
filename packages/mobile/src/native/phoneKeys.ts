@@ -150,6 +150,12 @@ export interface PhoneKeys {
   deliveredPushes(): Promise<{ id: string; userInfo: string; deliveredAt: number }[]>;
 
   /**
+   * Remove every musterd notification whose ask is one of `refs` — asks the daemon says are
+   * settled. A ref with no notification is ignored.
+   */
+  clearDelivered(refs: string[]): Promise<void>;
+
+  /**
    * `onPendingAnswer` fires when a notification action arrives while the app is running;
    * `onDelivery` when a musterd notification is presented while the app is in front.
    */

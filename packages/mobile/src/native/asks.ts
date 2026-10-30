@@ -8,6 +8,10 @@
  * answers only for an ask still live on this binding, with a fresh token (the one it replaces is
  * spent). The daemon stays the source of truth; nothing here stores an ask.
  *
+ * A ref the daemon calls gone (answered in the app, on /live or in Slack, or expired) has its
+ * notifications cleared, so Notification Center stops showing an ask that is settled. A ref it
+ * could not reach keeps them: the ask may still be open.
+ *
  * A missed push is not a lost ask: on open the app sends `redeliver`, and the daemon re-pushes
  * this binding's pending set. Those land as new notifications and refresh the list.
  *
@@ -132,19 +136,36 @@ export async function loadAsks(input: {
   }
 
   const fetched = await Promise.all(
-    [...refs.values()].map(({ route }) =>
-      fetchAsk({
+    [...refs.values()].map(async ({ route }) => ({
+      ref: route.ref,
+      got: await fetchAskOrMiss({
         pin,
         route,
         now,
         ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
       }),
-    ),
+    })),
   );
+  void clearSettled(settledRefs(fetched));
   const asks = fetched
-    .filter((entry): entry is AskEntry => entry !== null)
+    .flatMap(({ got }) => ('miss' in got ? [] : [got]))
     .sort((a, b) => b.delivery.ask.ts - a.delivery.ask.ts);
   return { asks, held };
+}
+
+/** The refs the daemon called gone. An unreachable one is not settled: it may still be open. */
+export function settledRefs(fetched: { ref: string; got: AskEntry | FetchMiss }[]): string[] {
+  return fetched.flatMap(({ ref, got }) => ('miss' in got && got.miss === 'gone' ? [ref] : []));
+}
+
+/** Take a settled ask's notifications out of Notification Center. A failure is swallowed. */
+export async function clearSettled(refs: string[]): Promise<void> {
+  if (refs.length === 0) return;
+  try {
+    await phoneKeys.clearDelivered(refs);
+  } catch {
+    // Clearing is tidying: a notification left behind still opens to "Already settled".
+  }
 }
 
 /** Opening the app fires both a first focus and a foreground; one re-push serves both. */
