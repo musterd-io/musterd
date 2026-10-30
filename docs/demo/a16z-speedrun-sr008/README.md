@@ -75,7 +75,7 @@ Version 3, 2026-10-30. Counts were read that day by nick; what changed from the 
 | Where it is built | United States, San Francisco | |
 | Founded | August 2026 | nick's rule: the month musterd.io was registered. `whois musterd.io` creation date 2026-08-13, read 2026-10-26. The first commit is 2026-06-09 |
 | Website | https://musterd.io | |
-| Team video (MP4) | nick on camera, about 90 seconds, in his own words, with an optional cutaway to `/live` | The form's only video field is "Team Video (MP4)", optional, with no length or guidance (read 2026-10-30). speedrun's "What founders ask us before applying" (2026-10-07): "We just need you … talking earnestly about what you're building", no AI voice, polish not weighed. It is not a product demo; the 10-26 entry "the 2-minute demo" was alfie's, not the form's |
+| Team video (MP4) | nick on camera, about 90 seconds, in his own words, with an optional cutaway to `/live`; the beats are [`video.md`](video.md) | The form's only video field is "Team Video (MP4)", optional, with no length or guidance (read 2026-10-30). speedrun's "What founders ask us before applying" (2026-10-07): "We just need you … talking earnestly about what you're building", no AI voice, polish not weighed. It is not a product demo; the 10-26 entry "the 2-minute demo" was alfie's, not the form's |
 | Pitch deck | `../pitch/build.sh` output, 12 pages | #3342 and #3344, 2026-10-26; its two daily-use counts refreshed to the 2026-10-30 read in this record's v3 PR |
 | Where did you learn about speedrun | Other: researching SF accelerators, incubators and residencies | nick, 2026-10-26 |
 
