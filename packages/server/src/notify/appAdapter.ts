@@ -9,6 +9,7 @@ import {
   AppAnswerSchema,
   askContract,
   AskTierSchema,
+  questionOf,
   classifyAskAction,
   isAwaitingAcceptance,
   makeEnvelope,
@@ -29,6 +30,7 @@ import { log } from '../log.js';
 import { appBindingKeys, stageAppPairing, type AppKeys } from '../store/appPairing.js';
 import {
   askDigest,
+  consumeAskChannelToken,
   issueAskChannelToken,
   redeemAskChannelToken,
 } from '../store/askChannelTokens.js';
@@ -47,6 +49,15 @@ import { insertMessage } from '../store/messages.js';
 import { humanPresent } from '../store/reachability.js';
 import { isAdvisoryReviewMeta } from '../store/review.js';
 import { resolveCapabilities, type MemberRow, type TeamRow } from '../store/rows.js';
+import {
+  enrollQuestionKey,
+  QUESTION_APP_TTL_MS,
+  questionAudience,
+  questionInterruption,
+  questionTier,
+  sendQuestionAnswer,
+  verifyQuestionAnswer,
+} from './appQuestion.js';
 import { loadAppChannelKeys, openFromPhone, sealToPhone } from './appSeal.js';
 import { relayChecks, relayLinkFor, type RelayLink } from './relay.js';
 
@@ -315,6 +326,7 @@ async function issueAskDelivery(
   const tier = AskTierSchema.safeParse(meta?.['tier']);
   const kind = appAskKind(meta);
   if (!kind) throw new Error('this ask is not one the app channel carries');
+  const question = questionOf(meta);
   const privileged = kind.class === 'privileged';
   const human = privileged ? await getMemberById(ctx.db, target.binding.member_id) : undefined;
   if (privileged && human?.kind !== 'human') throw new Error('a verdict ask needs a human binding');
@@ -350,10 +362,21 @@ async function issueAskDelivery(
         from: ask.from_name,
         from_kind: ask.from_kind === 'human' ? 'human' : 'agent',
         body: ask.body,
-        tier: tier.success ? tier.data : 'standard',
+        tier: question ? questionTier(question) : tier.success ? tier.data : 'standard',
         species: typeof meta?.['species'] === 'string' ? meta['species'] : null,
         action_class: kind.class,
         ts: ask.ts,
+        ...(question
+          ? {
+              question,
+              interruption: await questionInterruption(
+                ctx,
+                target.binding.member_id,
+                question,
+                now,
+              ),
+            }
+          : {}),
       },
       ...(approval ? { approval } : {}),
       ...(kind.class === 'privileged' && kind.lane
@@ -399,8 +422,11 @@ export async function deliverAskToAppChannels(
     if (!ask) return;
     const members = await listMembers(ctx.db, team.id);
     const humans = members.filter((m) => m.kind === 'human');
-    const addressed =
-      env.to.kind === 'member'
+    // ADR 773: a question reaches its addressee, or every person when it is open to the team.
+    const question = questionOf((env.meta as Record<string, unknown> | undefined) ?? null);
+    const addressed = question
+      ? questionAudience(humans, env.to, question)
+      : env.to.kind === 'member'
         ? humans.filter((m) => m.name === (env.to as { name: string }).name)
         : humans.filter((m) => resolveCapabilities(m).is_admin);
     const link = relayLinkFor(ctx, team.slug);
@@ -442,7 +468,11 @@ export async function deliverAskToAppChannels(
 }
 
 function askTierOf(ask: AskRow) {
-  const tier = AskTierSchema.safeParse(parseMeta(ask.meta)?.['tier']);
+  const meta = parseMeta(ask.meta);
+  // ADR 773: a question has no tier; its blocking flag stands in for the channel's gates.
+  const question = questionOf(meta);
+  if (question) return questionTier(question);
+  const tier = AskTierSchema.safeParse(meta?.['tier']);
   return tier.success ? tier.data : 'standard';
 }
 
@@ -453,6 +483,8 @@ function askTierOf(ask: AskRow) {
  */
 function askExpiry(ask: AskRow): number {
   const meta = parseMeta(ask.meta);
+  // ADR 773: a question has no clock; its token outlives any tier's.
+  if (questionOf(meta)) return ask.ts + QUESTION_APP_TTL_MS;
   if (!laneVerdictOf(meta)) return ask.ts + askContract(askTierOf(ask)).timeout_ms;
   const wait = (meta?.['lane_review'] as { wait_ms?: unknown } | undefined)?.wait_ms;
   return (
@@ -811,6 +843,21 @@ export async function handleAppCallback(
 
   if (cb.kind === 'redeliver') return redeliver(ctx, team, binding, keys, now);
 
+  if (cb.kind === 'question_key') {
+    let enrollBody: Uint8Array;
+    try {
+      enrollBody = await openFromPhone({
+        keys: await loadAppChannelKeys(),
+        route: { team: team.slug, binding: binding.id, ref: cb.ref, expires_at: cb.expires_at },
+        sealed: cb.sealed,
+        purpose: 'question_key',
+      });
+    } catch {
+      return { ok: false, reason: 'sealed_body' };
+    }
+    return enrollQuestionKey(ctx, team, binding, keys, enrollBody, now);
+  }
+
   let opened: Uint8Array;
   try {
     opened = await openFromPhone({
@@ -822,6 +869,23 @@ export async function handleAppCallback(
   } catch {
     return { ok: false, reason: 'sealed_body' };
   }
+  // ADR 773/774: a question is answered with an option and/or text, never approve/reject, and the
+  // question key signs nothing else. Which path is decided by the ASK, not by the body's shape.
+  const askedQuestion = await loadAsk(ctx.db, team.id, cb.ref);
+  const question = askedQuestion ? questionOf(parseMeta(askedQuestion.meta)) : null;
+  const bodyHasAnswer = (() => {
+    try {
+      const b = JSON.parse(new TextDecoder().decode(opened)) as Record<string, unknown>;
+      return typeof b === 'object' && b !== null && 'answer' in b;
+    } catch {
+      return false;
+    }
+  })();
+  if (question && askedQuestion) {
+    if (!bodyHasAnswer) return { ok: false, reason: 'decision_on_question' };
+    return answerQuestion(ctx, team, binding, keys, askedQuestion, opened, now);
+  }
+  if (bodyHasAnswer) return { ok: false, reason: 'answer_on_non_question' };
   const parsed = (() => {
     try {
       return AppAnswerSchema.safeParse(JSON.parse(new TextDecoder().decode(opened)));
@@ -940,6 +1004,54 @@ export async function handleAppCallback(
   );
   if (!result.ok) return { ok: false, reason: result.reason };
   if (reported) await auditReported(ctx, team, cb.ref, ask?.from_name, binding.id);
+  return { ok: true };
+}
+
+/**
+ * A question's answer from the phone (ADR 773/774): verify the signature, run every token check
+ * without writing (`preflight`), send the answer through the route — which claims the question,
+ * stamps `answer_proof {channel:'app', verified}` and wakes the asker — then burn the token.
+ */
+async function answerQuestion(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  binding: ChannelBinding,
+  keys: AppKeys,
+  ask: AskRow,
+  opened: Uint8Array,
+  now: number,
+): Promise<{ ok: boolean; reason?: string }> {
+  const verified = await verifyQuestionAnswer(ctx, team, binding, keys, ask.id, opened);
+  if (!verified.ok) return verified;
+  const { answer } = verified;
+  if (answer.nonce !== appDeliveryNonce(answer.token))
+    return { ok: false, reason: 'nonce_mismatch' };
+  const pre = await redeemAskChannelToken(
+    ctx.db,
+    {
+      teamId: team.id,
+      token: answer.token,
+      askId: ask.id,
+      assurance: 'A1',
+      decision: 'approve',
+      answerMessageId: `app-${ask.id}-${now}`,
+      providerIdentity: { tenantId: binding.provider_tenant_id, userId: binding.provider_user_id },
+      deliveryActor: 'app',
+      now,
+      preflight: true,
+      writeAnswer: async () => {},
+    },
+    relayChecks,
+  );
+  if (!pre.ok) return { ok: false, reason: pre.reason };
+  const sent = await sendQuestionAnswer(ctx, team, binding, {
+    askId: ask.id,
+    asker: ask.from_name,
+    answer: answer.answer,
+    now,
+  });
+  if (!sent.ok) return sent;
+  await consumeAskChannelToken(ctx.db, team.id, answer.token, now);
   return { ok: true };
 }
 

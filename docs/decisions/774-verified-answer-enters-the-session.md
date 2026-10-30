@@ -93,6 +93,15 @@ questions: an answer straight from the notification, with no Face ID (2026-10-30
   `musterd-app-question-answer/v1` — not over `appAnswerSigningBytes` as decision 4 words it — so a
   question-key signature can never verify as an approve/reject. The answer line's helpers live in
   `question.wire.ts`, beside the shape, rather than in `idleWake.ts`.
+- 2026-10-30 (lane `01M674NGQ3`), the phone wire:
+  - The question key lives in the binding's `app_keys` JSON, so no migration was needed.
+  - Enrollment rides a `question_key` callback, sealed with its own purpose.
+  - A phone answer is checked token-first (`preflight`), then sent as the person's `accept` through
+    the ordinary route, so it gets the same first-answer-wins claim and wake as `/live`. Only then
+    is the token burned.
+  - A question's delivery carries `question` and `interruption` (`active` only when the question
+    is blocking and the person is not on `/live`). Its token lives 7 days.
+  - The question key on anything that is not a question is refused (`answer_on_non_question`).
 
 ## Observability & Evaluation
 

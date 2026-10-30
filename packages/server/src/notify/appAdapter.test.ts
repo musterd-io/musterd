@@ -1,6 +1,8 @@
 import { createHash, generateKeyPairSync, sign as cryptoSign, type KeyObject } from 'node:crypto';
 import {
   appAnswerSigningBytes,
+  appQuestionAnswerSigningBytes,
+  questionKeyEnrollBytes,
   AppDeliverySchema,
   approvalWording,
   canonicalJson,
@@ -33,6 +35,7 @@ import { listChannelSettings, setChannelSettings } from '../store/channelSetting
 import { getLane, openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
+import { questionView } from '../store/questions.js';
 import { createTeam } from '../store/teams.js';
 import {
   appDeliveryNonce,
@@ -60,7 +63,11 @@ function stubCtx(db: Driver): Ctx {
     db,
     rosterRoots: [],
     config: { presenceTimeoutMs: 60_000 } as Ctx['config'],
-    hub: { deliver: () => false, broadcastFirehose: () => 0 } as unknown as Ctx['hub'],
+    hub: {
+      deliver: () => false,
+      deliverToAdmins: () => 0,
+      broadcastFirehose: () => 0,
+    } as unknown as Ctx['hub'],
   };
 }
 
@@ -993,5 +1000,287 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
         expect(last.waiting).toBe(1);
       });
     });
+  });
+});
+
+/** A question ask from ada to nick (ADR 773): no tier, structured options. */
+async function raiseQuestion(
+  s: Awaited<ReturnType<typeof seed>>,
+  id: string,
+  over: { blocking?: boolean } = {},
+): Promise<Envelope> {
+  const env = makeEnvelope({
+    id,
+    team: s.team.slug,
+    from: 'ada',
+    to: { kind: 'member', name: 'nick' },
+    act: 'ask',
+    body: 'Re-run the red shard, or fix the flake first?',
+    meta: {
+      species: 'consult',
+      question: {
+        text: 'Re-run the red shard, or fix the flake first?',
+        options: [{ label: 'Re-run the shard' }, { label: 'Fix the flake first' }],
+        ...(over.blocking ? { blocking: true } : {}),
+      },
+    },
+    ts: NOW,
+  });
+  await insertMessage(s.db, s.team.id, s.ada.id, s.nick.id, env);
+  return env;
+}
+
+function p256Raw(key: KeyObject): string {
+  const jwk = key.export({ format: 'jwk' });
+  return Buffer.concat([
+    Buffer.from([4]),
+    Buffer.from(jwk.x!, 'base64url'),
+    Buffer.from(jwk.y!, 'base64url'),
+  ]).toString('base64url');
+}
+
+/** The phone enrolls a question key, the enrollment signed by `signer` (its Face ID key by default). */
+async function enrollBody(
+  s: Awaited<ReturnType<typeof seed>>,
+  questionPublic: KeyObject,
+  signer: KeyObject = s.phone.signing,
+) {
+  const question_key = p256Raw(questionPublic);
+  const nonce = 'n'.repeat(24);
+  const signature = cryptoSign(
+    'sha256',
+    Buffer.from(
+      questionKeyEnrollBytes({ team: s.team.slug, binding: s.binding.id, question_key, nonce }),
+      'utf8',
+    ),
+    signer,
+  ).toString('base64url');
+  const route = { team: s.team.slug, binding: s.binding.id, ref: 'qk-1', expires_at: NOW + 60_000 };
+  const sealed = await sealToDaemon({
+    daemonReceivePublic: s.daemon.receivePublic,
+    route,
+    payload: new TextEncoder().encode(
+      JSON.stringify({ v: 1, binding: s.binding.id, question_key, nonce, signature }),
+    ),
+    purpose: 'question_key',
+  });
+  return JSON.stringify({ app: 1, kind: 'question_key', ...route, sealed });
+}
+
+/** The phone's answer to a question, signed silently by its question key (or another key). */
+async function questionAnswerBody(
+  s: Awaited<ReturnType<typeof seed>>,
+  delivery: Extract<AppDelivery, { kind: 'ask' }>,
+  signer: KeyObject,
+  over: { key?: 'question' | 'signing'; answer?: { choice?: number; text?: string } } = {},
+) {
+  const answer = over.answer ?? { choice: 1, text: 'then ping big-body' };
+  const signature = cryptoSign(
+    'sha256',
+    Buffer.from(
+      appQuestionAnswerSigningBytes({
+        team: s.team.slug,
+        binding: s.binding.id,
+        ask: delivery.ask.id,
+        token: delivery.token,
+        nonce: delivery.nonce,
+        answer,
+      }),
+      'utf8',
+    ),
+    signer,
+  ).toString('base64url');
+  const route = {
+    team: s.team.slug,
+    binding: s.binding.id,
+    ref: delivery.ask.id,
+    expires_at: delivery.expires_at,
+  };
+  const sealed = await sealToDaemon({
+    daemonReceivePublic: s.daemon.receivePublic,
+    route,
+    payload: new TextEncoder().encode(
+      JSON.stringify({
+        v: 1,
+        token: delivery.token,
+        answer,
+        nonce: delivery.nonce,
+        key: over.key ?? 'question',
+        signature,
+      }),
+    ),
+    purpose: 'answer',
+  });
+  return JSON.stringify({ app: 1, kind: 'answer', ...route, sealed });
+}
+
+withDrivers('app channel questions (ADR 773/774)', (o) => {
+  beforeEach(() => {
+    openStore = o;
+  });
+  afterEach(() => __setAppChannelKeysForTest(null));
+
+  async function delivered(s: Awaited<ReturnType<typeof seed>>, env: Envelope) {
+    await deliverAskToAppChannels(s.ctx, s.team, env, NOW);
+    const d = await receive(s, lastAppFrame(s.sent));
+    if (d.kind !== 'ask') throw new Error('expected an ask');
+    return d;
+  }
+
+  it('a question reaches the phone with its options, quiet unless blocking, on a 7-day token', async () => {
+    const s = await seed();
+    const d = await delivered(s, await raiseQuestion(s, 'q-1'));
+    expect(d.ask.question?.options?.map((o) => o.label)).toEqual([
+      'Re-run the shard',
+      'Fix the flake first',
+    ]);
+    expect(d.ask).toMatchObject({ tier: 'advisory', interruption: 'passive' });
+    expect(d.expires_at).toBe(NOW + 7 * 24 * 60 * 60_000);
+    const b = await delivered(s, await raiseQuestion(s, 'q-2', { blocking: true }));
+    expect(b.ask).toMatchObject({ tier: 'blocking', interruption: 'active' });
+  });
+
+  it('the question key enrolls under the Face ID key, and only under it', async () => {
+    const s = await seed();
+    const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('qk-1', await enrollBody(s, qk.publicKey, qk.privateKey)),
+        NOW,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'bad_signature' });
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('qk-1', await enrollBody(s, qk.publicKey)), NOW),
+    ).resolves.toEqual({ ok: true });
+    expect(await listAuditByAction(s.db, s.team.id, 'app.question_key_enrolled', 5)).toHaveLength(
+      1,
+    );
+  });
+
+  it("a silent question-key answer is recorded as nick's verified app answer, once", async () => {
+    const s = await seed();
+    const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('qk-1', await enrollBody(s, qk.publicKey)),
+      NOW,
+    );
+    const d = await delivered(s, await raiseQuestion(s, 'q-1'));
+    const body = await questionAnswerBody(s, d, qk.privateKey);
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('q-1', body), NOW + 1_000),
+    ).resolves.toEqual({ ok: true });
+    const row = await s.db.get<{ act: string; meta: string }>(
+      "SELECT act, meta FROM messages WHERE team_id = ? AND id LIKE 'app-q-1-%'",
+      [s.team.id],
+    );
+    expect(row?.act).toBe('accept');
+    expect(JSON.parse(row!.meta)).toMatchObject({
+      in_reply_to: 'q-1',
+      answer: { choice: 1, text: 'then ping big-body' },
+      answer_proof: { channel: 'app', verified: true, by: 'nick' },
+    });
+    expect((await questionView(s.db, s.team.id, 'q-1'))?.state).toBe('answered');
+    const again = await handleRelayCallback(s.ctx, s.team, callback('q-1', body), NOW + 2_000);
+    expect(again.ok).toBe(false);
+  });
+
+  it('a question answered on /live first refuses the phone with question_already_answered', async () => {
+    const s = await seed();
+    const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('qk-1', await enrollBody(s, qk.publicKey)),
+      NOW,
+    );
+    const d = await delivered(s, await raiseQuestion(s, 'q-1'));
+    await insertMessage(
+      s.db,
+      s.team.id,
+      s.nick.id,
+      s.ada.id,
+      makeEnvelope({
+        id: 'live-answer',
+        team: s.team.slug,
+        from: 'nick',
+        to: { kind: 'member', name: 'ada' },
+        act: 'accept',
+        meta: { in_reply_to: 'q-1', answer: { choice: 0 } },
+        ts: NOW + 500,
+      }),
+    );
+    await s.db.run(
+      `INSERT INTO question_answers (team_id, question_id, answer_id, asker, answered_by, channel, verified, answered_at)
+       VALUES (?, 'q-1', 'live-answer', 'ada', 'nick', 'live', 1, ?)`,
+      [s.team.id, NOW + 500],
+    );
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, qk.privateKey)),
+        NOW + 1_000,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'question_already_answered' });
+  });
+
+  it('the question key cannot answer anything that is not a question, and a question takes no decision', async () => {
+    const s = await seed();
+    const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('qk-1', await enrollBody(s, qk.publicKey)),
+      NOW,
+    );
+    const plain = await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-1');
+    const pd = await delivered(s, plain);
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('ask-1', await questionAnswerBody(s, pd, qk.privateKey)),
+        NOW + 1_000,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'answer_on_non_question' });
+    const qd = await delivered(s, await raiseQuestion(s, 'q-1'));
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('q-1', await answerBody(s, qd)), NOW + 1_000),
+    ).resolves.toEqual({ ok: false, reason: 'decision_on_question' });
+  });
+
+  it('an answer claiming the question key with none enrolled, or signed by a stranger, is refused', async () => {
+    const s = await seed();
+    const d = await delivered(s, await raiseQuestion(s, 'q-1'));
+    const stranger = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, stranger.privateKey)),
+        NOW + 1_000,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'key_revoked' });
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, stranger.privateKey, { key: 'signing' })),
+        NOW + 1_000,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'bad_signature' });
+    // The Face ID key itself may answer from inside the app.
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, s.phone.signing, { key: 'signing' })),
+        NOW + 1_000,
+      ),
+    ).resolves.toEqual({ ok: true });
   });
 });

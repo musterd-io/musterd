@@ -48,6 +48,10 @@ export interface AppKeys {
   /** The phone's APNs device token (hex) and its environment; absent, nothing is pushed. */
   push_token?: string;
   push_environment?: 'production' | 'development';
+  /** ADR 774 §5: the phone's question key — P-256 uncompressed point, base64url, no biometry. It
+   *  signs answers to questions only. Absent until the phone enrolls it. */
+  question_key?: string;
+  question_key_at?: number;
 }
 
 export type AppPairingRefusal =
@@ -354,4 +358,23 @@ export async function appBindingKeys(
   );
   if (!row || row.channel !== APP_CHANNEL || row.status !== 'active' || !row.app_keys) return null;
   return JSON.parse(row.app_keys) as AppKeys;
+}
+
+/** ADR 774 §5: record (or replace) the binding's question key inside its `app_keys`. */
+export async function setAppQuestionKey(
+  db: Driver,
+  teamId: string,
+  bindingId: string,
+  questionKey: string,
+  now: number,
+): Promise<boolean> {
+  const keys = await appBindingKeys(db, teamId, bindingId);
+  if (!keys) return false;
+  const next: AppKeys = { ...keys, question_key: questionKey, question_key_at: now };
+  await db.run('UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ?', [
+    JSON.stringify(next),
+    bindingId,
+    teamId,
+  ]);
+  return true;
 }

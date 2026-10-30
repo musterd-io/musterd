@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ApprovalDescriptorSchema } from './approval.js';
-import { AnswerSchema, type Answer } from './question.js';
+import { AnswerSchema, QuestionSchema, type Answer } from './question.js';
 
 /**
  * The musterd app's channel (ADR 676): what the pairing QR carries and what the phone sends back,
@@ -115,6 +115,16 @@ export const AppCallbackSchema = z.discriminatedUnion('kind', [
     kind: z.literal('redeliver'),
     binding: z.string().min(1).max(64),
   }),
+  /** ADR 774 §5: enroll the phone's question key. Sealed with purpose `question_key`; the body is
+   *  an {@link AppQuestionKeyEnrollSchema} signed by the binding's Face ID phone key. */
+  z.object({
+    app: z.literal(1),
+    kind: z.literal('question_key'),
+    binding: z.string().min(1).max(64),
+    ref: z.string().min(1).max(64),
+    expires_at: z.number().int().nonnegative(),
+    sealed: SealedBodySchema,
+  }),
 ]);
 export type AppCallback = z.infer<typeof AppCallbackSchema>;
 
@@ -168,6 +178,12 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
       species: z.string().nullable(),
       action_class: z.enum(['advisory', 'privileged']),
       ts: z.number().int(),
+      /** ADR 773: present when the ask is a question — options, why, context, audience. The app
+       *  answers it with {@link AppQuestionAnswerSchema}, never approve/reject. */
+      question: QuestionSchema.optional(),
+      /** How loud (ADR 773 notification defaults): `active` buzzes, `passive` lands quietly. Absent
+       *  on a non-question ask, where the app keeps its tier-based behaviour. */
+      interruption: z.enum(['active', 'passive']).optional(),
     }),
     /**
      * Present exactly when `action_class` is `privileged` (ADR 694): the ask's answer is a listed

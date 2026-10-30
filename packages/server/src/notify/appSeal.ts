@@ -44,7 +44,7 @@ export interface SealedBody {
 }
 
 /** Which way a sealed body travels. It is the HPKE `info`, so a body sealed for one cannot open as the other. */
-export type SealPurpose = 'deliver' | 'answer' | 'pair';
+export type SealPurpose = 'deliver' | 'answer' | 'pair' | 'question_key';
 
 export interface AppChannelKeys {
   identityPrivate: KeyObject;
