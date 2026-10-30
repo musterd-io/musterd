@@ -7,8 +7,8 @@
 #   bash prep-ubuntu.sh [user]          # default user: musterd
 #
 # Leaves: Node 22, git, gh, tailscale, bubblewrap and a C toolchain (better-sqlite3 compiles) system-wide;
-# a non-root user with lingering on (its systemd --user services run with nobody logged in); pnpm,
-# Claude Code and Codex installed for that user. Signing in (tailscale, gh, claude, codex) is the
+# a non-root user with lingering on (its systemd --user services run with nobody logged in); pnpm
+# and Claude Code installed for that user, Codex system-wide. Signing in (tailscale, gh, claude, codex) is the
 # human's step after this — see the guide's Linux section.
 set -euo pipefail
 
@@ -58,16 +58,24 @@ sudo -iu "$USER_NAME" bash -s <<'EOF'
 set -euo pipefail
 command -v pnpm >/dev/null || [ -x "$HOME/.local/share/pnpm/bin/pnpm" ] || curl -fsSL https://get.pnpm.io/install.sh | sh -
 npm config set prefix "$HOME/.npm-global"
-npm install -g @anthropic-ai/claude-code @openai/codex
+npm install -g @anthropic-ai/claude-code
 grep -q npm-global "$HOME/.bashrc" || echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >>"$HOME/.bashrc"
 EOF
 
+# Codex goes in system-wide, as root: its sandbox runs a vendored bwrap, and the AppArmor
+# exemption below must name a binary the agents (who run as $USER_NAME) cannot replace. Anything
+# under the user's home can be swapped by renaming a parent folder the user owns.
+npm install -g @openai/codex
+
 # Ubuntu 24.04 sets kernel.apparmor_restrict_unprivileged_userns=1, and bubblewrap needs a user
-# namespace: Codex's own sandbox (its vendored bwrap) fails "bwrap: loopback: Failed RTM_NEWADDR:
-# Operation not permitted", so every Codex wake dies ("thread id missing"), and the resident
-# engine's bash sandbox is bwrap too (musterd-joiner-1, 2026-10-29). Exempt only the two bwrap
-# binaries; the restriction stays on for everything else.
-CODEX_BWRAP="/home/$USER_NAME/.npm-global/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap"
+# namespace: Codex's sandbox fails "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
+# so every Codex wake dies ("thread id missing"), and the resident engine's bash sandbox is bwrap
+# too (musterd-joiner-1, 2026-10-29). Plainly: an UNCONFINED bwrap lets anything launched through
+# bwrap create user namespaces, which on this single-tenant box is close to lifting the
+# restriction for that user, not a narrow exemption. Its children are not stripped of capabilities
+# the way Ubuntu's stock bwrap-userns-restrict profile does; that profile is not installed on this
+# image, and adopting it is the stronger follow-up. Both paths are root-owned.
+CODEX_BWRAP="$(npm root -g)/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap"
 if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; then
   {
     printf 'abi <abi/4.0>,\ninclude <tunables/global>\n'

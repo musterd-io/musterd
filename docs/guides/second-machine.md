@@ -133,8 +133,11 @@ bash bootstrap.sh machine                       # then the hub-side invite and t
 
 Three things the first VM (`musterd-joiner-1`, 2026-10-29) needed beyond that, now in the script or
 noted here. Ubuntu 24.04 restricts unprivileged user namespaces, which broke Codex's bwrap sandbox
-(every Codex wake died "thread id missing"); `prep-ubuntu.sh` now writes an AppArmor profile that
-exempts only the two bwrap binaries. OpenCode v2 needs its own installer, then
+(every Codex wake died "thread id missing"); `prep-ubuntu.sh` now installs Codex system-wide (root-owned, so
+an agent cannot swap the binary) and writes an AppArmor profile letting the system and Codex bwrap
+create user namespaces, unconfined: close to lifting the restriction for anything run through
+bwrap, not a narrow exemption; Ubuntu's stock `bwrap-userns-restrict` profile is the stronger
+follow-up. OpenCode v2 needs its own installer, then
 `opencode upgrade --major`, and lives in `~/.opencode/bin`, which the host unit's PATH includes. A
 seat on musterd's own engine reads its model from `binding.model`, not a box-wide
 `MUSTERD_MODEL`, which would mislabel the Claude Code seats' attested model; keep its API key under
