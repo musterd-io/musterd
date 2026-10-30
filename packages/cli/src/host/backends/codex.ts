@@ -550,7 +550,13 @@ export function codexBackend(deps: CodexDeps = {}): ActuatorBackend {
       const fresh = await attempt(
         deps,
         bin,
-        withCodexBaseUrl(buildCodexFreshArgs(spec.order.composed_line, spec.workspace), baseUrl),
+        withCodexBaseUrl(
+          buildCodexFreshArgs(
+            spec.order.composed_recap_line ?? spec.order.composed_line,
+            spec.workspace,
+          ),
+          baseUrl,
+        ),
         undefined,
         spec,
         ctx,

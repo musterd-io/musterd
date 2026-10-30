@@ -1,4 +1,9 @@
-import { type IdleWakeReport, type IdleWakeState, isPushableLine } from '@musterd/protocol';
+import {
+  composeAnswerLine,
+  type IdleWakeReport,
+  type IdleWakeState,
+  isPushableLine,
+} from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import {
   IDLE_RETRY_AFTER_FAILURE_MS,
@@ -328,6 +333,23 @@ describe('only the daemon-shaped line is pushed (ADR 558 — it becomes a user t
       harness: 'claude-code',
       reason: 'line-shape',
     });
+  });
+
+  it("the answer line is pushed whole, in the person's own words (ADR 774)", async () => {
+    const line = composeAnswerLine({
+      team: 'revive',
+      person: 'nick',
+      questionId: 'Q1',
+      answerId: 'A1',
+      channel: 'app',
+      answer: '"Fix the flake first" — c’est bon 👍',
+    });
+    const h = harness({
+      check: () => Promise.resolve<IdleCheck>({ line, act: 'A1', from: 'nick' }),
+    });
+    h.iw.onDeliver(h.steer('A1'));
+    await h.advance(5_000);
+    expect(h.injected).toEqual([line]);
   });
 });
 

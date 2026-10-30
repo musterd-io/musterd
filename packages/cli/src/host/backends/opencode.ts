@@ -559,7 +559,7 @@ export function opencodeBackend(deps: OpencodeDeps = {}): ActuatorBackend {
       const fresh = await attempt(
         deps,
         bin,
-        buildOpencodeFreshArgs(spec.order.composed_line),
+        buildOpencodeFreshArgs(spec.order.composed_recap_line ?? spec.order.composed_line),
         undefined,
         spec,
         ctx,

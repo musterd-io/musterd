@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
+  ANSWER_LINE_MAX,
+  ANSWER_LINE_PATTERN,
   IDLE_LINE_MAX,
   IDLE_LINE_PATTERN,
   IDLE_RING_ACK_FILE,
@@ -31,6 +33,7 @@ import { isDeclined } from '../declined.js';
  *   free on the common path (the CLI prints nothing unless an interrupt-class act waits). The MCP-
  *   tool-path caveat (eval §2: mutation may not reach the model for MCP calls on 1.14.x) is the
  *   named falsifier; the idle rail below is the floor if it holds on 1.18.x.
+ * - The answer line (ADR 774, generation 6): a ring may carry the longer Unicode answer line.
  * - Idle-at-prompt wake (ADR 558 increment 3, generation 5). The MCP adapter decides when an idle
  *   session is pushed and writes the daemon's line to `.musterd/idle-ring.json`; this plugin watches
  *   that file, pushes the line with a reply-triggering `promptAsync` into the session it last saw,
@@ -60,7 +63,7 @@ import { isDeclined } from '../declined.js';
 
 export const OPENCODE_PLUGIN_MARKER = 'musterd-opencode-interrupt';
 /** Bump when the rendered plugin changes: the doctor names a file stamped otherwise as STALE. */
-export const OPENCODE_PLUGIN_GENERATION = 5;
+export const OPENCODE_PLUGIN_GENERATION = 6;
 export const OPENCODE_PLUGIN_SURFACE = 'opencode:plugin';
 /** The V2 plugin id in the default export (stable; shown in plugin list/diagnostics). */
 export const OPENCODE_PLUGIN_ID = 'musterd-interrupt';
@@ -111,6 +114,10 @@ const STAMP_EVERY_MS = ${String(OPENCODE_STAMP_EVERY_MS)};
 const RING_POLL_MS = 1000;
 const LINE_MAX = ${String(IDLE_LINE_MAX)};
 const LINE_RE = new RegExp(${JSON.stringify(IDLE_LINE_PATTERN)});
+// ADR 774 (generation 6): a verified answer to this seat's own question rides a longer line of
+// printable Unicode. Either shape passes; nothing else is pushed.
+const ANSWER_MAX = ${String(ANSWER_LINE_MAX)};
+const ANSWER_RE = new RegExp(${JSON.stringify(ANSWER_LINE_PATTERN)}, "u");
 
 // One daemon-composed line, or "" — never a throw, never a rejection (a probe on every tool call
 // must never disrupt the loop, ADR 088). cwd is the seat folder so the bound seat resolves.
@@ -244,7 +251,9 @@ function startRing(directory, push) {
     lastSeq = ring.seq;
     if (typeof ring.at !== "number" || Date.now() - ring.at > RING_MAX_AGE_MS) return;
     const line = typeof ring.line === "string" ? ring.line : "";
-    if (line.length > LINE_MAX || !LINE_RE.test(line)) return ack(ring.seq, false, "line-shape");
+    const idleShape = line.length <= LINE_MAX && LINE_RE.test(line);
+    const answerShape = line.length <= ANSWER_MAX && ANSWER_RE.test(line);
+    if (!idleShape && !answerShape) return ack(ring.seq, false, "line-shape");
     const id = sessionFor();
     if (!id) return ack(ring.seq, false, "no-session");
     if (status.get(id) === "busy") return ack(ring.seq, false, "busy");

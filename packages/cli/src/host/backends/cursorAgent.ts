@@ -308,7 +308,10 @@ export function cursorAgentBackend(deps: CursorAgentDeps = {}): ActuatorBackend 
         );
       }
       const fresh = await run(
-        buildCursorAgentFreshArgs(spec.order.composed_line, spec.workspace),
+        buildCursorAgentFreshArgs(
+          spec.order.composed_recap_line ?? spec.order.composed_line,
+          spec.workspace,
+        ),
         'fresh',
         spec.bounds.timeout_ms,
       );
