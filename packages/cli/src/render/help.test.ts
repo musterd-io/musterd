@@ -49,6 +49,14 @@ describe('renderHelp (grouped overview)', () => {
     }
   });
 
+  it('lists a start-here command once, not again in its room (lane 01M653WK0K)', () => {
+    const out = renderHelp({ full: true });
+    for (const n of START_HERE) {
+      const rows = out.split('\n').filter((l) => l.startsWith(n + ' ') || l.trim() === n);
+      expect(rows.length, `${n} listed ${rows.length} times`).toBe(1);
+    }
+  });
+
   it('folds non-primary commands behind a "+N more" pointer by default', () => {
     expect(out).toContain('more — musterd help setup');
     // `wire` is non-primary in setup, so it is hidden from the condensed overview…

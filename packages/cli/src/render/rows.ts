@@ -859,7 +859,9 @@ export function hubWarning(line: string): string {
 /** The hint a held lane earns, right-aligned at 80 columns. */
 function laneHint(lane: DailyLane): string | undefined {
   if (lane.state === 'awaiting_acceptance') return 'with the acceptor';
-  if (lane.merged) return 'PR merged · submit';
+  // A merged lane reads `landed` as its state (see the row loop), so the hint is the one verb
+  // left: submit. "PR merged" as a hint beside a state word mixed the two (lane 01M653WK0K).
+  if (lane.merged) return 'submit';
   if (lane.state === 'claimed') return 'ready to start';
   return undefined;
 }
@@ -907,9 +909,11 @@ export function renderDailyView(v: DailyView, now: number, width: number): strin
         ),
       );
     }
+    // One pointer per destination: the +more line already names the command, so the arrow
+    // line follows only when nothing was elided (lane 01M653WK0K).
     if (v.waiting.count > 3)
       out.push(theme.meta(`  +${v.waiting.count - 3} more ${sym.dot} musterd inbox`));
-    out.push(theme.meta('  → musterd inbox'));
+    else out.push(theme.meta('  → musterd inbox'));
   } else {
     out.push(theme.meta('⚑ nothing waiting on you'));
   }
@@ -922,11 +926,15 @@ export function renderDailyView(v: DailyView, now: number, width: number): strin
   } else {
     out.push(`◆ your work  ${theme.meta(String(v.lanes.length))}`);
     for (const lane of v.lanes.slice(0, 3)) {
-      const state = lane.state === 'active' ? theme.ok(lane.state) : lane.state;
+      // A lane whose PR merged has landed; that is its state word, in green, whatever the
+      // board state still says (lane 01M653WK0K).
+      const landed = !!lane.merged && lane.state !== 'awaiting_acceptance';
+      const stateWord = landed ? 'landed' : lane.state;
+      const state = landed || lane.state === 'active' ? theme.ok(stateWord) : stateWord;
       out.push(
         dailyRow(
           `  ${state}`,
-          2 + lane.state.length,
+          2 + stateWord.length,
           ` ${sym.dot} ${lane.title}`,
           width,
           narrow ? HINT_COLUMN_NARROW : HINT_COLUMN,
@@ -953,7 +961,7 @@ export function renderDailyView(v: DailyView, now: number, width: number): strin
     }
     const more = Math.max(v.upNext.total, upLanes.length) - shown.length;
     if (more > 0) out.push(theme.meta(`  +${more} more ${sym.dot} musterd next`));
-    out.push(theme.meta('  → musterd next'));
+    else out.push(theme.meta('  → musterd next'));
   }
   for (const section of v.notReported)
     out.push(theme.meta(`${section}: not reported by this daemon`));
