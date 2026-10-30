@@ -53,18 +53,24 @@ export function upNextCountCopy(brief: {
 
 function laneLine(l: Lane, tail = ''): string {
   // The daily view's row grammar (lane 01M653W2N4): state first, the title cut at the column
-  // edge, the short id after it. The full id wrapped mid-line and read as a different surface.
-  const goal = l.goal_id ? ` ◆ ${l.goal_id}` : '';
-  const areas = l.areas?.length ? ` · ${l.areas.join(', ')}` : '';
-  const branch = l.branch ? ` ⎇ ${l.branch}` : '';
+  // edge, the short id after it. The title wins the line: the goal, areas and branch ride the
+  // dim second line and are cut there instead — the first landing cut the title to a stub to
+  // make room for the tail and the line still ran past the edge (acceptance measured
+  // `blocked · First-r… — … ⎇ copy/tour-cold-read` at 104 cells on an 80-column terminal).
+  const width = termWidth();
   const head = `  ${l.state} · `;
-  const suffix = ` — ${shortId(l.id)}${goal}${areas}${branch}`;
-  const title = cut(l.title, Math.max(8, termWidth() - visibleLen(head + suffix + tail)));
-  return (
-    `  ${l.state} ${theme.meta('·')} ${title}` +
-    theme.meta(` — ${shortId(l.id)}${goal}${areas}${branch}`) +
-    tail
-  );
+  const idPart = ` — ${shortId(l.id)}`;
+  const title = cut(l.title, Math.max(8, width - visibleLen(head + idPart + tail)));
+  let out = `  ${l.state} ${theme.meta('·')} ${title}` + theme.meta(idPart) + tail;
+  const hint = [
+    l.goal_id ? `◆ ${l.goal_id}` : '',
+    l.areas?.length ? l.areas.join(', ') : '',
+    l.branch ? `⎇ ${l.branch}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  if (hint) out += '\n' + theme.meta(`    ${cut(hint, Math.max(8, width - 4))}`);
+  return out;
 }
 
 /**
@@ -230,12 +236,16 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     }
   }
   // ADR 487 §5.4: a goal whose live lanes have all stopped moving. `?? []` for an older daemon.
-  for (const g of brief.stale_goals ?? [])
+  // Same row grammar as a lane (lane 01M653W2N4): the warning on one line cut at the edge,
+  // the oldest lane as `"title…" — <short id>` under it — the full goal and lane ULIDs ran
+  // these lines to 151–273 cells (acceptance, 2026-10-30).
+  for (const g of brief.stale_goals ?? []) {
+    w(theme.warn(cut(`⚠ ${g.goal} · quiet ${shortDuration(g.idle_ms)}`, termWidth())) + '\n');
+    const suffix = ` — ${shortId(g.lane)} · oldest untouched`;
     w(
-      theme.warn(`⚠ goal ${g.goal} has not moved in ${shortDuration(g.idle_ms)}`) +
-        theme.meta(` — oldest untouched: ${g.lane} "${g.lane_title}"`) +
-        '\n',
+      `  "${cut(g.lane_title, Math.max(8, termWidth() - 4 - visibleLen(suffix)))}"${theme.meta(suffix)}\n`,
     );
+  }
   if (brief.in_flight.length > 0) {
     w(`\n${theme.accent('carrying')} (${brief.in_flight.length}):\n`);
     // ADR 664: carried work no wake will reach — the owner hears it here, not only on the board.
@@ -244,8 +254,9 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
       w(laneLine(l) + '\n');
       const why = stalled.get(l.id);
       // The detail already opens "no wake due: …" — saying it twice, once shouted, was the
-      // seam (lane 01M653W2N4).
-      if (why) w(theme.warn(`    ↳ ${why}`) + '\n');
+      // seam (lane 01M653W2N4). Cut at the column edge: `lane show` carries the full text,
+      // and the uncut detail wrapped to three lines (acceptance measured 180 cells).
+      if (why) w(theme.warn(`    ↳ ${cut(why, Math.max(8, termWidth() - 6))}`) + '\n');
     }
   }
   // ADR 373 increment 4: recorded intentions ABOVE the open lanes — a Seed is the same question one
@@ -257,7 +268,11 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     const more = total > seeds.length ? theme.meta(` (${seeds.length} of ${total})`) : '';
     w(`\n${theme.accent('up next')} — recorded intentions nobody has started${more}:\n`);
     for (const s of seeds) {
-      w(`  ${theme.meta(s.id)} ${s.summary}\n`);
+      // The full id stays (`seed claim` takes it); the summary is cut at the edge like every
+      // other title on the page (lane 01M653W2N4).
+      w(
+        `  ${theme.meta(s.id)} ${cut(s.summary, Math.max(8, termWidth() - visibleLen(s.id) - 3))}\n`,
+      );
       w(
         theme.meta(
           `    ${s.ref ?? `from ${s.submitted_by}`} · take it: \`musterd seed claim ${s.id}\``,

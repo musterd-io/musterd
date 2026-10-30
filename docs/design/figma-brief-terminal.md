@@ -365,7 +365,11 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
    this frame's sections (carrying, up next, owed, review debt) use the daily view's grammar
    since lane `01M653W2N4` (2026-10-30): state first, title cut at the column edge, 10-character
    lane prefix, owner and age on a dim line of their own; the stalled-continuation line says
-   `no wake due:` once.
+   `no wake due:` once. The title wins the carrying row (second landing, same lane): goal,
+   areas and branch ride the dim line under it and are cut there, the stale-goal warning is
+   `⚠ <goal> · quiet <N>d` with its lane as a short-id row under it, the `↳ no wake due`
+   detail and seed summaries are cut at the edge — every line pinned ≤80 columns by
+   `orient.test.ts`.
 
     ```
     next — as Ada

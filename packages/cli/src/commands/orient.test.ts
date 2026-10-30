@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
 import { HttpClient } from '../client.js';
 import { loadConfig, rememberIdentity, saveConfig } from '../config.js';
+import { visibleLen } from '../render/ui.js';
 import { bindTempWorkspace, claimAgentHttp } from '../test-auth.js';
 import { doneCommand } from './done.js';
 import { laneCommand, lanesCommand } from './lane.js';
@@ -331,6 +332,102 @@ describe('next / done commands', () => {
       });
       expect(res.out).toBe(FRAME);
       for (const line of res.out.split('\n')) expect(line.length).toBeLessThanOrEqual(80);
+    });
+
+    /**
+     * Lane 01M653W2N4, second landing: at 80 columns the title wins the carrying row. The
+     * first grammar cut the title to a stub (`blocked · First-r…`) to fit the goal/areas/
+     * branch tail and still overflowed; the ⚠ stale-goal lines carried full ULIDs at up to
+     * 273 cells and the ↳ no-wake-due detail ran 180. Every line of the page is pinned to
+     * the column edge, the way status.daily.test.ts pins the daily view.
+     */
+    it('keeps every next line within 80 columns, titles untruncated by their tails', async () => {
+      const lane = (over: Record<string, unknown>) => ({
+        id: '01M4V751KRZZZZZZZZZZZZZZZZ',
+        team: 'dawn',
+        project: 'runtime',
+        title: 'First-run tour cold read with a new human at the keyboard',
+        detail: null,
+        kind: null,
+        owner_seat: 'ghost',
+        role: null,
+        scope: [],
+        depends_on: [],
+        branch: 'copy/tour-cold-read',
+        goal_id: 'first-run-10-minutes',
+        areas: ['ui', 'cli', 'docs'],
+        risk: [],
+        stakes: 'normal',
+        stakes_provenance: 'declared',
+        merged: null,
+        state: 'blocked',
+        created_by: 'nick',
+        created_at: 1,
+        claimed_at: null,
+        resolved_at: null,
+        updated_at: 1,
+        ...over,
+      });
+      const brief = NextBriefSchema.parse({
+        member: 'Ada',
+        in_flight: [lane({})],
+        shipped: [],
+        up_next: [],
+        why: null,
+        next_goal: null,
+        review_debt_total: 0,
+        incidents: [],
+        stalled_continuations: [
+          {
+            kind: 'stalled_continuation',
+            subject: '01M4V751KRZZZZZZZZZZZZZZZZ',
+            with: '01M4V751KRZZZZZZZZZZZZZZZZ',
+            owner: null,
+            detail:
+              'no wake due: the continuation lease lapsed three times and the owning session is a resident seat whose transcript shows no tool call since the lane was claimed',
+          },
+        ],
+        stale_goals: [
+          {
+            goal: 'first-run-10-minutes',
+            lane: '01M4V751KRZZZZZZZZZZZZZZZZ',
+            lane_title: 'First-run tour cold read with a new human at the keyboard',
+            idle_ms: 3 * 24 * 3_600_000,
+          },
+        ],
+        up_next_seeds: [
+          {
+            id: '01M5SEEDZZZZZZZZZZZZZZZZZZ',
+            source: 'repo',
+            ref: null,
+            summary:
+              'Share the cold-read findings with the whole team and fold them into the tour script before the next recording session happens',
+            submitted_by: 'nick',
+            captured_at: 1,
+          },
+        ],
+      });
+      const res = await capture(async () => {
+        renderNext(brief, 0);
+        return 0;
+      });
+      for (const line of res.out.split('\n'))
+        expect(visibleLen(line), line).toBeLessThanOrEqual(80);
+      // The title survives: cut at the edge, not to a stub for the tail's sake.
+      expect(res.out).toContain(
+        'blocked · First-run tour cold read with a new human at the keybo… — 01M4V751KR',
+      );
+      // Goal, areas and branch ride the dim second line.
+      expect(res.out).toContain('◆ first-run-10-minutes · ui, cli, docs · ⎇ copy/tour-cold-read');
+      // The stale-goal warning is one line; its lane is the short-id row under it.
+      expect(res.out).toContain('⚠ first-run-10-minutes · quiet 3d');
+      expect(res.out).toContain('— 01M4V751KR · oldest untouched');
+      expect(res.out).not.toContain('01M4V751KRZZZZZZZZZZZZZZZZ');
+      // The no-wake-due detail is cut, not wrapped.
+      expect(res.out).toMatch(/↳ no wake due: .*…/);
+      // The seed keeps its full id (seed claim takes it) and cuts its summary.
+      expect(res.out).toContain('01M5SEEDZZZZZZZZZZZZZZZZZZ');
+      expect(res.out).toMatch(/Share the cold-read findings with the whole team a…/);
     });
 
     /** ADR 536 §4.5 — the up-next window says how much it is a window on; same words as team_next. */
