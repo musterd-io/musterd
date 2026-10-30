@@ -473,7 +473,10 @@ export function ffmpegArgs(
 ): string[] {
   const vcodec = opts.encoder === 'videotoolbox' ? 'h264_videotoolbox' : 'libx264';
   if (opts.capture === 'x11' && !display) {
-    throw new CliError('--capture x11 has no display to grab — Xvfb did not report one; re-run `musterd broadcast` (it starts Xvfb itself), and if it repeats check that Xvfb is installed', 1);
+    throw new CliError(
+      '--capture x11 has no display to grab — Xvfb did not report one; re-run `musterd broadcast` (it starts Xvfb itself), and if it repeats check that Xvfb is installed',
+      1,
+    );
   }
   const stage = stagePixels(opts.resolution);
   const video =
@@ -1480,12 +1483,7 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
   await new Promise<void>((res, rej) => {
     ws.onopen = () => res();
     ws.onerror = () =>
-      rej(
-        new CliError(
-          `could not attach to the Chrome DevTools socket — ${relaunchStep()}`,
-          1,
-        ),
-      );
+      rej(new CliError(`could not attach to the Chrome DevTools socket — ${relaunchStep()}`, 1));
   });
   let msgId = 0;
   const pending = new Map<
@@ -1546,12 +1544,7 @@ async function connectCdp(debugPort: number): Promise<Cdp> {
         const id = ++msgId;
         const timer = setTimeout(() => {
           if (pending.delete(id))
-            rej(
-              new CliError(
-                `Chrome did not answer ${method} in time — ${relaunchStep()}`,
-                1,
-              ),
-            );
+            rej(new CliError(`Chrome did not answer ${method} in time — ${relaunchStep()}`, 1));
         }, cdpTimeoutFor(method));
         pending.set(id, {
           res: (v) => {
