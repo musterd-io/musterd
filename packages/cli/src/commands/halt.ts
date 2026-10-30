@@ -72,7 +72,7 @@ export async function haltCommand(parsed: Parsed): Promise<number> {
   process.stdout.write(
     theme.meta(
       `effective at the seat's next tool boundary or musterd call — nothing is killed; ` +
-        `${res.presences_evicted} live session${res.presences_evicted === 1 ? '' : 's'} evicted`,
+        `${res.presences_evicted} live Presence${res.presences_evicted === 1 ? '' : 's'} evicted`,
     ) + '\n',
   );
   const ungated = ungatedSurfaceNotice(res.evicted_surfaces);

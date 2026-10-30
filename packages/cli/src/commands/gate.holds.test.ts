@@ -108,8 +108,8 @@ describe('the gate and a merges hold (ADR 516 increment 2)', () => {
 
   it('fails open and records unenforced when the daemon cannot answer — ADR 674 posture', async () => {
     vi.mocked(readHookStdin).mockResolvedValue(bash('git push origin main'));
-    http.holdCheck.mockRejectedValue(new CliError("can't reach team server", 7));
-    http.getEnforcement.mockRejectedValueOnce(new CliError("can't reach team server", 7));
+    http.holdCheck.mockRejectedValue(new CliError("can't reach the daemon", 7));
+    http.getEnforcement.mockRejectedValueOnce(new CliError("can't reach the daemon", 7));
     const out = await run();
     expect(out).not.toContain('"permission":"deny"');
     expect(out).toContain('unenforced');
@@ -219,7 +219,7 @@ describe('ADR 674 — remote hook 60s enforcement cache, per-class outage postur
 
     // Server goes down for gateCheck on a matched block class → denied with "gate unreachable".
     vi.mocked(readHookStdin).mockResolvedValue(edit('src/blocked/a.ts'));
-    http.gateCheck.mockRejectedValueOnce(new CliError("can't reach team server", 7));
+    http.gateCheck.mockRejectedValueOnce(new CliError("can't reach the daemon", 7));
     const blockOut = await run();
     expect(blockOut).toContain('"permission":"deny"');
     expect(blockOut).toContain('gate unreachable');
@@ -227,7 +227,7 @@ describe('ADR 674 — remote hook 60s enforcement cache, per-class outage postur
 
     // Costly-action class during outage → also denied with "gate unreachable".
     vi.mocked(readHookStdin).mockResolvedValue(bash('git push --force origin feat/x'));
-    http.gateCheck.mockRejectedValueOnce(new CliError("can't reach team server", 7));
+    http.gateCheck.mockRejectedValueOnce(new CliError("can't reach the daemon", 7));
     const costlyOut = await run();
     expect(costlyOut).toContain('"permission":"deny"');
     expect(costlyOut).toContain('gate unreachable');
@@ -235,7 +235,7 @@ describe('ADR 674 — remote hook 60s enforcement cache, per-class outage postur
 
     // Warn-posture class during outage → allowed and recorded "unenforced" in the tool result.
     vi.mocked(readHookStdin).mockResolvedValue(edit('src/warned/b.ts'));
-    http.gateCheck.mockRejectedValueOnce(new CliError("can't reach team server", 7));
+    http.gateCheck.mockRejectedValueOnce(new CliError("can't reach the daemon", 7));
     const warnOut = await run();
     expect(warnOut).not.toContain('"permission":"deny"');
     expect(warnOut).toContain('unenforced');
@@ -243,7 +243,7 @@ describe('ADR 674 — remote hook 60s enforcement cache, per-class outage postur
 
     // Next call: pending unenforced counter triggers a server probe; while still down on an unclassified call, it also records unenforced.
     vi.mocked(readHookStdin).mockResolvedValue(edit('src/unlisted.ts'));
-    http.getEnforcement.mockRejectedValueOnce(new CliError("can't reach team server", 7));
+    http.getEnforcement.mockRejectedValueOnce(new CliError("can't reach the daemon", 7));
     const unclassOut = await run();
     expect(unclassOut).not.toContain('"permission":"deny"');
     expect(unclassOut).toContain('unenforced');

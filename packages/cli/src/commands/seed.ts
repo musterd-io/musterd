@@ -217,7 +217,7 @@ function readBrief(path: string | undefined) {
     throw new CliError(`can't read Seed brief JSON from ${path}`, 2);
   }
   const parsed = SeedBriefSchema.safeParse(raw);
-  if (!parsed.success) throw new CliError('Seed brief does not match the protocol schema', 2);
+  if (!parsed.success) throw new CliError('seed brief does not match the protocol schema', 2);
   return parsed.data;
 }
 

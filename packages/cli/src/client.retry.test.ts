@@ -94,7 +94,7 @@ describe('an interrupted WRITE says its outcome is unknown, not that the daemon 
 
   it('keeps the plain unreachable error for a write that never connected', async () => {
     const err = await failure(fetchError('ENOTFOUND'));
-    expect(err.message).toMatch(/can't reach team server at http:\/\/x/);
+    expect(err.message).toMatch(/can't reach the daemon at http:\/\/x/);
     expect(isDaemonUnreachable(err)).toBe(true);
   });
 
@@ -117,7 +117,7 @@ describe('a READ fails fast, so the tool-boundary hook stays instant', () => {
     const fn = vi.fn().mockRejectedValue(fetchError('ECONNREFUSED'));
     vi.stubGlobal('fetch', fn);
 
-    await expect(client().roster('revive')).rejects.toThrow(/can't reach team server/);
+    await expect(client().roster('revive')).rejects.toThrow(/can't reach the daemon/);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

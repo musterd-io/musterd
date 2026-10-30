@@ -225,7 +225,7 @@ export function identityRepairError(
     if (rosterTeam !== null) {
       return new Error(
         `${path} is a version-1 ${fileKind} (pre-ADR-281, it still carries "surface") — this ` +
-          `folder is ${rosterTeam}'s roster home, not an agent worktree, so it runs no harnesses. ` +
+          `folder is ${rosterTeam}'s roster home, so it runs no harnesses. ` +
           "Convert it with `musterd harness configure --select '' --yes` (the empty set).",
       );
     }

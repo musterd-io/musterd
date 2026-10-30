@@ -406,7 +406,7 @@ export function isSessionLeaseRefusal(error: { code: string; message: string }):
  */
 export function isDaemonUnreachable(err: unknown): boolean {
   return (
-    err instanceof CliError && err.exitCode === 7 && /can't reach team server/.test(err.message)
+    err instanceof CliError && err.exitCode === 7 && /can't reach the daemon/.test(err.message)
   );
 }
 

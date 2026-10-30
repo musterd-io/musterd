@@ -71,7 +71,7 @@ export function reducePick(s: PickState, e: PickEvent | { type: 'key'; key: Key 
         return {
           state: {
             ...s,
-            notice: `blocked on ${b.lane.slice(0, 10)} (owner ${b.owner ?? 'unowned'}) — it can be viewed, not picked`,
+            notice: `blocked on ${b.lane.slice(0, 10)} (owner ${b.owner ?? 'unowned'}) — it stays viewable while blocked`,
           },
           outcome: null,
         };

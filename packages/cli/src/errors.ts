@@ -140,7 +140,7 @@ export function transportError(
     );
   }
   return new CliError(
-    `can't reach team server at ${server} — is the daemon running? (musterd serve)`,
+    `can't reach the daemon at ${server} — is the daemon running? (musterd serve)`,
     7,
   );
 }
@@ -157,7 +157,7 @@ function buildContext(b: Builds): string {
   const same = (a: string, d: string) => a.replace(/-dirty$/, '') === d.replace(/-dirty$/, '');
   if (b.cli && b.daemon) {
     return same(b.cli, b.daemon)
-      ? ` — the CLI and the daemon both run ${short(b.daemon)}, so this is a bug, not skew`
+      ? ` — the CLI and the daemon both run ${short(b.daemon)}; the builds agree, so report it as a bug with that build named`
       : ` — your CLI build (${short(b.cli)}) differs from the daemon (${short(b.daemon)}): rebuild your checkout (pnpm build) or match the daemon`;
   }
   if (b.cli)

@@ -56,7 +56,7 @@ export function inferCliRepoRoot(binPath: string = process.argv[1] ?? ''): strin
 export function packagedInstallNotes(binPath: string = process.argv[1] ?? ''): string[] {
   if (!isPackagedCliInstall(binPath)) return [];
   return [
-    'this musterd is a packaged install (npm/brew or a baked image), not a git checkout — update ' +
+    'this musterd is a packaged install (npm/brew or a baked image) — update ' +
       'with `npm i -g @musterd/cli@latest` / `brew upgrade musterd`, or by redeploying the image ' +
       'if this machine runs one. `musterd service refresh` only works from a source checkout ' +
       '(ADR 118).',
@@ -64,6 +64,6 @@ export function packagedInstallNotes(binPath: string = process.argv[1] ?? ''): s
       'guidance ships inside the CLI, so `musterd init --refresh-guidance` can only ever write ' +
       'what this binary carries, and the doctor can only compare your files against it. A ✓ here ' +
       'means "your guidance matches this CLI" — NOT "your guidance is current with main". If a ' +
-      'newer version has shipped, the repair is a newer CLI, not a refresh.',
+      'newer version has shipped, install the newer CLI.',
   ];
 }

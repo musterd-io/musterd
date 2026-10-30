@@ -125,12 +125,12 @@ async function decideCommand(parsed: Parsed): Promise<number> {
   process.stdout.write(success(`approved request ${theme.meta(res.request_id)}`) + '\n');
   if (res.delivered) {
     process.stdout.write(
-      theme.meta('the waiting session picked up the decision and is live now.') + '\n',
+      theme.meta('the waiting seat picked up the decision and is live now.') + '\n',
     );
   } else {
     process.stdout.write(
       theme.meta(
-        'the requesting session already disconnected — it should re-run `musterd claim <name>` now.',
+        'the requesting seat already disconnected — it should re-run `musterd claim <name>` now.',
       ) + '\n',
     );
   }

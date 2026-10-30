@@ -385,14 +385,14 @@ export async function claimCommand(parsed: Parsed): Promise<number> {
       )
       .join('\n');
     throw new CliError(
-      `several unclaimed sessions are waiting here — re-run with --for <code>:\n${list}`,
+      `several unclaimed seats are waiting here — re-run with --for <code>:\n${list}`,
       2,
     );
   }
   const marker: PendingMarker | undefined =
     (forCode ? pendings.find((p) => p.code === forCode) : pendings[0]) ?? undefined;
   if (forCode && !marker) {
-    throw new CliError(`no pending session with code "${forCode}" in this folder`, 2);
+    throw new CliError(`no pending claim with code "${forCode}" in this folder`, 2);
   }
 
   const timeoutRaw = flagStr(flags, 'timeout');
@@ -661,7 +661,7 @@ async function detachedClaim(input: {
       '\n',
   );
   process.stdout.write(
-    `${theme.presenceDot('online')} ${theme.meta(`${seat} online via ${surface} (detached — no session held)`)}\n`,
+    `${theme.presenceDot('online')} ${theme.meta(`${seat} online via ${surface} (detached — this folder holds no Presence)`)}\n`,
   );
   return 0;
 }
