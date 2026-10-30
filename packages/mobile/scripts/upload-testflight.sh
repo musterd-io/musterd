@@ -10,10 +10,24 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 key="${ASC_API_KEY_JSON:-$HOME/.appstoreconnect/fastlane-musterd.json}"
 [ -f "$key" ] || { echo "no API key config at $key (see 09-mobile.md)" >&2; exit 1; }
+# altool can print a resume-file error and fail the fastlane action after the upload itself
+# succeeded (2026-10-30, builds 33 and 34). Its own "UPLOAD SUCCEEDED" line is the truth.
+upload() {
+  local log status=0
+  log=$(mktemp)
+  FASTLANE_SKIP_UPDATE_CHECK=1 fastlane run upload_to_testflight api_key_path:"$key" ipa:"$1" \
+    skip_waiting_for_build_processing:true 2>&1 | tee "$log" || status=$?
+  if [ "$status" -ne 0 ] && grep -q "UPLOAD SUCCEEDED" "$log"; then
+    echo "altool reported UPLOAD SUCCEEDED; the error after it is not a failed upload."
+    status=0
+  fi
+  rm -f "$log"
+  return "$status"
+}
 if [ $# -ge 1 ] && [ -f "$1" ]; then
   if [ -n "${DRY_RUN:-}" ]; then echo "dry run: would upload $1 ($(du -h "$1" | cut -f1))"; exit 0; fi
-  FASTLANE_SKIP_UPDATE_CHECK=1 fastlane run upload_to_testflight api_key_path:"$key" ipa:"$1" skip_waiting_for_build_processing:true
-  exit 0
+  upload "$1"
+  exit $?
 fi
 if [ $# -ge 1 ]; then
   json=$(npx -y eas-cli@latest build:view "$1" --json)
@@ -39,4 +53,4 @@ ipa="$(mktemp -d)/musterd-$build.ipa"
 echo "downloading build ${build}..."
 curl -sSL -o "$ipa" "$url"
 if [ -n "${DRY_RUN:-}" ]; then echo "dry run: would upload $ipa ($(du -h "$ipa" | cut -f1))"; exit 0; fi
-FASTLANE_SKIP_UPDATE_CHECK=1 fastlane run upload_to_testflight api_key_path:"$key" ipa:"$ipa" skip_waiting_for_build_processing:true
+upload "$ipa"
