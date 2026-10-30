@@ -72,6 +72,16 @@ going red without being asked, and each person should decide how loud questions 
   actions; Settings → You (miley, lane `01M67E6BEV`) edits the preferences.
 - The hub runs `gh`. A daemon without it degrades visibly, never silently.
 - Seat-side PR watchers become unnecessary; they can be retired once the watch has run a week.
+- 2026-10-30 (lane `01M67E3TYE`): the `gh` reader (`readPrState`) landed with the quick actions
+  rather than the watch, so Check PR reads the real PR from day one.
+  - A headless wake reads no GitHub inside its lease transaction (a `gh` call can take 5 s). Its
+    line points the seat at `gh pr view <branch>` instead, unless the lane already carries a merge
+    attestation.
+  - The idle-seam line reads GitHub live.
+  - A seat's quick action is refused, and a client-supplied `pr_event` is stripped.
+  - From the commit security review: a seat sets its lane's branch, so the branch is checked
+    before it reaches `gh`. It must use git's branch characters, with no leading `-` and no `..`.
+    It is passed after `--`, so `--repo=…` can never be read as a flag.
 
 ## Observability & Evaluation
 
