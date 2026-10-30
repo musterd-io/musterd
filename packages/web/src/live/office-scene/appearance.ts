@@ -119,7 +119,7 @@ const HAIR_COLORS = [
 ] as const;
 
 /** Hair silhouettes. These must read at ~30px, so they differ by *shape*, not by strand detail. */
-export type HairStyle = 'bald' | 'buzz' | 'short' | 'side' | 'bob' | 'long' | 'ponytail' | 'afro' | 'bun' | 'slicked' | 'curly';
+export type HairStyle = 'bald' | 'buzz' | 'short' | 'side' | 'bob' | 'long' | 'ponytail' | 'afro' | 'bun' | 'slicked' | 'curly' | 'tousled';
 
 export type FacialHair = 'none' | 'stubble' | 'moustache' | 'goatee' | 'beard' | 'beard-wild';
 
@@ -149,8 +149,8 @@ const GROOMING: readonly Grooming[] = ['polished', 'polished', 'relaxed', 'relax
  *  half the floor wears one — the thing the retired axis existed to guarantee. */
 // slicked back (v2-3c) joins the polished pool
 const POLISHED_HAIR: readonly HairStyle[] = ['side', 'bun', 'bob', 'buzz', 'short', 'ponytail', 'side', 'bun', 'bald', 'slicked'];
-// curly (v2-3c) joins the relaxed pool
-const RELAXED_HAIR: readonly HairStyle[] = ['long', 'afro', 'short', 'ponytail', 'bob', 'long', 'buzz', 'afro', 'long', 'curly'];
+// curly and tousled (v2-3c) join the relaxed pool
+const RELAXED_HAIR: readonly HairStyle[] = ['long', 'afro', 'short', 'ponytail', 'bob', 'long', 'buzz', 'afro', 'long', 'curly', 'tousled'];
 /** Facial hair by grooming. Weighted toward `none` either way — a floor where everyone has a beard is
  *  as uniform as one where nobody does. The untrimmed beard joins the relaxed pool with v2-3a. */
 const POLISHED_FACIAL: readonly FacialHair[] = ['none', 'none', 'none', 'none', 'none', 'moustache', 'goatee', 'beard'];
