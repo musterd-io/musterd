@@ -62,8 +62,8 @@ export const LIFE_EVENTS: ReadonlyArray<{ name: string; weight: number }> = [
   // `softTap`, `stapler`, `drawer` and `nightair`. Apart from the keyboard they read as one annoying,
   // samey click family (most were the same bandpassed-noise recipe) and played too often. Their
   // weight went to `keys`, the one room sound kept as is. Adding any of them back is a regression.
-  { name: 'keys', weight: 0.91 },
-  { name: 'whisper', weight: 0.04 }, // kept for a re-voice (lane 01M67C125R's follow-up)
+  // `whisper` CUT 2026-10-30 too (nick: the recorded takes sounded creepy, lane 01M67CQQQK).
+  { name: 'keys', weight: 0.95 },
   // `footsteps`, `sip`, `blow`, `water` and `eating` LEFT THE ROLL on 2026-10-27 (lane 01M5XS6KAD):
   // they played from a random side on a timer while the office had real walks, sip beats, water
   // errands and plates. They are placed moments now (`sipAt`, `bottle`, `eatAt`, `machine`), fired

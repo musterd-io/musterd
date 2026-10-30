@@ -102,3 +102,22 @@ The harness resolves about 3 dB, so everything in the room sits where its role p
 - The table lists every `case` in `soundEngine.ts`'s `moment` and `life` dispatch and every key of `CUES` as of inc 1 (2026-10-28); falsify: a `case '<name>'` in either dispatch, or a `CUES` key, not in the table. <!-- claim: other -->
 - ~~"`footsteps` is not tied to anyone walking" (2026-10-27)~~ FIXED 2026-10-27 by lane 01M5XS6KAD: `footsteps` is no longer in `LIFE_EVENTS`; falsify: a `footsteps` entry back in the table. <!-- claim: defect -->
 - "an ask plays two sounds" (2026-10-27): falsify: `emit` in `office-scene/index.ts` not calling `roomTone.moment('askbell', …)` while `Stream.tsx` chimes `ask`. <!-- claim: defect -->
+
+## Recorded takes (ADR 776, 2026-10-30)
+
+Each file is in `packages/web/src/live/sounds/` and is trimmed from a CC0 (public domain) BigSoundBank clip, which needs no attribution. nick heard every take on the soundboard before it shipped.
+
+| Voice | Files | Source clip |
+| --- | --- | --- |
+| door | `door-1`, `door-2` | Opening and Closing Light Door (s0377) |
+| sip (coffee) | `sip-1`, `sip-2` | Drink from the gourd #1 (s3247) |
+| eating | `eat-1`, `eat-2` | Eat a Rusk (s0407) |
+| bark | `bark-1` | Barking of a Spitz (s0682) |
+| collar jingle | `jingle-1`, `jingle-2` | Keys in a hand (s0445) |
+| nameplate open/close | `nameplate-1` | Turned Page (s0164) |
+| board open/close | `board-1` | News paper, pages (s1250) |
+
+- Rejected: `whisper`, two takes from Whisper #1 (s3255). nick heard them as "very creepy", so chatter left the roll instead.
+- Still synthesized, with recordings to come: the water bottle, the coffee machine, the wagon's phone, wheels, front-door chime and confetti pop, and the paws, yawn, label maker and toss.
+- Each take is mono at 48 kbps. Its gain on the LIFE bus (`TAKE_GAIN`) matches the peak of the synth voice it replaced.
+- Falsify: `pnpm perf:check` reports office sounds above `officeSoundBytes` (160,000 B).

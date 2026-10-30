@@ -64,9 +64,9 @@ describe('the life event roll', () => {
 
   it('has every requested event in the table', () => {
     const names = LIFE_EVENTS.map((e) => e.name);
-    for (const n of ['keys', 'whisper', 'paws']) expect(names).toContain(n);
+    for (const n of ['keys', 'paws']) expect(names).toContain(n);
     // cut 2026-10-30 (nick, lane 01M67C125R): the samey click family and the night air
-    for (const n of ['murmur', 'tap', 'softTap', 'stapler', 'drawer', 'nightair']) expect(names).not.toContain(n);
+    for (const n of ['murmur', 'whisper', 'tap', 'softTap', 'stapler', 'drawer', 'nightair']) expect(names).not.toContain(n);
     expect(names).not.toContain('birds'); // left the roll 2026-10-28 (lane 01M625KHCN)
   });
 
@@ -121,8 +121,8 @@ describe('chatter', () => {
     expect(heard.has('whisper')).toBe(false);
   });
 
-  it('fires when two members actually share a zone', () => {
-    expect(sweep(near).has('whisper')).toBe(true);
+  it('stays quiet even when two members share a zone — chatter was cut 2026-10-30 (lane 01M67CQQQK)', () => {
+    expect(sweep(near).has('whisper')).toBe(false);
   });
 
   it('pans toward the pair, not at random', () => {
@@ -165,7 +165,6 @@ describe('work sounds track evidenced work (E2 spec §3)', () => {
   it('keeps work sounds out even when people are merely present (idle room keeps presence sounds)', () => {
     const heard = sweep(near);
     expect(heard.has('keys')).toBe(false);
-    expect(heard.has('whisper')).toBe(true);
   });
 
   it('lets keys fire only while some desk is in its typing phase', () => {
