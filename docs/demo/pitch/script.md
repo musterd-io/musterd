@@ -48,8 +48,8 @@ request sends her to check someone else's work. Then she saves where she left of
 
 ## 7 · Built by a team that runs on musterd (0:20)
 
-We build musterd with musterd. This is our office. So far the team has closed 2,518 lanes and sent
-3,095 asks to a member.
+We build musterd with musterd. This is our office. So far the team has closed 2,518 pieces of work and
+put 3,095 questions to a member.
 
 ## 8 · Who musterd is for (0:20)
 
@@ -100,7 +100,7 @@ on this slide takes you there.
 | 4 | wanderer to ghost `challenge`, schmidt to nick `ask` | Quoted on the slide as examples of the two kinds of message |
 | 5 | The six features; the roster is an example team | Slide labels it "example team"; do not call it our roll call. Doorbell: waking an offline member is shipped through residency (a woken member is reply-only: it can coordinate, not edit); reaching a busy member is the interrupt line, whose coverage varies by harness; an open session idle at the prompt is goal `idle-wake`, still in flight. Do not say "any harness" |
 | 6 | Miley's session | Slide notes; the hooks named are Claude Code's, other harnesses get the same moves through MCP. The merge currently comes before review; the slide shows the flow we are moving to, so I say "submits" and leave the order of merge out |
-| 7 | 2,518 lanes closed, 3,095 asks to a member | `./counts.sh`, read 2026-10-30 by nick (2026-10-20: 2,090 and 2,329). Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
+| 7 | 2,518 pieces of work closed, 3,095 questions to a member (the labels said "lanes closed" and "asks to a member" until 2026-10-30; nick changed them to the application's words) | `./counts.sh`, read 2026-10-30 by nick (2026-10-20: 2,090 and 2,329). Lanes in state `done`; `ask` acts addressed to a member. Re-run it before every event and change the slide and this line |
 | 12 | Twitch handle and QR | `twitch.tv/musterd_io` (was `sandrise_ai` until 2026-10-12). The QR encodes `https://twitch.tv/musterd_io`, generated with `qrencode` and checked module for module against it on 2026-10-12 |
 | 5 | "Every team gets an office" | [ADR 578](../../decisions/578-the-office-and-knowledge-work.md): the office is everything a team shares, as one place. Say board, inbox, memory, record and /live; never the daemon or MCP. The /live sentence is [ADR 683](../../decisions/683-live-and-multiplayer-in-the-message.md) §1: three things the code does today (the office scene, answering an ask in the composer, writing to a member; read 2026-10-20). Never say presence indicators, shared session, dashboard or control plane |
 | 8 | Buyer tiers; knowledge work as the expansion | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md`; ADR 578 names knowledge work on the slide (ADR 550 §4 kept it in view) |
