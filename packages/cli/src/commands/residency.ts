@@ -723,7 +723,7 @@ async function onCommand(
   if (res.seat_live) {
     process.stdout.write(
       theme.warn(
-        `  ! "${seat}" has a live session — it occupies via the grant this enroll just rotated; ` +
+        `  ! "${seat}" has a live Presence — it occupies via the grant this enroll just rotated; ` +
           'the new grant and policy govern from its next wake/claim (a reconnect may need team_join)',
       ) + '\n',
     );
@@ -755,7 +755,7 @@ async function onCommand(
     process.stdout.write(
       theme.warn(
         `  ! standing grant NOT saved locally (no binding for "${seat}" here) — ` +
-          'run this in the seat’s workspace so woken sessions can occupy',
+          'run this in the seat’s workspace so woken seats can occupy',
       ) + '\n',
     );
     process.stdout.write(

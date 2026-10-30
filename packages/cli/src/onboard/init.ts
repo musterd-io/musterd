@@ -604,7 +604,7 @@ export async function runInit(): Promise<number> {
   } else if (liveTeams.length > 0) {
     p.log.info(
       pc.dim(
-        'A team is a standing roster, not a project — reuse the same team across folders to keep agents talking.',
+        'A team is a standing roster — reuse the same team across folders to keep members talking.',
       ),
     );
     const reuse = guard(
@@ -1331,7 +1331,7 @@ async function provisionToolkitTools(
     }
     p.log.info(
       pc.dim(
-        'Tooling is provisioned additively and per-user/local — a future `musterd uninstall` removes exactly these. Provisioning is a starting point, not a sandbox.',
+        'Tooling is provisioned additively and per-user/local — a future `musterd uninstall` removes exactly these. Provisioning is a starting point: extend it to fit.',
       ),
     );
   } catch (err) {

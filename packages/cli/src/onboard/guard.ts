@@ -35,7 +35,7 @@ export function inspectInitTarget(cwd: string): InitTargetReport {
   // (1) The musterd source checkout itself — the exact dogfound slip.
   if (isMusterdSourceTree(cwd)) {
     warnings.push(
-      'This folder looks like the musterd source tree — init would wire an agent into the repo itself, not your project.',
+      'This folder looks like the musterd source tree — init would wire an agent into the repo itself. Run init from your project folder.',
     );
   }
 

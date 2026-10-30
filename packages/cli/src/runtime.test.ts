@@ -74,7 +74,7 @@ describe('packaged install detection (ADR 156)', () => {
     // The ✓ must be disambiguated explicitly — this is the sentence the whole note exists for.
     expect(ceiling).toMatch(/matches this CLI.+NOT.+current with main/s);
     // ...and the repair named must be the one that works.
-    expect(ceiling).toContain('the repair is a newer CLI, not a refresh');
+    expect(ceiling).toContain('install the newer CLI');
   });
 
   // A checkout says none of this: there `buildSkewNotes` compares against origin/main and gives a

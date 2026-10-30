@@ -93,7 +93,7 @@ export async function resetCommand(
     }
     process.stdout.write(
       `${theme.warn(sym.warn)} ${theme.accent('musterd reset')} will permanently wipe:\n` +
-        `  ${theme.meta(sym.bullet)} the database at ${theme.meta(dbPath)} (all teams, members, sessions, messages)\n` +
+        `  ${theme.meta(sym.bullet)} the database at ${theme.meta(dbPath)} (all teams, members, Presences, messages)\n` +
         `  ${theme.meta(sym.bullet)} ${identityCount} local ${identityCount === 1 ? 'identity' : 'identities'} in ${theme.meta(configPath())}\n` +
         (noBackup
           ? `  ${theme.err('no backup')} ${theme.meta('(--no-backup)')}\n`

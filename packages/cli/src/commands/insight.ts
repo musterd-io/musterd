@@ -64,7 +64,7 @@ export async function insightCommand(parsed: Parsed): Promise<number> {
       throw new CliError('insight body is limited to 2048 bytes', 2);
     }
     if (body.trim().length === 0) {
-      throw new CliError('insight body must not be empty — the finding, not just the subject', 2);
+      throw new CliError('insight body must not be empty — put the finding in the body', 2);
     }
     const tags = flagStr(parsed.flags, 'tags')
       ?.split(',')

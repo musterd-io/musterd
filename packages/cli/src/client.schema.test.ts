@@ -20,12 +20,12 @@ describe('schemaError names the builds', () => {
     expect(msg).toContain('rebuild your checkout (pnpm build)');
   });
 
-  it('the same build, a -dirty marker aside: a bug, not skew', () => {
+  it('the same build, a -dirty marker aside: the builds agree', () => {
     const msg = schemaError(issue, 'roster', {
       cli: 'ccccccc3333-dirty',
       daemon: 'ccccccc3333',
     }).message;
-    expect(msg).toContain('the CLI and the daemon both run ccccccc, so this is a bug, not skew');
+    expect(msg).toContain('the CLI and the daemon both run ccccccc; the builds agree');
   });
 
   it('only the CLI build known: says where the daemon build is shown', () => {
