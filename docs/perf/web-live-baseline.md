@@ -2713,3 +2713,18 @@ what a viewer downloads grows with the roster's wardrobe, not with this total. A
 measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,300,000 B with this lane in.
+
+## 2026-10-30 — figure v2-5b-blazer; Office art HELD at 8,300,000 B (lane 01M62415ZG)
+
+| Budget     | Before (ceiling) | This branch (CI/files) | Ceiling             |
+| ---------- | ---------------- | ---------------------- | ------------------- |
+| office art | 8,300,000 B      | ~8,291,606 B (177)     | held at 8,300,000 B |
+
+The blazer lands with no raise because the outer-layer sheets were shrunk first (nick, 2026-10-30:
+"be careful of raising the budget"). Cells that come out visually identical are merged and share one
+rect (same size and offset, mean difference under 3/255, under 2% of pixels off by more than 32). The
+sheet is then repacked and quantized to 24 colours without dithering. The outer layers are tinted
+greys, so the multiply hides the steps. Result: `outer-cardigan` 457 → 258 KB, re-shrunk from #3627,
+and `outer-blazer` 449 → 246 KB, about 1,243 cells down to about 695 unique per layer.
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 8,300,000 B with this lane in.

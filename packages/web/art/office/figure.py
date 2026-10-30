@@ -58,7 +58,7 @@ FACIAL = ["stubble", "moustache", "goatee", "beard", "beard-wild"]
 HATS = ["cap", "beanie", "band", "bucket"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
 # outer layers (v2-5b): worn over a top; the outermost carries the identity hue
-OUTERS = ["cardigan"]
+OUTERS = ["cardigan", "blazer"]
 ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet", "headphones-neck"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
@@ -601,6 +601,17 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     o.scale = (1.0, 1.5, o.scale.z)
     for side, sy in (("L", 1), ("R", -1)):
         r.cyl("cuffrib", f"elbow{side}", "outer/cardigan", rib, 0, sy * SHOULDER_W, WRIST + 0.9 * FIG, 3.0 * FIG, 3.0 * FIG, 1.5 * FIG)
+
+    # the blazer: tailored — squared shoulders, notched lapels lying open in a V, two buttons at the
+    # waist and flapped pockets at the hips, a hem past the trouser top
+    outer_body("outer/blazer", cloth_dark, drop=3.0)
+    for sy in (1, -1):
+        r.orb("pad", f"shoulder{"L" if sy > 0 else "R"}", "outer/blazer", cloth_dark, 0, sy * SHOULDER_W, SHOULDER + 0.2 * FIG, 4.3 * FIG, 4.4 * FIG, 2.6 * FIG)
+        r.turn(r.box("lapel", "spine", "outer/blazer", cloth, front - 0.2, sy * 2.2 * FIG, CHEST - 3 * FIG, 0.8, 2.6 * FIG, 10 * FIG),
+               (math.radians(sy * -20), 0, 0))
+        r.box("pocket", "hips", "outer/blazer", cloth, 0.5 + 5.6 * FIG, sy * 5.2 * FIG, HIP - 0.5 * FIG, 0.8, 3.6 * FIG, 0.9 * FIG)
+    for i in range(2):
+        r.orb("button", "spine", "outer/blazer", rib, front, 0, HIP + 3.5 * FIG - i * 3.0 * FIG, 0.6, 0.6, 0.6)
 
     # ── bottom: a pelvis with a seat and trouser legs that taper to the ankle, one fused shape
     r.orb("pelvis", "hips", "bottom", denim, 0, 0, HIP + 2.5 * FIG, 5.6 * FIG, 8.2 * FIG, 5.0 * FIG, "bottom")
