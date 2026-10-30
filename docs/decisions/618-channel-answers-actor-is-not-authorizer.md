@@ -76,6 +76,8 @@ A gate-raised ask (`meta.gate`, ADR 150) is privileged and gets no buttons.
   protocol code, with a test that pins the table.
 - **A2 answers** may authorize privileged classes once A2 exists; until then, privileged asks are
   notify-only on every channel.
+  _(Amended 2026-10-30: an answer to a question ask authorizes nothing on any channel and rides
+  `accept` + `meta.answer`; see [ADR 773](773-question-asks.md).)_
 
 ### 5. Consumers enforce it; the buttons are a courtesy
 

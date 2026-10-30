@@ -62,6 +62,7 @@ Rules:
 
 - `accept`/`decline` **must** carry `meta.in_reply_to` pointing at the message they answer, and **should** set `thread` to that message's thread (or its id if it was a root).
 - `resolve` **must** carry a non-empty `thread` (the id of the thread it closes; a no-thread root is closed by its own id). It is the thread-terminal "done" — any member may send it (v0.3 doesn't enforce a closer); UIs treat a resolved thread's open asks as no longer pending (ADR 024/025).
+- **Question asks (ADR 773/774, unreleased).** An `ask` with `meta.question` (`text`, `why?`, up to 9 `options` of `{label, consequence?}`, `context? {lane, pr, branch}`, `blocking`, `audience: addressee|team`, `inferred`) is a seat's question to a person: species `consult`, **no** `meta.tier`, no clock. It closes when answered, withdrawn (the asker's `resolve`) or when its lane closes. The answer is an `accept` with `meta.in_reply_to` and `meta.answer {choice?, text?}`; the server stamps `meta.answer_proof {channel, verified, by, late?}`, the first answer wins, and a verified answer wakes the asker with the fenced answer line (SPEC A.31).
 - Unknown `meta` keys are allowed and preserved (forward-compat); unknown **acts** are rejected (validation error). This asymmetry is intentional: acts are the contract, meta is extensible.
 - Streaming/step-level granularity (StreamMA finding) is a **v2 transport option**, noted in `SPEC.md`; v1 sends whole envelopes.
 

@@ -71,6 +71,8 @@ a compromised seat could steer every busy agent on the team. Therefore, from the
 
 - The injected line is **daemon-composed** from structured fields (sender, act, tier) — **never the raw
   message body**. Reading the body is an explicit follow-up act by the agent (`musterd inbox`).
+  _(Amended 2026-10-30: one exception — a person's verified answer to the woken seat's own question
+  rides the line, fenced; see [ADR 774](774-verified-answer-enters-the-session.md).)_
   _(Amended 2026-10-15: on the native row the host makes that follow-up read itself and hands the
   model its result as a tool exchange, never inside the line. See [ADR 627](627-native-steer-host-read.md).)_
 - Sender identity is always present in the line, so the model can weigh the source.

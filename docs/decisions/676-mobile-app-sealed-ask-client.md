@@ -75,6 +75,8 @@ one gets tapped through.
    is still signed, so the action asks for Face ID. A listed act cannot be answered from the
    notification: it opens the descriptor screen. Every answer redeems through ADR 623 §6's recheck
    (recomputed class, current binding generation, unconsumed token).
+   _(Amended 2026-10-30: an answer to a question ask is signed silently by a separate question key,
+   with no Face ID; see [ADR 774](774-verified-answer-enters-the-session.md).)_
 
 8. **Replay and fatigue.** Each sealed delivery carries its token's expiry and nonce. The app keeps a
    store of nonces it has seen and drops a replay before display. Per human:
