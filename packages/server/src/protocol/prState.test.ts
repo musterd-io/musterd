@@ -47,4 +47,25 @@ describe('readPrState (ADR 779 §4)', () => {
     });
     expect(await readPrState('b', async () => 'not json')).toEqual({ unknown: 'gh_error' });
   });
+
+  it('never hands gh a ref it could read as a flag, and fences the ref with --', async () => {
+    const seen: string[][] = [];
+    const run = async (args: string[]) => {
+      seen.push(args);
+      return JSON.stringify({ number: 1, state: 'OPEN', statusCheckRollup: [] });
+    };
+    for (const bad of ['--repo=evil/x', '-R', 'a..b', 'a b', '']) {
+      expect(await readPrState(bad, run)).toEqual({ unknown: 'gh_error' });
+    }
+    expect(seen).toEqual([]);
+    await readPrState('feat/quick-actions', run);
+    expect(seen[0]).toEqual([
+      'pr',
+      'view',
+      '--json',
+      'number,state,statusCheckRollup',
+      '--',
+      'feat/quick-actions',
+    ]);
+  });
 });

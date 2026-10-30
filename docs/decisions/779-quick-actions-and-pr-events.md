@@ -79,6 +79,9 @@ going red without being asked, and each person should decide how loud questions 
     attestation.
   - The idle-seam line reads GitHub live.
   - A seat's quick action is refused, and a client-supplied `pr_event` is stripped.
+  - From the commit security review: a seat sets its lane's branch, so the branch is checked
+    before it reaches `gh`. It must use git's branch characters, with no leading `-` and no `..`.
+    It is passed after `--`, so `--repo=…` can never be read as a flag.
 
 ## Observability & Evaluation
 

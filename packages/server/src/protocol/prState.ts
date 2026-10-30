@@ -51,14 +51,25 @@ export function rollupChecks(
   return 'green';
 }
 
+/**
+ * A branch name `gh` can only read as a branch: git's own allowed characters, never a leading `-`
+ * (a seat sets its lane's branch, so `--repo=…` must not reach `gh` as a flag — security review,
+ * 2026-10-30). The `--` before it is the second fence.
+ */
+export function isSafeRef(ref: string | number): boolean {
+  if (typeof ref === 'number') return Number.isInteger(ref) && ref > 0;
+  return /^[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}$/.test(ref) && !ref.includes('..');
+}
+
 /** The PR for a branch (or a PR number). */
 export async function readPrState(
   ref: string | number,
   run: GhRunner = runGh,
 ): Promise<QuickActionPr> {
+  if (!isSafeRef(ref)) return { unknown: 'gh_error' };
   let out: string;
   try {
-    out = await run(['pr', 'view', String(ref), '--json', 'number,state,statusCheckRollup']);
+    out = await run(['pr', 'view', '--json', 'number,state,statusCheckRollup', '--', String(ref)]);
   } catch (err) {
     const e = err as NodeJS.ErrnoException & { stderr?: string };
     if (e.code === 'ENOENT') return { unknown: 'no_gh' };
