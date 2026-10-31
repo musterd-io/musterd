@@ -67,6 +67,19 @@ A half-open socket fails silently at both ends:
   line per ping until the relay is redeployed.
 - The relay is redeployed by its operator (`wrangler deploy`, ADR 659 §4). Merging this does not
   reach it.
+- 2026-10-31 (lane `01M69CWVZN`), from the relay's Worker logs for 2026-10-30:
+  - After a daemon restart the relay refused the new socket 409 five times over about 55 s
+    (22:13:42–22:14:36Z). The daemon's stop dropped the TCP connection with `terminate()`, and the
+    relay kept the old socket as live until it closed on its own. Every phone request in that gap
+    failed. The daemon now sends a close frame (1001 `daemon stopping`) on stop and terminates only
+    if the close has not finished within 1 s.
+  - The daemon logged only the first error of a connection. A redial refused 409 now logs
+    `away_relay_redial_failed` once per outage.
+  - 328 of 358 app body fetches (92%) were answered 504: the relay waits 5 s for the daemon's
+    `app_body`. The phone fetched 30–60 bodies at once, 378 of them for asks that no longer exist,
+    and the daemon's answers queue behind each other on its one database connection. The daemon
+    now logs `away_app_fetch_slow {ms, found}` past 1 s. The phone side is cider's.
+    Follows-up: lane `01M69CWVZN`.
 
 ## Observability & Evaluation
 

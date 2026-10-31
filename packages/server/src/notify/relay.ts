@@ -312,6 +312,9 @@ export function relayLinkFor(ctx: Ctx, teamSlug: string): RelayLink | null {
   return linksByConfig.get(ctx.config)?.get(teamSlug) ?? null;
 }
 
+/** An app body fetch slower than this is logged: the relay's own limit is 5 s. */
+export const APP_FETCH_SLOW_MS = 1_000;
+
 /** Start the relay client: one link per team whose policy names a relay. Returns a stop function. */
 export function startAwayRelay(ctx: Ctx): () => void {
   const links = new Map<string, { url: string; credential: string; link: RelayLink }>();
@@ -323,6 +326,8 @@ export function startAwayRelay(ctx: Ctx): () => void {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let attempt = 0;
     let down = false;
+    /** One `away_relay_redial_failed` per outage, so a 409 lockout shows in the log (lane 01M69CWVZN). */
+    let redialFailureLogged = false;
     let closed = false;
     let heartbeat: RelayHeartbeat | null = null;
 
@@ -359,6 +364,7 @@ export function startAwayRelay(ctx: Ctx): () => void {
       socket.on('open', () => {
         attempt = 0;
         down = false;
+        redialFailureLogged = false;
         log.info({ msg: 'away_relay_up', team: team.slug });
         stopHeartbeat();
         heartbeat = startRelayHeartbeat({
@@ -464,12 +470,23 @@ export function startAwayRelay(ctx: Ctx): () => void {
           );
         } else if (frame.data.type === 'app_fetch') {
           const { request_id: requestId } = frame.data;
+          const started = Date.now();
           void handleAppFetch(ctx, team, frame.data)
             .catch((err) => {
               log.warn({ msg: 'away_app_fetch_failed', team: team.slug, err: String(err) });
               return null;
             })
             .then((found) => {
+              // The relay gives up after 5 s and answers the phone 504 (lane 01M69CWVZN: 92% of
+              // fetches on 2026-10-30), so a slow answer is worth a line.
+              const ms = Date.now() - started;
+              if (ms > APP_FETCH_SLOW_MS)
+                log.warn({
+                  msg: 'away_app_fetch_slow',
+                  team: team.slug,
+                  ms,
+                  found: found !== null,
+                });
               socket.send(
                 JSON.stringify({
                   protocol: 1,
@@ -499,6 +516,10 @@ export function startAwayRelay(ctx: Ctx): () => void {
       socket.on('close', () => lost('closed'));
       socket.on('error', (error) => {
         if (!down) log.warn({ msg: 'away_relay_error', team: team.slug, error: String(error) });
+        else if (!redialFailureLogged) {
+          redialFailureLogged = true;
+          log.warn({ msg: 'away_relay_redial_failed', team: team.slug, error: String(error) });
+        }
       });
     };
 
@@ -513,7 +534,13 @@ export function startAwayRelay(ctx: Ctx): () => void {
         closed = true;
         if (timer) clearTimeout(timer);
         stopHeartbeat();
-        ws?.terminate();
+        // A close frame, not a bare TCP drop: after a terminate() the relay kept the dead socket
+        // and refused the restarted daemon 409 for ~55 s (2026-10-30 22:13Z, lane 01M69CWVZN).
+        const socket = ws;
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.close(1001, 'daemon stopping');
+          setTimeout(() => socket.terminate(), 1_000).unref();
+        } else socket?.terminate();
       },
     };
     return link;
