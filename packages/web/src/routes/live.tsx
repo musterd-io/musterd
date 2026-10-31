@@ -969,6 +969,7 @@ function LivePage() {
                 isAdmin={settingsAdmin}
                 teamHours={stream.teamWorkingHours}
                 pairings={pairings}
+                seats={roster.filter((m) => m.kind === 'agent').map((m) => m.name)}
                 origin={settingsOrigin}
                 initialTab={settingsAdmin ? settingsTab : 'you'}
                 onPairingsChanged={refreshPairings}

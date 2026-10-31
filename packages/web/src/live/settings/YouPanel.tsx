@@ -26,6 +26,7 @@ import { statusLineDraft, visibleStatusLine } from '../statusLine';
 import { Row, Segmented, Switch } from './controls';
 import { PairPhone } from './PairPhone';
 import { Passkeys } from './Passkeys';
+import { QuestionNotify } from './QuestionNotify';
 
 /**
  * The You side of settings: everything here is the viewer's own, and the daemon answers each route
@@ -37,8 +38,11 @@ export function YouPanel({
   me,
   pairings,
   onPairingsChanged,
+  seats = [],
 }: {
   cfg: LiveConfig;
+  /** The team's agent seats — the per-seat rows of Questions from seats. */
+  seats?: readonly string[];
   /** The viewer's roster row — availability and effective working hours come from it. */
   me: MemberSummary | null;
   pairings: ChannelPairing[];
@@ -63,6 +67,7 @@ export function YouPanel({
       <Presence cfg={cfg} me={me} />
       <Doorbell cfg={cfg} />
       <AwayChannels cfg={cfg} />
+      <QuestionNotify cfg={cfg} seats={seats} />
       {style.mine ? (
         <div className="lc-set__style">
           <MyStylePart
