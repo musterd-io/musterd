@@ -371,7 +371,9 @@ async function issueAskDelivery(
               question,
               interruption: await questionInterruption(
                 ctx,
+                team,
                 target.binding.member_id,
+                ask.from_name,
                 question,
                 now,
               ),

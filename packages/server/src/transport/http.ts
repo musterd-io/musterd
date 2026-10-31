@@ -186,6 +186,7 @@ import {
   type AuthorityRelayRequest,
   type AuthorityRelayResponse,
   AuthorityRelayRequestSchema,
+  QuestionNotifyPrefsSchema,
 } from '@musterd/protocol';
 import { requestDecisionApproval } from '@musterd/protocol/approval';
 import { ulid } from 'ulid';
@@ -473,6 +474,7 @@ import {
   supersededMessage,
 } from '../store/presence.js';
 import { afterPullClaim, offerPull } from '../store/pull.js';
+import { getQuestionNotify, setQuestionNotify } from '../store/questionNotify.js';
 import { answerLineFor, markAnswerDelivered } from '../store/questions.js';
 import {
   lastActionBySubject,
@@ -5193,6 +5195,17 @@ export async function handleHttp(
             );
           }
           return sendJson(res, 200, result);
+        }
+        // ADR 779 §5: my question-notification preferences — per channel buzz/quiet, per seat
+        // always/never. Self only, like the channel settings beside it.
+        if (method === 'GET' && rest === '/channels/question-notify') {
+          return sendJson(res, 200, { prefs: await getQuestionNotify(ctx.db, team.id, member.id) });
+        }
+        if (method === 'PUT' && rest === '/channels/question-notify') {
+          const prefs = parseOrBadRequest(QuestionNotifyPrefsSchema, await readJson(req));
+          return sendJson(res, 200, {
+            prefs: await setQuestionNotify(ctx.db, team.id, member, prefs),
+          });
         }
         if (method === 'GET' && rest === '/channels/settings') {
           // Every channel this human has a binding for, plus slack (the one adapter in v1).
