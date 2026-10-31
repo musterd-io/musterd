@@ -176,13 +176,16 @@ withDrivers('authority-relay-http (ADR 728/729)', (_o, kind) => {
       config: hub.config,
       rosterRoots: [],
     };
-    expect(await pushTeam(hubCtx, hubTeam)).toBeGreaterThan(0);
-    const pulledAskEvents = await pullTeam(joinerCtx, joinerTeam);
+    // The counts are not asserted (lane 01M646H0S8): the servers' background push/pull can
+    // stage these rows first under load — on a loaded CI runner the explicit push returned 0 —
+    // and then the explicit calls correctly find nothing new. What the test exists to prove is
+    // what the joiner holds after the pull, whoever moved the rows.
+    await pushTeam(hubCtx, hubTeam);
+    await pullTeam(joinerCtx, joinerTeam);
     const joinerAsk = await joiner.store.get(
       'SELECT id FROM messages WHERE team_id = ? AND id = ?',
       [joinerTeam.id, ask!.id],
     );
-    expect(pulledAskEvents).toBeGreaterThan(0);
     expect(joinerAsk).toBeDefined();
 
     const acceptedEnvelope = makeEnvelope({
