@@ -7,6 +7,7 @@ import { heldBody, refusalLine, waitingSubtitle } from '../native/notice';
 import { showOffer } from '../native/offer';
 import type { PairingPin } from '../native/pairingPin';
 import { summary } from '../native/readable';
+import { Button } from '../ui/button';
 import { Backdrop, Glass } from '../ui/glass';
 import { Icon } from '../ui/icon';
 import { Halo, Rise, Squish } from '../ui/motion';
@@ -28,6 +29,9 @@ export default function AsksScreen() {
   const [loading, setLoading] = useState(false);
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
   const [outgoing, setOutgoing] = useState(0);
+  // ADR 774 §5: offer to enroll the question key, once per binding and key, until "Not now".
+  const [offerKey, setOfferKey] = useState(false);
+  const keyDeclined = useRef(false);
   const alive = useRef(true);
   // Every list refresh re-fetches each ask, which re-issues its token and spends the old one. The
   // ask screen holds a token of its own, so nothing refreshes while it is in front.
@@ -54,6 +58,13 @@ export default function AsksScreen() {
       const next = await loadAsks({ pin: current });
       if (!alive.current) return;
       setView(next);
+      try {
+        const { needsQuestionKey } = await import('../native/questionKey');
+        const needed = await needsQuestionKey(current);
+        if (alive.current) setOfferKey(needed && !keyDeclined.current);
+      } catch {
+        if (alive.current) setOfferKey(false);
+      }
       try {
         const { phoneKeys } = await import('../native/phoneKeys');
         setDiagnostics(refusalLine(phoneKeys.recentRefusals(), Date.now()));
@@ -121,6 +132,19 @@ export default function AsksScreen() {
     }, [refresh]),
   );
 
+  const turnOnKey = async () => {
+    if (!pin?.binding) return;
+    const { enrollQuestionKey } = await import('../native/questionKey');
+    const outcome = await enrollQuestionKey({ pin });
+    if (!alive.current) return;
+    if (outcome === 'enrolled') {
+      setOfferKey(false);
+      setNote('Done. A question now shows its answers on the lock screen.');
+    } else if (outcome === 'failed') {
+      setNote('Couldn’t turn it on just now. Try again in a minute.');
+    }
+  };
+
   const paired = Boolean(pin?.binding);
   const asks = paired ? (view?.asks ?? []) : [];
   const team = pin?.team ?? null;
@@ -157,6 +181,27 @@ export default function AsksScreen() {
       {note ? (
         <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
           <Text style={[styles.bannerText, { color: p.text }]}>{note}</Text>
+        </Rise>
+      ) : null}
+      {paired && offerKey ? (
+        <Rise>
+          <Glass style={styles.offer}>
+            <Text style={[styles.bannerTitle, { color: p.text }]}>
+              Answer questions from the lock screen
+            </Text>
+            <Text style={[styles.bannerText, { color: p.muted }]}>
+              Turn it on once with Face ID. Then tap an answer right on the notification.
+            </Text>
+            <Button label="Turn on" icon="faceid" onPress={() => void turnOnKey()} />
+            <Button
+              label="Not now"
+              kind="quiet"
+              onPress={() => {
+                keyDeclined.current = true;
+                setOfferKey(false);
+              }}
+            />
+          </Glass>
         </Rise>
       ) : null}
       {outgoing > 0 ? (
@@ -290,17 +335,18 @@ function AskRow({ entry }: { entry: AskEntry }) {
   const p = usePalette();
   const { delivery, route } = entry;
   const listed = delivery.approval !== undefined;
+  const question = delivery.ask.question;
   // A listed act is named by the app's fixed wording; the agent's words wait for the screen.
   const headline = listed
     ? (showOffer(delivery.approval!.approve, { team: route.team, now: Date.now() })?.wording
         .headline ?? 'An ask that needs the app')
-    : summary(delivery.ask.body, 140);
+    : summary(question?.text ?? delivery.ask.body, 140);
   const waiting = waitingSubtitle(delivery.waiting ?? 0);
   const agent = delivery.ask.from_kind === 'agent';
   return (
     <Squish
       accessibilityRole="button"
-      accessibilityLabel={`${listed ? 'Needs Face ID. ' : ''}${headline}, from ${delivery.ask.from}`}
+      accessibilityLabel={`${listed ? 'Needs Face ID. ' : question ? 'Question. ' : ''}${headline}, from ${delivery.ask.from}`}
       onPress={() =>
         router.push({
           pathname: '/ask/[ref]',
@@ -326,6 +372,11 @@ function AskRow({ entry }: { entry: AskEntry }) {
             <View style={[styles.chip, { backgroundColor: p.tint }]}>
               <Icon name="faceid" color={p.accentText} size={12} />
               <Text style={[styles.chipText, { color: p.accentText }]}>Face ID</Text>
+            </View>
+          ) : question ? (
+            <View style={[styles.chip, { backgroundColor: p.raised }]}>
+              <Icon name="questionmark.bubble" color={p.text} size={12} />
+              <Text style={[styles.chipText, { color: p.text }]}>Question</Text>
             </View>
           ) : null}
         </View>
@@ -362,6 +413,7 @@ const styles = StyleSheet.create({
   pillDot: { width: 8, height: 8, borderRadius: radius.pill },
   pillText: { fontFamily: font.medium, fontSize: 13 },
   banner: { borderRadius: radius.md, padding: space.lg, gap: space.xs },
+  offer: { padding: space.lg, gap: space.sm },
   bannerTitle: { fontFamily: font.bold, fontSize: 15 },
   bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
   calm: { alignItems: 'center', gap: space.md, paddingTop: space.xl * 2 },
