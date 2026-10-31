@@ -14,6 +14,7 @@ import { success, warning } from '../../ui/haptics';
 import { Icon } from '../../ui/icon';
 import { Moment } from '../../ui/moment';
 import { Rise, Squish } from '../../ui/motion';
+import { QuestionCard } from '../../ui/questionCard';
 import { ago, Seat } from '../../ui/seat';
 import { font, radius, space, usePalette } from '../../ui/theme';
 
@@ -28,6 +29,9 @@ import { font, radius, space, usePalette } from '../../ui/theme';
  *
  * An advisory ask shows its text and the two answers. Decline also comes as "I did not expect
  * this", which the daemon records as `channel.answer_reported` and flags on /live.
+ *
+ * A question (ADR 773) is the question card instead: its options and a typed answer, never
+ * approve or decline.
  */
 type Phase =
   | { kind: 'loading' }
@@ -36,7 +40,7 @@ type Phase =
   | { kind: 'unverified' }
   | { kind: 'ready'; entry: AskEntry; offers: { approve: ShownOffer; reject: ShownOffer } | null }
   | { kind: 'sending' }
-  | { kind: 'sent' };
+  | { kind: 'sent'; question: boolean };
 
 function noteFor(outcome: AnswerOutcome): string {
   switch (outcome) {
@@ -167,7 +171,7 @@ export default function AskScreen() {
       const { clearSettled } = await import('../../native/asks');
       void clearSettled([entry.route.ref]);
       success();
-      setPhase({ kind: 'sent' });
+      setPhase({ kind: 'sent', question: false });
       return;
     }
     setNote(noteFor(outcome));
@@ -184,8 +188,12 @@ export default function AskScreen() {
       <Moment
         icon="checkmark"
         tone="done"
-        title="Sent"
-        copy="Signed here and sealed for your team. It closes when the daemon records it."
+        title={phase.question ? 'Answered' : 'Sent'}
+        copy={
+          phase.question
+            ? 'Sealed for your team. The seat gets it on its next turn.'
+            : 'Signed here and sealed for your team. It closes when the daemon records it.'
+        }
       >
         <Button label="Back to asks" kind="secondary" onPress={() => router.back()} />
       </Moment>
@@ -226,6 +234,46 @@ export default function AskScreen() {
   const { ask } = entry.delivery;
   const now = Date.now();
   const agent = ask.from_kind === 'agent';
+
+  const answered = async (outcome: AnswerOutcome) => {
+    if (outcome === 'sent') {
+      const { clearSettled } = await import('../../native/asks');
+      void clearSettled([entry.route.ref]);
+      success();
+      setPhase({ kind: 'sent', question: true });
+      return;
+    }
+    setNote(noteFor(outcome));
+    if (outcome !== 'cancelled' && outcome !== 'undelivered') setPhase({ kind: 'unverified' });
+  };
+
+  if (ask.question && pin) {
+    return (
+      <ScrollView
+        style={{ backgroundColor: p.bg }}
+        contentContainerStyle={styles.page}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
+        <Backdrop />
+        <Rise style={styles.who}>
+          <Seat name={ask.from} agent={agent} size={44} />
+          <View style={styles.whoText}>
+            <Text style={[styles.from, { color: p.text }]}>{ask.from}</Text>
+            <Text style={[styles.muted, { color: p.muted }]}>
+              {agent ? 'agent seat' : 'person'} · asked {ago(ask.ts, now)}
+            </Text>
+          </View>
+        </Rise>
+        {note ? (
+          <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
+            <Text style={[styles.bannerText, { color: p.text }]}>{note}</Text>
+          </Rise>
+        ) : null}
+        <QuestionCard entry={entry} pin={pin} onOutcome={(o) => void answered(o)} />
+      </ScrollView>
+    );
+  }
   const waiting = waitingSubtitle(entry.delivery.waiting ?? 0);
   const theirs = agent ? 'The agent says' : `${ask.from} says`;
 

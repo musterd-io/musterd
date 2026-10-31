@@ -2,11 +2,11 @@
 //  AskCategory.swift
 //  MusterdKeys
 //
-//  The advisory category, registered by the app. A notification service extension cannot
-//  register categories, and it cannot present Face ID. `authenticationRequired` makes the
-//  action itself ask for Face ID; `foreground` opens the app, where the enclave signature
-//  asks again (ADR 676 decision 7). Decline is destructive as well. A listed act has no
-//  category, so it has no actions.
+//  The app's fixed categories. The advisory one: `authenticationRequired` makes the action itself
+//  ask for Face ID; `foreground` opens the app, where the enclave signature asks again (ADR 676
+//  decision 7). Decline is destructive as well. A listed act has no category, so it has no actions.
+//  A question with no options gets Reply only (ADR 774 §5); a question with options gets a category
+//  of its own from the extension (`QuestionCategory`), kept here while its question is live.
 //
 
 import UserNotifications
@@ -23,12 +23,18 @@ enum AskCategory {
       title: "Decline",
       options: [.authenticationRequired, .destructive, .foreground]
     )
-    let category = UNNotificationCategory(
+    let advisory = UNNotificationCategory(
       identifier: Notice.advisoryCategory,
       actions: [approve, decline],
       intentIdentifiers: [],
       options: []
     )
-    UNUserNotificationCenter.current().setNotificationCategories([category])
+    let now = Int(Date().timeIntervalSince1970 * 1000)
+    Task {
+      await QuestionCategory.register(
+        [advisory, QuestionCategory.reply()],
+        liveNonces: QuestionCategory.liveNonces(now: now)
+      )
+    }
   }
 }

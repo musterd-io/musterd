@@ -217,9 +217,10 @@ module — plain Swift over CryptoKit, Security and DeviceCheck, one config plug
   refuses a prebuild whose `ios.deploymentTarget` is below 17 (CryptoKit HPKE is iOS 17+; the
   deployment target lives in `app.json`). It also adds the `MusterdNotify` extension target.
 - `modules/musterd-keys/ios/MusterdPushSubscriber.swift` — an `ExpoAppDelegateSubscriber`
-  (declared in `expo-module.config.json`). It registers the advisory category, asks for
-  notification permission including Time Sensitive, stores the APNs device token, and keeps a
-  notification action until JavaScript takes it. The extension cannot do any of those.
+  (declared in `expo-module.config.json`). It registers the advisory and Reply-only question
+  categories, asks for notification permission including Time Sensitive, stores the APNs device
+  token, and keeps an Approve/Decline or plain tap until JavaScript takes it. A question's option
+  or Reply goes to `QuestionAnswer.swift` instead, which answers it natively in the background.
 - `modules/musterd-keys/ios/extension/` — the notification service extension. `NotificationService.swift`
   is the principal class and is excluded from the app pod. The other files (route JSON, the
   seen-nonce rule, the keychain store, the lock-screen copy, the seal open) compile into both
@@ -276,6 +277,26 @@ route) and POSTs it to `{relay}/app/{team}/callback`. The daemon opens that POST
 seen-nonce store blocks a second display; it does not block the answer of the notification
 already on screen.
 
+A question (ADR 773) is never approved or declined. Once this binding's question key is
+enrolled (ADR 774 §5), its notification gets the first three options as buttons and a **Reply**
+text field. The buttons' titles are the question's own labels, so the extension registers a
+category per question (`musterd.question.options.<nonce>`) just before it hands the notification
+over; a question with no options uses the app's fixed Reply-only `musterd.question`. Every caller
+of `setNotificationCategories` keeps the others, and drops per-question categories whose question
+is no longer live. None of these actions is `foreground` or `authenticationRequired`: iOS wakes
+the app in the background, and `QuestionAnswer.swift` signs `appQuestionAnswerSigningBytes` with
+the silent question key, seals it, and POSTs the same `answer` callback as above — no Face ID, no
+JavaScript, phone still locked. What it answers is the extension's own keychain record of the
+verified delivery (`question-routes`: route, token, nonce, option count). A relay that refuses
+twice leaves the callback in `question-outbox`, re-sent on every open, and a local notification
+says so. `PhoneKeys.signQuestion` refuses anything that does not start with the question-answer
+domain tag. Before enrollment a question has no actions and opens the app, where the question card
+answers it with the Face ID key instead (`key: 'signing'`). The home screen offers enrollment once
+per binding and key: one Face ID, then the `question_key` callback with a fresh random nonce and a
+seal expiry nine minutes out and later than the last. The relay's 202 is all the phone hears, so
+an enrollment the daemon refused still shows buttons whose answers it refuses; the ask stays in
+the list, answerable from the card.
+
 The extension's binding check is skipped only while the stored pin has no binding. After the open
 verifies, `PinBinding` writes the route's binding into that pin. A stored binding that disagrees
 is still refused, and it is not overwritten. `logic-check.swift` runs that decision.
@@ -322,7 +343,7 @@ src/
     pairingQr.ts           // the QR parse, the relay origin, the fingerprint, the challenge
     phoneKeys.ts           // the typed TS contract of the native module modules/musterd-keys
     push.ts                // the musterd block on an APNs payload, and a fetched body
-    questionKey.ts         // the question key: its Face ID-signed enrollment, and silent answers to questions
+    questionKey.ts         // the question key: enrollment (question_key callback), and answering a question in the app
     readable.ts            // an ask's text cleaned for a phone: one-line summary, or paragraphs and bullets
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/
@@ -336,12 +357,13 @@ The screens are `.tsx` and outside the drift check; kept honest by hand:
 src/app/_layout.tsx   // the Stack, themed from the palette; the nameplate wordmark heads Asks
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
-src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, and answering
+src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, the question card, and answering
 src/ui/askText.tsx    // the asker's words on the ask screen: light formatting, long text folded
 src/ui/button.tsx     // the three buttons: one mustard primary, a grey secondary, a quiet text way out
 src/ui/glass.tsx      // Glass (Liquid Glass card, solid fallback) and the warm Backdrop (ADR 764)
 src/ui/icon.tsx       // an SF Symbol in the text's colour, with a text fallback (ADR 764)
 src/ui/moment.tsx     // a whole screen for one moment — on its way, done, or stopped
+src/ui/questionCard.tsx // a question: its text, why, options to tap, and a typed answer
 src/ui/motion.tsx     // Rise, Squish, Breathe, Pop, Halo — RN Animated, off under Reduce Motion
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```

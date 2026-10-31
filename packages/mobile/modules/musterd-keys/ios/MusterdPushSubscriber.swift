@@ -3,8 +3,9 @@
 //  MusterdKeys
 //
 //  App-side notification registration (ADR 676 decisions 7 and 11). The extension cannot
-//  register categories or receive the device token, so this subscriber does both. It is not
-//  compiled into the extension.
+//  receive the device token, so this subscriber does, and registers the app's fixed categories
+//  (a question's own buttons are the extension's, `QuestionCategory`). It is not compiled into
+//  the extension.
 //
 //  The APNs entitlement is production (TestFlight only). A Debug build asks Apple for a
 //  development token against that entitlement and registration fails; that is accepted,
@@ -12,7 +13,8 @@
 //
 //  Approve and Decline carry `authenticationRequired` and `foreground`. The action's Face ID
 //  is the system's; the enclave signature in the app is a second one. The response is kept
-//  until JavaScript calls `takePendingAnswer`, because the app may still be launching.
+//  until JavaScript calls `takePendingAnswer`, because the app may still be launching. A
+//  question's option or Reply has neither: `QuestionAnswer` answers it here, in the background.
 //
 
 import ExpoModulesCore
@@ -193,6 +195,15 @@ public final class MusterdPushSubscriber: BaseExpoAppDelegateSubscriber,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
     let action = response.actionIdentifier
+    // A question's option or Reply (ADR 774 §5): answered here, in the background, with the
+    // silent question key. iOS keeps the app awake until the completion handler runs.
+    if action == Question.actionReply || action.hasPrefix(Question.actionChoicePrefix) {
+      Task {
+        await QuestionAnswer.handle(response)
+        completionHandler()
+      }
+      return
+    }
     // A plain tap is kept too, so the app opens the ask it was tapped for: the tap takes the
     // notification out of Notification Center, and with it the ask from the list (nick,
     // 2026-10-29).
