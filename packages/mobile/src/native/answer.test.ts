@@ -369,6 +369,26 @@ describe('sendAnswer from the app', () => {
     expect(phoneKeys.sign).not.toHaveBeenCalled();
   });
 
+  it('never approves or declines a question (ADR 773): it is answered with an option or text', async () => {
+    expect(
+      await sendAnswer({
+        pin,
+        route: ROUTE,
+        delivery: delivery({
+          ask: {
+            ...delivery().ask,
+            question: { text: 'Which?', blocking: false, audience: 'addressee', inferred: false },
+          },
+        }) as Parameters<typeof sendAnswer>[0]['delivery'],
+        decision: 'approve',
+        reported: false,
+        now: 1,
+        fetchImpl: accepted(),
+      }),
+    ).toBe('refused');
+    expect(phoneKeys.sign).not.toHaveBeenCalled();
+  });
+
   it('refuses a privileged ask that carries no offer', async () => {
     expect(
       await sendAnswer({

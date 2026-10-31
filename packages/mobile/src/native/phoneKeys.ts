@@ -25,7 +25,7 @@ import { requireNativeModule } from 'expo';
  */
 
 /** HPKE `info` discriminator, exactly the daemon's `SealPurpose` (`appSeal.ts`). */
-export type SealPurpose = 'deliver' | 'answer' | 'pair';
+export type SealPurpose = 'deliver' | 'answer' | 'pair' | 'question_key';
 
 /** Why a call refused, in the five shapes the design names. */
 export type PhoneKeysErrorCode =
@@ -84,6 +84,18 @@ export interface PhoneKeys {
 
   /** Sign `message` with the question key — no Face ID. Only `appQuestionAnswerSigningBytes`. */
   signQuestion(message: string): Promise<string>;
+
+  /** 24 random bytes, base64url: a question-key enrollment's nonce. */
+  randomNonce(): Promise<string>;
+
+  /** What this phone last enrolled (ADR 774 §5): the binding, the key, that seal's expiry. */
+  questionEnrollment(): { binding: string; key: string; expires_at: number } | null;
+
+  /** Record a sent enrollment; the extension then gives questions on `binding` their actions. */
+  saveQuestionEnrollment(binding: string, key: string, expiresAt: number): boolean;
+
+  /** Re-send lock-screen question answers the relay did not take; resolves to how many still wait. */
+  flushQuestionOutbox(): Promise<number>;
 
   /** Sign `message` with the signing key after Face ID. DER-encoded ECDSA P-256/SHA-256. */
   sign(message: string): Promise<string>;

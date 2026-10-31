@@ -67,6 +67,8 @@ const EXTENSION_SOURCES = [
   'extension/AskRoutes.swift',
   'extension/SharedStore.swift',
   'extension/Readable.swift',
+  'extension/Question.swift',
+  'extension/QuestionCategory.swift',
   'extension/Notice.swift',
   'extension/DeliveryOpen.swift',
   'extension/PinBinding.swift',

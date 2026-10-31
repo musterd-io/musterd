@@ -194,6 +194,15 @@ enum PhoneKeys {
     }
   }
 
+  /// A fresh nonce, for a question-key enrollment: 24 random bytes, base64url (32 characters).
+  static func randomNonce() throws -> String {
+    var bytes = [UInt8](repeating: 0, count: 24)
+    guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+      throw PhoneKeysError.unavailable("no random bytes")
+    }
+    return b64url(Data(bytes))
+  }
+
   /// Seal `plaintext` to `recipientPublic` (a raw P-256 point, base64url) with the daemon's exact
   /// suite: DHKEM(P-256, HKDF-SHA256) + HKDF-SHA256 + AES-128-GCM, base mode, `info` =
   /// `musterd-app/v1 <purpose>`, `aad` = the canonical-JSON route bytes.
@@ -341,7 +350,7 @@ enum PhoneKeys {
   /// sealed one way opens the other. An unknown purpose is a client bug; refuse it.
   private static func hpkeInfo(_ purpose: String) throws -> Data {
     switch purpose {
-    case "deliver", "answer", "pair":
+    case "deliver", "answer", "pair", "question_key":
       return Data("musterd-app/v1 \(purpose)".utf8)
     default:
       throw PhoneKeysError.sealedOpenFailed("unknown seal purpose")

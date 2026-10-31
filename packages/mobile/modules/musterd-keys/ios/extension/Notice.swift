@@ -20,7 +20,11 @@ enum Notice {
   static let actionReject = "musterd.answer.reject"
 
   enum Body {
-    case ask(text: String, from: String, actionClass: String, hasApproval: Bool, waiting: Int, nonce: String)
+    /// `question` is set on a question ask (ADR 773); `quiet` when the daemon says it lands
+    /// without a buzz (`interruption: passive`).
+    case ask(
+      text: String, from: String, actionClass: String, hasApproval: Bool, waiting: Int,
+      nonce: String, question: Question.Info? = nil, quiet: Bool = false)
     case held(count: Int)
     case paired(member: String, deviceKeyId: String)
   }
@@ -38,13 +42,15 @@ enum Notice {
     var subtitle: String?
     var category: String?
     var sound: Bool
+    /// Delivered at `.passive`: into Notification Center without lighting the screen.
+    var passive: Bool = false
   }
 
   static func gate(body: Body, routeExpiresAt: Int, now: Int) -> Gate {
     if routeExpiresAt <= now { return .stale }
     switch body {
-    case .ask(let text, _, _, _, _, _):
-      if text.isEmpty { return .unverified }
+    case .ask(let text, _, _, _, _, _, let question, _):
+      if text.isEmpty || question?.text.isEmpty == true { return .unverified }
     case .paired(let member, _):
       if member.isEmpty { return .unverified }
     case .held:
@@ -55,17 +61,34 @@ enum Notice {
 
   static func seenKey(body: Body, ref: String) -> String {
     switch body {
-    case .ask(_, _, _, _, _, let nonce):
+    case .ask(_, _, _, _, _, let nonce, _, _):
       return nonce
     case .held, .paired:
       return ref
     }
   }
 
-  static func render(body: Body, verdict: SeenNonce.Verdict) -> Rendered {
+  /// `questionKey`: this binding has an enrolled question key, so a question can be answered from
+  /// the notification itself. Without one, a question only opens the app.
+  static func render(body: Body, verdict: SeenNonce.Verdict, questionKey: Bool = false) -> Rendered {
     if verdict != .fresh { return stale() }
     switch body {
-    case .ask(let text, let from, let actionClass, let hasApproval, let waiting, _):
+    case .ask(_, let from, _, _, _, let nonce, let question?, let quiet):
+      if question.text.isEmpty { return unverified() }
+      // A question is never approved or declined (ADR 773): its actions are its options and Reply.
+      let category =
+        questionKey
+        ? (question.options.isEmpty ? Question.replyCategory : Question.optionsCategory(nonce: nonce))
+        : nil
+      return Rendered(
+        title: from,
+        body: category == nil ? Readable.summary(question.text, max: 180) : Readable.plain(question.text),
+        subtitle: category == nil ? nil : answerHint,
+        category: category,
+        sound: !quiet,
+        passive: quiet
+      )
+    case .ask(let text, let from, let actionClass, let hasApproval, let waiting, _, nil, _):
       if text.isEmpty { return unverified() }
       let category = actionClass == "advisory" && !hasApproval ? advisoryCategory : nil
       let more = waitingSubtitle(waiting)
