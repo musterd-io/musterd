@@ -25,7 +25,7 @@ Every sound the office can play on `/live` and `/broadcast` as of 2026-10-28 (so
 | Life | `stapler`, `drawer` | any working desk; 0.03 each | that desk | stapler clicks 0.03 + 0.07, drawer noise 0.05 since 2026-10-28 (inc 3; were 0.05 + 0.14 and 0.10, the two loudest noise events in the room) — now 2× keys |
 | Life | ~~`footsteps`~~ | ~~always available; 0.03~~ LEFT THE ROLL 2026-10-27 (lane 01M5XS6KAD) — now `stepPlank`/`stepTile` moments per foot plant | the walker | — |
 | Life | ~~`sip`, `water`, `blow`, `eating`~~ | ~~always available~~ LEFT THE ROLL 2026-10-27 (lane 01M5XS6KAD) — now `sipAt` on the sip beat, `bottle` at the cooler, `eatAt` at the couch plate; `blow` is gone | the body | — |
-| Life | `paws`, `jingle`, `yawn`, `bark` | dog on the floor (paws: walking); 0.025 / 0.01 / 0.01 / 0.005 | the dog | paws click 0.035 (≈ keys); jingle sine pings 0.006–0.010 (quiet, bright); yawn lowpassed 0.05; bark bandpassed 0.12 — loud, and meant to be at 0.005 weight; OK |
+| Life | `paws`, `jingle`, `yawn`, `bark`, `pant` | dog on the floor (paws: walking); 0.025 / 0.01 / 0.01 / 0.0025 / 0.01 | the dog | paws click 0.035 (≈ keys); jingle sine pings 0.006–0.010 (quiet, bright); yawn lowpassed 0.05; bark bandpassed 0.12 — loud, and meant to be at 0.005 weight; OK |
 | Life | ~~`birds`~~ LEFT THE ROLL 2026-10-28 (lane 01M625KHCN; nick: all morning on the stream, "doesn't really sound like birds") | ~~05:00–11:00 office clock with daylight; 0.03~~ | random side | sine chirps 0.0055–0.0085 — a sine at this gain lands near a 0.03 noise click; quiet and outside; OK |
 | Life | `nightair` | dark room with someone in it; 0.02 | random side | sine pings 0.0035–0.0055 — the quietest thing the room plays; OK |
 | Moment | ~~`fanfare`~~ REMOVED 2026-10-28 (inc 3; superseded by `laneDone`, emit site moved in inc 2) | an accept lands on a celebrant | the celebrant | sine pings 0.020–0.026 + sparkle clicks 0.012–0.020 — clearly above the bed, under the ask bell; OK (rare, earned) |
@@ -113,6 +113,7 @@ Each file is in `packages/web/src/live/sounds/` and is trimmed from a CC0 (publi
 | sip (coffee) | `sip-1`, `sip-2` | Drink from the gourd #1 (s3247) |
 | eating | `eat-1`, `eat-2` | Eat a Rusk (s0407) |
 | bark | `bark-1` | Barking of a Spitz (s0682) |
+| pant | `pant-1`, `pant-2` | Dog panting (BigSoundBank, CC0); recorded only, no synth fallback — added 2026-10-31, lane 01M67J1YDR |
 | collar jingle | `jingle-1`, `jingle-2` | Keys in a hand (s0445) |
 | nameplate open/close | `nameplate-1` | Turned Page (s0164) |
 | board open/close | `board-1` | News paper, pages (s1250) |

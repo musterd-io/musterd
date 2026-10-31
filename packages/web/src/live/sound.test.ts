@@ -139,13 +139,14 @@ describe('chatter', () => {
 describe('dog sounds', () => {
   it('never fire with no dog present', () => {
     const heard = sweep(EMPTY_LIFE);
-    for (const n of ['paws', 'jingle', 'yawn', 'bark']) expect(heard.has(n)).toBe(false);
+    for (const n of ['paws', 'jingle', 'yawn', 'bark', 'pant']) expect(heard.has(n)).toBe(false);
   });
 
   it('fire when the dog is on the floor, panned to where it is', () => {
     const heard = sweep(withDog);
     expect(heard.has('jingle')).toBe(true);
     expect(panFor('bark', withDog)).toBeCloseTo(-0.4 * 0.75, 5);
+    expect(panFor('pant', withDog)).toBeCloseTo(-0.4 * 0.75, 5);
   });
 
   it('keeps the paws to a dog that is actually walking', () => {

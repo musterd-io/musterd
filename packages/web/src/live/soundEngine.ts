@@ -89,6 +89,7 @@ const TAKE_GAIN: Record<string, number> = {
   sip: 0.018,
   eat: 0.021,
   bark: 0.037, // -6 dB (nick, 2026-10-30: too loud)
+  pant: 0.012, // a breath, not a bark: ~5 dB under it at the clip's higher peak (-5 dBFS vs -12)
   jingle: 0.041,
   nameplate: 0.0073,
   board: 0.011,
@@ -946,6 +947,7 @@ export class RoomTone {
       case 'jingle': return this.jingle(ctx, out);
       case 'yawn': return this.blow(ctx, out, true);
       case 'bark': return this.bark(ctx, out);
+      case 'pant': return this.pant(ctx, out);
       case 'nightair': return this.nightair(ctx, out);
     }
   }
@@ -1205,6 +1207,12 @@ export class RoomTone {
     src.stop(t0 + 0.2);
   }
 
+  /** The dog panting, a few breaths: recorded only (nick approved both takes, 2026-10-31). There
+   *  is no synth recipe here — breath from filtered noise is the whisper family, and that was
+   *  "very creepy" — so until the take lands, the dog is quiet. */
+  private pant(ctx: AudioContext, out: AudioNode): void {
+    this.take(ctx, out, 'pant');
+  }
 
   /** Night air for the late shift (E2 spec §4): a distant cricket-ish pulse train — a few tremolo'd
    *  high pips, very quiet, very sparse. Deliberately under everything else: it is the sound of the
