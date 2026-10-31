@@ -736,8 +736,10 @@ export const PLANTS: Plant[] = [
   // The pinwheel's hub (office v3): the four desks turn around this plant — a trailing pothos on a
   // stand (v3-4), tall enough to read over the desks.
   { lx: 225, ly: 330, species: 'pothos' },
-  // The café's corner (v3-4): behind the couch, against the north-east walls.
-  { lx: 862, ly: 22, species: 'pothos' },
+  // The café's pothos (v3-4), on the east wall south of the couch. It stood behind the couch at
+  // (862, 22) until 2026-10-30, under the wall board's east end, where it blocked the walk to the
+  // board's last column (nick, lane 01M67MT84T).
+  { lx: 884, ly: 230, species: 'pothos' },
   // (a fiddle stood at 480,55 — removed with the bench: it landed against the counter's end, and a
   // plant wedged between a bench and a printer is clutter, not softening.)
   { lx: 55, ly: 645, species: 'fiddle' }, // left wall, in the gap between pod 2 and reception
