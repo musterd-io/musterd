@@ -2760,3 +2760,15 @@ connected. Its stylesheet is classified with the other overlays in the `app` gro
 The four quick actions (Start, Check inbox, Check PR, Resume) and Start everyone's per-seat results are one lazy module and stylesheet. The roster's seat detail and the triage card, both already lazy, share it, and the team column loads it on the Start everyone click. The button itself is inline-styled, so /live's eager CSS is unchanged. Initial JS is unchanged too.
 
 - Falsify: `pnpm perf:check` reports total JS over 396,000 B or app CSS over 20,300 B with this lane in.
+
+## 2026-10-29 — figure v2-6a-dress; Office art RAISED 8,620,000 → 8,820,000 B (lane 01M62419RE)
+
+| Budget     | Before (ceiling)    | This branch (CI/files) | Ceiling                          |
+| ---------- | ------------------- | ---------------------- | -------------------------------- |
+| office art | 8,620,000 B          | ~8,763,432 B (179)  | RAISED 8,620,000 → 8,820,000 B |
+
+Sheets from the full figure render: `dress-shift` 0 KB → 203 KB, `outer-blazer` 245 KB → 253 KB, `outer-cardigan` 257 KB → 252 KB, `outer-zip` 263 KB → 255 KB. Figure sheets load only for the layers a member wears (`loadFigureLayers`, `wornLayers`), so
+what a viewer downloads grows with the roster's wardrobe, not with this total. A re-baseline to
+measured + 15% would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 8,820,000 B with this lane in.
