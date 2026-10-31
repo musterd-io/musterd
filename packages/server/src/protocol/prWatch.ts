@@ -9,7 +9,14 @@ import { getMemberByName } from '../store/members.js';
 import type { TeamRow } from '../store/rows.js';
 import { getTeamById, listActiveTeams } from '../store/teams.js';
 import { joinerEnrollment } from '../sync/claim.js';
-import { listPrsByBranch, prWatchRepos, runGh, type GhRunner, type ListedPr } from './prState.js';
+import {
+  listPrs,
+  prForLane,
+  prWatchRepos,
+  runGhList,
+  type GhRunner,
+  type ListedPr,
+} from './prState.js';
 import { routeEnvelope } from './route.js';
 
 /**
@@ -65,18 +72,18 @@ export async function sweepTeamPrs(
   ctx: Ctx,
   team: TeamRow,
   now: number = Date.now(),
-  run: GhRunner = runGh,
+  run: GhRunner = runGhList,
   repos: Map<string, string> = prWatchRepos(),
 ): Promise<number> {
   const lanes = (
     await listLanes(ctx.db, team.id, team.slug, { states: [...WATCHED_STATES] })
-  ).filter((l) => l.owner_seat && l.branch);
+  ).filter((l) => l.owner_seat);
   if (lanes.length === 0) return 0;
   // Only a team mapped to its repository is watched, and only against that repository.
   const repo = repos.get(team.slug);
   if (!repo) return 0;
-  const prs = await listPrsByBranch(repo, run);
-  if (!(prs instanceof Map)) {
+  const prs = await listPrs(repo, run);
+  if (!Array.isArray(prs)) {
     const last = await ctx.db.get<{ ts: number }>(
       `SELECT MAX(ts) AS ts FROM audit WHERE team_id = ? AND action = 'pr_watch.unavailable'`,
       [team.id],
@@ -89,14 +96,18 @@ export async function sweepTeamPrs(
         result: 'deny',
         detail: { reason: prs.unknown },
       });
+      log.warn({ msg: 'pr_watch_unavailable', team: team.slug, repo, reason: prs.unknown });
     }
     return 0;
   }
   const voice = await boardSeat(ctx.db, team);
-  if (!voice) return 0;
+  if (!voice) {
+    log.warn({ msg: 'pr_watch_no_board_seat', team: team.slug });
+    return 0;
+  }
   let sent = 0;
   for (const lane of lanes) {
-    const pr = prs.get(lane.branch!);
+    const pr = prForLane(prs, lane);
     if (!pr) continue;
     const state = prEventFor(pr, await toldStates(ctx, team.id, lane.id, pr.number));
     if (!state) continue;
@@ -141,6 +152,7 @@ export async function sweepTeamPrs(
     });
     sent += 1;
   }
+  if (sent > 0) log.info({ msg: 'pr_watch_sent', team: team.slug, lanes: lanes.length, sent });
   return sent;
 }
 
@@ -148,7 +160,7 @@ export async function sweepTeamPrs(
 export async function sweepPrWatch(
   ctx: Ctx,
   now: number = Date.now(),
-  run: GhRunner = runGh,
+  run: GhRunner = runGhList,
 ): Promise<number> {
   let sent = 0;
   for (const team of await listActiveTeams(ctx.db)) {
@@ -165,6 +177,10 @@ export async function sweepPrWatch(
 }
 
 export function startPrWatch(ctx: Ctx): () => void {
+  log.info({
+    msg: 'pr_watch_started',
+    repos: [...prWatchRepos()].map(([team, repo]) => `${team}=${repo}`),
+  });
   let running = false;
   const tick = async () => {
     if (running) return;

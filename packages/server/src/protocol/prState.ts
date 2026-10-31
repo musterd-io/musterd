@@ -31,15 +31,26 @@ export function prWatchRepos(env: NodeJS.ProcessEnv = process.env): Map<string, 
 /** Runs `gh` with arguments; injected so tests never shell out. Resolves stdout, rejects with the error. */
 export type GhRunner = (args: string[]) => Promise<string>;
 
-const GH_TIMEOUT_MS = 5_000;
-
-export const runGh: GhRunner = (args) =>
-  new Promise((resolve, reject) => {
-    execFile('gh', args, { timeout: GH_TIMEOUT_MS, maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
-      if (err) reject(Object.assign(err, { stderr: String(stderr ?? '') }));
-      else resolve(String(stdout));
+/** A `gh` runner that gives up after `timeoutMs`. */
+export function ghRunner(timeoutMs: number): GhRunner {
+  return (args) =>
+    new Promise((resolve, reject) => {
+      execFile('gh', args, { timeout: timeoutMs, maxBuffer: 4 << 20 }, (err, stdout, stderr) => {
+        if (err) reject(Object.assign(err, { stderr: String(stderr ?? '') }));
+        else resolve(String(stdout));
+      });
     });
-  });
+}
+
+/** One PR, read where a seat or a person is waiting. */
+export const runGh: GhRunner = ghRunner(5_000);
+
+/**
+ * The watch's list read, off any request path. A list of recent PRs with their checks takes the
+ * hub's `gh` several seconds (7.5 s for 200 on 2026-10-31), so the 5 s read timed out every sweep
+ * and the watch never told anyone anything.
+ */
+export const runGhList: GhRunner = ghRunner(30_000);
 
 interface GhPr {
   number: number;
@@ -138,16 +149,47 @@ export interface ListedPr {
   state: 'open' | 'merged' | 'closed';
   checks: 'green' | 'red' | 'pending' | 'none';
   url: string | undefined;
+  /** The lane ids the PR names: `Lane \`<id>\`.` in its body's first five lines, or `(lane <id>)` in its title (ADR 106). */
+  lanes: string[];
+}
+
+/** How many recent PRs one sweep reads, newest first. */
+export const PR_LIST_LIMIT = 100;
+
+const LANE_REF = /\blane\s+`?([0-9a-hjkmnp-tv-z]{10,26})`?/gi;
+
+/** The lane ids a PR's title and the first five lines of its body name, upper-cased. */
+export function laneRefs(title: string | undefined, body: string | undefined): string[] {
+  const head = [title ?? '', ...(body ?? '').split('\n').slice(0, 5)].join('\n');
+  return [...new Set([...head.matchAll(LANE_REF)].map((m) => m[1]!.toUpperCase()))];
 }
 
 /**
- * Every recent PR, newest first, by head branch — ONE `gh` call per sweep rather than one per lane
- * (ADR 779 §4), so a team of twenty lanes costs one API request a minute.
+ * The PR for a lane: by the lane's branch when it has one, else the newest PR that names the lane
+ * id (full, or the 10-character prefix the board shows). Most seats never set a lane's branch, so
+ * the id the PR body already carries is what usually matches.
  */
-export async function listPrsByBranch(
+export function prForLane(
+  prs: readonly ListedPr[],
+  lane: { id: string; branch: string | null },
+): ListedPr | undefined {
+  if (lane.branch) {
+    const byBranch = prs.find((p) => p.branch === lane.branch);
+    if (byBranch) return byBranch;
+  }
+  const id = lane.id.toUpperCase();
+  return prs.find((p) => p.lanes.some((ref) => id.startsWith(ref)));
+}
+
+/**
+ * Every recent PR, newest first — ONE `gh` call per sweep rather than one per lane (ADR 779 §4), so
+ * a team of twenty lanes costs one API request a minute. A fork's PR is left out: a stranger can
+ * name its branch, or write a lane id in its body, as anything.
+ */
+export async function listPrs(
   repo: string,
-  run: GhRunner = runGh,
-): Promise<Map<string, ListedPr> | { unknown: 'no_gh' | 'gh_error' }> {
+  run: GhRunner = runGhList,
+): Promise<ListedPr[] | { unknown: 'no_gh' | 'gh_error' }> {
   let out: string;
   try {
     out = await run([
@@ -158,9 +200,9 @@ export async function listPrsByBranch(
       '--state',
       'all',
       '--limit',
-      '200',
+      String(PR_LIST_LIMIT),
       '--json',
-      'number,headRefName,state,statusCheckRollup,url,isCrossRepository',
+      'number,headRefName,state,statusCheckRollup,url,isCrossRepository,title,body',
     ]);
   } catch (err) {
     const e = err as NodeJS.ErrnoException & { stderr?: string };
@@ -170,21 +212,22 @@ export async function listPrsByBranch(
     return { unknown: 'gh_error' };
   }
   try {
-    const rows = JSON.parse(out) as Array<GhPr & { headRefName: string; url?: string }>;
-    const byBranch = new Map<string, ListedPr>();
-    for (const r of rows) {
-      if (r.isCrossRepository) continue; // a fork's branch name proves nothing about our lanes
-      if (byBranch.has(r.headRefName)) continue; // newest first: keep the first seen per branch
-      const s = r.state.toUpperCase();
-      byBranch.set(r.headRefName, {
-        number: r.number,
-        branch: r.headRefName,
-        state: s === 'MERGED' ? 'merged' : s === 'CLOSED' ? 'closed' : 'open',
-        checks: rollupChecks(r.statusCheckRollup),
-        url: r.url,
+    const rows = JSON.parse(out) as Array<
+      GhPr & { headRefName: string; url?: string; title?: string; body?: string }
+    >;
+    return rows
+      .filter((r) => !r.isCrossRepository)
+      .map((r): ListedPr => {
+        const s = r.state.toUpperCase();
+        return {
+          number: r.number,
+          branch: r.headRefName,
+          state: s === 'MERGED' ? 'merged' : s === 'CLOSED' ? 'closed' : 'open',
+          checks: rollupChecks(r.statusCheckRollup),
+          url: r.url,
+          lanes: laneRefs(r.title, r.body),
+        };
       });
-    }
-    return byBranch;
   } catch {
     return { unknown: 'gh_error' };
   }

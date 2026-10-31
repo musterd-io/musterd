@@ -14,7 +14,7 @@ import { getMemberById, listMembers } from '../store/members.js';
 import { hasLivePresence } from '../store/presence.js';
 import { getResidency, seatAtHourlyCap } from '../store/residency.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
-import { prWatchRepos, readPrState, type GhRunner } from './prState.js';
+import { listPrs, prForLane, prWatchRepos, readPrState, type GhRunner } from './prState.js';
 import { routeEnvelope } from './route.js';
 
 /**
@@ -44,10 +44,16 @@ export async function quickActionContext(
   if (lane.merged?.pr)
     return { ...ctx, pr: { number: lane.merged.pr, state: 'merged', checks: 'green' } };
   if (!opts.readPr) return ctx;
-  if (!branch) return { ...ctx, pr: { unknown: 'no_pr' } };
+  const repo = (opts.repos ?? prWatchRepos()).get(team.slug);
+  if (branch) return { ...ctx, pr: await readPrState(branch, repo, opts.run) };
+  // No branch on the lane (most seats never set one): the PR that names the lane id.
+  if (!repo) return { ...ctx, pr: { unknown: 'no_repo' } };
+  const prs = await listPrs(repo, opts.run);
+  if (!Array.isArray(prs)) return { ...ctx, pr: prs };
+  const pr = prForLane(prs, lane);
   return {
     ...ctx,
-    pr: await readPrState(branch, (opts.repos ?? prWatchRepos()).get(team.slug), opts.run),
+    pr: pr ? { number: pr.number, state: pr.state, checks: pr.checks } : { unknown: 'no_pr' },
   };
 }
 
