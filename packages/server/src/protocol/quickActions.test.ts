@@ -101,7 +101,10 @@ withDrivers('quick actions', (o) => {
 
     const noGh = await quickActionLineFor(db, team, 'ryder', 's2', { readGitHub: false });
     expect(noGh).toContain("check your lane's PR yourself (gh pr view perf/ledger-rows-cache)");
+    const unmapped = await quickActionLineFor(db, team, 'ryder', 's2', { repos: new Map() });
+    expect(unmapped).toContain("musterd isn't watching this team's GitHub repo");
     const read = await quickActionLineFor(db, team, 'ryder', 's2', {
+      repos: new Map([['revive', 'musterd-io/musterd']]),
       run: async () =>
         JSON.stringify({
           number: 3660,

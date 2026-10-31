@@ -18,6 +18,7 @@ export const LOOPS = [
   'policy_review',
   'away_relay',
   'lane_watch',
+  'pr_watch',
 ] as const;
 export type LoopName = (typeof LOOPS)[number];
 
@@ -48,6 +49,9 @@ const NOT_ON_CLOUD: ReadonlySet<LoopName> = new Set([
   // server is already public and receives provider callbacks through the shared ingress
   // (away-channels lane 01M50ZQQW9), so it never dials a relay.
   'away_relay',
+  // ADR 779 §4: the PR watch reads GitHub through THIS machine's `gh` login (the hub's); a Cloud
+  // VM has none, and a tenant's PRs are not ours to read.
+  'pr_watch',
 ]);
 
 export function loopsFor(mode: ResolvedConfig['mode']): ReadonlySet<LoopName> {

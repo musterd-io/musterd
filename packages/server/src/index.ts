@@ -30,6 +30,7 @@ import { startReaper } from './presence/reaper.js';
 import { reconcileAll } from './projection/reconcile.js';
 import { startRosterWatcher } from './projection/watcher.js';
 import { startLaneWatch, sweepLaneWatches } from './protocol/laneWatch.js';
+import { startPrWatch } from './protocol/prWatch.js';
 import { routeEnvelope } from './protocol/route.js';
 import { startSeedsIngest } from './seeds/ingest.js';
 import { appendAudit } from './store/audit.js';
@@ -406,6 +407,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let stopSeeds: (() => void) | null = null;
   let stopAwayRelay: (() => void) | null = null;
   let stopLaneWatch: (() => void) | null = null;
+  let stopPrWatch: (() => void) | null = null;
   let stopDigest: (() => void) | null = null;
   let stopSync: (() => void) | null = null;
   let stopPull: (() => void) | null = null;
@@ -514,6 +516,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           if (loops.has('away_relay')) stopAwayRelay = startAwayRelay(opCtx);
           // ADR 724: a held refusal watches the holder's lane; this tells the refused seat when it frees.
           if (loops.has('lane_watch')) stopLaneWatch = startLaneWatch(opCtx);
+          // ADR 779 §4: tell a lane's owner when its PR merges, goes red, or goes green again.
+          if (loops.has('pr_watch')) stopPrWatch = startPrWatch(opCtx);
           // ADR 494 §5: the morning digest, posted at each team's working-hours start.
           if (loops.has('digest')) stopDigest = startDigestSchedule(opCtx);
           if (loops.has('sync_push')) stopSync = startSyncPush(opCtx);
@@ -689,6 +693,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopSeeds?.();
         stopAwayRelay?.();
         stopLaneWatch?.();
+        stopPrWatch?.();
         pulses.dispose();
         stopDigest?.();
         stopSync?.();

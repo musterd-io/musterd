@@ -14,7 +14,7 @@ import { getMemberById, listMembers } from '../store/members.js';
 import { hasLivePresence } from '../store/presence.js';
 import { getResidency, seatAtHourlyCap } from '../store/residency.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
-import { readPrState, type GhRunner } from './prState.js';
+import { prWatchRepos, readPrState, type GhRunner } from './prState.js';
 import { routeEnvelope } from './route.js';
 
 /**
@@ -31,7 +31,7 @@ export async function quickActionContext(
   db: Driver,
   team: { id: string; slug: string },
   seat: string,
-  opts: { readPr?: boolean; run?: GhRunner } = {},
+  opts: { readPr?: boolean; run?: GhRunner; repos?: Map<string, string> } = {},
 ): Promise<{ lane?: string; branch?: string; pr?: QuickActionPr }> {
   const lanes = await listLanes(db, team.id, team.slug, {
     owner: seat,
@@ -45,7 +45,10 @@ export async function quickActionContext(
     return { ...ctx, pr: { number: lane.merged.pr, state: 'merged', checks: 'green' } };
   if (!opts.readPr) return ctx;
   if (!branch) return { ...ctx, pr: { unknown: 'no_pr' } };
-  return { ...ctx, pr: await readPrState(branch, opts.run) };
+  return {
+    ...ctx,
+    pr: await readPrState(branch, (opts.repos ?? prWatchRepos()).get(team.slug), opts.run),
+  };
 }
 
 /**
@@ -59,7 +62,7 @@ export async function quickActionLineFor(
   seat: string,
   actId: string,
   /** `readGitHub` false inside a transaction: a `gh` call (up to 5 s) must never hold one open. */
-  opts: { readGitHub?: boolean; run?: GhRunner } = {},
+  opts: { readGitHub?: boolean; run?: GhRunner; repos?: Map<string, string> } = {},
 ): Promise<string | null> {
   const row = await db.get<{
     act: string;
@@ -81,6 +84,7 @@ export async function quickActionLineFor(
   const ctx = await quickActionContext(db, team, seat, {
     readPr: action.data === 'check_pr' && opts.readGitHub !== false,
     ...(opts.run ? { run: opts.run } : {}),
+    ...(opts.repos ? { repos: opts.repos } : {}),
   });
   return composeQuickActionLine({
     team: team.slug,
