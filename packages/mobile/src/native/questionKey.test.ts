@@ -78,6 +78,10 @@ describe('signQuestionAnswer', () => {
         answer,
       }),
     );
+    // PhoneKeys.signQuestion refuses any message without this first line.
+    expect(vi.mocked(phoneKeys.signQuestion).mock.calls[0]?.[0]).toMatch(
+      /^musterd-app-question-answer\/v1\n/,
+    );
     // Never the Face ID key: a question answer is not a decision.
     expect(phoneKeys.sign).not.toHaveBeenCalled();
   });
