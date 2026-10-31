@@ -32,6 +32,7 @@ const pr = (over: Partial<ListedPr> = {}): ListedPr => ({
   state: 'open',
   checks: 'pending',
   url: undefined,
+  lanes: [],
   ...over,
 });
 
@@ -131,5 +132,17 @@ withDrivers('the PR watch', (o) => {
     const fork = { ...row('MERGED', 'SUCCESS'), isCrossRepository: true };
     expect(await sweepTeamPrs(ctx, team, 2_000, gh([fork]), REPOS)).toBe(0);
     expect(await events(db, team.id)).toHaveLength(0);
+  });
+
+  it('a PR on another branch is matched by the lane id its body names', async () => {
+    const { db, team, lane, ctx } = await seed();
+    const named = {
+      ...row('MERGED', 'SUCCESS'),
+      headRefName: 'fix/something-else',
+      title: 'Ledger cache',
+      body: `Lane \`${lane.id}\`.\n\nWhat it does.`,
+    };
+    expect(await sweepTeamPrs(ctx, team, 1_000, gh([named]), REPOS)).toBe(1);
+    expect(JSON.parse((await events(db, team.id))[0]!.meta).pr_event.lane).toBe(lane.id);
   });
 });

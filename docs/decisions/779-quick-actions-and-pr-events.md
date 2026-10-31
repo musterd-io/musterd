@@ -102,6 +102,15 @@ going red without being asked, and each person should decide how loud questions 
     second schedule. A blocking question still buzzes in quiet hours unless its seat is `never`.
   - The phone delivery applies the preferences now. The `/live` doorbell sink follows with the
     settings screen. Follows-up: lane `01M67E6BEV`.
+- 2026-10-31 (lane `01M69CH0QD`): the watch told nobody on the revive hub.
+  - Cause: the sweep's `gh pr list` of 200 PRs with their checks took 7.5 s, and the `gh` reader
+    times out at 5 s. Every sweep failed, and the failure went only to the hourly audit row.
+  - The list now reads the newest 100 PRs, with a 30 s timeout of its own. A failure is also
+    logged, at most hourly, and the daemon logs which repos it watches when the loop starts.
+  - Most lanes carry no branch, so a branch-only match found almost nothing. A PR now also
+    matches the lane its title or body names (ADR 106's `Lane \`<id>\`.` line, or
+    `(lane <id>)`), by the full id or its 10-character prefix. Check PR uses the same match when the
+    lane has no branch.
 
 ## Observability & Evaluation
 

@@ -113,6 +113,22 @@ withDrivers('quick actions', (o) => {
         }),
     });
     expect(read).toContain("your lane's PR #3660 is open, checks red");
+    // sloane's lane has no branch: the PR whose title names the lane id.
+    const bare = await openLane(db, team.id, 'revive', 'sloane', { title: 'bare', claim: true });
+    await routeEnvelope(ctx, team, nick, steer('s3', 'nick', 'sloane', 'check_pr'));
+    const byId = await quickActionLineFor(db, team, 'sloane', 's3', {
+      repos: new Map([['revive', 'musterd-io/musterd']]),
+      run: async () =>
+        JSON.stringify([
+          {
+            number: 3661,
+            headRefName: 'fix/y',
+            state: 'MERGED',
+            title: `bare (lane ${bare.id.slice(0, 10)})`,
+          },
+        ]),
+    });
+    expect(byId).toContain("your lane's PR #3661 is merged");
     // Addressed to ryder, so no other seat gets this line.
     expect(await quickActionLineFor(db, team, 'sloane', 's1')).toBeNull();
   });

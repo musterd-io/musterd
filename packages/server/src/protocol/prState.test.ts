@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { prWatchRepos, readPrState, rollupChecks } from './prState.js';
+import {
+  laneRefs,
+  listPrs,
+  prForLane,
+  prWatchRepos,
+  readPrState,
+  rollupChecks,
+  type ListedPr,
+} from './prState.js';
 
 const fail = (o: { code?: string; stderr?: string; message?: string }) => () =>
   Promise.reject(Object.assign(new Error(o.message ?? 'gh failed'), o));
@@ -108,5 +116,69 @@ describe('readPrState (ADR 779 §4)', () => {
       }).entries(),
     ]).toEqual([['revive', 'musterd-io/musterd']]);
     expect(prWatchRepos({}).size).toBe(0);
+  });
+
+  it('laneRefs reads the ADR 106 lines from the title and the first five body lines only', () => {
+    expect(laneRefs('Fix it (lane 01M69CH0QD)', '')).toEqual(['01M69CH0QD']);
+    expect(laneRefs('Fix it', 'Lane `01M69CH0QD526YRZE8MZF3QSJP`.\n\nmore')).toEqual([
+      '01M69CH0QD526YRZE8MZF3QSJP',
+    ]);
+    expect(laneRefs('x', 'a\nb\nc\nd\ne\nLane `01M69CH0QD`.')).toEqual([]);
+    expect(laneRefs('lane 01M6', 'the lane ledger')).toEqual([]);
+  });
+
+  it('prForLane prefers the branch, else the newest PR naming the lane id or its prefix', () => {
+    const p = (number: number, branch: string, lanes: string[]): ListedPr => ({
+      number,
+      branch,
+      state: 'open',
+      checks: 'none',
+      url: undefined,
+      lanes,
+    });
+    const prs = [
+      p(3, 'feat/b', ['01M69CH0QD']),
+      p(2, 'feat/a', []),
+      p(1, 'feat/c', ['01M69CH0QD']),
+    ];
+    const id = '01M69CH0QD526YRZE8MZF3QSJP';
+    expect(prForLane(prs, { id, branch: 'feat/a' })?.number).toBe(2);
+    expect(prForLane(prs, { id, branch: null })?.number).toBe(3);
+    expect(prForLane(prs, { id, branch: 'feat/gone' })?.number).toBe(3);
+    expect(prForLane(prs, { id: '01M69CWVZNM8MVM0VDHWPPCA6N', branch: null })).toBeUndefined();
+  });
+
+  it('listPrs reads title and body, drops forks, and fails visibly', async () => {
+    const seen: string[][] = [];
+    const prs = await listPrs('musterd-io/musterd', async (args) => {
+      seen.push(args);
+      return JSON.stringify([
+        { number: 2, headRefName: 'a', state: 'MERGED', title: 'x (lane 01M69CH0QD)', body: '' },
+        {
+          number: 1,
+          headRefName: 'b',
+          state: 'OPEN',
+          isCrossRepository: true,
+          title: '',
+          body: '',
+        },
+      ]);
+    });
+    expect(seen[0]).toContain(
+      'number,headRefName,state,statusCheckRollup,url,isCrossRepository,title,body',
+    );
+    expect(prs).toEqual([
+      {
+        number: 2,
+        branch: 'a',
+        state: 'merged',
+        checks: 'none',
+        url: undefined,
+        lanes: ['01M69CH0QD'],
+      },
+    ]);
+    expect(await listPrs('musterd-io/musterd', fail({ message: 'timed out' }))).toEqual({
+      unknown: 'gh_error',
+    });
   });
 });
