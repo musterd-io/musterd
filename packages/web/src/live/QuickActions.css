@@ -1,0 +1,86 @@
+/* Quick actions (seats ask 2c): a quiet row of four pills, on a roster seat and the triage card. */
+.qa {
+  display: grid;
+  gap: 6px;
+}
+.qa__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.qa__btn {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--lc-border);
+  border-radius: 999px;
+  background: var(--lc-surface-2);
+  color: var(--lc-dim);
+  cursor: pointer;
+  transition:
+    transform var(--lc-dur-1) var(--lc-ease-out),
+    border-color var(--lc-dur-1) var(--lc-ease-out),
+    color var(--lc-dur-1) var(--lc-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .qa__btn:hover:not(:disabled) {
+    border-color: var(--lc-border-2);
+    color: var(--lc-text);
+  }
+}
+.qa__btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.qa__btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.qa__btn:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+.qa__said {
+  margin: 0;
+  font-size: 12px;
+  color: var(--lc-success-ink);
+}
+.qa__said.is-error {
+  color: var(--lc-danger-ink);
+}
+.qa--compact .qa__btn {
+  padding: 3px 9px;
+}
+.qa-all {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+.qa-all__sum {
+  margin: 0;
+  color: var(--lc-text);
+  font-weight: 600;
+}
+.qa-all__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--lc-muted);
+}
+.qa-all__seat {
+  color: var(--lc-dim);
+  font-weight: 600;
+}
+.qa-all__list .is-capped {
+  color: var(--lc-warn-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .qa__btn {
+    transition-duration: 0s;
+  }
+  .qa__btn:active:not(:disabled) {
+    transform: none;
+  }
+}

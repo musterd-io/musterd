@@ -30,6 +30,7 @@ export function TeamCard({
   daemonEpoch,
   still = false,
   you = false,
+  canAct = false,
 }: {
   card: Card;
   now: number;
@@ -41,6 +42,8 @@ export function TeamCard({
   still?: boolean;
   /** This card is the signed-in viewer's own seat (signed-in `/live` only). */
   you?: boolean;
+  /** The viewer is a signed-in person: an agent's detail offers the quick actions (seats ask 2c). */
+  canAct?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const badge = modelBadge(card.member);
@@ -186,7 +189,7 @@ export function TeamCard({
         <div className="lc-team-card__detail">
           {meta && <p className="lc-team-card__detail-meta">{meta}</p>}
           <Suspense fallback={null}>
-            <SeatDetail m={card.member} cfg={cfg} />
+            <SeatDetail m={card.member} cfg={cfg} canAct={canAct} />
           </Suspense>
         </div>
       )}

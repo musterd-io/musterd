@@ -3,6 +3,7 @@ import { answerLabel } from '@musterd/protocol/wire';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LiveFetchError, sendAct, type LiveConfig } from './client';
 import { MemberFace } from './MemberFace';
+import { QuickActionBar } from './quickActions';
 import { waitedLabel, type QuestionCard } from './questions';
 import { alreadyAnswered, answerOf, triageKey } from './triage';
 
@@ -237,6 +238,9 @@ export function QuestionTriage({
               ))}
             </ol>
           )}
+
+          {/* Seats ask 2c: the quick actions, for the seat that asked (the slot 1e left empty). */}
+          <QuickActionBar cfg={cfg} seat={card.asker} compact />
 
           <footer className="qt__foot">
             <button type="button" className="qt__link" onClick={() => setMore((m) => !m)}>
