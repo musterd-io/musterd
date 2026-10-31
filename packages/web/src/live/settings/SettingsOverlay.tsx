@@ -33,8 +33,11 @@ export function SettingsOverlay({
   onPairingsChanged,
   onHoldsChanged,
   onClose,
+  seats = [],
 }: {
   cfg: LiveConfig;
+  /** The team's agent seats, for Settings → You's per-seat question rows. */
+  seats?: readonly string[];
   me: MemberSummary | null;
   isAdmin: boolean;
   teamHours: WorkingHours | null;
@@ -159,6 +162,7 @@ export function SettingsOverlay({
               me={me}
               pairings={pairings}
               onPairingsChanged={onPairingsChanged}
+              seats={seats}
             />
           ) : (
             <TeamPanel cfg={cfg} hours={teamHours} onHoldsChanged={onHoldsChanged} />
