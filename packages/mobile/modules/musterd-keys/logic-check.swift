@@ -7,7 +7,7 @@
 //
 //    swiftc -o /tmp/nse-logic-check \
 //      ios/extension/RouteJson.swift ios/extension/SeenNonce.swift ios/extension/Notice.swift \
-//      ios/extension/PinBinding.swift ios/extension/AskRoutes.swift logic-check.swift
+//      ios/extension/PinBinding.swift ios/extension/AskRoutes.swift ios/extension/Readable.swift logic-check.swift
 //    /tmp/nse-logic-check
 //
 //  A multi-file swiftc invocation has no top-level entry unless one file is named main.swift,
@@ -67,6 +67,7 @@ check(pruned.records.count == 1 && pruned.records[0].key == "n", "dead records a
 
 let ask = Notice.Body.ask(
   text: "Ship it?",
+  from: "wallow",
   actionClass: "advisory",
   hasApproval: false,
   waiting: 2,
@@ -74,7 +75,7 @@ let ask = Notice.Body.ask(
 )
 check(Notice.gate(body: ask, routeExpiresAt: 10, now: 10) == .stale, "route expiry is not consumed")
 check(Notice.gate(body: ask, routeExpiresAt: 20, now: 10) == .open, "a live ask is open")
-let empty = Notice.Body.ask(text: "", actionClass: "advisory", hasApproval: false, waiting: 0, nonce: "n")
+let empty = Notice.Body.ask(text: "", from: "wallow", actionClass: "advisory", hasApproval: false, waiting: 0, nonce: "n")
 check(Notice.gate(body: empty, routeExpiresAt: 20, now: 10) == .unverified, "empty body")
 
 check(PinBinding.matches(stored: nil, route: "bind-1"), "a pin with no binding accepts the route")
@@ -100,10 +101,14 @@ check(PinBinding.withBinding(json: waitingPin, routeBinding: longBinding) == nil
 
 let shown = Notice.render(body: ask, verdict: .fresh)
 check(shown.body == "Ship it?" && shown.category == Notice.advisoryCategory, "advisory actions")
+check(shown.title == "wallow", "the asker is the title")
+let long = Notice.Body.ask(text: String(repeating: "word ", count: 60), from: "wallow", actionClass: "advisory", hasApproval: false, waiting: 0, nonce: "n")
+check(!(Notice.render(body: long, verdict: .fresh).body.hasSuffix("…")), "an answerable ask is never cut")
 check(shown.subtitle == "\(Notice.answerHint) · 2 more waiting" && shown.sound, "waiting subtitle")
 
 let listed = Notice.Body.ask(
   text: "Ship it?",
+  from: "wallow",
   actionClass: "privileged",
   hasApproval: false,
   waiting: 0,
@@ -112,6 +117,7 @@ let listed = Notice.Body.ask(
 check(Notice.render(body: listed, verdict: .fresh).category == nil, "a listed act has no actions")
 let withApproval = Notice.Body.ask(
   text: "Ship it?",
+  from: "wallow",
   actionClass: "advisory",
   hasApproval: true,
   waiting: 1,
@@ -149,6 +155,29 @@ let many = (0..<60).reduce([AskRoutes.Record]()) { list, i in
 check(many.count == AskRoutes.cap && many.first?.ref == "r10", "the newest fifty are kept")
 check(AskRoutes.decode(AskRoutes.encode(repushed)!) == repushed, "records round-trip")
 check(AskRoutes.decode(Data("[{\"ref\":1}]".utf8)) == nil, "a bad record fails the read")
+
+// The lock screen's text: the same fixtures as src/native/readable.test.ts.
+let readable: [(String, String, String)] = [
+  (
+    "[lane] acceptance requested for `01M653W2N4GNXM0STPSZYH2NEE`: **merge it?**\n\n- tests pass\n- docs updated",
+    "acceptance requested for 01M653W2N4: merge it? • tests pass • docs updated",
+    "acceptance requested for 01M653W2N4: merge it? • tests pass • docs updated"
+  ),
+  (
+    "Can I run the hub migration on the shared daemon now? It restarts it for about 30 seconds, and every live session reconnects on its own afterwards without anyone doing anything.",
+    "Can I run the hub migration on the shared daemon now? It restarts it for about 30 seconds, and every live session reconnects on its own afterwards without anyone doing anything.",
+    "Can I run the hub migration on the shared daemon now?"
+  ),
+  (
+    "## Deploy\nShip build 34 to TestFlight with the notification fix and the readable asks change and the pairing copy and the glass pass",
+    "Deploy Ship build 34 to TestFlight with the notification fix and the readable asks change and the pairing copy and the glass pass",
+    "Deploy Ship build 34 to TestFlight with the notification fix and the readable asks change and the pairing copy and the…"
+  ),
+]
+for (input, plain, summary) in readable {
+  check(Readable.plain(input) == plain, "plain: \(Readable.plain(input))")
+  check(Readable.summary(input, max: 120) == summary, "summary: \(Readable.summary(input, max: 120))")
+}
 
 fputs("ok\n", stdout)
 }
