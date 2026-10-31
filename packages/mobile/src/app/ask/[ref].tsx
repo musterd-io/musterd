@@ -51,7 +51,7 @@ function noteFor(outcome: AnswerOutcome): string {
     case 'refused':
       return 'This ask cannot be answered from the app.';
     case 'undelivered':
-      return 'Your answer didn’t leave this phone. Try again.';
+      return 'Your answer hasn’t reached your team yet. musterd keeps sending it each time it opens.';
     case 'cancelled':
       return 'Face ID didn’t confirm. Nothing was sent.';
   }

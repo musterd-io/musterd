@@ -128,6 +128,11 @@ public final class MusterdKeysModule: Module {
       }
     }
 
+    // ADR 777: why the extension refused recent deliveries — coarse reasons, no ask content.
+    Function("recentRefusals") { () -> [[String: Any]] in
+      SharedStore.loadRefusals()
+    }
+
     Function("markSeen") { (refs: [String]) in
       let now = Int(Date().timeIntervalSince1970 * 1000)
       SharedStore.updateAskRoutes { AskRoutes.markSeen(records: $0, refs: Set(refs), now: now) }

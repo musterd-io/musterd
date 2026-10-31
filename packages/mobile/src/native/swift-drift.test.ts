@@ -6,7 +6,7 @@ import {
   ACTION_REJECT,
   ADVISORY_CATEGORY,
   STALE_TEXT,
-  UNVERIFIED_TEXT,
+  LOCK_SCREEN_FALLBACK_TEXT,
 } from './notice';
 
 const read = (rel: string) => readFileSync(new URL(`../../../../${rel}`, import.meta.url), 'utf8');
@@ -21,7 +21,7 @@ describe('the Swift extension matches the TypeScript sentences', () => {
 
   it('pins the lock-screen copy and the action identifiers', () => {
     for (const sentence of [
-      UNVERIFIED_TEXT,
+      LOCK_SCREEN_FALLBACK_TEXT,
       STALE_TEXT,
       ANSWER_HINT,
       ADVISORY_CATEGORY,

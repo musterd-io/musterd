@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, FlatList, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import mark from '../../assets/mark.png';
 import type { AskEntry, AsksView } from '../native/asks';
-import { heldBody, waitingSubtitle } from '../native/notice';
+import { heldBody, refusalLine, waitingSubtitle } from '../native/notice';
 import { showOffer } from '../native/offer';
 import type { PairingPin } from '../native/pairingPin';
 import { summary } from '../native/readable';
@@ -26,6 +26,8 @@ export default function AsksScreen() {
   const [pin, setPin] = useState<PairingPin | null | undefined>(undefined);
   const [view, setView] = useState<AsksView | null>(null);
   const [loading, setLoading] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<string | null>(null);
+  const [outgoing, setOutgoing] = useState(0);
   const alive = useRef(true);
   // Every list refresh re-fetches each ask, which re-issues its token and spends the old one. The
   // ask screen holds a token of its own, so nothing refreshes while it is in front.
@@ -45,9 +47,19 @@ export default function AsksScreen() {
       }
       const { loadAsks, markShown, requestRedelivery } = await import('../native/asks');
       if (redeliver) void requestRedelivery({ pin: current });
+      // Answers a dropped relay kept from leaving go first (outbox.ts).
+      const { flushOutbox } = await import('../native/outbox');
+      const stillWaiting = await flushOutbox();
+      if (alive.current) setOutgoing(stillWaiting);
       const next = await loadAsks({ pin: current });
       if (!alive.current) return;
       setView(next);
+      try {
+        const { phoneKeys } = await import('../native/phoneKeys');
+        setDiagnostics(refusalLine(phoneKeys.recentRefusals(), Date.now()));
+      } catch {
+        setDiagnostics(null);
+      }
       // Shown to you, so their notifications go; the asks stay here until settled (ADR 772).
       if (focused.current && AppState.currentState === 'active')
         void markShown(next.asks.map((entry) => entry.route.ref));
@@ -147,6 +159,27 @@ export default function AsksScreen() {
           <Text style={[styles.bannerText, { color: p.text }]}>{note}</Text>
         </Rise>
       ) : null}
+      {outgoing > 0 ? (
+        <Rise style={[styles.banner, { backgroundColor: p.tint }]}>
+          <Text style={[styles.bannerTitle, { color: p.accentText }]}>
+            {outgoing === 1
+              ? '1 answer is still on its way'
+              : `${outgoing} answers are still on their way`}
+          </Text>
+          <Text style={[styles.bannerText, { color: p.text }]}>
+            Your team hasn’t got it yet. musterd sends it again each time you open the app.
+          </Text>
+        </Rise>
+      ) : null}
+      {view && view.unreachable > 0 ? (
+        <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
+          <Text style={[styles.bannerText, { color: p.text }]}>
+            {view.unreachable === 1
+              ? '1 ask couldn’t load. Pull down to try again.'
+              : `${view.unreachable} asks couldn’t load. Pull down to try again.`}
+          </Text>
+        </Rise>
+      ) : null}
       {view?.held ? (
         <Rise style={[styles.banner, { backgroundColor: p.tint }]}>
           <Text style={[styles.bannerTitle, { color: p.accentText }]}>
@@ -223,6 +256,11 @@ export default function AsksScreen() {
         keyExtractor={(entry) => entry.delivery.ask.id}
         ListHeaderComponent={header}
         ListEmptyComponent={empty}
+        ListFooterComponent={
+          diagnostics ? (
+            <Text style={[styles.diagnostics, { color: p.placeholder }]}>{diagnostics}</Text>
+          ) : undefined
+        }
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -369,4 +407,11 @@ const styles = StyleSheet.create({
   askText: { fontSize: 17, lineHeight: 24, fontFamily: font.medium },
   waitingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   waitingDot: { width: 6, height: 6, borderRadius: radius.pill },
+  diagnostics: {
+    fontFamily: font.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+    marginTop: space.lg,
+  },
 });

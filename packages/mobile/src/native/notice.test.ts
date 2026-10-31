@@ -1,12 +1,13 @@
 import type { AppDelivery } from '@musterd/protocol/app-channel';
 import { describe, expect, it } from 'vitest';
 import {
+  refusalLine,
   ADVISORY_CATEGORY,
   gateBeforeNonce,
   noticeFor,
   staleNotice,
   unverifiedNotice,
-  UNVERIFIED_TEXT,
+  LOCK_SCREEN_FALLBACK_TEXT,
 } from './notice';
 
 const ask = (over: Partial<AppDelivery & { kind: 'ask' }> = {}): AppDelivery => ({
@@ -59,8 +60,8 @@ describe('noticeFor', () => {
     const empty = ask();
     if (empty.kind !== 'ask') throw new Error('fixture');
     empty.ask = { ...empty.ask, body: '' };
-    expect(noticeFor(empty, 'fresh', 5_000, now).body).toBe(UNVERIFIED_TEXT);
-    expect(unverifiedNotice().body).toBe('an ask could not be verified');
+    expect(noticeFor(empty, 'fresh', 5_000, now).body).toBe(LOCK_SCREEN_FALLBACK_TEXT);
+    expect(unverifiedNotice().body).toBe('New ask — open musterd to see it.');
   });
 
   it('does not consume a route that has already expired, or an empty body', () => {
@@ -104,5 +105,27 @@ describe('noticeFor', () => {
         now,
       ).body,
     ).toBe('Paired as nick.');
+  });
+});
+
+describe('refusalLine', () => {
+  const now = 100 * 3_600_000;
+  it('counts the last 24 hours and names each reason once', () => {
+    expect(
+      refusalLine(
+        [
+          { reason: 'fetch', at: now - 1_000 },
+          { reason: 'timeout', at: now - 2_000 },
+          { reason: 'fetch', at: now - 3_000 },
+          { reason: 'check', at: now - 25 * 3_600_000 },
+        ],
+        now,
+      ),
+    ).toBe('Diagnostics: 3 lock-screen checks failed today (fetch, timeout)');
+  });
+
+  it('says nothing when there were none today', () => {
+    expect(refusalLine([], now)).toBeNull();
+    expect(refusalLine([{ reason: 'check', at: now - 30 * 3_600_000 }], now)).toBeNull();
   });
 });

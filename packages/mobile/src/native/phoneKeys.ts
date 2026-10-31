@@ -161,6 +161,12 @@ export interface PhoneKeys {
    */
   knownAsks(): { team: string; binding: string; ref: string; expires_at: number; seen: boolean }[];
 
+  /**
+   * Why the notification extension refused its last deliveries (ADR 777): a coarse reason —
+   * `check`, `fetch`, `timeout`, `keychain`, `not-paired`, `malformed` — and when. No ask content.
+   */
+  recentRefusals(): { reason: string; at: number }[];
+
   /** The list showed these asks while the app was active: a re-push of one presents nothing. */
   markSeen(refs: string[]): void;
 
