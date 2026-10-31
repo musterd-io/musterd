@@ -6,6 +6,7 @@ import {
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
+import { DAEMON_SERVICE_SEATS } from '../store/boardSeat.js';
 import {
   addMember,
   getMemberById,
@@ -346,6 +347,8 @@ export async function reconcileTeam(db: Driver, spec: TeamSpec): Promise<Reconci
   for (const m of await listMembers(db, team.id)) {
     // Observer seats (ADR 063) are runtime watchers, not seat files — never tombstone them for being
     // absent from the roster files.
+    // The daemon's own service seats (board, policy) have no file either, and are never retired.
+    if (m.kind === 'service' && DAEMON_SERVICE_SEATS.has(m.name)) continue;
     if (!desired.has(m.name) && m.observer !== 1) {
       await leaveMember(db, m.id, { releaseClaims });
       result.removed.push(m.name);

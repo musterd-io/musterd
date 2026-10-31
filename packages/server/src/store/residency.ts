@@ -1461,7 +1461,8 @@ export { BOARD_SEAT, boardSeat } from './boardSeat.js';
  *  Read-only, for the derivation; the poll handler mints (`boardSeat`) when it sends. */
 async function boardCanSpeak(db: Driver, teamId: string): Promise<boolean> {
   const existing = await getMemberByName(db, teamId, BOARD_SEAT);
-  return !existing || (existing.kind === 'service' && existing.left_at === null);
+  // A retired service row is brought back when the board next speaks (`daemonServiceSeat`).
+  return !existing || existing.kind === 'service';
 }
 
 /**

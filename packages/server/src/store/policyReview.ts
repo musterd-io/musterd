@@ -5,7 +5,7 @@ import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { joinerEnrollment } from '../sync/claim.js';
 import { appendAudit, listAudit } from './audit.js';
-import { addMember, getMemberByName } from './members.js';
+import { daemonServiceSeat } from './boardSeat.js';
 import { type MessageRow, resolveCapabilities, type MemberRow, type TeamRow } from './rows.js';
 import { applyPolicyChange, getStoredPolicy, getTeamById, listActiveTeams } from './teams.js';
 
@@ -45,9 +45,7 @@ export async function policyReviewDue(
 }
 
 export async function policyReviewSeat(db: Driver, team: TeamRow): Promise<MemberRow | null> {
-  const existing = await getMemberByName(db, team.id, POLICY_REVIEW_SEAT);
-  if (existing) return existing.kind === 'service' && existing.left_at === null ? existing : null;
-  return (await addMember(db, team, { name: POLICY_REVIEW_SEAT, kind: 'service' })).row;
+  return daemonServiceSeat(db, team, POLICY_REVIEW_SEAT);
 }
 
 const clockDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);

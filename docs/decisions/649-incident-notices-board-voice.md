@@ -54,6 +54,12 @@ rule.
 - A service seat is never bound to a node (`sync/log.ts`), so a notice sent as `board` cannot be
   refused as `bound_elsewhere` (the stall #2807 fixed for the dispatch nudge), whichever daemon
   minted it.
+- 2026-10-31 (lane `01M69N8GR2`): on the revive hub the board was silent from 2026-10-18. Roster
+  reconcile retires every member without a seat file, and the board has none: it was created at
+  16:11Z and retired at 17:06Z the same day. `boardSeat` then refused the retired row, so the
+  incident notices, the dispatch nudge and the PR watch (ADR 779) sent nothing. Reconcile now
+  skips the daemon's own service seats (`board`, `policy`), and a retired one is brought back on
+  its next send.
 
 ## Observability & Evaluation
 

@@ -8,6 +8,7 @@ import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { saveNodeEnrollment } from '../node/state.js';
 import { appendAudit } from '../store/audit.js';
+import { boardSeat } from '../store/boardSeat.js';
 import { getLane, openLane } from '../store/lanes.js';
 import {
   addMember,
@@ -172,6 +173,18 @@ end = "12:00"
       expect((await listMembers(db, team.id)).map((m) => m.name)).toEqual(['david']);
       expect((await getMemberByName(db, team.id, 'olive'))!.id).toBe(oliveId);
       expect((await getMemberByName(db, team.id, 'olive'))!.left_at).not.toBeNull();
+    });
+
+    it("never retires the daemon's own board seat, which has no file, and the board revives a retired one (lane 01M69N8GR2)", async () => {
+      await writeRoster('slug = "alpha"\n', { david: 'kind = "human"\nrole = "lead"\n' });
+      await reconcile();
+      const team = (await getTeamBySlug(db, 'alpha'))!;
+      const board = (await boardSeat(db, team))!;
+      expect((await reconcile()).removed).toEqual([]);
+      expect((await getMemberByName(db, team.id, 'board'))!.left_at).toBeNull();
+      // A hub retired before this fix: the board's next send brings the same row back.
+      await db.run('UPDATE members SET left_at = 1 WHERE id = ?', [board.id]);
+      expect((await boardSeat(db, team))!).toMatchObject({ id: board.id, left_at: null });
     });
 
     it("on an enrolled joiner, a REMOVE leaves the seat's lanes to the hub — no lane.released as musterd (lane 01M3ZBTJKD)", async () => {
