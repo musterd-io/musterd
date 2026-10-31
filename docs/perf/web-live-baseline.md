@@ -2772,3 +2772,9 @@ what a viewer downloads grows with the roster's wardrobe, not with this total. A
 measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,820,000 B with this lane in.
+
+## 2026-10-31 — seats ask 2f: Settings → You, questions from seats; total JS RAISED by 2,000 B (lane 01M67E6BEV)
+
+The "Questions from seats" section (Buzz/Quiet per channel, Default/Always/Never per seat) sits in the existing lazy settings chunk and adds about 1 KB gzip. Main had already grown to within 0.2 KB of the ceiling, so CI measured 386.9 KB against 386.7 KB. Initial JS and every CSS group are unchanged.
+
+- Falsify: `pnpm perf:check` reports total JS over the new ceiling with this lane in.
