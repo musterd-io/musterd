@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  ACTION_QUESTION_CHOICE_PREFIX,
+  ACTION_QUESTION_REPLY,
+  QUESTION_BUTTONS_MAX,
+  QUESTION_OPTIONS_CATEGORY_PREFIX,
+  QUESTION_REPLY_CATEGORY,
+  QUESTION_UNDELIVERED_TEXT,
   ANSWER_HINT,
   ACTION_APPROVE,
   ACTION_REJECT,
@@ -33,6 +39,23 @@ describe('the Swift extension matches the TypeScript sentences', () => {
     ]) {
       expect(notice).toContain(sentence);
     }
+  });
+
+  it('pins the question actions and their copy (ADR 774 §5)', () => {
+    const question = read('packages/mobile/modules/musterd-keys/ios/extension/Question.swift');
+    const answer = read('packages/mobile/modules/musterd-keys/ios/QuestionAnswer.swift');
+    for (const id of [
+      `"${QUESTION_REPLY_CATEGORY}"`,
+      `"${QUESTION_OPTIONS_CATEGORY_PREFIX}"`,
+      `"${ACTION_QUESTION_CHOICE_PREFIX}"`,
+      `"${ACTION_QUESTION_REPLY}"`,
+      `maxButtons = ${QUESTION_BUTTONS_MAX}`,
+    ]) {
+      expect(question).toContain(id);
+    }
+    expect(answer).toContain(QUESTION_UNDELIVERED_TEXT);
+    expect(plugin).toContain('extension/Question.swift');
+    expect(plugin).toContain('extension/QuestionCategory.swift');
   });
 
   it('shares one keychain service and does not add a notification or sqlite package', () => {

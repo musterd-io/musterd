@@ -70,7 +70,8 @@ function answerable(delivery: AppDelivery): delivery is AppDelivery & { kind: 'a
   return (
     delivery.kind === 'ask' &&
     delivery.ask.action_class === 'advisory' &&
-    delivery.approval === undefined
+    delivery.approval === undefined &&
+    delivery.ask.question === undefined
   );
 }
 
@@ -211,6 +212,8 @@ export async function sendAnswer(input: {
 }): Promise<AnswerOutcome> {
   const { pin, route, delivery, decision } = input;
   if (!samePlace(pin, route)) return 'unverified';
+  // A question is answered with an option or text (questionKey.ts), never approve or reject.
+  if (delivery.ask.question) return 'refused';
   const reported = input.reported && decision === 'reject';
   const message = appAnswerSigningBytes({
     team: route.team,
@@ -261,39 +264,52 @@ export async function sendAnswer(input: {
       : {}),
   };
   if (!AppAnswerSchema.safeParse(answer).success) return 'unverified';
-  const resolved = { route };
-  const routeJson = canonicalJson(resolved.route);
+  return sealAndSend({
+    pin,
+    route,
+    plaintext: JSON.stringify(answer),
+    ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+    ...(input.outbox ? { outbox: input.outbox } : {}),
+  });
+}
+
+/**
+ * Seal one signed answer body to the daemon under `route` and POST it through the relay as an
+ * `answer` callback: twice now, then kept and re-sent on every open until the relay takes it
+ * (outbox.ts). Shared by a decision ({@link sendAnswer}) and a question's answer (questionKey.ts).
+ */
+export async function sealAndSend(input: {
+  pin: PairingPin;
+  route: PushRoute;
+  plaintext: string;
+  fetchImpl?: typeof fetch;
+  outbox?: { storage: OutboxStorage; pauseMs: number };
+}): Promise<AnswerOutcome> {
+  const { pin, route } = input;
   let sealed;
   try {
     sealed = await phoneKeys.seal({
       recipientPublic: pin.receive,
-      plaintext: JSON.stringify(answer),
+      plaintext: input.plaintext,
       purpose: 'answer',
-      aad: b64urlEncode(utf8Encode(routeJson)),
+      aad: b64urlEncode(utf8Encode(canonicalJson(route))),
     });
   } catch {
     return 'unverified';
   }
-
   const callback = {
     app: 1 as const,
     kind: 'answer' as const,
-    binding: resolved.route.binding,
-    ref: resolved.route.ref,
-    expires_at: resolved.route.expires_at,
+    binding: route.binding,
+    ref: route.ref,
+    expires_at: route.expires_at,
     sealed,
   };
   if (!AppCallbackSchema.safeParse(callback).success) return 'unverified';
-  const url = relayUrl(pin.relay, `app/${encodeURIComponent(resolved.route.team)}/callback`);
+  const url = relayUrl(pin.relay, `app/${encodeURIComponent(route.team)}/callback`);
   if (!url) return 'unverified';
-  // Twice now, then kept and re-sent on every open until the relay takes it (outbox.ts).
   const sent = await sendOrKeep(
-    {
-      url,
-      body: JSON.stringify(callback),
-      ref: resolved.route.ref,
-      expires_at: resolved.route.expires_at,
-    },
+    { url, body: JSON.stringify(callback), ref: route.ref, expires_at: route.expires_at },
     {
       ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
       ...(input.outbox ? { storage: input.outbox.storage, pauseMs: input.outbox.pauseMs } : {}),

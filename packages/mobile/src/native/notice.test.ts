@@ -8,6 +8,8 @@ import {
   staleNotice,
   unverifiedNotice,
   LOCK_SCREEN_FALLBACK_TEXT,
+  QUESTION_OPTIONS_CATEGORY_PREFIX,
+  QUESTION_REPLY_CATEGORY,
 } from './notice';
 
 const ask = (over: Partial<AppDelivery & { kind: 'ask' }> = {}): AppDelivery => ({
@@ -33,6 +35,33 @@ const ask = (over: Partial<AppDelivery & { kind: 'ask' }> = {}): AppDelivery => 
 
 describe('noticeFor', () => {
   const now = 1_000;
+
+  it('gives a question its options and Reply, never approve or decline, once the key is enrolled', () => {
+    const question = (options?: { label: string }[]) =>
+      ask({
+        ask: {
+          ...(ask() as AppDelivery & { kind: 'ask' }).ask,
+          question: {
+            text: 'Which branch?',
+            ...(options ? { options } : {}),
+            blocking: false,
+            audience: 'addressee',
+            inferred: false,
+          },
+          interruption: 'passive',
+        },
+      });
+    const shown = noticeFor(question([{ label: 'main' }]), 'fresh', 5_000, now, true);
+    expect(shown).toEqual({
+      title: 'musterd',
+      body: 'Which branch?',
+      subtitle: 'Press and hold to answer',
+      category: `${QUESTION_OPTIONS_CATEGORY_PREFIX}nonce-1`,
+      sound: false,
+    });
+    expect(noticeFor(question(), 'fresh', 5_000, now, true).category).toBe(QUESTION_REPLY_CATEGORY);
+    expect(noticeFor(question(), 'fresh', 5_000, now).category).toBeUndefined();
+  });
 
   it('gives an advisory ask its actions and says to press and hold, with a count when more wait', () => {
     const notice = noticeFor({ ...ask(), waiting: 2 }, 'fresh', 5_000, now);

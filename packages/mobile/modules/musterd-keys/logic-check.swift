@@ -7,7 +7,8 @@
 //
 //    swiftc -o /tmp/nse-logic-check \
 //      ios/extension/RouteJson.swift ios/extension/SeenNonce.swift ios/extension/Notice.swift \
-//      ios/extension/PinBinding.swift ios/extension/AskRoutes.swift ios/extension/Readable.swift logic-check.swift
+//      ios/extension/PinBinding.swift ios/extension/AskRoutes.swift ios/extension/Readable.swift \
+//      ios/extension/Question.swift logic-check.swift
 //    /tmp/nse-logic-check
 //
 //  A multi-file swiftc invocation has no top-level entry unless one file is named main.swift,
@@ -178,6 +179,58 @@ for (input, plain, summary) in readable {
   check(Readable.plain(input) == plain, "plain: \(Readable.plain(input))")
   check(Readable.summary(input, max: 120) == summary, "summary: \(Readable.summary(input, max: 120))")
 }
+
+// ADR 773/774: a question answered from the lock screen. The same fixture as questionKey.test.ts.
+let questionText = "ship \"it\"\nafter\tlunch 🚀 a/b \u{2028} \u{7f} \\ é"
+check(
+  Question.signingBytes(team: "revive", binding: "bind-1", ask: "q1", token: "t1", nonce: "n1",
+    choice: 2, text: questionText)
+    == "musterd-app-question-answer/v1\nrevive\nbind-1\nq1\nt1\nn1\n2\n\"ship \\\"it\\\"\\nafter\\tlunch 🚀 a/b \u{2028} \u{7f} \\\\ é\"",
+  "question signing bytes match JSON.stringify"
+)
+check(
+  Question.signingBytes(team: "revive", binding: "bind-1", ask: "q1", token: "t1", nonce: "n1",
+    choice: 0, text: nil) == "musterd-app-question-answer/v1\nrevive\nbind-1\nq1\nt1\nn1\n0\n-",
+  "a choice alone"
+)
+check(
+  Question.signingBytes(team: "t", binding: "b", ask: "a", token: "k", nonce: "n", choice: nil,
+    text: nil) == nil, "nothing to answer with signs nothing")
+check(Question.choice(action: "musterd.question.choice.2") == 2, "third button")
+check(Question.choice(action: "musterd.question.choice.3") == nil, "only three buttons")
+check(Question.choice(action: "musterd.answer.approve") == nil, "approve is not an option")
+check(Question.replyText("  ok \n") == "ok", "a reply is trimmed")
+check(Question.replyText(" \n ") == nil, "an empty reply is not sent")
+check(Question.replyText(String(repeating: "x", count: 4001)) == nil, "a reply past the wire's limit")
+
+let pendingQ = Question.Pending(team: "t", binding: "b", ref: "q", expiresAt: 100, token: "k",
+  nonce: "n", options: 2)
+let qs = Question.record([], adding: pendingQ, now: 50)
+check(Question.find(qs, ref: "q", now: 50) == pendingQ, "an admitted question is found")
+check(Question.find(qs, ref: "q", now: 100) == nil, "an expired question is not")
+var fresher = pendingQ
+fresher.token = "k2"
+check(Question.record(qs, adding: fresher, now: 50) == [fresher], "a re-delivery replaces the token")
+check(Question.forget(qs, ref: "q", now: 50).isEmpty, "an answered question is forgotten")
+check(Question.decode(Question.encode(qs)!) == qs, "questions round-trip")
+
+let q = Question.Info(text: "Which **branch**?", options: ["main", "next"], token: "k")
+let question = Notice.Body.ask(text: "Which branch?", from: "ryder · agent", actionClass: "advisory",
+  hasApproval: false, waiting: 0, nonce: "nq", question: q, quiet: false)
+let answerable = Notice.render(body: question, verdict: .fresh, questionKey: true)
+check(answerable.category == Question.optionsCategory(nonce: "nq"), "a question with options")
+check(answerable.body == "Which branch?" && answerable.subtitle == Notice.answerHint, "question copy")
+check(answerable.category != Notice.advisoryCategory, "a question is never approve or decline")
+let noKey = Notice.render(body: question, verdict: .fresh)
+check(noKey.category == nil && noKey.subtitle == nil, "no question key: the tap opens the app")
+let open = Notice.Body.ask(text: "Why?", from: "ryder", actionClass: "advisory", hasApproval: false,
+  waiting: 0, nonce: "n2", question: Question.Info(text: "Why?", options: [], token: "k"), quiet: true)
+let openShown = Notice.render(body: open, verdict: .fresh, questionKey: true)
+check(openShown.category == Question.replyCategory, "no options: Reply only")
+check(openShown.passive && !openShown.sound, "a passive question lands quietly")
+let blankQ = Notice.Body.ask(text: "x", from: "r", actionClass: "advisory", hasApproval: false,
+  waiting: 0, nonce: "n", question: Question.Info(text: "", options: [], token: "k"))
+check(Notice.gate(body: blankQ, routeExpiresAt: 20, now: 10) == .unverified, "a blank question")
 
 fputs("ok\n", stdout)
 }

@@ -61,7 +61,7 @@ enum DeliveryOpen {
     if !ok { throw DeliveryOpenError.unverified }
 
     guard let body = parse(payload, route: route) else { throw DeliveryOpenError.unverified }
-    if case .ask(_, _, _, _, _, _) = body {
+    if case .ask = body {
       // The ask's own expiry is inside the signed payload. A route expiry is the caller's.
       if let expires = askExpiry(payload), expires <= now { throw DeliveryOpenError.expired }
     }
@@ -103,7 +103,20 @@ enum DeliveryOpen {
         let token = nonEmpty(object["token"]),
         let nonce = nonEmpty(object["nonce"])
       else { return nil }
-      _ = token
+      // ADR 773: a question carries its own text and options; a malformed one fails closed.
+      var question: Question.Info?
+      if ask.keys.contains("question") {
+        guard let q = ask["question"] as? [String: Any], let info = parseQuestion(q, token: token)
+        else { return nil }
+        question = info
+      }
+      var quiet = false
+      if ask.keys.contains("interruption") {
+        guard let interruption = ask["interruption"] as? String,
+          interruption == "active" || interruption == "passive"
+        else { return nil }
+        quiet = interruption == "passive"
+      }
       let hasApproval: Bool
       if object.keys.contains("approval") {
         guard let approval = object["approval"] as? [String: Any],
@@ -134,7 +147,9 @@ enum DeliveryOpen {
         actionClass: actionClass,
         hasApproval: hasApproval,
         waiting: waiting,
-        nonce: nonce
+        nonce: nonce,
+        question: question,
+        quiet: quiet
       )
     case "held":
       guard let count = jsonInt(object["count"]), count > 0, jsonInt(object["until"]) != nil else {
@@ -151,6 +166,23 @@ enum DeliveryOpen {
     default:
       return nil
     }
+  }
+
+  /// The subset of `QuestionSchema` the lock screen reads: the text and each option's label.
+  private static func parseQuestion(_ q: [String: Any], token: String) -> Question.Info? {
+    guard let text = nonEmpty(q["text"]) else { return nil }
+    var labels: [String] = []
+    if q.keys.contains("options") {
+      guard let options = q["options"] as? [[String: Any]], options.count <= Question.maxOptions
+      else { return nil }
+      for option in options {
+        guard let label = nonEmpty(option["label"]), label.count <= Question.labelMax else {
+          return nil
+        }
+        labels.append(label)
+      }
+    }
+    return Question.Info(text: text, options: labels, token: token)
   }
 
   private static func nonEmpty(_ value: Any?) -> String? {

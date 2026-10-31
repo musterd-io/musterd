@@ -27,6 +27,9 @@ enum SharedStore {
   static let pinAccount = "pairing-pin"
   static let askRoutesAccount = "ask-routes"
   static let refusalsAccount = "refusals"
+  static let questionsAccount = "question-routes"
+  static let questionKeyAccount = "question-key-enrolled"
+  static let questionOutboxAccount = "question-outbox"
 
   struct PushToken {
     var token: String
@@ -69,6 +72,59 @@ enum SharedStore {
     if next == current { return true }
     guard let data = AskRoutes.encode(next) else { return false }
     return save(data, account: askRoutesAccount)
+  }
+
+  /// The questions the extension admitted (ADR 773/774), for the lock-screen answer.
+  static func loadQuestions() -> [Question.Pending] {
+    guard case .data(let data) = load(account: questionsAccount) else { return [] }
+    return Question.decode(data)
+  }
+
+  @discardableResult
+  static func updateQuestions(_ change: ([Question.Pending]) -> [Question.Pending]) -> Bool {
+    let current = loadQuestions()
+    let next = change(current)
+    if next == current { return true }
+    guard let data = Question.encode(next) else { return false }
+    return save(data, account: questionsAccount)
+  }
+
+  /// The question key this binding enrolled (ADR 774 §5), as the app last sent it: the binding,
+  /// the key's public point, and that enrollment's seal expiry (the next must be later).
+  static func loadQuestionEnrollment() -> (binding: String, key: String, expiresAt: Int)? {
+    guard case .data(let data) = load(account: questionKeyAccount),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let binding = object["binding"] as? String,
+      let key = object["key"] as? String,
+      let expiresAt = (object["expires_at"] as? NSNumber)?.intValue
+    else { return nil }
+    return (binding, key, expiresAt)
+  }
+
+  @discardableResult
+  static func saveQuestionEnrollment(binding: String, key: String, expiresAt: Int) -> Bool {
+    let object: [String: Any] = ["binding": binding, "key": key, "expires_at": expiresAt]
+    guard let data = try? JSONSerialization.data(withJSONObject: object) else { return false }
+    return save(data, account: questionKeyAccount)
+  }
+
+  /// Whether a question on `binding` can be answered from its notification.
+  static func questionKeyEnrolled(binding: String) -> Bool {
+    loadQuestionEnrollment()?.binding == binding
+  }
+
+  /// Lock-screen answers the relay did not take, each `{url, body, ref, expires_at}`.
+  static func loadQuestionOutbox() -> [[String: Any]] {
+    guard case .data(let data) = load(account: questionOutboxAccount),
+      let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else { return [] }
+    return array
+  }
+
+  @discardableResult
+  static func saveQuestionOutbox(_ items: [[String: Any]]) -> Bool {
+    guard let data = try? JSONSerialization.data(withJSONObject: items) else { return false }
+    return save(data, account: questionOutboxAccount)
   }
 
   /// Why the extension refused a delivery (ADR 777): a coarse reason and the time, the last 10.
