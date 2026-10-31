@@ -416,7 +416,8 @@ def render_figure(a: dict) -> None:
         """What occludes a variant: the body (skin and eyes), plus a stand-in for each kind of piece that
         can be in front of it (office figure v2, plan Task 4) — the runtime draws pieces back to front,
         so a piece's own render must already have the holes the pieces drawn under it cannot make.
-        - a top: the trousers (seated thighs come in front of the hem);
+        - a top or an outer layer (v2-5b): the trousers (seated thighs come in front of the hem);
+        - a dress (v2-6a): the body alone — the skin legs it shows are the base's;
         - shoes: the trousers (a hem over the ankle);
         - hair, facial hair, hats, accessories, a carried thing, the lanyard: a torso (the tee's — every
           top shares its shape), so hair behind the back is hidden and long hair in front still shows;
@@ -424,9 +425,9 @@ def render_figure(a: dict) -> None:
         - an agent's tell (glowing irises, the collar light): the body alone — it sits on the surface;
         - the plant: the box it sits in, as before."""
         b = set(base)
-        if layer.startswith("top/") or layer == "shoes":
+        if layer.startswith(("top/", "outer/")) or layer == "shoes":
             return b | {"bottom"}
-        if layer == "acc/scarf" or layer == "bottom" or layer.startswith(("tell/", "mouth/")):
+        if layer in ("acc/scarf", "bottom", "dress/shift") or layer.startswith(("tell/", "mouth/")):
             return b
         return b | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
 

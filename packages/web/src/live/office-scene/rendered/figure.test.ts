@@ -32,6 +32,7 @@ const femme: Appearance = {
   ears: 'none',
   neck: 'none',
   wrist: 'none',
+  onePiece: 'none',
   outer: 'none',
   underColor: null,
   accessory: 'glasses',
@@ -61,8 +62,16 @@ describe('layersFor (office realism Task 11)', () => {
     expect(layers.findIndex((l) => l.id === 'outer/cardigan')).toBe(layers.findIndex((l) => l.id === 'top/long') + 1);
   });
 
+  it('a dress is worn instead of the top and the bottom, and carries the hue (v2-6a)', () => {
+    const ids = layersFor({ ...femme, onePiece: 'shift' }, 'human', '#3366cc');
+    expect(ids.map((l) => l.id)).toContain('dress/shift');
+    expect(ids.map((l) => l.id)).not.toContain('bottom');
+    expect(ids.some((l) => l.id.startsWith('top/'))).toBe(false);
+    expect(ids.find((l) => l.id === 'dress/shift')?.color).toBe('#3366cc');
+  });
+
   it('an agent wears no visor: its eyes and a collar light glow in its identity colour (figure v2)', () => {
-    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', eyes: 'none', ears: 'none', neck: 'none', wrist: 'none', outer: 'none', accessory: 'none', cut: 'tee' };
+    const agent: Appearance = { ...appearanceOf({ name: 'cy', kind: 'agent' }), hair: 'short', facialHair: 'none', hat: 'none', eyes: 'none', ears: 'none', neck: 'none', wrist: 'none', onePiece: 'none', outer: 'none', accessory: 'none', cut: 'tee' };
     const layers = layersFor(agent, 'agent', '#5b8def');
     expect(layers.map((l) => l.id)).toEqual(['skin', 'eyes', 'tell/eyes', `mouth/${agent.smile}`, 'shoes', 'bottom', 'top/tee', 'tell/collar', 'hair/short']);
     expect(layers.find((l) => l.id === 'tell/eyes')?.color).toBe('#5b8def');

@@ -59,6 +59,8 @@ HATS = ["cap", "beanie", "band", "bucket"]
 TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
 # outer layers (v2-5b): worn over a top; the outermost carries the identity hue
 OUTERS = ["cardigan", "blazer", "zip"]
+# one-pieces (v2-6a): worn instead of a top and a bottom
+DRESSES = ["shift"]
 ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet", "headphones-neck"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
@@ -70,6 +72,7 @@ LAYERS = (
     + [f"facial/{f}" for f in FACIAL]
     + [f"top/{t}" for t in TOPS]
     + [f"outer/{o}" for o in OUTERS]
+    + [f"dress/{d}" for d in DRESSES]
     + ["bottom", "shoes"]
     + [f"hat/{h}" for h in HATS]
     + [f"acc/{a}" for a in ACCS]
@@ -97,7 +100,7 @@ def layer_id_byte(layer: str) -> int:
 # cells) — every mesh on a shoulder, elbow or wrist joint, plus the whole of a prop held at the desk —
 # which `drawFigureFrame(part: 'arms')` draws again over the slab.
 # the wrist pieces (v2-4c) ride the forearm, so the seated overlay and the carrying poses keep them
-ARM_LAYERS = ["skin"] + [f"top/{t}" for t in TOPS] + ["carry/mug", "carry/plate", "acc/watch", "acc/bracelet"] + [f"outer/{o}" for o in OUTERS]
+ARM_LAYERS = ["skin"] + [f"top/{t}" for t in TOPS] + ["carry/mug", "carry/plate", "acc/watch", "acc/bracelet"] + [f"outer/{o}" for o in OUTERS] + [f"dress/{d}" for d in DRESSES]
 
 
 # ── materials ──────────────────────────────────────────────────────────────────────────────
@@ -570,6 +573,19 @@ def build_figure(zs: float, origin: Vector) -> Rig:
     for side, sy in (("L", 1), ("R", -1)):
         r.torus("armhole", "spine", "top/vest", rib, 0.3, sy * (SHOULDER_W - 1.0 * FIG), SHOULDER - 2.6 * FIG,
                 3.5 * FIG, 0.8, (math.radians(90), 0, 0))
+
+    # ── the dress (v2-6a, spec §2.4): a one-piece worn instead of a top and a bottom — a fitted bodice
+    # with short sleeves and a skirt to just above the knee, the legs bare under it. The skirt is three
+    # panels fused into one: a flared panel on each thigh that follows the leg (seated, it lies over the
+    # lap instead of hanging through the chair like a rigid tube) and a centre panel on the hips that
+    # closes the gap between them and drapes between the knees when sitting.
+    torso("dress/shift")
+    sleeves("dress/shift", False)
+    neck_rib("dress/shift")
+    hem_z = KNEE + 1.5 * FIG
+    r.frustum("skirt-mid", "hips", "dress/shift", cloth, 0.3, 0, hem_z, 4.4 * FIG, 5.6 * FIG, HIP + 2.0 * FIG - hem_z, sy=1.3)["fuse"] = "dress/shift"
+    for side, sy in (("L", 1), ("R", -1)):
+        r.cyl("skirt-leg", f"hip{side}", "dress/shift", cloth, 0.2, sy * HIP_W * 0.85, hem_z, 4.9 * FIG, 4.3 * FIG, HIP + 1.0 * FIG - hem_z)["fuse"] = "dress/shift"
 
     # ── outer layers (v2-5b, spec §2.4): a size up over any top — a fuller body that reaches past the
     # trouser top, long sleeves over the top's — with each garment's own finishing. One layer each.
@@ -1151,7 +1167,7 @@ CARRY_BASE = {"walk-hold2": "walk", "walk-hold1": "walk", "walk-call": "walk", "
               "sit-hand": "sit-idle",
               # office v3-6: the lap arms over the seated idle
               "sit-lap": "sit-idle"}
-CARRY_OWN = ("skin", "top/", "outer/", "carry/", "lanyard", "acc/watch", "acc/bracelet")
+CARRY_OWN = ("skin", "top/", "outer/", "dress/", "carry/", "lanyard", "acc/watch", "acc/bracelet")
 # Layers a carrying clip stores beyond CARRY_OWN: the lap arms lie across the trousers, so sit-lap's
 # `bottom` cells are its own (spec §8); every other carrying clip keeps the base clip's.
 CARRY_OWN_EXTRA = {"sit-lap": ("bottom",)}

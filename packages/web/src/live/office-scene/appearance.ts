@@ -191,6 +191,18 @@ const OUTERS_BY_STYLE: Record<Style, readonly Outer[]> = {
 /** What a shirt under an outer layer is: plain, so the hue on the outside is the one you find them by. */
 const UNDER_COLORS = ['#f2eee6', '#c9d6e3', '#9aa0a6', '#2b3038', '#e8dcc4'] as const;
 
+/**
+ * A one-piece (v2-6a, spec §2.4): a dress is worn instead of a top and a bottom, so it changes the
+ * legs. Open to anyone (§2.5); weighted by style, never by anything else.
+ */
+export type OnePiece = 'none' | 'shift';
+const ONE_PIECES_BY_STYLE: Record<Style, readonly OnePiece[]> = {
+  formal: ['none', 'none', 'none', 'shift'],
+  smart: ['none', 'none', 'none', 'none', 'shift'],
+  casual: ['none', 'none', 'none', 'none', 'none', 'none', 'shift'],
+  athletic: ['none'],
+};
+
 const BOTTOMS = {
   denim: '#3f5570',
   charcoal: '#2b3038',
@@ -278,6 +290,8 @@ export interface Appearance {
   hatColor: string;
   /** The cut of the top. The *hue* is not here — it is the member's identity colour (see the file docs). */
   cut: TopCut;
+  /** A dress worn instead of the top and the bottom, or 'none'. */
+  onePiece: OnePiece;
   /** An outer layer over the top, or 'none'. */
   outer: Outer;
   /** The top's own colour when an outer layer carries the hue; null when the top carries it. */
@@ -324,6 +338,7 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
   const cut = pick(CUTS_BY_STYLE[style], name, 8);
   // a hood does not go under a jacket: a hoodie is its own outermost layer
   const outer = cut === 'hoodie' ? 'none' : pick(OUTERS_BY_STYLE[style], name, 23);
+  const onePiece = pick(ONE_PIECES_BY_STYLE[style], name, 25);
   const skin = pick(SKINS, name, 1);
   // Agents never wear glasses — the eye glow is their tell, and frames would sit on it.
   const eyes = kind === 'agent' ? 'none' : pick(EYES, name, 18);
@@ -346,10 +361,11 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
     hat: pick(HATS, name, 6),
     hatColor: pickContrasting(HAT_COLORS, name, 7, skin),
     cut,
+    onePiece,
     outer,
     underColor: outer === 'none' ? null : pick(UNDER_COLORS, name, 24),
     // an outer layer's long sleeves cover the arms whatever the top under it
-    bareArms: outer === 'none' && (cut === 'tee' || cut === 'vest'),
+    bareArms: outer === 'none' && (onePiece !== 'none' || cut === 'tee' || cut === 'vest'),
     bottom: pick(BOTTOMS_BY_STYLE[style], name, 9),
     shoes: pick(SHOES_BY_STYLE[style], name, 10),
     eyes,
