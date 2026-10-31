@@ -63,7 +63,7 @@ export const LIFE_EVENTS: ReadonlyArray<{ name: string; weight: number }> = [
   // samey click family (most were the same bandpassed-noise recipe) and played too often. Their
   // weight went to `keys`, the one room sound kept as is. Adding any of them back is a regression.
   // `whisper` CUT 2026-10-30 too (nick: the recorded takes sounded creepy, lane 01M67CQQQK).
-  { name: 'keys', weight: 0.9525 },
+  { name: 'keys', weight: 0.9425 },
   // `footsteps`, `sip`, `blow`, `water` and `eating` LEFT THE ROLL on 2026-10-27 (lane 01M5XS6KAD):
   // they played from a random side on a timer while the office had real walks, sip beats, water
   // errands and plates. They are placed moments now (`sipAt`, `bottle`, `eatAt`, `machine`), fired
@@ -71,12 +71,13 @@ export const LIFE_EVENTS: ReadonlyArray<{ name: string; weight: number }> = [
   { name: 'paws', weight: 0.025 },
   { name: 'jingle', weight: 0.01 },
   { name: 'yawn', weight: 0.01 },
+  { name: 'pant', weight: 0.01 }, // recorded only; added 2026-10-31 (nick: more dog, less bark)
   // A bark on a timer is an alarm clock. Rarity IS the design; do not "fix" this upward.
   { name: 'bark', weight: 0.0025 }, // halved 2026-10-30 (nick: still slightly too often)
 ];
 
 const CHATTER = new Set(['murmur', 'whisper']);
-const DOG_EVENTS = new Set(['paws', 'jingle', 'yawn', 'bark']);
+const DOG_EVENTS = new Set(['paws', 'jingle', 'yawn', 'bark', 'pant']);
 /** The "somebody is doing something" family — gated on evidenced work, placed at a working desk.
  *  (`creak` was one of these; see the removal note on LIFE_EVENTS.) */
 const WORK_EVENTS = new Set(['keys', 'tap', 'softTap', 'drawer', 'stapler']);
