@@ -1218,6 +1218,19 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       for (const sql of LANE_LIST_INDEX_SQL) await d.exec(sql);
     },
   },
+  {
+    // v138 — ADR 779 §5 (lane 01M67E5WWB): a person's question-notification preferences — per
+    // channel buzz/quiet and per seat always/never — beside member_channel_settings. One row per
+    // person; no row means the defaults. Team-owned.
+    version: 138,
+    sql: `CREATE TABLE IF NOT EXISTS member_question_notify (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  member_id TEXT NOT NULL,
+  prefs_json TEXT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (team_id, member_id)
+)`,
+  },
 ];
 
 /** v137: the lane lists `ORDER BY created_at`, by owner and for the whole team (ADR 778). */

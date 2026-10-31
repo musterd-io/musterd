@@ -94,6 +94,14 @@ going red without being asked, and each person should decide how loud questions 
       team's lanes are never matched against another's. An unmapped team is not watched, and Check
       PR tells the seat so (`no_repo`).
     - A PR from a fork is ignored, since anyone can name a fork's branch the same as a lane's.
+- 2026-10-31 (lane `01M67E5WWB`), decision 5 as built:
+  - Channel on/off and "quiet while on `/live`" stay in the existing channel settings
+    (`member_channel_settings`). The new `member_question_notify` (v138) holds only per channel
+    buzz/quiet and per seat always/never.
+  - Quiet hours are the person's working hours, or the team's when they have none, so there is no
+    second schedule. A blocking question still buzzes in quiet hours unless its seat is `never`.
+  - The phone delivery applies the preferences now. The `/live` doorbell sink follows with the
+    settings screen. Follows-up: lane `01M67E6BEV`.
 
 ## Observability & Evaluation
 

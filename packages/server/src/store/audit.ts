@@ -557,6 +557,7 @@ export type AuditAction =
   | 'quick_action.start_all'
   | 'pr_event.sent'
   | 'pr_watch.unavailable'
+  | 'question.notify_set'
   | 'ask.raised'
   | 'ask.deferred'
   | 'ask.held'
@@ -951,6 +952,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'quick_action.start_all': 'actor',
   'pr_event.sent': 'none',
   'pr_watch.unavailable': 'none',
+  'question.notify_set': 'actor',
   'ask.raised': 'actor',
   'ask.deferred': 'actor',
   'ask.held': 'actor',

@@ -153,3 +153,39 @@ export function questionsHeadline(q: QuestionMeasures): string {
     `resume p50 ${p50} · ${q.undelivered} undelivered${flag} (${q.window_days}d)`
   );
 }
+
+/**
+ * A person's question-notification preferences (ADR 779 §5), beside the channel settings that
+ * already say which channels deliver at all and whether to stay quiet while on `/live`.
+ * - `channels`: per channel, `buzz` or `quiet` when a question would otherwise buzz;
+ * - `seats`: per seat, `always` (buzz even when quiet would win) or `never` (never buzz — the card
+ *   still lands in the list).
+ */
+export interface QuestionNotifyPrefs {
+  channels?: Record<string, 'buzz' | 'quiet'> | undefined;
+  seats?: Record<string, 'always' | 'never'> | undefined;
+}
+
+/**
+ * Whether a question buzzes on a channel (ADR 779 §5). Quiet never hides the card; it only stops
+ * the noise. Defaults (no prefs): buzz for blocking, quiet otherwise, quiet while on `/live`,
+ * and outside working hours only a blocking question buzzes.
+ */
+export function notifyDecision(
+  prefs: QuestionNotifyPrefs | null | undefined,
+  ctx: {
+    channel: string;
+    seat: string;
+    blocking: boolean;
+    activeOnLive: boolean;
+    inQuietHours: boolean;
+  },
+): 'buzz' | 'quiet' {
+  const seat = prefs?.seats?.[ctx.seat];
+  if (seat === 'never') return 'quiet';
+  if (seat === 'always') return 'buzz';
+  if (prefs?.channels?.[ctx.channel] === 'quiet') return 'quiet';
+  if (ctx.activeOnLive) return 'quiet';
+  if (!ctx.blocking) return 'quiet';
+  return 'buzz';
+}

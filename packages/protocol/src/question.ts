@@ -76,6 +76,20 @@ export const QuestionMeasuresSchema = z.object({
   resume_p50_ms: z.number().nonnegative().nullable(),
 });
 
+/** ADR 779 §5: what a person stores; seat and channel names bounded, values closed. */
+export const QuestionNotifyPrefsSchema = z
+  .object({
+    channels: z.record(z.string().min(1).max(32), z.enum(['buzz', 'quiet'])).optional(),
+    seats: z.record(z.string().min(1).max(64), z.enum(['always', 'never'])).optional(),
+  })
+  .strict()
+  .refine(
+    (p) => Object.keys(p.channels ?? {}).length <= 16 && Object.keys(p.seats ?? {}).length <= 200,
+    {
+      message: 'too many entries',
+    },
+  );
+
 /** The question an act's meta carries, parsed with defaults — `null` when absent or malformed. */
 export function questionOf(meta: Record<string, unknown> | null | undefined): Question | null {
   const parsed = QuestionSchema.safeParse(meta?.['question']);

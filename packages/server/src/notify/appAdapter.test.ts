@@ -36,6 +36,7 @@ import { listChannelSettings, setChannelSettings } from '../store/channelSetting
 import { getLane, openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
+import { setQuestionNotify } from '../store/questionNotify.js';
 import { questionView } from '../store/questions.js';
 import { createTeam } from '../store/teams.js';
 import {
@@ -1145,6 +1146,13 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
     expect(d.expires_at).toBe(NOW + 7 * 24 * 60 * 60_000);
     const b = await delivered(s, await raiseQuestion(s, 'q-2', { blocking: true }));
     expect(b.ask).toMatchObject({ tier: 'blocking', interruption: 'active' });
+  });
+
+  it("a person's preferences quiet a blocking question from a seat set to never (ADR 779 §5)", async () => {
+    const s = await seed();
+    await setQuestionNotify(s.db, s.team.id, s.nick, { seats: { ada: 'never' } });
+    const d = await delivered(s, await raiseQuestion(s, 'q-1', { blocking: true }));
+    expect(d.ask).toMatchObject({ tier: 'blocking', interruption: 'passive' });
   });
 
   it('the question key enrolls under the Face ID key, and only under it', async () => {

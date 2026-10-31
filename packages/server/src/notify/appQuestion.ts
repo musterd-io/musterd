@@ -18,6 +18,7 @@ import { appendAudit } from '../store/audit.js';
 import { getDeviceKey } from '../store/authority.js';
 import type { ChannelBinding } from '../store/channelBindings.js';
 import { getMemberById } from '../store/members.js';
+import { questionBuzzes } from '../store/questionNotify.js';
 import { getTeamBySlug } from '../store/teams.js';
 
 /**
@@ -42,16 +43,25 @@ export function questionTier(q: Question): AskTier {
 /** Whether a question buzzes (ADR 773 defaults): blocking, and the person is not on `/live`. */
 export async function questionInterruption(
   ctx: Ctx,
+  team: { id: string },
   memberId: string,
+  seat: string,
   q: Question,
   now: number,
 ): Promise<'active' | 'passive'> {
-  if (!q.blocking) return 'passive';
   const live = await ctx.db.get<{ n: number }>(
     `SELECT COUNT(*) AS n FROM presence WHERE member_id = ? AND surface = 'web' AND last_seen_at >= ?`,
     [memberId, now - LIVE_ACTIVE_WINDOW_MS],
   );
-  return (live?.n ?? 0) > 0 ? 'passive' : 'active';
+  // ADR 779 §5: the person's own preferences decide — per seat, per channel, quiet hours.
+  const buzz = await questionBuzzes(
+    ctx.db,
+    team.id,
+    memberId,
+    { channel: 'app', seat, blocking: q.blocking, activeOnLive: (live?.n ?? 0) > 0 },
+    now,
+  );
+  return buzz ? 'active' : 'passive';
 }
 
 /** The humans a question reaches: its addressee, or every person for a team question. */

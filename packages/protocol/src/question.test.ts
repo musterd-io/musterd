@@ -16,7 +16,9 @@ import {
   composeAnswerLine,
   isPushableAnswerLine,
   isQuestion,
+  notifyDecision,
   QuestionMeasuresSchema,
+  QuestionNotifyPrefsSchema,
   questionOf,
   questionsHeadline,
 } from './question.js';
@@ -241,5 +243,42 @@ describe('questionsHeadline (ADR 773 Experiment)', () => {
     expect(questionsHeadline({ ...base, unflagged_undelivered: 2, resume_p50_ms: null })).toBe(
       '12 asked · 10 answered (9 off the terminal) · resume p50 — · 1 undelivered · ⚠ 2 lost (7d)',
     );
+  });
+});
+
+describe('notifyDecision (ADR 779 §5)', () => {
+  const base = {
+    channel: 'app',
+    seat: 'ryder',
+    blocking: true,
+    activeOnLive: false,
+    inQuietHours: false,
+  };
+  it('defaults: blocking buzzes; anything else, on /live, or a non-blocking one in quiet hours is quiet', () => {
+    expect(notifyDecision(null, base)).toBe('buzz');
+    expect(notifyDecision(null, { ...base, blocking: false })).toBe('quiet');
+    expect(notifyDecision(null, { ...base, activeOnLive: true })).toBe('quiet');
+    expect(notifyDecision(null, { ...base, inQuietHours: true })).toBe('buzz');
+    expect(notifyDecision(null, { ...base, blocking: false, inQuietHours: true })).toBe('quiet');
+  });
+  it('a seat set to never stays quiet even when blocking; always buzzes even on /live', () => {
+    expect(notifyDecision({ seats: { ryder: 'never' } }, base)).toBe('quiet');
+    expect(
+      notifyDecision(
+        { seats: { ryder: 'always' } },
+        { ...base, blocking: false, activeOnLive: true },
+      ),
+    ).toBe('buzz');
+  });
+  it('a channel set to quiet never buzzes', () => {
+    expect(notifyDecision({ channels: { app: 'quiet' } }, base)).toBe('quiet');
+    expect(notifyDecision({ channels: { slack: 'quiet' } }, base)).toBe('buzz');
+  });
+  it('the stored shape is closed and bounded', () => {
+    expect(QuestionNotifyPrefsSchema.safeParse({ seats: { ryder: 'never' } }).success).toBe(true);
+    expect(QuestionNotifyPrefsSchema.safeParse({ seats: { ryder: 'sometimes' } }).success).toBe(
+      false,
+    );
+    expect(QuestionNotifyPrefsSchema.safeParse({ extra: 1 }).success).toBe(false);
   });
 });
