@@ -120,10 +120,12 @@ it, who accepted it, and which model), the mechanisms as proof under it. "An age
 out of the headline lines until our own record shows refusals aimed at a person (ADR 665 §2). Every
 number has a row in the Q&A ledger below; re-read it before each event.
 
-- **Is anyone using it?** Only our own team so far. I have not started with design partners yet; finding the first ones is
-  my next job. _(nick, 2026-10-20: no design partner conversations yet. Re-check before every event.)_
-- **Is it open source?** The packages are MIT. I decide what else to open after the first design
-  partners.
+- **Is anyone using it?** Only our own team so far. After the SF Tech Week demo the hosts, the incubator EPIC
+  Connector, followed up and introduced me to their venture partner; the first design partners are my next
+  job. _(nick, 2026-10-30: no design partner conversation yet; the EPIC Connector email of 2026-10-29 is the
+  first outside follow-up. Re-check before every event.)_
+- **Is it open source?** Yes: the repository has been public since 2026-10-12 (ADR 565) and the packages are
+  MIT. _(Corrected 2026-10-30: the earlier answer predated the repository opening.)_
 - **Does musterd run my agents?** Your agents keep running in Claude Code, Codex or whatever runs
   them today, and join the team from there. Isolation stays with your harness or sandbox.
 - **What if Claude Code, Codex or Cursor add this themselves?** musterd works across all of them,
