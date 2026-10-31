@@ -1,5 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import type { Driver } from '../db/driver.js';
-import { addMember, getMemberByName } from './members.js';
+import { addMember, getMemberByName, hashToken } from './members.js';
 import type { MemberRow, TeamRow } from './rows.js';
 
 /**
@@ -32,11 +33,13 @@ export async function daemonServiceSeat(
   if (!existing) return (await addMember(db, team, { name, kind: 'service' })).row;
   if (existing.kind !== 'service') return null;
   if (existing.left_at === null) return existing;
-  await db.run('UPDATE members SET left_at = NULL, updated_at = ? WHERE id = ? AND kind = ?', [
-    now,
-    existing.id,
-    'service',
-  ]);
+  // A token nobody holds, and unbound: whatever credential the row had before it was retired stays
+  // dead (as `reviveMember` re-mints). The daemon speaks as this seat without one.
+  await db.run(
+    `UPDATE members SET left_at = NULL, token_hash = ?, bound_at = NULL, updated_at = ?
+      WHERE id = ? AND kind = 'service'`,
+    [hashToken(randomBytes(32).toString('hex')), now, existing.id],
+  );
   return (await getMemberByName(db, team.id, name)) ?? null;
 }
 

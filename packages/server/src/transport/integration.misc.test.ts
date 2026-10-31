@@ -585,6 +585,18 @@ withDrivers('integration · misc', (_o, kind) => {
       expect(res.status).toBe(401);
     });
 
+    it("never provisions the daemon's own board seat, even for an admin (lane 01M69N8GR2)", async () => {
+      const team = await ppost('/teams', {
+        slug: 'dawn',
+        creator: { name: 'nick', kind: 'human' },
+      });
+      const nickTok = team.json.human_credential as string;
+      for (const name of ['board', 'policy']) {
+        const res = await ppost('/teams/dawn/members', { name, kind: 'service' }, nickTok);
+        expect(res.status).toBe(403);
+      }
+    });
+
     it('an admin credential still provisions from anywhere', async () => {
       const team = await ppost('/teams', {
         slug: 'dawn',

@@ -183,8 +183,12 @@ end = "12:00"
       expect((await reconcile()).removed).toEqual([]);
       expect((await getMemberByName(db, team.id, 'board'))!.left_at).toBeNull();
       // A hub retired before this fix: the board's next send brings the same row back.
-      await db.run('UPDATE members SET left_at = 1 WHERE id = ?', [board.id]);
-      expect((await boardSeat(db, team))!).toMatchObject({ id: board.id, left_at: null });
+      const before = (await getMemberByName(db, team.id, 'board'))!.token_hash;
+      await db.run('UPDATE members SET left_at = 1, bound_at = 5 WHERE id = ?', [board.id]);
+      const back = (await boardSeat(db, team))!;
+      expect(back).toMatchObject({ id: board.id, left_at: null, bound_at: null });
+      // Revived with a token nobody holds: the retired row's credential stays dead.
+      expect(back.token_hash).not.toBe(before);
     });
 
     it("on an enrolled joiner, a REMOVE leaves the seat's lanes to the hub — no lane.released as musterd (lane 01M3ZBTJKD)", async () => {
