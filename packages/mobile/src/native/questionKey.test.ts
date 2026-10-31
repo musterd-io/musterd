@@ -278,7 +278,11 @@ describe('sendQuestionAnswer', () => {
     expect(await sendQuestionAnswer({ ...opts, delivery, answer: { choice: 2 } })).toBe('refused');
     const { question: _q, ...plainAsk } = delivery.ask;
     expect(
-      await sendQuestionAnswer({ ...opts, delivery: { ...delivery, ask: plainAsk }, answer: { choice: 0 } }),
+      await sendQuestionAnswer({
+        ...opts,
+        delivery: { ...delivery, ask: plainAsk },
+        answer: { choice: 0 },
+      }),
     ).toBe('refused');
     expect(phoneKeys.seal).not.toHaveBeenCalled();
   });
