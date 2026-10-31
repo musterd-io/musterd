@@ -62,7 +62,7 @@ enum PhoneKeysError: Error {
   }
 }
 
-/// The two Secure Enclave keys and the three primitives over them.
+/// The Secure Enclave keys and the primitives over them.
 ///
 /// - **signing** — P-256 guarded by Face ID (`privateKeyUsage` + `biometryCurrentSet`, accessible
 ///   only while unlocked). Every use prompts; a Face ID change invalidates the key, which is
@@ -70,6 +70,10 @@ enum PhoneKeysError: Error {
 /// - **receive** — a P-256 key-agreement key the notification extension opens deliveries with.
 ///   Usable while the phone is locked (`AfterFirstUnlockThisDeviceOnly`, no biometry) because a
 ///   push arrives when the phone may be in a pocket.
+/// - **question** — a P-256 signing key with **no** biometry (ADR 774 §5), so a notification
+///   action can answer a *question* while the phone is locked. The daemon accepts it only on an
+///   answer to a question, under its own domain tag; approvals and verdicts keep the Face ID key.
+///   It is enrolled once per binding by an enrollment the signing key signs.
 ///
 /// CryptoKit stores enclave keys in the keychain itself and hands back a `dataRepresentation`
 /// reference blob; we persist that blob in our own keychain items so the app and the notification
@@ -81,6 +85,9 @@ enum PhoneKeys {
   private static let service = "dev.musterd.keys"
   private static let signingAccount = "signing"
   private static let receiveAccount = "receive"
+  private static let questionAccount = "question"
+  /// `appQuestionAnswerSigningBytes`' first line (`@musterd/protocol` appChannel.ts).
+  private static let questionAnswerTag = "musterd-app-question-answer/v1\n"
 
   /// Serializes key creation: two concurrent first calls must produce one keypair, not two.
   private static let createLock = NSLock()
@@ -152,6 +159,39 @@ enum PhoneKeys {
       context.interactionNotAllowed = true
     }
     return signatures
+  }
+
+  /// The question key's public point (raw uncompressed, base64url), creating the key on first call.
+  static func questionPublicKey() throws -> String {
+    guard SecureEnclave.isAvailable else {
+      throw PhoneKeysError.unavailable("no Secure Enclave on this device")
+    }
+    createLock.lock()
+    defer { createLock.unlock() }
+    return b64url(try loadOrCreateQuestionKey().publicKey.x963Representation)
+  }
+
+  /// Sign `message` (UTF-8) with the question key: no Face ID, no prompt (ADR 774 §5). The caller
+  /// passes only `appQuestionAnswerSigningBytes`; the daemon refuses this key on anything else, and
+  /// so does this function: a message without the question-answer domain tag is never signed.
+  static func signQuestion(_ message: String) throws -> String {
+    guard message.hasPrefix(questionAnswerTag) else {
+      throw PhoneKeysError.unavailable("the question key signs only answers to questions")
+    }
+    guard let reference = loadReference(account: questionAccount) else {
+      throw PhoneKeysError.keyInvalidated("no question key on this phone; enroll it again")
+    }
+    let key: SecureEnclave.P256.Signing.PrivateKey
+    do {
+      key = try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: reference)
+    } catch {
+      throw PhoneKeysError.keyInvalidated("the question key was invalidated; enroll it again")
+    }
+    do {
+      return b64url(try key.signature(for: Data(message.utf8)).derRepresentation)
+    } catch {
+      throw PhoneKeysError.unavailable("the Secure Enclave refused the question key")
+    }
   }
 
   /// Seal `plaintext` to `recipientPublic` (a raw P-256 point, base64url) with the daemon's exact
@@ -388,6 +428,39 @@ enum PhoneKeys {
     try saveReference(
       key.dataRepresentation,
       account: receiveAccount,
+      accessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    )
+    return key
+  }
+
+  /// Load-or-create the question key. No biometry and usable after first unlock, like the receive
+  /// key, because a notification action answers while the phone is locked. ThisDeviceOnly: it never
+  /// leaves this phone, in a backup or otherwise.
+  private static func loadOrCreateQuestionKey() throws -> SecureEnclave.P256.Signing.PrivateKey {
+    if let reference = loadReference(account: questionAccount),
+       let key = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: reference) {
+      return key
+    }
+    var error: Unmanaged<CFError>?
+    guard
+      let access = SecAccessControlCreateWithFlags(
+        kCFAllocatorDefault,
+        kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        [.privateKeyUsage],
+        &error
+      )
+    else {
+      throw PhoneKeysError.unavailable("could not create the question key's access control")
+    }
+    let key: SecureEnclave.P256.Signing.PrivateKey
+    do {
+      key = try SecureEnclave.P256.Signing.PrivateKey(accessControl: access)
+    } catch {
+      throw PhoneKeysError.unavailable("no Secure Enclave, or key creation was refused")
+    }
+    try saveReference(
+      key.dataRepresentation,
+      account: questionAccount,
       accessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
     )
     return key

@@ -322,6 +322,7 @@ src/
     pairingQr.ts           // the QR parse, the relay origin, the fingerprint, the challenge
     phoneKeys.ts           // the typed TS contract of the native module modules/musterd-keys
     push.ts                // the musterd block on an APNs payload, and a fetched body
+    questionKey.ts         // the question key: its Face ID-signed enrollment, and silent answers to questions
     readable.ts            // an ask's text cleaned for a phone: one-line summary, or paragraphs and bullets
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/

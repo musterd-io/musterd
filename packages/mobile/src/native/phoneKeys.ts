@@ -75,6 +75,16 @@ export interface PhoneKeys {
    */
   getPublicKeys(): Promise<{ signing: string; receive: string }>;
 
+  /**
+   * The question key's public point (ADR 774 §5), creating the key on first call: a Secure Enclave
+   * P-256 signing key with no biometry, usable while locked, so a notification action can answer a
+   * question. The daemon accepts it only on an answer to a question.
+   */
+  questionPublicKey(): Promise<string>;
+
+  /** Sign `message` with the question key — no Face ID. Only `appQuestionAnswerSigningBytes`. */
+  signQuestion(message: string): Promise<string>;
+
   /** Sign `message` with the signing key after Face ID. DER-encoded ECDSA P-256/SHA-256. */
   sign(message: string): Promise<string>;
 
