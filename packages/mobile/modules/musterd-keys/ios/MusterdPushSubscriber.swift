@@ -175,17 +175,16 @@ public final class MusterdPushSubscriber: BaseExpoAppDelegateSubscriber,
     ) != nil {
       return
     }
-    // Opening the app asks the daemon to re-push what is pending (ADR 676 decision 9). An ask
-    // already in Notification Center is a repeat: it goes to the list without a banner or a
-    // sound. A new ask alerts as usual (nick, 2026-10-29: opening the app re-alerted asks).
+    // In front, the open list shows every ask (ADR 772). An ask it has already shown is a
+    // re-push (opening the app asks the daemon to re-push what is pending, ADR 676 decision 9):
+    // nothing is presented. A new ask gets a banner and a sound but stays out of Notification
+    // Center, because the list is about to show it and would clear it anyway.
     guard let ref = DeliveredPushes.ref(notification.request.content.userInfo) else {
       completionHandler([.banner, .list, .sound])
       return
     }
-    center.getDeliveredNotifications { delivered in
-      let seen = delivered.contains { DeliveredPushes.ref($0.request.content.userInfo) == ref }
-      completionHandler(seen ? [.list] : [.banner, .list, .sound])
-    }
+    let seen = SharedStore.loadAskRoutes().contains { $0.ref == ref && $0.seen }
+    completionHandler(seen ? [] : [.banner, .sound])
   }
 
   public func userNotificationCenter(

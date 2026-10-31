@@ -63,22 +63,29 @@ small change.
   that screen, because nothing else can deliver the binding.
 - **Reconcile.** On open the app asks the daemon, through the relay, to re-deliver what is pending
   (ADR 659): the daemon is the source of truth and the relay stores no sealed body. It asks at most
-  once a minute, because each request re-pushes every pending ask. A re-pushed ask that is already
-  in Notification Center lands in the list with no banner and no sound; only a new one alerts.
-- **A tap opens the ask.** Tapping a notification takes it out of Notification Center, and so
-  off the list; the app opens that ask's screen instead. An ask with lock-screen actions says
+  once a minute, because each request re-pushes every pending ask. While the app is in front, a
+  re-pushed ask the list has already shown presents nothing; a new one gets a banner and a sound
+  but stays out of Notification Center, because the open list shows it (ADR 772).
+- **A tap opens the ask.** Tapping a notification takes it out of Notification Center, and the
+  app opens that ask's screen. The ask stays on the list (ADR 772). An ask with lock-screen actions says
   "Press and hold to answer". On the ask screen a relay 404 is "Already settled"; a 503, 504 or
   no network is retried once and then "Couldn't reach your team", with Try again.
-- **The list.** Notification Center says which asks reached the phone, not which are still open, so
-  each ref there is fetched by ref through the relay. The daemon answers only for an ask still live
+- **The list.** The phone's own record says which asks reached it (ADR 772): the extension writes
+  each admitted ask's route — team, binding, ref, expiry, and whether the list has shown it; no
+  body, no token — to the keychain item `ask-routes`, at most 50, expired ones pruned. The list
+  reads that record together with Notification Center, which covers notifications that arrived
+  before it. Neither says which asks are still open, so each ref is fetched by ref through the
+  relay. The daemon answers only for an ask still live
   on this binding, re-issued with a fresh token (the old one is spent), so a decided or expired ask
   drops out. Because a fetch spends the previous token, the list does not refresh while the ask
   screen — which holds its own token — is in front.
 - **A settled ask's notifications clear.** When a fetch says gone (a relay 404: answered in the
   app, on /live or in Slack, or expired), and when the app sends an answer, every notification for
-  that ask is removed from Notification Center (`clearDelivered`). A 503, 504 or no network clears
-  nothing: the ask may still be open. Asks seen in the list but still open keep their
-  notifications.
+  that ask is removed from Notification Center (`clearDelivered`) and from the phone's record. A
+  503, 504 or no network clears nothing: the ask may still be open.
+- **A seen ask's notifications clear.** When the list loads while the app is in front, every
+  listed ask is marked seen and its notifications are removed (`markShown`). It stays on the list
+  until it is settled (ADR 772).
 - **A listed act.** The ask screen fetches the ask again for fresh descriptors (they live five
   minutes), hashes each offer's payload on the phone (`offer.ts`), shows nothing whose digest does not
   match, and words the header with `approvalWording`. Approving signs the answer bytes and the

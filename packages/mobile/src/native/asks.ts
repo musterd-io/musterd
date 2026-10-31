@@ -6,11 +6,13 @@
  * open, because an ask answered on /live or in Slack leaves its notification behind. So each
  * ref is fetched through the relay (`GET /app/<team>/body/<binding>/<ref>`), and the daemon
  * answers only for an ask still live on this binding, with a fresh token (the one it replaces is
- * spent). The daemon stays the source of truth; nothing here stores an ask.
+ * spent). The daemon stays the source of truth; nothing here stores an ask's content.
  *
- * A ref the daemon calls gone (answered in the app, on /live or in Slack, or expired) has its
- * notifications cleared, so Notification Center stops showing an ask that is settled. A ref it
- * could not reach keeps them: the ask may still be open.
+ * Notification Center is not the only record (ADR 772): the extension also writes each admitted
+ * ask's route to the phone's own list (`knownAsks`), so an ask stays listed after its notification
+ * is tapped or cleared. Once the list has shown an ask, its notifications are cleared. A ref the
+ * daemon calls gone (answered in the app, on /live or in Slack, or expired) leaves the phone's list
+ * and Notification Center. A ref it could not reach keeps both: the ask may still be open.
  *
  * A missed push is not a lost ask: on open the app sends `redeliver`, and the daemon re-pushes
  * this binding's pending set. Those land as new notifications and refresh the list.
@@ -134,6 +136,12 @@ export async function loadAsks(input: {
     const seen = refs.get(route.ref);
     if (!seen || item.deliveredAt > seen.at) refs.set(route.ref, { route, at: item.deliveredAt });
   }
+  // ADR 772: the phone's own record covers an ask whose notification was cleared or tapped away.
+  for (const known of knownAsks()) {
+    const route = routeOf(known);
+    if (!samePlace(pin, route) || route.expires_at <= now || refs.has(route.ref)) continue;
+    refs.set(route.ref, { route, at: -1 });
+  }
 
   const fetched = await Promise.all(
     [...refs.values()].map(async ({ route }) => ({
@@ -158,13 +166,41 @@ export function settledRefs(fetched: { ref: string; got: AskEntry | FetchMiss }[
   return fetched.flatMap(({ ref, got }) => ('miss' in got && got.miss === 'gone' ? [ref] : []));
 }
 
-/** Take a settled ask's notifications out of Notification Center. A failure is swallowed. */
+/**
+ * A settled ask leaves the phone's list and Notification Center. A failure is swallowed: clearing
+ * is tidying, and a notification left behind still opens to "Already settled".
+ */
 export async function clearSettled(refs: string[]): Promise<void> {
   if (refs.length === 0) return;
   try {
+    phoneKeys.forgetAsks(refs);
     await phoneKeys.clearDelivered(refs);
   } catch {
-    // Clearing is tidying: a notification left behind still opens to "Already settled".
+    // See above.
+  }
+}
+
+/**
+ * The list showed these asks while the app was active (ADR 772): mark them seen, so a re-push
+ * presents nothing, and take their notifications out of Notification Center. They stay listed
+ * until they are settled.
+ */
+export async function markShown(refs: string[]): Promise<void> {
+  if (refs.length === 0) return;
+  try {
+    phoneKeys.markSeen(refs);
+    await phoneKeys.clearDelivered(refs);
+  } catch {
+    // A notification left behind is only a reminder.
+  }
+}
+
+/** The phone's own record; empty where the native module is missing (Expo Go). */
+function knownAsks(): PushRoute[] {
+  try {
+    return phoneKeys.knownAsks();
+  } catch {
+    return [];
   }
 }
 

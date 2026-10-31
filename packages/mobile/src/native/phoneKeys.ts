@@ -156,6 +156,18 @@ export interface PhoneKeys {
   clearDelivered(refs: string[]): Promise<void>;
 
   /**
+   * The phone's own list of the asks that reached it (ADR 772): each admitted ask's route and
+   * whether the list has shown it. Expired records are left out. No body, no token.
+   */
+  knownAsks(): { team: string; binding: string; ref: string; expires_at: number; seen: boolean }[];
+
+  /** The list showed these asks while the app was active: a re-push of one presents nothing. */
+  markSeen(refs: string[]): void;
+
+  /** The daemon called these asks gone: take them out of the phone's list. */
+  forgetAsks(refs: string[]): void;
+
+  /**
    * `onPendingAnswer` fires when a notification action arrives while the app is running;
    * `onDelivery` when a musterd notification is presented while the app is in front.
    */

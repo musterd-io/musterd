@@ -119,6 +119,25 @@ public final class MusterdKeysModule: Module {
       await DeliveredPushes.clear(refs: refs)
     }
 
+    // ADR 772: the phone's own list of the asks that reached it.
+    Function("knownAsks") { () -> [[String: Any]] in
+      let now = Int(Date().timeIntervalSince1970 * 1000)
+      return AskRoutes.prune(SharedStore.loadAskRoutes(), now: now).map {
+        ["team": $0.team, "binding": $0.binding, "ref": $0.ref, "expires_at": $0.expiresAt,
+          "seen": $0.seen]
+      }
+    }
+
+    Function("markSeen") { (refs: [String]) in
+      let now = Int(Date().timeIntervalSince1970 * 1000)
+      SharedStore.updateAskRoutes { AskRoutes.markSeen(records: $0, refs: Set(refs), now: now) }
+    }
+
+    Function("forgetAsks") { (refs: [String]) in
+      let now = Int(Date().timeIntervalSince1970 * 1000)
+      SharedStore.updateAskRoutes { AskRoutes.forget(records: $0, refs: Set(refs), now: now) }
+    }
+
     OnCreate {
       PendingAnswers.emitter = self
     }
