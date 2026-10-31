@@ -1850,7 +1850,9 @@
      strong outlines back on the floor, the colour-everywhere result nick turned down. */
   /* 2026-10-28 (lane 01M6017XWD, nick: "a tiny bit more prominent"): 55% → 70%. One step, same 1px,
      so a floor of plates still reads as hints rather than twelve outlines. */
-  border: 1px solid color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 70%, var(--lc-paper-rim));
+  /* 2026-10-31 (lane 01M69J9QG4, nick: "slightly thicker/bolder"): 1px 70% → 1.5px 80%. One step on
+     each axis; still a rim in the seat's hue, not the hue used neat. */
+  border: 1.5px solid color-mix(in srgb, var(--lc-plate-hue, var(--lc-accent)) 80%, var(--lc-paper-rim));
   font-family: var(--font-sans);
   font-size: var(--lc-type-name);
   letter-spacing: -0.01em;
