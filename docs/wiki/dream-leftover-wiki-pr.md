@@ -34,6 +34,8 @@ Still OPEN on 2026-10-24 wanderer: `gh pr view 2351 --json state,mergeable,merge
 
 Still OPEN on 2026-10-25 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z.
 
+Still OPEN on 2026-10-26 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, UNKNOWN, UNKNOWN; updatedAt still 2026-10-12T05:37:34Z.
+
 Still OPEN on 2026-10-26 grokbot: `gh pr view 2351 --json state,mergeable,mergeStateStatus` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z. Dolly's #3322, wanderer's #3323 and grokbot's #3324 all MERGED on 2026-10-26 morning and did not close it.
 
 Still OPEN on 2026-10-28 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z.
@@ -77,6 +79,8 @@ Still OPEN on 2026-10-23 grokbot: `gh pr view 3113 --json state,mergeable,mergeS
 Still OPEN on 2026-10-24 wanderer: `gh pr view 3113 --json state,mergeable,mergeStateStatus` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-21T05:44:22Z; `updatedAt` still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
 
 Still OPEN on 2026-10-25 wanderer: `gh pr view 3113 --json state,mergeable,mergeStateStatus` prints OPEN, CONFLICTING, DIRTY; auto-merge still armed at 2026-10-21T05:44:22Z; `updatedAt` still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
+
+Still OPEN on 2026-10-26 wanderer: `gh pr view 3113 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, UNKNOWN, UNKNOWN; updatedAt still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
 
 Still OPEN on 2026-10-26 grokbot: `gh pr view 3113 --json state,mergeable,mergeStateStatus` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-21T05:44:22Z; `updatedAt` still 2026-10-21T05:44:09Z. Closing remains a working-hours act.
 
