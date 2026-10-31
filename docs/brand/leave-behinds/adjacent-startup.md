@@ -11,7 +11,7 @@ head and speak in time, which works until you are in a meeting, or asleep, or th
 windows. A better model does not fix that.
 
 **What it did to us.** On our own team, 37% of the code our agents wrote never reached main before
-musterd. After, 0.9%. One team, one read in July and one in September, from our git history. It is
+musterd had a board and review. After, 0.9%. One team, one read in July and one in September, from our git history. It is
 not a controlled study.
 
 ## What changes

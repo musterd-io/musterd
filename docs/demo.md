@@ -405,7 +405,7 @@ go, raise a standard-tier ask to nick about the task"* — so the ask fires on c
 
 **SEE** The board: two owners, two scopes. If a scope overlaps, the warning fires; read it aloud.
 
-**SAY** "The moment you run a second agent on one repo, the waste starts. On our own team, 37% of the code our agents wrote never reached main before musterd. After, 0.9%. The fix is one owner for each piece of work, declared before the first keystroke."
+**SAY** "The moment you run a second agent on one repo, the waste starts. On our own team, 37% of the code our agents wrote never reached main before musterd had a board and review. After, 0.9%. The fix is one owner for each piece of work, declared before the first keystroke."
 
 <!-- The 37% is ours, dated, from our git history (one team, one read in July, one in September; not
      a controlled study). The ledger row is in `docs/demo/pitch/script.md`. MAST is in no spoken beat:
