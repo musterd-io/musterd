@@ -284,6 +284,7 @@ import {
   storePasskeyProof,
 } from '../store/authority.js';
 import { matchGoalQuery, matchLaneQuery, readBoardQuery } from '../store/boardQuery.js';
+import { DAEMON_SERVICE_SEATS } from '../store/boardSeat.js';
 import {
   createCalendarEntry,
   deleteCalendarEntry,
@@ -3374,6 +3375,10 @@ export async function handleHttp(
       if (method === 'POST' && rest === '/members') {
         const rawMember = (await readJson(req)) as { approval?: unknown };
         const body = parseOrBadRequest(AddMemberBody, rawMember);
+        // The daemon's own service seats are never provisioned: a token minted or rotated here would
+        // let its holder speak as the board (lane 01M69N8GR2, security review).
+        if (DAEMON_SERVICE_SEATS.has(body.name))
+          throw new MusterdError('forbidden', `"${body.name}" is the daemon's own seat`);
         const provisioningTeam = await requireTeam(ctx.db, slug);
         await requireHubLocalOnly(ctx, provisioningTeam, 'member creation');
         const roots = body.observer
