@@ -73,6 +73,9 @@ field). This is phase 3a: the decision, the shared check, and Claude Code. OpenC
   be caught twice, by its Stop hook and by the host. Rule 3's one-open-question refusal makes the
   second a no-op. Follows-up: lane `01M67E83M9` (3b), lane `01M67E9BGX` (3c), lane `01M67EA48P`
   (3d, interactive Codex).
+- 2026-11-01: 3c is ADR 783. The host cannot act as the seat once a headless run has exited, so it
+  reports the run's last message on the supplementary wake report and the daemon raises the
+  question as the seat, under §3's rules.
 
 ## Observability & Evaluation
 

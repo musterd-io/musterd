@@ -341,9 +341,13 @@ function killTree(child: ChildProcess, graceMs: number): void {
  *  `error_text` is the harness's own last word when the result is an error (`is_error`): it is the
  *  only place a run that never reached the roster says why — four delta wakes on 2026-09-06 died in
  *  ~10 s at $0.0000 on `Credit balance is too low`, and host.log said "exited without occupying". */
-export function parseRunSummary(
-  stdout: string,
-): { cost_usd?: number; duration_ms?: number; is_error?: boolean; error_text?: string } | null {
+export function parseRunSummary(stdout: string): {
+  cost_usd?: number;
+  duration_ms?: number;
+  is_error?: boolean;
+  error_text?: string;
+  final_text?: string;
+} | null {
   try {
     const parsed = JSON.parse(stdout.trim()) as Record<string, unknown>;
     const isError = typeof parsed['is_error'] === 'boolean' ? parsed['is_error'] : undefined;
@@ -355,6 +359,8 @@ export function parseRunSummary(
       ...(typeof parsed['duration_ms'] === 'number' ? { duration_ms: parsed['duration_ms'] } : {}),
       ...(isError !== undefined ? { is_error: isError } : {}),
       ...(isError === true && result.length > 0 ? { error_text: result } : {}),
+      // ADR 783: a clean run's `result` is its last assistant message — where a question would be.
+      ...(isError === false && result.length > 0 ? { final_text: result } : {}),
     };
   } catch {
     return null;
@@ -513,6 +519,7 @@ function runAttempt(
       // it never sees — a watchdog kill, a crash — for the session this attempt ran.
       captures: [{ harness: 'claude-code', ids: [opts.sessionId] }],
       ...(yielded ? { yielded: true } : {}),
+      ...(summary?.final_text ? { final_message: summary.final_text } : {}),
     };
   });
 
@@ -753,6 +760,7 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
           const costs = known.filter((k) => k.cost_usd !== undefined);
           const durations = known.filter((k) => k.duration_ms !== undefined);
           const captures = known.flatMap((k) => k.captures ?? []);
+          const said = [...known].reverse().find((k) => k.final_message)?.final_message;
           return {
             ...(costs.length > 0 ? { cost_usd: costs.reduce((a, k) => a + k.cost_usd!, 0) } : {}),
             ...(durations.length > 0
@@ -761,6 +769,8 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
             ...(captures.length > 0 ? { captures } : {}),
             // ADR 546: any attempt of this lease taken over means the lease was.
             ...(known.some((k) => k.yielded) ? { yielded: true } : {}),
+            // ADR 783: the last attempt that spoke has the run's last word.
+            ...(said ? { final_message: said } : {}),
           };
         });
       // Per-order knobs (increment 5): tool policy + turn cap ride the argv; the transcript bound

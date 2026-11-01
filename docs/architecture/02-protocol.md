@@ -258,6 +258,10 @@ launcher never signals it, and the MCP adapter does not honour the file (ADR 554
 holding `lease_id` to stop. `WakeReportBodySchema` gains optional `yielded`: the supplementary
 report for a run a person took over, recorded as a `residency.wake_cost` row with `yielded: true`.
 It never changes the primary outcome, so a take-over does not count as a failed wake.
+`WakeReportBodySchema` also gains optional `final_message` (≤ `WAKE_FINAL_MESSAGE_MAX`, 2,000):
+the settled run's last assistant message, on the supplementary report only. The daemon looks for a
+question in it (`inferQuestion`) and raises it as the seat (ADR 783). It is the one model-output
+field on the report, and it is never logged or audited.
 
 ## Durable review promises (ADR 490, SPEC A.14)
 

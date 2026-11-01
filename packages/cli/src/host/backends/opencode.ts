@@ -150,6 +150,23 @@ export function parseOpencodeStepLine(
   }
 }
 
+/** opencode's finished text part (`opencode run --format json`): `{"type":"text", "part":
+ *  {"type":"text","text"}}`. ADR 783: the last one is the run's last word. */
+const TextPartSchema = z.object({
+  type: z.literal('text'),
+  part: z.object({ type: z.literal('text'), text: z.string() }),
+});
+
+/** External JSONL boundary: a finished text part's text, or nothing. */
+export function parseOpencodeTextLine(line: string): string | undefined {
+  try {
+    const result = TextPartSchema.safeParse(JSON.parse(line));
+    return result.success ? result.data.part.text : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** External JSONL boundary: only a typed event record supplies an identity. */
 export function parseOpencodeSessionLine(line: string): string | undefined {
   try {
@@ -324,6 +341,7 @@ async function attempt(
   });
   let usage: WakeUsage | undefined;
   let harnessCost: number | undefined;
+  let lastText: string | undefined;
   let buffer = '';
   child.stdout?.on('data', (chunk: Buffer) => {
     buffer += chunk.toString();
@@ -341,6 +359,7 @@ async function attempt(
         if (step.harness_cost_usd !== undefined)
           harnessCost = (harnessCost ?? 0) + step.harness_cost_usd;
       }
+      lastText = parseOpencodeTextLine(line) ?? lastText;
     }
   });
   let timedOut = false;
@@ -360,6 +379,7 @@ async function attempt(
   const settled: Promise<WakeCompletion | undefined> = exited.then((code) => {
     clearTimeout(watchdog);
     sessionId ??= parseOpencodeSessionLine(buffer);
+    lastText = parseOpencodeTextLine(buffer) ?? lastText;
     const yielded = lease?.settle() ?? false;
     const duration_ms = Date.now() - startedAt;
     ctx.log(
@@ -379,6 +399,7 @@ async function attempt(
       // ADR 436 clause 4: the capture this run made or resumed — the loop stamps it ended.
       captures: [{ harness: 'opencode', ids: [sessionId, expectedId] }],
       ...(yielded ? { yielded: true } : {}),
+      ...(lastText && code === 0 ? { final_message: lastText } : {}),
     };
   });
   const verified = await Promise.race([

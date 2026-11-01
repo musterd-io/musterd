@@ -11,6 +11,7 @@ import {
   opencodeGatewayConfig,
   opencodeWakeEnv,
   parseOpencodeSessionLine,
+  parseOpencodeTextLine,
   parseOpencodeStepLine,
 } from './opencode.js';
 
@@ -73,6 +74,16 @@ describe('OpenCode residency argv', () => {
     ).toBe('ses_x');
     expect(parseOpencodeSessionLine('{"type":"text","timestamp":1}')).toBeUndefined();
     expect(parseOpencodeSessionLine('not json at all')).toBeUndefined();
+  });
+  it('reads an assistant message only from a finished text part (ADR 783)', () => {
+    const line = (part: object) =>
+      JSON.stringify({ type: 'text', timestamp: 1, sessionID: 's', part });
+    expect(parseOpencodeTextLine(line({ type: 'text', text: 'Ship it?' }))).toBe('Ship it?');
+    expect(parseOpencodeTextLine(line({ type: 'reasoning', text: 'x' }))).toBeUndefined();
+    expect(
+      parseOpencodeTextLine('{"type":"step_finish","part":{"type":"text","text":"x"}}'),
+    ).toBeUndefined();
+    expect(parseOpencodeTextLine('not json')).toBeUndefined();
   });
   it('does not pass ambient musterd credentials into the child', () => {
     const env = opencodeWakeEnv({

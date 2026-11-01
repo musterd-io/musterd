@@ -7,6 +7,7 @@ import {
   buildCodexResumeArgs,
   codexBackend,
   codexWakeEnv,
+  parseCodexMessageLine,
   parseCodexThreadLine,
   parseCodexUsageLine,
   addUsage,
@@ -106,6 +107,19 @@ describe('Codex residency argv', () => {
   it('accepts only a typed thread.started JSONL record', () => {
     expect(parseCodexThreadLine('{"type":"thread.started","thread_id":"t"}')).toBe('t');
     expect(parseCodexThreadLine('{"type":"item.completed","thread_id":"t"}')).toBeUndefined();
+  });
+  it('reads an assistant message only from a completed agent_message item (ADR 783)', () => {
+    const done = (item: object) => JSON.stringify({ type: 'item.completed', item });
+    expect(parseCodexMessageLine(done({ id: 'i', type: 'agent_message', text: 'Merge it?' }))).toBe(
+      'Merge it?',
+    );
+    expect(
+      parseCodexMessageLine(done({ id: 'i', type: 'reasoning', text: 'hm?' })),
+    ).toBeUndefined();
+    expect(
+      parseCodexMessageLine('{"type":"item.started","item":{"type":"agent_message","text":"x"}}'),
+    ).toBeUndefined();
+    expect(parseCodexMessageLine('not json')).toBeUndefined();
   });
   it('does not pass ambient musterd credentials into the child', () => {
     const env = codexWakeEnv({
