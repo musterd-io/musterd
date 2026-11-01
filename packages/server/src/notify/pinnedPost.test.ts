@@ -244,6 +244,7 @@ describe('getPinned — the seeds relay pull takes the same rule (lane 01M3W815K
       expect(await getPinned('https://relay.example/seeds', {}, 1000, 1024, d)).toEqual({
         ok: false,
         refused: true,
+        reason: 'not_public',
       });
       expect(d.calls).toHaveLength(0);
     }
@@ -254,13 +255,27 @@ describe('getPinned — the seeds relay pull takes the same rule (lane 01M3W815K
     expect(await getPinned('http://relay.example/seeds', {}, 1000, 1024, d)).toEqual({
       ok: false,
       refused: true,
+      reason: 'not_https',
     });
-    expect(await getPinned('not a url', {}, 1000, 1024, d)).toEqual({ ok: false, refused: true });
+    expect(await getPinned('not a url', {}, 1000, 1024, d)).toEqual({
+      ok: false,
+      refused: true,
+      reason: 'malformed',
+    });
     expect(d.calls).toHaveLength(0);
+    // A name that does not resolve is told apart from a name that resolves somewhere private: the
+    // first is the network (the laptop is offline, the resolver is down), the second is policy.
     const nx = deps(new Error('ENOTFOUND'));
     expect(await getPinned('https://nx.example/seeds', {}, 1000, 1024, nx)).toEqual({
       ok: false,
       refused: true,
+      reason: 'unresolved',
+    });
+    const empty = deps([]);
+    expect(await getPinned('https://nx.example/seeds', {}, 1000, 1024, empty)).toEqual({
+      ok: false,
+      refused: true,
+      reason: 'unresolved',
     });
     const moved = deps([{ address: '93.184.216.34', family: 4 }], fakeGet(302));
     expect(await getPinned('https://relay.example/seeds', {}, 1000, 1024, moved)).toEqual({
