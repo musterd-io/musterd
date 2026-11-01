@@ -200,6 +200,12 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
     token: z.string(),
     nonce: z.string(),
     expires_at: z.number().int(),
+    /**
+     * On a question delivery: the question key the daemon holds for this binding (ADR 774), as
+     * base64url (no padding) of SHA-256 over its raw 65-byte point. Absent when it holds none. The
+     * phone offers lock-screen answers only when this matches its own enrolled key.
+     */
+    question_key: z.string().length(43).optional(),
   }),
   z.object({
     v: z.literal(1),

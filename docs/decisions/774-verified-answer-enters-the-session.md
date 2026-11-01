@@ -112,6 +112,15 @@ questions: an answer straight from the notification, with no Face ID (2026-10-30
     the write share one transaction. So an older enrollment held back by the relay cannot roll the
     key back. The write is a compare-and-swap on the keys just read (Postgres's READ COMMITTED
     would otherwise let two racing enrollments both pass the check); the loser is `replayed`.
+- 2026-10-31 (lane `01M69KHDVJ`): the phone only hears the relay's 202 for an enrollment, so if the
+  daemon refused one (a clock ahead by more than a minute, a revoked phone key), the lock-screen
+  buttons stayed on and every answer from them was quietly refused.
+  - A question's delivery now carries an optional `question_key`: base64url (no padding) of
+    SHA-256 over the raw 65-byte point the daemon holds for the binding. It is absent when the
+    daemon holds no question key.
+  - The phone offers lock-screen answers only when it matches the same hash of its own enrolled
+    key; otherwise it shows the question without buttons and enrolls again on its next open.
+    Follows-up: lane `01M69J0K0X` (cider, the phone side).
 
 ## Observability & Evaluation
 

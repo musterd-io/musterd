@@ -1,4 +1,4 @@
-import { createPublicKey, verify as cryptoVerify, type KeyObject } from 'node:crypto';
+import { createHash, createPublicKey, verify as cryptoVerify, type KeyObject } from 'node:crypto';
 import {
   AppQuestionAnswerSchema,
   AppQuestionKeyEnrollSchema,
@@ -76,6 +76,14 @@ export function questionAudience<M extends { name: string; kind: string }>(
 }
 
 export { questionOf };
+
+/**
+ * The question key a delivery names (ADR 774): base64url of SHA-256 over the raw point, so the
+ * phone can tell whether the daemon holds the key it enrolled.
+ */
+export function questionKeyThumbprint(point: string): string {
+  return createHash('sha256').update(Buffer.from(point, 'base64url')).digest('base64url');
+}
 
 function p256(point: string): KeyObject {
   const raw = Buffer.from(point, 'base64url');

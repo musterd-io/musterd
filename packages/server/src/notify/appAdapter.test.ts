@@ -1174,6 +1174,24 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
     );
   });
 
+  it('a question names the question key the daemon holds, and nothing before one is enrolled', async () => {
+    const s = await seed();
+    const before = await delivered(s, await raiseQuestion(s, 'q-1'));
+    expect(before.question_key).toBeUndefined();
+    const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('qk-1', await enrollBody(s, qk.publicKey)),
+      NOW,
+    );
+    const after = await delivered(s, await raiseQuestion(s, 'q-2'));
+    const raw = Buffer.from(p256Raw(qk.publicKey), 'base64url');
+    expect(raw).toHaveLength(65);
+    expect(after.question_key).toBe(createHash('sha256').update(raw).digest('base64url'));
+    expect(after.question_key).toHaveLength(43);
+  });
+
   it("a silent question-key answer is recorded as nick's verified app answer, once", async () => {
     const s = await seed();
     const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });
