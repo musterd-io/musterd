@@ -39,13 +39,15 @@ no runtime version. MoveTrail, nick's other Expo app, ships this way already.
    public certificate (`packages/mobile/certs/certificate.pem`, in the repo) and
    `codeSigningMetadata` in `app.json`; expo-updates then rejects any update whose signature does
    not verify. The private key never enters the repo or EAS. nick generates it on his own machine
-   and stores it as a GitHub secret, and only the publish workflow reads it. Changing the key needs
+   and stores it as a secret of a GitHub environment, `production-ota`, that needs his approval on
+   every run; only the publish workflow reads it, through a pinned `eas-cli`. Changing the key needs
    a TestFlight build, since the certificate is in the binary.
 3. **The runtime version is the native fingerprint** (`runtimeVersion: {policy: "fingerprint"}`).
    Any change to native code, a config plugin or a native dependency changes it, so an update is
    only ever offered to binaries built from the same native tree. An update published after a
    Swift change reaches no phone until a TestFlight build with that change is installed.
-4. **One way to publish:** an `ios-update` workflow, dispatched by hand with a git ref, that runs
+4. **One way to publish:** an `ios-update` workflow, dispatched by hand from the branch it
+   publishes (no ref input, so the approval shows what ships), that runs
    `eas update --channel production` with the signing key from the secret. No seat publishes from
    a laptop. A publish is a deploy: it goes to nick as an ask first, as every deploy does.
 

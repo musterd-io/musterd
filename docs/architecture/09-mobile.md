@@ -159,12 +159,12 @@ The upload script treats altool's own `UPLOAD SUCCEEDED` line as success, becaus
 the fastlane action afterwards on a resume-file error.
 
 **Over the air** ([ADR 780](../decisions/780-phone-ota-updates.md)). A JavaScript-only change ships
-without TestFlight: the `ios-update` workflow (Actions → ios-update → Run workflow, with a branch or
-SHA) runs `eas update --channel production`, and the phone downloads it on launch and applies it on
+without TestFlight: the `ios-update` workflow (Actions → ios-update → Run workflow, from the branch
+to publish) runs `eas update --channel production`, and the phone downloads it on launch and applies it on
 the next launch — a launch never waits for it. Every update is code-signed. The app carries the
 public certificate (`certs/certificate.pem`) and refuses an update that does not verify; the
-private key exists only as the `EXPO_UPDATE_PRIVATE_KEY` repository secret, never in the repo or
-EAS. The runtime version is the native fingerprint, so an update reaches only binaries built from
+private key exists only as the `EXPO_UPDATE_PRIVATE_KEY` secret of the `production-ota` GitHub
+environment, never in the repo or EAS, and that environment needs nick's approval on every run. The runtime version is the native fingerprint, so an update reaches only binaries built from
 the same native code: anything touching Swift, a config plugin or a native dependency still goes
 through `ios-testflight`. A publish is a deploy, so it goes to nick as an ask first.
 
