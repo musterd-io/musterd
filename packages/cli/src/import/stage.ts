@@ -54,7 +54,7 @@ const StageShape = z
     lanes: z.array(z.object({ ref: z.string(), title: z.string() }).passthrough()),
     linked_goals: z.array(z.string()),
     diagnostics: z.array(z.object({ level: z.enum(['error', 'warning']) }).passthrough()),
-    created: z.record(z.string()),
+    created: z.record(z.string(), z.string()),
     saved_at: z.number().nullable(),
     sync: z
       .object({

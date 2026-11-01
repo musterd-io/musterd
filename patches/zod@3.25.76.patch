@@ -1,0 +1,122 @@
+diff --git a/src/v3/types.ts b/src/v3/types.ts
+index b10e84f1beb1dacdae5e01c42a223974b9e20b73..cd1587a0dc94dd5ad2cc485c822adc0f304fc891 100644
+--- a/src/v3/types.ts
++++ b/src/v3/types.ts
+@@ -2295,20 +2295,27 @@ export class ZodArray<T extends ZodTypeAny, Cardinality extends ArrayCardinality
+       }
+     }
+ 
++    if ((def.exactLength !== null && ctx.data.length > def.exactLength.value) ||
++        (def.maxLength !== null && ctx.data.length > def.maxLength.value)) {
++        return INVALID;
++    }
+     if (ctx.common.async) {
+-      return Promise.all(
+-        ([...ctx.data] as any[]).map((item, i) => {
+-          return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+-        })
+-      ).then((result) => {
+-        return ParseStatus.mergeArray(status, result);
+-      });
++        return (async () => {
++            const result: SyncParseReturnType<any>[] = [];
++            for (let i = 0; i < ctx.data.length; i++) {
++                const item = await def.type._parseAsync(new ParseInputLazyPath(ctx, ctx.data[i], ctx.path, i));
++                if (item.status !== "valid") return INVALID;
++                result.push(item);
++            }
++            return ParseStatus.mergeArray(status, result);
++        })();
++    }
++    const result: SyncParseReturnType<any>[] = [];
++    for (let i = 0; i < ctx.data.length; i++) {
++        const item = def.type._parseSync(new ParseInputLazyPath(ctx, ctx.data[i], ctx.path, i));
++        if (item.status !== "valid") return INVALID;
++        result.push(item);
+     }
+-
+-    const result = ([...ctx.data] as any[]).map((item, i) => {
+-      return def.type._parseSync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+-    });
+-
+     return ParseStatus.mergeArray(status, result);
+   }
+ 
+diff --git a/v3/types.cjs b/v3/types.cjs
+index 11ed4dfc4745f9af1f1501874576b78b77d294ef..e3e5ef19cd50e0df2dbb7c9f87d4bbc0f7ce13bc 100644
+--- a/v3/types.cjs
++++ b/v3/types.cjs
+@@ -1819,16 +1819,27 @@ class ZodArray extends ZodType {
+                 status.dirty();
+             }
+         }
++        if ((def.exactLength !== null && ctx.data.length > def.exactLength.value) ||
++            (def.maxLength !== null && ctx.data.length > def.maxLength.value)) {
++            return parseUtil_js_1.INVALID;
++        }
+         if (ctx.common.async) {
+-            return Promise.all([...ctx.data].map((item, i) => {
+-                return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+-            })).then((result) => {
++            return (async () => {
++                const result = [];
++                for (let i = 0; i < ctx.data.length; i++) {
++                    const item = await def.type._parseAsync(new ParseInputLazyPath(ctx, ctx.data[i], ctx.path, i));
++                    if (item.status !== "valid") return parseUtil_js_1.INVALID;
++                    result.push(item);
++                }
+                 return parseUtil_js_1.ParseStatus.mergeArray(status, result);
+-            });
++            })();
++        }
++        const result = [];
++        for (let i = 0; i < ctx.data.length; i++) {
++            const item = def.type._parseSync(new ParseInputLazyPath(ctx, ctx.data[i], ctx.path, i));
++            if (item.status !== "valid") return parseUtil_js_1.INVALID;
++            result.push(item);
+         }
+-        const result = [...ctx.data].map((item, i) => {
+-            return def.type._parseSync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+-        });
+         return parseUtil_js_1.ParseStatus.mergeArray(status, result);
+     }
+     get element() {
+diff --git a/v3/types.js b/v3/types.js
+index 40b11c0f01b2af54e0ed48e198607bd8836d9a63..9ad5ff216f977f04fc20f34d968684418c58f663 100644
+--- a/v3/types.js
++++ b/v3/types.js
+@@ -1798,16 +1798,27 @@ export class ZodArray extends ZodType {
+                 status.dirty();
+             }
+         }
++        if ((def.exactLength !== null && ctx.data.length > def.exactLength.value) ||
++            (def.maxLength !== null && ctx.data.length > def.maxLength.value)) {
++            return INVALID;
++        }
+         if (ctx.common.async) {
+-            return Promise.all([...ctx.data].map((item, i) => {
+-                return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+-            })).then((result) => {
++            return (async () => {
++                const result = [];
++                for (let i = 0; i < ctx.data.length; i++) {
++                    const item = await def.type._parseAsync(new ParseInputLazyPath(ctx, ctx.data[i], ctx.path, i));
++                    if (item.status !== "valid") return INVALID;
++                    result.push(item);
++                }
+                 return ParseStatus.mergeArray(status, result);
+-            });
++            })();
++        }
++        const result = [];
++        for (let i = 0; i < ctx.data.length; i++) {
++            const item = def.type._parseSync(new ParseInputLazyPath(ctx, ctx.data[i], ctx.path, i));
++            if (item.status !== "valid") return INVALID;
++            result.push(item);
+         }
+-        const result = [...ctx.data].map((item, i) => {
+-            return def.type._parseSync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+-        });
+         return ParseStatus.mergeArray(status, result);
+     }
+     get element() {

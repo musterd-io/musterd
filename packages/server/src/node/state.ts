@@ -36,7 +36,9 @@ export type NodeEnrollment = z.infer<typeof NodeEnrollmentSchema>;
 
 const NodeEnrollmentEntrySchema = NodeEnrollmentSchema.extend({ team: z.string().min(1) }).strict();
 
-const NodeStateSchema = z.object({ nodes: z.record(NodeEnrollmentSchema).default({}) });
+const NodeStateSchema = z.object({
+  nodes: z.record(z.string(), NodeEnrollmentSchema).prefault({}),
+});
 export type NodeState = z.infer<typeof NodeStateSchema>;
 
 export function nodeStatePath(env: NodeJS.ProcessEnv = process.env): string {

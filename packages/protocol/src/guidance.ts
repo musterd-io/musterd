@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 60;
+export const GUIDANCE_CONTENT_VERSION = 61;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -588,9 +588,13 @@ export function renderOrientSkill(): string {
     '   discharges it for your co-addressees; skip it and two seats review the same thing. Open',
     '   incident lanes: read the lane, post one status_update',
     '   with what you found. Do not start other work into a shared red.',
+    '   **Security and Dependabot findings are tier 1 musterd asks** (ADR 784):',
+    '   validate and address them automatically, without waiting for another pickup request.',
+    '   Reconcile the current dependency graph, claim a lane before writing, and coordinate',
+    '   any existing owner. Record concrete blockers; active testing still needs its own authorization.',
     '4. **Surface, do not handle (tier 2) — work nobody routed to you.** Carried lanes, up-next,',
     '   claimable open lanes: one compact readout for the human, from the reconciled `team_next`',
-    '   of step 2, never from memory alone. Do not claim unaddressed work.',
+    '   of step 2, never from memory alone. Apart from the security findings above, do not claim unaddressed work.',
     "5. **Label from THIS session's tool list** — not from which harness you think you are on",
     '   (ADR 418). `set_session_title` → self-label THIS session with `session_id: "self"` as',
     '   `<seat> · <start time> · <team> · <the host’s own title>` — e.g. `dolly · Mon 1p · revive ·',

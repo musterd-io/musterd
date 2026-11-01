@@ -7,6 +7,7 @@ import {
   type CanMessage,
   type VisibilityLevel,
 } from './capabilities.wire.js';
+import { sparsePartial } from './schema.js';
 
 /**
  * The v0.3 seat capability model (ADR 070, P1 of ADR 069) — the **typed substrate** for governance.
@@ -72,7 +73,7 @@ export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 
 /** A partial capability override — what a `roles/<name>.toml` default or a per-seat narrowing carries
  *  (any subset of the fields). */
-export const PartialCapabilitiesSchema = CapabilitiesSchema.partial();
+export const PartialCapabilitiesSchema = sparsePartial(CapabilitiesSchema);
 export type PartialCapabilities = z.infer<typeof PartialCapabilitiesSchema>;
 
 /**
@@ -251,7 +252,7 @@ export function effectiveCapabilities(
  *  server now owns (ADR 070). */
 export const RoleSchema = z.object({
   name: z.string(),
-  capabilities: PartialCapabilitiesSchema.default({}),
+  capabilities: PartialCapabilitiesSchema.prefault({}),
   charter: z.string().optional(),
 });
 export type Role = z.infer<typeof RoleSchema>;

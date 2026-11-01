@@ -4,6 +4,13 @@
 
 This is the implementation-facing distillation of `SPEC.md`. `SPEC.md` is the normative, versioned, public protocol; this file restates it as concrete JSON shapes + the WS/HTTP contract the server and clients implement. **If this file and `SPEC.md` disagree, `SPEC.md` wins** and you fix this file (with an ADR if substantive). The canonical zod schemas live in `@musterd/protocol` and are the executable form of both.
 
+Validation uses Zod 4 ([ADR 784](../decisions/784-dependency-validation-refresh.md)).
+`schema.ts` supplies `sparsePartial` for policy overrides: defaults belong to the dense read
+schema, while an override preserves only fields actually chosen. Enum dictionaries that were
+sparse use `partialRecord`; object defaults use `prefault` where nested defaults must be parsed.
+The sync pull envelope is rebuilt from the base shape before widening its act string, preserving
+the existing forward-compatible ingress without running current-version act refinements.
+
 Protocol version: **`musterd/0.3`** (string constant `PROTOCOL_VERSION` in `@musterd/protocol`).
 
 ## The Envelope
@@ -369,7 +376,7 @@ export const Envelope = z.object({
   id: z.string(), v: z.literal(PROTOCOL_VERSION), team: z.string(),
   from: z.string(), to: Recipient, act: Act,
   body: z.string().default(''), thread: z.string().nullish(),
-  meta: z.record(z.unknown()).nullish(), ts: z.number().int(),
+  meta: z.record(z.string(), z.unknown()).nullish(), ts: z.number().int(),
 }).superRefine(actMetaRules);   // enforces accept/decline -> meta.in_reply_to; resolve -> thread; defer -> meta.goal_id (ADR 103)
 
 export type Envelope = z.infer<typeof Envelope>;

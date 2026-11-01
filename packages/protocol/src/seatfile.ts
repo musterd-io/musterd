@@ -110,7 +110,7 @@ export const RoleFileSchema = z.object({
   /** One-line summary the roster surfaces (ADR 227) — the discoverable face of the role; the full
    *  `charter` stays prose for humans and primers. Optional on parse for pre-227 files. */
   summary: z.string().optional(),
-  capabilities: PartialCapabilitiesSchema.default({}),
+  capabilities: PartialCapabilitiesSchema.prefault({}),
   charter: z.string().optional(),
   /** The role's skill: a directory name under the repo's `.agents/skills/` (ADR 586 §3). Absent, it
    *  is the role's own name, so a role file written before the field stays valid. */
@@ -211,14 +211,13 @@ export function normalizeSeatName(name: string): string {
  * "this file is fine". Callers run it beside a parse, never instead of one.
  */
 export function unknownRosterKeys(kind: 'team' | 'seat' | 'role', text: string): string[] {
-  // SeatFileSchema is a ZodEffects (it carries a `.refine`), so its object shape lives one level in.
-  // Reaching through `innerType()` rather than duplicating the key list keeps this derived from the
-  // schema — a hand-kept copy is precisely the stale proxy this function exists to catch.
+  // Zod 4 keeps the shape on a refined object. Derive the key list from that shape so
+  // a hand-kept copy cannot go stale.
   const shape =
     kind === 'team'
       ? TeamFileSchema.shape
       : kind === 'seat'
-        ? SeatFileSchema.innerType().shape
+        ? SeatFileSchema.shape
         : RoleFileSchema.shape;
   let raw: unknown;
   try {

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { sparsePartial } from './schema.js';
 import {
   STYLE_BLUNTNESS,
   STYLE_FLOOR_PHRASES,
@@ -78,16 +79,16 @@ export type StyleEnvelope = z.infer<typeof StyleEnvelopeSchema>;
 
 /** `PolicySchema.style`, dense on read: `parse({})` is the shipped default. */
 export const StylePolicySchema = z.object({
-  floor: StyleFloorSchema.default({}),
-  defaults: StyleDialsSchema.default({}),
+  floor: StyleFloorSchema.prefault({}),
+  defaults: StyleDialsSchema.prefault({}),
   prose: ProseSchema.default(''),
 });
 export type StylePolicy = z.infer<typeof StylePolicySchema>;
 
 /** What an admin wrote (ADR 185): optional at every level, so a present `floor` stays sparse. */
 export const StylePolicyOverrideSchema = z.object({
-  floor: StyleFloorSchema.partial().optional(),
-  defaults: StyleDialsSchema.partial().optional(),
+  floor: sparsePartial(StyleFloorSchema).optional(),
+  defaults: sparsePartial(StyleDialsSchema).optional(),
   prose: ProseSchema.optional(),
 });
 export type StylePolicyOverride = z.infer<typeof StylePolicyOverrideSchema>;

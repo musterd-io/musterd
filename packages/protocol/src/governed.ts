@@ -66,7 +66,7 @@ export const GovernedPolicySchema = z
         quota: QuotaSchema.optional(),
       })
       .strict(),
-    members: z.record(NameSchema, GovernedPolicyMemberSchema).default({}),
+    members: z.record(NameSchema, GovernedPolicyMemberSchema).prefault({}),
   })
   .strict()
   .superRefine((policy, ctx) => {

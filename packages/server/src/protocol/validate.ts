@@ -11,10 +11,9 @@ export function parseEnvelope(value: unknown): Envelope {
   return result.data;
 }
 
-/** Parse with an arbitrary schema, mapping failure to a bad_request MusterdError. The input type
- *  parameter is `any` so preprocess-wrapped schemas (input `unknown`, e.g. ADR 296 legacy-key
- *  adoption) infer their OUTPUT type instead of collapsing `T` to `unknown`. */
-export function parseOrBadRequest<T>(schema: z.ZodType<T, z.ZodTypeDef, any>, value: unknown): T {
+/** Parse with an arbitrary schema, mapping failure to a bad_request MusterdError. Infer the
+ *  output independently of the input, including preprocess-wrapped legacy-key schemas. */
+export function parseOrBadRequest<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) {
     throw new MusterdError('bad_request', formatZod(result.error));

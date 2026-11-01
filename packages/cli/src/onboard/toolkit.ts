@@ -40,7 +40,7 @@ export const ToolkitMcpServerSchema = z
     name: z.string().min(1),
     command: z.string().min(1).optional(),
     args: z.array(z.string()).default([]),
-    env: z.record(z.string()).default({}),
+    env: z.record(z.string(), z.string()).prefault({}),
     url: z.string().url().optional(),
   })
   .refine((s) => (s.command === undefined) !== (s.url === undefined), {
@@ -73,7 +73,7 @@ export const ToolkitToolsSchema = z
     /** Declared Codex plugins; the Codex adapter writes project-local enable tables (ADR 323). */
     codex_plugins: z.array(CodexPluginIdSchema).default([]),
   })
-  .default({});
+  .prefault({});
 
 /**
  * The charter — the *lens*, not a résumé (human-agent-dynamics.md §3). Authored as a string or an

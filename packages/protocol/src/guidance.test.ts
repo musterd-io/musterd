@@ -87,6 +87,13 @@ describe('content stamp', () => {
 });
 
 describe('orient tier 1 owns addressed work (ADR 326 amendment 2026-08-27 UTC)', () => {
+  it('automatically addresses security and Dependabot findings as tier 1 (ADR 784)', () => {
+    const skill = renderOrientSkill();
+    expect(skill).toContain('Security and Dependabot findings are tier 1 musterd asks');
+    expect(skill).toContain('validate and address them automatically');
+    expect(skill).toContain('claim a lane before writing');
+    expect(skill).toContain('active testing still needs its own authorization');
+  });
   // The defect this pins: seats surfaced acceptance requests routed to them and then asked the
   // human's permission to take them — because the skill's tier 2 said "owed reviews: surface,
   // do not handle". The autonomy line sits between ADDRESSED and UNADDRESSED work.
@@ -261,6 +268,7 @@ describe('version-bump discipline (ADR 085)', () => {
     58: '9ca4f5a9bb68c7e2', // named inbox ids are historical reads; `--waiting` checks pending acts; answer request_help with accept/decline + reply_to, then resolve the thread when work is done (lane 01M5JTZWHQ)
     59: 'f5384d800cf1085a', // ADR 726 follow-up: a claimed lane supplies roster status, so lane-picker and orientation no longer prompt redundant status_update sends
     60: 'dee6c5d030e4394b', // + waiting without polling names the act lane: an act-lane seat ends its turn and the host resumes it (ADR 735, lane 01M5WS00G1)
+    61: 'c0955cd051fbe95d', // ADR 784: security and Dependabot findings are addressed as tier 1.
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {

@@ -30,13 +30,14 @@ import { loadProvisioning, saveProvisioning } from './manifest.js';
 const McpJsonSchema = z.object({
   mcpServers: z
     .record(
+      z.string(),
       z.object({
         command: z.string().min(1),
         args: z.array(z.string()).default([]),
-        env: z.record(z.string()).default({}),
+        env: z.record(z.string(), z.string()).prefault({}),
       }),
     )
-    .default({}),
+    .prefault({}),
 });
 
 /** The manifest key that records mirrored servers, as `repo-server <harnessId> <name>`. */
