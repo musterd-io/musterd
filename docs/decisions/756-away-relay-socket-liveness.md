@@ -80,6 +80,13 @@ A half-open socket fails silently at both ends:
     and the daemon's answers queue behind each other on its one database connection. The daemon
     now logs `away_app_fetch_slow {ms, found}` past 1 s. The phone side is cider's.
     Follows-up: lane `01M69CWVZN`.
+- 2026-10-31 (lane `01M69Q215W`): two app pushes on 2026-10-30 had relay handlers of 9.7 s and
+  22 s, though the APNs request itself aborts at 5 s. To find where the time goes, the relay now
+  logs one `apns_send` line per push with `token_ms` (provider token), `fetch_ms` (the APNs
+  request) and `total_ms` (the whole frame handler), plus the status and reason. It never logs the
+  device token or the sealed body. A large `total_ms` with small parts means the time is spent
+  outside the send. At the first restart after #3682 (onto c3684ec) the relay refused no socket
+  (0 × 409, against 5 at the restart on 2026-10-30).
 
 ## Observability & Evaluation
 

@@ -21,7 +21,7 @@
  * operator map, so rotation or revocation refuses the old socket's next frame (§4).
  */
 
-import { apnsConfigFrom, sendApns } from './apns.js';
+import { apnsConfigFrom, sendApns, type ApnsTiming } from './apns.js';
 import {
   cloudDestinationFrom,
   ingressSignedPayload,
@@ -869,12 +869,30 @@ export class TeamRelay implements DurableObject {
       );
       return;
     }
-    const { body } = apnsPayload(slug, frame);
+    const { body, inline } = apnsPayload(slug, frame);
+    const timing: ApnsTiming = {};
     const result = await sendApns(
       config,
       frame.push,
       { body, expiresAt: frame.expires_at, collapseId: frame.ask_ref },
       now,
+      fetch,
+      timing,
+    );
+    // Workers Logs: where a slow push spent its time (2026-10-30 had handlers of 9.7 s and 22 s).
+    // Route and outcome only — never the device token or the sealed body.
+    console.log(
+      JSON.stringify({
+        msg: 'apns_send',
+        team: slug,
+        ok: result.ok,
+        status: result.status ?? null,
+        reason: result.reason ?? null,
+        inline,
+        token_ms: timing.tokenMs ?? null,
+        fetch_ms: timing.fetchMs ?? null,
+        total_ms: Date.now() - now,
+      }),
     );
     reply({
       ok: result.ok,
