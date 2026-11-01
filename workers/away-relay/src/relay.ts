@@ -312,7 +312,8 @@ export function parseDaemonFrame(raw: string): DaemonFrame | null {
 /**
  * The app's callback (ADR 676 §6, §8), checked for shape only: the daemon parses it in full and
  * its trust is the seal and the phone's signature, never this relay. Returns the ref the callback
- * frame carries — the pairing or ask it names, or the binding for a re-delivery — or null.
+ * frame carries — the pairing, ask or question-key enrollment (ADR 774) it names, or the binding
+ * for a re-delivery — or null.
  */
 export function appCallbackRef(raw: string): string | null {
   if (new TextEncoder().encode(raw).length > RELAY_MAX_FRAME_BYTES) return null;
@@ -326,7 +327,7 @@ export function appCallbackRef(raw: string): string | null {
   const binding = v['binding'];
   if (typeof binding !== 'string' || binding.length === 0 || binding.length > 64) return null;
   if (v['kind'] === 'redeliver') return binding;
-  if (v['kind'] !== 'pair' && v['kind'] !== 'answer') return null;
+  if (v['kind'] !== 'pair' && v['kind'] !== 'answer' && v['kind'] !== 'question_key') return null;
   const ref = v['ref'];
   if (typeof ref !== 'string' || ref.length === 0 || ref.length > 128) return null;
   if (!isSealed(v['sealed'])) return null;
