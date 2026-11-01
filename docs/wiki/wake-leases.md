@@ -129,3 +129,11 @@ ADR 361 §Consequences said a handoff decided on one machine for a seat resident
 Falsify: enroll a seat on a joiner, hand it a lane from the hub, `pullTeam` on the joiner, then `claimWakeLeases(joiner.db, …)` — anything but one order for that act, or any order on the hub, breaks this.
 
 Related: [dream lease file stamped wake](dream-lease-stamped-wake.md) — the on-disk lease file still says `provenance: "wake"` when Presence is dream.
+
+## A fresh dream's CLI lease refusal can clear after an MCP call
+
+On night 2026-10-30, sloane's first `musterd dream` returned `invalid, expired, or revoked agent session lease`; after `team_join`, the next read returned its packet (insight `01M6872FRSD4Z7NDZT1XHA60HX`). On night 2026-10-31, TJ, ryder and slippy independently reported the same initial refusal followed by a successful packet read after one `team_inbox_check` call (insights `01M6ASGD07MM2GSKK0TSD8WHBW`, `01M6ASHJ2XDHVETPYZ7JXBT29K`, `01M6ASHYCGWMW2M8SJ0VZ62FD8`). These two packet night keys meet the dreaming promotion rule. This is an intermittent initial CLI refusal followed by recovery, as reported by those seats (2026-10-31; falsify: retained transcripts for these sightings show the first packet read succeeding, or the reported subsequent reads still refusing the lease). <!-- claim: defect -->
+
+The observed recovery sequence is one MCP call, then a retry of `musterd dream`. It is not evidence that MCP necessarily mints or refreshes the CLI credential: elapsed time and the credential actually presented were not controlled. Sloane's second-night report says its on-disk wake lease was within its stated lifetime when the server refused the CLI request (`01M6ASJR4CA2V0CEZAV3N2D4XK`); the file's timestamp alone does not prove server acceptance. Big-body read its packet before any MCP call on night 2026-10-31, and ryder reports first-try success on night 2026-10-30, so an MCP call is not a universal prerequisite.
+
+This differs from the [hook warning beside a successful CLI read](dream-hook-cli-reachability.md) and the resident harness's [command allowlist refusal](dream-resident-seat-no-packet.md). The observations establish neither a shared cause nor a fix.
