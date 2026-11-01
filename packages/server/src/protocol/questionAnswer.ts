@@ -1,6 +1,7 @@
 import {
   AnswerProofSchema,
   classifyAskAction,
+  questionOf,
   type AnswerChannel,
   type AnswerProof,
   type Envelope,
@@ -8,8 +9,29 @@ import {
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { appendAudit } from '../store/audit.js';
-import { claimAnswer, mayAnswer, questionView } from '../store/questions.js';
+import { claimAnswer, mayAnswer, questionView, waitingSeats } from '../store/questions.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
+
+/**
+ * ADR 781 §3: an inferred question (a turn-end catcher raised it from the seat's last message) comes
+ * only from an agent seat, and only while that seat has no other open question — so an explicit
+ * question raised in the same turn wins, and a long exchange holds one card, not one per turn.
+ */
+export async function checkInferredQuestion(
+  db: Driver,
+  team: Pick<TeamRow, 'id'>,
+  sender: Pick<MemberRow, 'name' | 'kind'>,
+  env: Pick<Envelope, 'act' | 'meta'>,
+): Promise<void> {
+  if (env.act !== 'ask' || !questionOf(env.meta ?? null)?.inferred) return;
+  if (sender.kind !== 'agent')
+    throw new MusterdError('forbidden', 'an inferred question comes from a seat (ADR 781)');
+  if ((await waitingSeats(db, team.id)).has(sender.name))
+    throw new MusterdError(
+      'conflict',
+      `question_already_open: ${sender.name} already has an open question (ADR 781)`,
+    );
+}
 
 /**
  * The answer to a question ask (ADR 773 §4–§5): an `accept` carrying `meta.answer`. Before persist

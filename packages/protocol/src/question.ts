@@ -13,6 +13,8 @@ import {
 
 /** The zod face of question asks (ADR 773); the shapes, limits and the answer line are `question.wire.js`. */
 export * from './question.wire.js';
+/** ADR 781: the shared inferred-question check every turn-end catcher uses. */
+export * from './question.infer.js';
 
 export const QuestionOptionSchema = z
   .object({
