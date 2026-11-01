@@ -108,7 +108,7 @@ export const EnvelopeSchema = z
     act: ActSchema,
     body: z.string().default(''),
     thread: z.string().min(1).nullish(),
-    meta: z.record(z.unknown()).nullish(),
+    meta: z.record(z.string(), z.unknown()).nullish(),
     ts: z.number().int().nonnegative(),
     /**
      * When the daemon that served this envelope first held it — `messages.created_at`, the receipt

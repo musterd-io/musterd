@@ -41,5 +41,5 @@ export const GuardianTierSchema = z.enum(['observe', 'alert', 'auto']);
 export type GuardianTier = z.infer<typeof GuardianTierSchema>;
 
 /** Sparse per-class overrides — absent classes fall to the shipped defaults at read time. */
-export const GuardianTiersSchema = z.record(GuardianClassSchema, GuardianTierSchema);
+export const GuardianTiersSchema = z.partialRecord(GuardianClassSchema, GuardianTierSchema);
 export type GuardianTiers = z.infer<typeof GuardianTiersSchema>;

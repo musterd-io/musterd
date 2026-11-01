@@ -8,6 +8,7 @@ import { StakesDefaultSchema } from './lanes.js';
 import { LoopsPolicySchema } from './loops.js';
 import { PullPolicySchema } from './pull.js';
 import { ResidencyPolicyOverrideSchema, ResidencyPolicySchema } from './residency.js';
+import { sparsePartial } from './schema.js';
 import { StylePolicyOverrideSchema, StylePolicySchema } from './style.js';
 import { TracePolicySchema } from './trace.js';
 import { WikiSourceSchema } from './wiki.js';
@@ -115,7 +116,7 @@ export type CredentialMint = z.infer<typeof CredentialMintSchema>;
 /** `PolicySchema.agent_host` (ADR 463 §2) — named so sparsification can walk it like the other blocks. */
 export const AgentHostPolicySchema = z.object({
   max_per_host: z.number().int().min(1).max(100).default(5),
-  policy: ResidencyPolicyOverrideSchema.default({}),
+  policy: ResidencyPolicyOverrideSchema.prefault({}),
   /**
    * ADR 689 decision 7: on a joiner, the privileged host-key verbs (mint `claim_seat`, issue a
    * grant, enrol, revoke, claim a provision) run only while the joiner's last successful pull from
@@ -173,7 +174,7 @@ export const PolicySchema = z.object({
   ask_slack_webhook: z.string().url().optional(),
   /** The doorbell's team half (ADR 443): the sink allow-list, defaults, and team Slack/webhook
    *  URLs. `parse({})` configures no outbound URL. */
-  doorbell: DoorbellPolicySchema.default({}),
+  doorbell: DoorbellPolicySchema.prefault({}),
   /**
    * Seeds ingest (ADR 248) — where the daemon pulls buffered raw ideas from, and the bearer token it
    * presents. Both set = the ingest loop polls `GET <url>/seeds?after=<cursor>` and opens one lane
@@ -204,7 +205,7 @@ export const PolicySchema = z.object({
   slack_bot_token: z.string().optional(),
   /** Team-wide wake-policy defaults (ADR 131 increment 5) — per-seat enrollment overrides layer on
    *  top (`ResidencyPolicyOverrideSchema` in `residency.policy`). `parse({})` yields launch defaults. */
-  residency: ResidencyPolicySchema.default({}),
+  residency: ResidencyPolicySchema.prefault({}),
   /**
    * Structural enforcement (ADR 150) — the opt-in PreToolUse gate declaration. A table of *classes* the
    * team marked consequential enough to gate at the tool boundary (contended surfaces → Gate A
@@ -214,15 +215,15 @@ export const PolicySchema = z.object({
    * the audit `detail` freely. The declaration is admin-set through `POST /policy` (audited
    * `policy.change`); the hook reads it so the gate is consistent across a team's seats.
    */
-  enforcement: EnforcementPolicySchema.default({}),
+  enforcement: EnforcementPolicySchema.prefault({}),
   /**
    * Board-triggered loop enables (ADR 179 / ADR 191). Each switch is independently installable;
    * `parse({})` yields every loop off. A wake fires only where the matching loop is on *and* the
    * target seat's residency `flow` is `auto`.
    */
-  loops: LoopsPolicySchema.default({}),
+  loops: LoopsPolicySchema.prefault({}),
   /** ADR 645: the band-2 pull — announcement window, spend cap, per-seat daily cap, release rule. */
-  pull: PullPolicySchema.default({}),
+  pull: PullPolicySchema.prefault({}),
   /**
    * Admin-set default stakes by surface (ADR 244) — the configurable half of "front-end changes
    * default to low". First match wins; a lane whose declared surfaces all fall under a rule opens at
@@ -238,19 +239,19 @@ export const PolicySchema = z.object({
    * absent classes read as the guardian's shipped defaults. `parse({})` yields an empty map: inert
    * until an admin flips a class, same opt-in posture as `enforcement`/`loops`/`stakes_defaults`.
    */
-  guardian_tiers: GuardianTiersSchema.default({}),
+  guardian_tiers: GuardianTiersSchema.prefault({}),
   /**
    * Shared-blocker convergence (incident spec §5, ADR 268). Unlike every block above it, this one
    * is NOT inert on `parse({})` — increment 1 shipped clustering on for every team, so the default
    * reproduces it and `enabled: false` is the opt-out. The two wake knobs inside it are opt-in, for
    * the reasons on `IncidentPolicySchema`.
    */
-  incident: IncidentPolicySchema.default({}),
+  incident: IncidentPolicySchema.prefault({}),
   /**
    * Agent-trace capture (ADR 445 §3). `content` (default `off`) decides whether the trace store's
    * content column is written at all; structural rows are recorded either way. Not a secret.
    */
-  trace: TracePolicySchema.default({}),
+  trace: TracePolicySchema.prefault({}),
   /**
    * Who may issue a sponsored agent's one-time connect link (ADR 456 §2). `'sponsor'` (default): the
    * agent's sponsor or a team admin. `'any_member'`: any human member in good standing — team
@@ -290,7 +291,7 @@ export const PolicySchema = z.object({
    * inside it is REQUIRED for a provision to go ready — checked at claim, not here, so `parse({})`
    * stays inert and a team that never hosts never sees it.
    */
-  agent_host: AgentHostPolicySchema.default({}),
+  agent_host: AgentHostPolicySchema.prefault({}),
   /**
    * ADR 463 §4.3: when true, `POST /invites` without `member_until` is refused. The policy setter
    * refuses `agent_connect: 'any_member'` unless this is also true.
@@ -332,7 +333,7 @@ export const PolicySchema = z.object({
    * prose addendum. A human's own dials (`members.style_prefs`) sit on top and can never lower the
    * floor. Dense here (read); sparse on the wire and in the row (`PolicyOverrideSchema`, ADR 185).
    */
-  style: StylePolicySchema.default({}),
+  style: StylePolicySchema.prefault({}),
   /**
    * ADR 747: where the Team's wiki lives — a folder of its repo's default branch, which /live reads
    * through the daemon. Absent: no wiki linked. A source, not a rule: on its own it gives the stored
@@ -362,7 +363,7 @@ export type Policy = z.infer<typeof PolicySchema>;
 export const POLICY_REVIEW_DEFAULT_MS = 90 * 24 * 3600_000;
 export const POLICY_REVIEW_MAX_MS = 365 * 24 * 3600_000;
 
-export const PolicyOverrideSchema = PolicySchema.partial().extend({
+export const PolicyOverrideSchema = sparsePartial(PolicySchema).extend({
   /**
    * ADR 533: epoch ms after which the daemon asks the human admins to re-confirm or drop this doc.
    * Stamped by the server on every write that stores at least one knob (absent ⇒ the default
@@ -371,13 +372,13 @@ export const PolicyOverrideSchema = PolicySchema.partial().extend({
    */
   review_by: z.number().int().positive().optional(),
   residency: ResidencyPolicyOverrideSchema.optional(),
-  enforcement: EnforcementPolicySchema.partial().optional(),
-  loops: LoopsPolicySchema.partial().optional(),
-  pull: PullPolicySchema.partial().optional(),
-  incident: IncidentPolicySchema.partial().optional(),
-  doorbell: DoorbellPolicySchema.partial().optional(),
-  trace: TracePolicySchema.partial().optional(),
-  agent_host: AgentHostPolicySchema.partial().optional(),
+  enforcement: sparsePartial(EnforcementPolicySchema).optional(),
+  loops: sparsePartial(LoopsPolicySchema).optional(),
+  pull: sparsePartial(PullPolicySchema).optional(),
+  incident: sparsePartial(IncidentPolicySchema).optional(),
+  doorbell: sparsePartial(DoorbellPolicySchema).optional(),
+  trace: sparsePartial(TracePolicySchema).optional(),
+  agent_host: sparsePartial(AgentHostPolicySchema).optional(),
   style: StylePolicyOverrideSchema.optional(),
 });
 export type PolicyOverride = z.infer<typeof PolicyOverrideSchema>;

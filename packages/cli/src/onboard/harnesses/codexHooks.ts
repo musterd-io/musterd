@@ -9,7 +9,7 @@ export const CODEX_HOOK_MARKER = 'musterd-codex-hook:v2';
 const HandlerSchema = z.object({ command: z.string().optional() }).passthrough();
 const GroupSchema = z.object({ hooks: z.array(HandlerSchema) }).passthrough();
 const HooksFileSchema = z
-  .object({ hooks: z.record(z.array(GroupSchema)).optional() })
+  .object({ hooks: z.record(z.string(), z.array(GroupSchema)).optional() })
   .passthrough();
 
 type HooksFile = z.infer<typeof HooksFileSchema>;

@@ -1024,9 +1024,9 @@ function parseSeedPathId(segment: string): string {
  * 1. **It must work when the body does not parse.** The row cannot source its fields from the
  *    parsed body — there isn't one. Only an already-string `lease_id` is salvaged, by hand, and a
  *    body that cannot name its lease is still audited (without one) rather than dropped.
- * 2. **It records field paths and TYPE names, never values** (ADR 128). `expected`/`received` are
- *    zod's type words — `number`, `string`, `integer`, `float` — which is exactly what would have
- *    named the ADR 269 defect on sight, and carries nothing out of the rejected payload.
+ * 2. **It records field paths and TYPE names, never values** (ADR 128). Zod 4 supplies `expected`;
+ *    the runtime type of its local issue input supplies `received` (ADR 784). The issue input
+ *    itself never enters the audit row.
  *
  * The throw is delegated to {@link parseOrBadRequest} so the 400 the host sees is byte-identical to
  * what it saw before this ADR: auditing a refusal must not change what a refusal means.
@@ -1036,7 +1036,7 @@ async function parseWakeReportOrAudit(
   teamId: string,
   raw: unknown,
 ): Promise<WakeReportBody> {
-  const result = WakeReportBodySchema.safeParse(raw);
+  const result = WakeReportBodySchema.safeParse(raw, { reportInput: true });
   if (result.success) return result.data;
 
   const rawLeaseId =
@@ -1075,8 +1075,15 @@ async function parseWakeReportOrAudit(
         ...('expected' in issue && typeof issue.expected === 'string'
           ? { expected: issue.expected }
           : {}),
-        ...('received' in issue && typeof issue.received === 'string'
-          ? { received: issue.received }
+        ...('input' in issue
+          ? {
+              received:
+                issue.input === null
+                  ? 'null'
+                  : Array.isArray(issue.input)
+                    ? 'array'
+                    : typeof issue.input,
+            }
           : {}),
       })),
     },

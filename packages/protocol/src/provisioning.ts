@@ -75,7 +75,7 @@ export const WorktreeProvisioningSchema = z
       .array(HarnessIdSchema)
       .refine(uniqueStrings, { message: 'desired ids must be unique' }),
     /** Fragment resource keys this worktree contributes to, per harness. */
-    contributions: z.record(HarnessIdSchema, z.array(z.string())),
+    contributions: z.partialRecord(HarnessIdSchema, z.array(z.string())),
     provisionedAt: z.string().min(1),
   })
   .strict();
@@ -94,7 +94,7 @@ export const WorktreeProvisioningV2Schema = z
     desired: z
       .array(HarnessIdSchema)
       .refine(uniqueStrings, { message: 'desired ids must be unique' }),
-    contributions: z.record(HarnessIdSchema, z.array(z.string())),
+    contributions: z.partialRecord(HarnessIdSchema, z.array(z.string())),
     provisionedAt: z.string().min(1),
   })
   .strict();

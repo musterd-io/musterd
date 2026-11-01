@@ -261,7 +261,7 @@ export type SyncPushResponse = z.infer<typeof SyncPushResponseSchema>;
  * what the log holds; the reader decides what it can apply.
  */
 export const SyncPullMessageEventSchema = SyncMessageEventSchema.extend({
-  envelope: EnvelopeSchema.innerType().extend({ act: z.string().min(1) }),
+  envelope: z.object(EnvelopeSchema.shape).extend({ act: z.string().min(1) }),
   hub_seq: z.number().int().positive(),
 });
 export type SyncPullMessageEvent = z.infer<typeof SyncPullMessageEventSchema>;

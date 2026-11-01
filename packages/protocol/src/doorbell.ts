@@ -101,7 +101,7 @@ export type DoorbellSinkPref = z.infer<typeof DoorbellSinkPrefSchema>;
 
 /** A human's own doorbell prefs (`members.doorbell_prefs`). `parse({})` = no overrides. */
 export const DoorbellPrefsSchema = z.object({
-  sinks: z.record(DoorbellSinkSchema, DoorbellSinkPrefSchema).default({}),
+  sinks: z.partialRecord(DoorbellSinkSchema, DoorbellSinkPrefSchema).prefault({}),
 });
 export type DoorbellPrefs = z.infer<typeof DoorbellPrefsSchema>;
 

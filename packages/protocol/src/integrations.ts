@@ -55,13 +55,14 @@ export const GovernedModelsManifestSchema = z
       .min(1),
     roles: z
       .record(
+        z.string(),
         z.object({
           models: z.array(ExactModelSchema).min(1).optional(),
           quota_tier: z.string().min(1).optional(),
         }),
       )
-      .default({}),
-    workloads: z.record(z.object({ workload_id: WorkloadIdSchema })).default({}),
+      .prefault({}),
+    workloads: z.record(z.string(), z.object({ workload_id: WorkloadIdSchema })).prefault({}),
   })
   .strict()
   .superRefine((manifest, ctx) => {
@@ -204,7 +205,9 @@ export type TailscaleStatus = z.infer<typeof TailscaleStatusSchema>;
 /** Vendor-owned Tailscale Serve status JSON. */
 export const TailscaleServeStatusSchema = z
   .object({
-    TCP: z.record(z.object({ TCPForward: z.string().optional() }).passthrough()).optional(),
+    TCP: z
+      .record(z.string(), z.object({ TCPForward: z.string().optional() }).passthrough())
+      .optional(),
   })
   .passthrough();
 export type TailscaleServeStatus = z.infer<typeof TailscaleServeStatusSchema>;
@@ -244,9 +247,9 @@ const ApertureQuotaSchema = z
 /** Parsed Aperture HuJSON configuration. Vendor-owned levels deliberately retain unknown future keys. */
 export const ApertureConfigSchema = z
   .object({
-    providers: z.record(ApertureProviderSchema).optional(),
+    providers: z.record(z.string(), ApertureProviderSchema).optional(),
     grants: z.array(ApertureGrantSchema).optional(),
-    quotas: z.record(ApertureQuotaSchema).optional(),
+    quotas: z.record(z.string(), ApertureQuotaSchema).optional(),
     database: z
       .object({
         retention: z

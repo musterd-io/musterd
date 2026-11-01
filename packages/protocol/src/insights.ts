@@ -328,7 +328,7 @@ export const WakeHoldSchema = z.object({
   act_ts: z.number().int(),
   waited_ms: z.number().int().nonnegative(),
   /** Milliseconds per state; a state the wait never touched is absent. */
-  by_state: z.record(
+  by_state: z.partialRecord(
     z.union([WakeGateStateSchema, z.literal('unobserved')]),
     z.number().int().nonnegative(),
   ),

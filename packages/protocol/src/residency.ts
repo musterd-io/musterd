@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { MemoryEnvelopeSchema, MemoryProvenanceSchema } from './claim-handshake.js';
 import { CLAIM_CHECK_SOURCES, ClaimCheckSchema } from './claimCheck.js';
 import { WAKEABILITIES } from './model.js';
+import { sparsePartial } from './schema.js';
 import { type WorkingHours, isWithinWorkingHours } from './working-hours.wire.js';
 
 /**
@@ -163,7 +164,7 @@ export const ResidencyPolicySchema = z.object({
 export type ResidencyPolicy = z.infer<typeof ResidencyPolicySchema>;
 
 /** A per-seat enrollment override: same knobs, all optional — only explicitly-set keys stick. */
-export const ResidencyPolicyOverrideSchema = ResidencyPolicySchema.partial();
+export const ResidencyPolicyOverrideSchema = sparsePartial(ResidencyPolicySchema);
 export type ResidencyPolicyOverride = z.infer<typeof ResidencyPolicyOverrideSchema>;
 
 /** A seat's residency enrollment (public shape — the standing grant travels once, never here). */
@@ -953,7 +954,7 @@ export const WakeTranscriptTurnSchema = z.object({
   usage: WakeTurnBodySchema.shape.usage,
   cost_usd: z.number().nonnegative().nullable(),
   stop_reason: z.string().nullable(),
-  transcript: z.unknown(),
+  transcript: z.unknown().optional(),
   created_at: z.number().int(),
 });
 export type WakeTranscriptTurn = z.infer<typeof WakeTranscriptTurnSchema>;
