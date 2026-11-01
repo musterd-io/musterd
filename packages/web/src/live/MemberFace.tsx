@@ -108,11 +108,26 @@ export function MemberFace({
             <circle cx="18.9" cy="17.4" r="1.1" fill="#2e2a26" />
           </>
         )}
-        {look.eyes !== 'none' && (
-          <g fill="none" stroke={look.accessoryColor} strokeWidth="0.9" data-spot="eyes">
+        {look.eyes === 'glasses' && (
+          <g fill="none" stroke={look.accessoryColor} strokeWidth="0.9" data-spot="eyes" data-frame="round">
             <circle cx="13" cy="17.5" r="2.4" />
             <circle cx="19" cy="17.5" r="2.4" />
             <path d="M15.4 17.3h1.2" />
+          </g>
+        )}
+        {look.eyes === 'glasses-square' && (
+          <g fill="none" stroke={look.accessoryColor} strokeWidth="0.9" data-spot="eyes" data-frame="square">
+            <rect x="10.5" y="15.3" width="4.9" height="4.3" rx="0.7" />
+            <rect x="16.6" y="15.3" width="4.9" height="4.3" rx="0.7" />
+            <path d="M15.4 17.2h1.2" />
+          </g>
+        )}
+        {look.eyes === 'glasses-browline' && (
+          <g fill="none" stroke={look.accessoryColor} data-spot="eyes" data-frame="browline">
+            {/* the heavy brow bar across both lenses, then a fine rim hanging below it */}
+            <path d="M10.4 15.6h5.1M16.5 15.6h5.1" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M10.7 15.9v1.6a2.4 2.4 0 0 0 4.8 0v-1.6M16.5 15.9v1.6a2.4 2.4 0 0 0 4.8 0v-1.6" strokeWidth="0.55" />
+            <path d="M15.5 16.2h1" strokeWidth="0.9" />
           </g>
         )}
         {look.ears === 'headphones' && (

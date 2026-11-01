@@ -40,4 +40,22 @@ describe('MemberFace', () => {
     }
     expect(names.some((n) => spots(n) >= 2)).toBe(true);
   });
+
+  it('draws the frame the figure wears — round lenses, square rims, or a browline bar — not round for all (lane 01M6490EC7)', () => {
+    const names = Array.from({ length: 300 }, (_, i) => `person${i}`);
+    const big = rosterIndex(names.map((name) => ({ name, kind: 'human', hue: 40 })) as unknown as MemberSummary[]);
+    const html = (name: string) => renderToStaticMarkup(createElement(MemberFace, { name, roster: big }));
+    const seen = new Set<string>();
+    for (const name of names) {
+      const look = appearanceOf({ name, kind: 'human' });
+      const frame = html(name).match(/data-frame="(round|square|browline)"/)?.[1];
+      const want = { glasses: 'round', 'glasses-square': 'square', 'glasses-browline': 'browline', none: undefined }[look.eyes];
+      expect(frame).toBe(want);
+      if (frame) seen.add(frame);
+      if (frame === 'square') expect(html(name)).toContain('<rect');
+      if (frame === 'browline') expect(html(name)).toContain('stroke-width="1.5"');
+      if (frame === 'round') expect(html(name)).toContain('r="2.4"');
+    }
+    expect([...seen].sort()).toEqual(['browline', 'round', 'square']);
+  });
 });
