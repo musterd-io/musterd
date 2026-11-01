@@ -251,7 +251,8 @@ export type Moment =
   // The welcome wagon's toss; no longer the directed-act sound (inc 3).
   | 'whoosh'
   // The Welcome Wagon (lane 01M3F81DD9): the desk phone, the label maker, the wagon's wheels, the
-  // front-door chime and the confetti pop. All synthesized — no audio files (ADR 151 bytes).
+  // front-door chime and the confetti pop. Synthesized (ADR 151 bytes) until 2026-11-01, when the
+  // chime and the pop got recorded takes (ADR 776); the phone, label maker and wheels still are.
   | 'ring'
   | 'ratchet'
   | 'rattle'
