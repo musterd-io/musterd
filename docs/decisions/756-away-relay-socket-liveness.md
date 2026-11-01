@@ -87,6 +87,13 @@ A half-open socket fails silently at both ends:
   device token or the sealed body. A large `total_ms` with small parts means the time is spent
   outside the send. At the first restart after #3682 (onto c3684ec) the relay refused no socket
   (0 × 409, against 5 at the restart on 2026-10-30).
+- 2026-11-01 (lane `01M6CB3QEJ`): the 1001 close holds. Across the four daemon bounces of
+  2026-11-01 (d479725, c49de95, cb2c59c, aa5a6e8) the hub's daemon log has one `away_relay_up` per
+  bounce and no `away_relay_redial_failed`, so no ADR for "newest same-credential socket wins" is
+  needed. The seeds-pull part of the same lane: the "url must be https to a public host" report
+  could not be traced to a log line (its reporter's context was compacted), but the message did
+  cover a DNS failure too; `getPinned` now says which (`reason`), and the pull reports an
+  unresolved host as "relay unreachable", not as a wrong URL.
 
 ## Observability & Evaluation
 

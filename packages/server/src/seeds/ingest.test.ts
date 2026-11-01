@@ -203,6 +203,19 @@ withDrivers('ingest', (o) => {
       expect(await listSeeds(db, team.id)).toHaveLength(0);
     });
 
+    it('a relay whose name does not resolve is "unreachable", not "must be https to a public host"', async () => {
+      // Lane 01M6CB3QEJ: the policy refusal and a DNS failure shared one message, so an offline
+      // laptop read as a misconfigured relay URL. The cursor stays put either way.
+      const team = await seedTeam();
+      setPinnedGetForTests(() =>
+        Promise.resolve({ ok: false, refused: true, reason: 'unresolved' as const }),
+      );
+      const error: unknown = await ingestTeamSeeds(ctx, team).catch((e: unknown) => e);
+      expect(String(error)).toContain('relay unreachable: the relay host did not resolve');
+      expect(String(error)).not.toContain('must be https');
+      expect(await listSeeds(db, team.id)).toHaveLength(0);
+    });
+
     it('a relay redirect is a status, never followed — nothing is created', async () => {
       const team = await seedTeam();
       setPinnedGetForTests(() => Promise.resolve({ ok: false, status: 302 }));

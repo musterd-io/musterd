@@ -54,6 +54,10 @@ async function pullSeeds(url: string, token: string, after: string): Promise<Rel
     PULL_TIMEOUT_MS,
     MAX_RELAY_BYTES,
   );
+  // Two different failures, two messages (lane 01M6CB3QEJ): a name that did not resolve is the
+  // network and clears itself; anything else refused is the URL, and no retry will help.
+  if (res.refused && res.reason === 'unresolved')
+    throw new Error('relay unreachable: the relay host did not resolve');
   if (res.refused) throw new Error('relay refused: the url must be https to a public host');
   if (!res.ok || res.body === undefined)
     throw new Error(`relay responded ${res.status ?? 'nothing'}`);

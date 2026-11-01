@@ -32,9 +32,20 @@ export function setSinkPostForTests(fn: SinkPost | null): void {
   override = fn;
 }
 
-/** `refused` means the URL never reached the network: not https, malformed, or a host whose answer
- *  set holds a non-global address (or did not resolve). `body` is set only on a 2xx. */
-export type PinnedGetResult = { ok: boolean; status?: number; body?: string; refused?: true };
+/** Why a GET never reached the network. `not_https`, `malformed` and `not_public` are policy: the
+ *  URL itself is wrong. `unresolved` is the network: the name gave no usable answer (offline,
+ *  resolver down, NXDOMAIN), and the same URL may work next tick (lane 01M6CB3QEJ). */
+export type PinnedRefusal = 'not_https' | 'malformed' | 'not_public' | 'unresolved';
+
+/** `refused` means the URL never reached the network; `reason` says why (`PinnedRefusal`). `body`
+ *  is set only on a 2xx. */
+export type PinnedGetResult = {
+  ok: boolean;
+  status?: number;
+  body?: string;
+  refused?: true;
+  reason?: PinnedRefusal;
+};
 export type PinnedGet = (
   url: string,
   headers: Record<string, string>,
@@ -49,27 +60,27 @@ export function setPinnedGetForTests(fn: PinnedGet | null): void {
   getOverride = fn;
 }
 
-/** The checked address to connect to, or null when the name may not be reached. */
+/** The checked address to connect to, or the reason the name may not be reached. */
 async function pinnedAddress(
   hostname: string,
   deps: PinnedPostDeps,
-): Promise<{ address: string; family: 4 | 6 } | null> {
+): Promise<{ address: string; family: 4 | 6 } | { refused: PinnedRefusal }> {
   const literal = isIP(hostname);
   if (literal === 4 || literal === 6) {
     return isGlobalUnicastAddress(hostname, literal)
       ? { address: hostname, family: literal }
-      : null;
+      : { refused: 'not_public' };
   }
   let answers: { address: string; family: number }[];
   try {
     answers = await deps.lookup(hostname);
   } catch {
-    return null;
+    return { refused: 'unresolved' };
   }
-  if (answers.length === 0) return null;
+  if (answers.length === 0) return { refused: 'unresolved' };
   for (const a of answers) {
     if ((a.family !== 4 && a.family !== 6) || !isGlobalUnicastAddress(a.address, a.family))
-      return null;
+      return { refused: 'not_public' };
   }
   const first = answers[0]!;
   return { address: first.address, family: first.family as 4 | 6 };
@@ -91,7 +102,7 @@ export async function postJsonPinned(
   if (url.protocol !== 'https:') return { ok: false };
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const pin = await pinnedAddress(hostname, deps);
-  if (!pin) return { ok: false };
+  if ('refused' in pin) return { ok: false };
 
   return new Promise<SinkResult>((resolve) => {
     let settled = false;
@@ -161,12 +172,12 @@ export async function getPinned(
   try {
     url = new URL(rawUrl);
   } catch {
-    return { ok: false, refused: true };
+    return { ok: false, refused: true, reason: 'malformed' };
   }
-  if (url.protocol !== 'https:') return { ok: false, refused: true };
+  if (url.protocol !== 'https:') return { ok: false, refused: true, reason: 'not_https' };
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const pin = await pinnedAddress(hostname, deps);
-  if (!pin) return { ok: false, refused: true };
+  if ('refused' in pin) return { ok: false, refused: true, reason: pin.refused };
 
   return new Promise<PinnedGetResult>((resolve) => {
     let settled = false;
