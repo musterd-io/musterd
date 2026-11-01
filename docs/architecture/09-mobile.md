@@ -158,6 +158,16 @@ remote build number; and `ASC_API_KEY_CONFIG`, the contents of the API key confi
 The upload script treats altool's own `UPLOAD SUCCEEDED` line as success, because altool can fail
 the fastlane action afterwards on a resume-file error.
 
+**Over the air** ([ADR 780](../decisions/780-phone-ota-updates.md)). A JavaScript-only change ships
+without TestFlight: the `ios-update` workflow (Actions → ios-update → Run workflow, with a branch or
+SHA) runs `eas update --channel production`, and the phone downloads it on launch and applies it on
+the next launch — a launch never waits for it. Every update is code-signed. The app carries the
+public certificate (`certs/certificate.pem`) and refuses an update that does not verify; the
+private key exists only as the `EXPO_UPDATE_PRIVATE_KEY` repository secret, never in the repo or
+EAS. The runtime version is the native fingerprint, so an update reaches only binaries built from
+the same native code: anything touching Swift, a config plugin or a native dependency still goes
+through `ios-testflight`. A publish is a deploy, so it goes to nick as an ask first.
+
 The first EAS build asked for the Apple ID, with 2FA, and created the signing certificate, the
 provisioning profile and the App Store Connect app; every later build is non-interactive. A build
 appears in TestFlight after Apple processes it (10–15 minutes); add yourself as an internal tester

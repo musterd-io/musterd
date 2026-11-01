@@ -1,0 +1,64 @@
+# The phone app's JavaScript over the air (ADR 780): `eas update` to the production channel,
+# code-signed with our own key. The phone refuses an update whose signature does not verify against
+# the certificate in packages/mobile/certs, and is only offered one whose runtime version (the
+# native fingerprint) matches its binary — a Swift change still needs ios-testflight. Manual only;
+# a publish is a deploy, so it goes to nick as an ask first. See docs/architecture/09-mobile.md.
+name: ios-update
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or SHA to publish (default the branch the run is started from)
+        required: false
+        default: ''
+
+concurrency:
+  group: ios-update
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish a signed update
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check required secrets
+        env:
+          HAS_EXPO: ${{ secrets.EXPO_TOKEN != '' }}
+          HAS_KEY: ${{ secrets.EXPO_UPDATE_PRIVATE_KEY != '' }}
+        run: |
+          missing=()
+          [ "$HAS_EXPO" = true ] || missing+=(EXPO_TOKEN)
+          [ "$HAS_KEY" = true ] || missing+=(EXPO_UPDATE_PRIVATE_KEY)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error title=Missing secrets::Add repository secrets: ${missing[*]} (09-mobile.md)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: ./.github/actions/setup
+        with:
+          build: 'false'
+
+      - name: Publish (eas update)
+        working-directory: packages/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_UPDATE_PRIVATE_KEY: ${{ secrets.EXPO_UPDATE_PRIVATE_KEY }}
+        run: |
+          key="$RUNNER_TEMP/update-key.pem"
+          umask 077
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$EXPO_UPDATE_PRIVATE_KEY" > "$key"
+          sha="$(git rev-parse --short HEAD)"
+          npx -y eas-cli@latest update --channel production --environment production \
+            --platform ios --private-key-path "$key" --non-interactive \
+            --message "$sha $(git log -1 --format=%s | cut -c1-80)"
+          echo "Published $sha to the production channel. Phones on a matching build get it on their next launch." >> "$GITHUB_STEP_SUMMARY"
