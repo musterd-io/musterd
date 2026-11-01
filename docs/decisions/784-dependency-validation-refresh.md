@@ -53,6 +53,11 @@ Zod 4 no longer supplies the old `received` type on every issue. Wake-report ref
 derives only the runtime type of a locally retained issue input; the input value never enters
 the audit row. The existing test still checks both type names and secret-value exclusion.
 
+CI's static gate measured total web JS at 393.2 KB against the prior 388.7 KB ceiling after
+the dependency refresh. The same PR records the measurements and a narrow budget raise under
+ADR 151 in `docs/perf/web-live-baseline.md`, and classifies Vite's separately emitted site
+prose stylesheet. The eager-JS and largest-chunk limits remain unchanged.
+
 ## Observability & Evaluation
 
 **Traces:** existing lane and coordination acts record the inventory, authorization, checks
