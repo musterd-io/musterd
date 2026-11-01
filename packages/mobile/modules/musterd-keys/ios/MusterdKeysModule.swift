@@ -103,6 +103,25 @@ public final class MusterdKeysModule: Module {
       try run { try PhoneKeys.signQuestion(message) }
     }
 
+    AsyncFunction("randomNonce") { () -> String in
+      try run { try PhoneKeys.randomNonce() }
+    }
+
+    // ADR 774 §5: what this binding last enrolled, so the next enrollment's expiry is later.
+    Function("questionEnrollment") { () -> [String: Any]? in
+      guard let enrolled = SharedStore.loadQuestionEnrollment() else { return nil }
+      return ["binding": enrolled.binding, "key": enrolled.key, "expires_at": enrolled.expiresAt]
+    }
+
+    Function("saveQuestionEnrollment") { (binding: String, key: String, expiresAt: Int) -> Bool in
+      SharedStore.saveQuestionEnrollment(binding: binding, key: key, expiresAt: expiresAt)
+    }
+
+    // Lock-screen answers the relay did not take; re-sent natively. The count still waiting.
+    AsyncFunction("flushQuestionOutbox") { () async -> Int in
+      await QuestionAnswer.flush()
+    }
+
     AsyncFunction("generateAttestationKey") { (challenge: String) async throws -> [String: String] in
       let result = try await runAsync { try await PhoneKeys.attestationKey(challenge: challenge) }
       return ["keyId": result.keyId, "attestation": result.attestation]

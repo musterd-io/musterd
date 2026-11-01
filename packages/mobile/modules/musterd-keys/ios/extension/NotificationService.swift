@@ -156,7 +156,34 @@ final class NotificationService: UNNotificationServiceExtension {
         )
       }
     }
-    return Notice.render(body: body, verdict: verdict)
+    // ADR 773/774: a question is answered from its notification with the silent question key.
+    // Record what the answer needs, and register the question's own buttons before handing over.
+    var questionKey = false
+    if case .ask(_, _, _, _, _, let nonce, let question?, _) = body, verdict == .fresh {
+      let route = opened.route
+      let recorded = SharedStore.updateQuestions {
+        Question.record(
+          $0,
+          adding: Question.Pending(team: route.team, binding: route.binding, ref: route.ref,
+            expiresAt: route.expiresAt, token: question.token, nonce: nonce,
+            options: question.options.count),
+          now: now
+        )
+      }
+      // The daemon names the key it holds; a refused or lost enrollment gets no buttons, and the
+      // notification says to open musterd instead (lane 01M69KHDVJ).
+      questionKey = recorded
+        && Question.daemonHolds(
+          enrolledKey: SharedStore.enrolledQuestionKey(binding: route.binding),
+          heldKey: question.heldKey)
+      if questionKey && !question.options.isEmpty {
+        await QuestionCategory.register(
+          [QuestionCategory.options(nonce: nonce, labels: question.options)],
+          liveNonces: QuestionCategory.liveNonces(now: now)
+        )
+      }
+    }
+    return Notice.render(body: body, verdict: verdict, questionKey: questionKey)
   }
 
   static func apply(_ rendered: Notice.Rendered, to content: UNMutableNotificationContent) {
@@ -165,6 +192,10 @@ final class NotificationService: UNNotificationServiceExtension {
     content.subtitle = rendered.subtitle ?? ""
     content.categoryIdentifier = rendered.category ?? ""
     content.sound = rendered.sound ? .default : nil
+    // Only ever lowered: a level the push itself asked for is otherwise left alone.
+    if rendered.passive {
+      content.interruptionLevel = .passive
+    }
   }
 
   private static func fetchBody(

@@ -104,5 +104,16 @@ export async function flushOutbox(
   } catch {
     // Left as it was: the next open tries again.
   }
-  return still.length;
+  // A test's own storage stands in for both outboxes.
+  return still.length + (opts.storage ? 0 : await flushNative());
+}
+
+/** Lock-screen question answers keep their own outbox, in the native module (QuestionAnswer.swift). */
+async function flushNative(): Promise<number> {
+  try {
+    const { phoneKeys } = await import('./phoneKeys');
+    return await phoneKeys.flushQuestionOutbox();
+  } catch {
+    return 0;
+  }
 }
