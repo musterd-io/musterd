@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   PACKAGE_DIRS,
   assertPublishable,
+  assertTagMatches,
   PUBLISH_ORDER,
   bumpPackageJson,
   bumpServerJson,
+  nextStepsAfterBump,
   nextStepsAfterPublish,
+  npmPublishArgs,
   parseReleaseArgs,
 } from '../scripts/release/helpers.ts';
 
@@ -36,6 +39,8 @@ describe('release helpers (ADR 156)', () => {
     expect(parseReleaseArgs(['--dry-run', '--allow-dirty', '--version', '0.3.1'])).toEqual({
       dryRun: true,
       allowDirty: true,
+      publish: false,
+      noProvenance: false,
       version: '0.3.1',
     });
     expect(parseReleaseArgs(['--version=1.0.0']).version).toBe('1.0.0');
@@ -78,6 +83,61 @@ describe('release helpers (ADR 156)', () => {
     });
   });
 
+  describe('the CI publish (ADR 782)', () => {
+    it('--publish needs the tag, and takes no version of its own', () => {
+      expect(parseReleaseArgs(['--publish', '--tag', 'v0.7.0'])).toMatchObject({
+        publish: true,
+        tag: 'v0.7.0',
+        noProvenance: false,
+      });
+      expect(parseReleaseArgs(['--publish', '--tag=v0.7.0', '--no-provenance']).noProvenance).toBe(
+        true,
+      );
+      expect(() => parseReleaseArgs(['--publish'])).toThrow(/--tag/);
+      // The number comes from the tag and the merged tree; a second one could only disagree.
+      expect(() =>
+        parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--version', '0.7.0']),
+      ).toThrow(/no --version/);
+      expect(() => parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--dry-run'])).toThrow();
+      expect(() => parseReleaseArgs(['--tag', 'v0.7.0'])).toThrow(/only apply with --publish/);
+      expect(() => parseReleaseArgs(['--no-provenance'])).toThrow(/only apply with --publish/);
+    });
+
+    it('refuses a tag that does not name the version on disk', () => {
+      expect(() => assertTagMatches('v0.7.0', '0.7.0')).not.toThrow();
+      // Tagged the commit before the bump merged.
+      expect(() => assertTagMatches('v0.7.0', '0.6.0')).toThrow(/does not match/);
+      expect(() => assertTagMatches('0.7.0', '0.7.0')).toThrow(/does not match/);
+    });
+
+    it('publishes the packed tarball with npm, provenance on unless said otherwise', () => {
+      expect(npmPublishArgs('/t/cli.tgz', true)).toEqual([
+        'publish',
+        '/t/cli.tgz',
+        '--access',
+        'public',
+        '--provenance',
+      ]);
+      expect(npmPublishArgs('/t/cli.tgz', false)).toContain('--no-provenance');
+    });
+
+    it('after a bump, the next steps land it as a PR and the tag starts the publish', () => {
+      const steps = nextStepsAfterBump('0.7.0').join('\n');
+      expect(steps).toContain('git push origin v0.7.0');
+      expect(steps).toContain('npm-release');
+      expect(steps).not.toMatch(/pnpm publish|npm publish/);
+    });
+
+    it('the release workflow publishes from the tag, with OIDC and behind the environment', () => {
+      const wf = readFileSync('.github/workflows/release.yml', 'utf8');
+      expect(wf).toContain('id-token: write');
+      expect(wf).toContain('environment: npm-release');
+      expect(wf).toContain('pnpm release --publish --tag "$GITHUB_REF_NAME"');
+      // No long-lived npm token anywhere in the release path.
+      expect(wf).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN/);
+    });
+  });
+
   it('bumpPackageJson rewrites version only', () => {
     const next = bumpPackageJson(
       JSON.stringify({ name: '@musterd/cli', version: '0.2.0', private: false }, null, 2),
@@ -86,9 +146,8 @@ describe('release helpers (ADR 156)', () => {
     expect(JSON.parse(next)).toMatchObject({ name: '@musterd/cli', version: '0.3.0' });
   });
 
-  it('nextStepsAfterPublish mentions tag, the MCP Registry and brew', () => {
+  it('nextStepsAfterPublish mentions the MCP Registry and brew', () => {
     const steps = nextStepsAfterPublish('0.3.0').join('\n');
-    expect(steps).toContain('v0.3.0');
     expect(steps).toContain('mcp-publisher publish');
     expect(steps).toContain('bump-brew-formula');
     expect(steps).toContain('SandRiseStudio/musterd');

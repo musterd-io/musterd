@@ -1,5 +1,5 @@
 /**
- * Lockstep npm release helpers for @musterd/* (ADR 156).
+ * Lockstep npm release helpers for @musterd/* (ADR 156; the publish moved to CI in ADR 782).
  * Pure functions — the CLI driver is scripts/release.ts.
  */
 export const PUBLISH_ORDER = [
@@ -25,6 +25,18 @@ export interface ReleaseArgs {
   dryRun: boolean;
   allowDirty: boolean;
   /**
+   * `--publish` — the CI half (ADR 782): publish the versions already on disk, from the tag the
+   * release workflow was pushed with. Never bumps. Exclusive with `--version` and `--dry-run`.
+   */
+  publish: boolean;
+  /** `--tag vX.Y.Z` — the git tag that triggered the publish; must name the on-disk version. */
+  tag?: string;
+  /**
+   * `--no-provenance` — publish without a provenance attestation. Outside GitHub Actions npm cannot
+   * sign one, so a laptop publish (the break-glass path, ADR 782 §4) has to say so out loud.
+   */
+  noProvenance: boolean;
+  /**
    * Target version for all public packages. **No default, deliberately.**
    *
    * It used to default to `'0.3.0'`, a literal frozen in source — stale from the moment 0.3.0
@@ -41,11 +53,21 @@ const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 export function parseReleaseArgs(argv: string[]): ReleaseArgs {
   let dryRun = false;
   let allowDirty = false;
+  let publish = false;
+  let noProvenance = false;
   let version: string | undefined;
+  let tag: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--dry-run') dryRun = true;
     else if (a === '--allow-dirty') allowDirty = true;
+    else if (a === '--publish') publish = true;
+    else if (a === '--no-provenance') noProvenance = true;
+    else if (a === '--tag') {
+      const v = argv[++i];
+      if (!v || v.startsWith('-')) throw new Error('--tag requires a value (vX.Y.Z)');
+      tag = v;
+    } else if (a.startsWith('--tag=')) tag = a.slice('--tag='.length);
     else if (a === '--version') {
       const v = argv[++i];
       if (!v || v.startsWith('-')) throw new Error('--version requires a semver value');
@@ -61,10 +83,63 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
   if (version !== undefined && !SEMVER.test(version)) {
     throw new Error(`invalid --version ${JSON.stringify(version)} (want X.Y.Z)`);
   }
+  if (publish && (version !== undefined || dryRun)) {
+    // The publish takes its number from the tag and the tree, both already reviewed and merged; a
+    // second number on the command line could only disagree with them.
+    throw new Error('--publish takes no --version and no --dry-run: it publishes what is on disk');
+  }
+  if (publish && tag === undefined) {
+    throw new Error('--publish requires --tag vX.Y.Z (the tag the release workflow runs for)');
+  }
+  if (!publish && (tag !== undefined || noProvenance)) {
+    throw new Error('--tag and --no-provenance only apply with --publish');
+  }
   // `version` is optional-and-absent, not optional-and-undefined: under exactOptionalPropertyTypes
   // those are different types, and the whole point of having no default (above) is that "nobody
   // said" stays distinguishable from a value.
-  return { dryRun, allowDirty, ...(version !== undefined ? { version } : {}) };
+  return {
+    dryRun,
+    allowDirty,
+    publish,
+    noProvenance,
+    ...(version !== undefined ? { version } : {}),
+    ...(tag !== undefined ? { tag } : {}),
+  };
+}
+
+/**
+ * Refuse a publish whose tag does not name the version on disk (ADR 782).
+ *
+ * The workflow runs for whatever tag was pushed. A tag on the wrong commit — one before the version
+ * bump merged — would otherwise publish the previous version's number again (npm refuses) or, on a
+ * tree bumped twice, a number nobody tagged. The tag is the human's statement of what ships; the
+ * tree has to agree with it before anything is written.
+ */
+export function assertTagMatches(tag: string, onDisk: string): void {
+  if (tag !== `v${onDisk}`) {
+    throw new Error(
+      `tag ${tag} does not match the version on disk (${onDisk}) — tag the commit that bumped to ` +
+        `${tag.replace(/^v/, '')}, or bump in a PR first (pnpm release --version X)`,
+    );
+  }
+}
+
+/**
+ * The `npm publish` argv for one packed tarball (ADR 782).
+ *
+ * We publish the tarball `pnpm pack` produced, not the package directory: pnpm is what rewrites
+ * `workspace:*` (raw npm leaves it in and ships broken installs, ADR 156), and it is the same file
+ * the consumer smoke just installed and ran. npm, not pnpm, does the upload because npm's CLI is the
+ * one that speaks trusted publishing (OIDC) and signs the provenance statement.
+ */
+export function npmPublishArgs(tarball: string, provenance: boolean): string[] {
+  return [
+    'publish',
+    tarball,
+    '--access',
+    'public',
+    provenance ? '--provenance' : '--no-provenance',
+  ];
 }
 
 /** The `X.Y.Z` core of a version, prerelease suffix discarded. */
@@ -124,9 +199,21 @@ export function bumpServerJson(raw: string, version: string): string {
   return `${JSON.stringify(server, null, 2)}\n`;
 }
 
+/**
+ * What a human does after `pnpm release --version X` bumped the tree (ADR 782): the bump lands as
+ * an ordinary PR, and pushing the tag on its merge commit is what starts the publish.
+ */
+export function nextStepsAfterBump(version: string): string[] {
+  return [
+    `git switch -c release/v${version} && git commit -am "release: v${version}"   # + docs/releases/v${version}.md`,
+    `gh pr create … && gh pr merge --squash --auto   # the bump lands like any change`,
+    `git fetch origin main && git tag v${version} origin/main && git push origin v${version}`,
+    `approve the npm-release run in GitHub Actions — it builds, smokes and publishes with provenance`,
+  ];
+}
+
 export function nextStepsAfterPublish(version: string): string[] {
   return [
-    `git tag v${version} && git push origin v${version}`,
     // The official MCP Registry holds metadata only, so it can list a version only once npm has it.
     // The io.musterd/ namespace is verified by a DNS TXT record on musterd.io: a one-time
     // `mcp-publisher login dns --domain musterd.io --private-key <hex>` by whoever holds the key.

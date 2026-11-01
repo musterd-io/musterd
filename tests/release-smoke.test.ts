@@ -126,6 +126,16 @@ describe('smokeConsumerInstall', () => {
     for (const p of packs) expect(p[0]).toBe('pnpm');
   });
 
+  it('with packInto, packs there and returns the tarballs it smoked — the ones CI publishes', () => {
+    const h = harness((e) => (e.includes('cli') ? '0.4.1' : `THROW:${HEALTHY_NO_BINDING}`));
+    const keep = mkdtempSync(join(tmpdir(), 'musterd-smoke-keep-'));
+    const tarballs = smokeConsumerInstall(fakeRoot('0.4.1'), h.deps, keep);
+    for (const p of h.commands.filter((c) => c[1] === 'pack')) {
+      expect(p).toContain(keep);
+    }
+    for (const name of PUBLISH_ORDER) expect(tarballs[name].startsWith(keep)).toBe(true);
+  });
+
   it('passes when the adapter merely lacks a binding', () => {
     const h = harness((e) => (e.includes('cli') ? '0.4.1' : `THROW:${HEALTHY_NO_BINDING}`));
     expect(() => smokeConsumerInstall(fakeRoot('0.4.1'), h.deps)).not.toThrow();

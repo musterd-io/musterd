@@ -48,6 +48,31 @@ export async function checkNpm(fetchJson: FetchJson, version: string): Promise<C
     : { car: 'npm', verdict: 'ok', detail: `all ${PACKAGES.length} packages at ${version}` };
 }
 
+/**
+ * Every package at `version` carries an npm provenance attestation (ADR 782): proof, checkable by
+ * anyone, that the tarball was built by .github/workflows/release.yml from the tagged commit. A
+ * version published from a laptop (the break-glass path) has none, and shows here as missing.
+ */
+export async function checkProvenance(fetchJson: FetchJson, version: string): Promise<CarResult> {
+  const without: string[] = [];
+  for (const name of PACKAGES) {
+    const res = await fetchJson(`https://registry.npmjs.org/${name.replace('/', '%2F')}`);
+    if (!res || res.status !== 200)
+      return { car: 'provenance', verdict: 'unknown', detail: `could not read ${name}` };
+    const versions = (
+      res.json as { versions?: Record<string, { dist?: { attestations?: unknown } }> }
+    ).versions;
+    if (!versions?.[version]?.dist?.attestations) without.push(name);
+  }
+  return without.length
+    ? {
+        car: 'provenance',
+        verdict: 'missing',
+        detail: `no provenance at ${version}: ${without.join(', ')}`,
+      }
+    : { car: 'provenance', verdict: 'ok', detail: `all ${PACKAGES.length} packages attested` };
+}
+
 export function checkTag(git: Git, version: string): CarResult {
   const out = git('ls-remote', '--tags', 'origin', `refs/tags/v${version}`);
   if (out === null) return { car: 'tag', verdict: 'unknown', detail: 'git ls-remote failed' };
@@ -149,6 +174,7 @@ export async function trainStatus(
 ): Promise<CarResult[]> {
   return [
     await checkNpm(io.fetchJson, version),
+    await checkProvenance(io.fetchJson, version),
     checkTag(io.git, version),
     await checkGithubRelease(io.fetchJson, version),
     await checkRegistry(io.fetchJson, version),

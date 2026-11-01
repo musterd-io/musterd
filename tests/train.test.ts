@@ -14,6 +14,7 @@ import {
   checkBrew,
   checkGithubRelease,
   checkNpm,
+  checkProvenance,
   checkRegistry,
   checkSite,
   checkTag,
@@ -34,6 +35,26 @@ describe('train status (ADR 669 §3.1)', () => {
     const r = await checkNpm(json(oneBehind), '0.6.0');
     expect(r.verdict).toBe('missing');
     expect(r.detail).toContain('@musterd/mcp@0.5.0');
+  });
+
+  it('provenance is green only when every package at the version is attested (ADR 782)', async () => {
+    const pack = (attested: boolean) => ({
+      status: 200,
+      json: {
+        versions: {
+          '0.7.0': { dist: attested ? { attestations: { provenance: {} } } : {} },
+        },
+      },
+    });
+    const all = Object.fromEntries(PACKAGES.map((p) => [p.replace('/', '%2F'), pack(true)]));
+    expect((await checkProvenance(json(all), '0.7.0')).verdict).toBe('ok');
+    const laptop = { ...all, '@musterd%2Fcli': pack(false) };
+    const r = await checkProvenance(json(laptop), '0.7.0');
+    expect(r.verdict).toBe('missing');
+    expect(r.detail).toContain('@musterd/cli');
+    // A version that is not on the registry at all has no attestation either.
+    expect((await checkProvenance(json(all), '0.8.0')).verdict).toBe('missing');
+    expect((await checkProvenance(async () => null, '0.7.0')).verdict).toBe('unknown');
   });
 
   it('a surface it cannot reach is unknown — never folded into missing or ok', async () => {

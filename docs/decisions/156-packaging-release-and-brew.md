@@ -25,7 +25,9 @@ script that dry-runs safely and publishes in dependency order when they run it.
 2. **`pnpm release`** (`scripts/release.ts`): refuse a dirty tree (unless `--allow-dirty`);
    `--dry-run` builds and packs without registry writes; real mode bumps versions, builds, and
    **`pnpm publish`es** in order (rewrites `workspace:*` — never raw `npm publish`). **No CI
-   publish** in this decision — credentials stay with the human (ADR 145). After publish: tag
+   publish** in this decision — credentials stay with the human (ADR 145). _(Amended 2026-11-01:
+   superseded by [ADR 782](782-npm-publish-from-ci-with-provenance.md) — the publish now runs in CI
+   with provenance, from a tag, behind nick's approval.)_ After publish: tag
    `vX.Y.Z`, bump the brew formula.
 3. **Homebrew** via custom tap **`SandRiseStudio/homebrew-musterd`**: an **npm-wrapper** formula
    that depends on Node ≥22 and installs `@musterd/cli@<version>` into the Cellar. Formula source
@@ -55,6 +57,13 @@ installer, automated brew bump in CI.
   holds metadata only and verifies it against the published package's `mcpName`, so the first
   listing waits for the first release that carries it (0.5.0 does not). `tests/release.test.ts`
   pins the descriptor to the package's name, version and `mcpName`.
+- 2026-11-01 (lane `01M6AMQQETY7NZPNCVAAKGG6PY`, [ADR 782](782-npm-publish-from-ci-with-provenance.md)):
+  Decision 2's "no CI publish" is superseded. `pnpm release --version X` now only bumps, builds and
+  smoke-tests; the bump lands as a PR, and the tag on its merge commit starts
+  `.github/workflows/release.yml`, which publishes the smoked tarballs via npm trusted publishing
+  (no token) with a provenance attestation, after nick approves the `npm-release` environment.
+  Lockstep order, the consumer smoke gate and `pnpm publish`'s `workspace:*` rewrite (now `pnpm
+  pack`) all stand.
 
 ## Observability & Evaluation
 
