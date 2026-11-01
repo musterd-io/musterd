@@ -417,7 +417,7 @@ def render_figure(a: dict) -> None:
         can be in front of it (office figure v2, plan Task 4) — the runtime draws pieces back to front,
         so a piece's own render must already have the holes the pieces drawn under it cannot make.
         - a top or an outer layer (v2-5b): the trousers (seated thighs come in front of the hem);
-        - a dress (v2-6a): the body alone — the skin legs it shows are the base's;
+        - a dress (v2-6a) or a skirt (v2-6b): the body alone — the skin legs they show are the base's;
         - shoes: the trousers (a hem over the ankle);
         - hair, facial hair, hats, accessories, a carried thing, the lanyard: a torso (the tee's — every
           top shares its shape), so hair behind the back is hidden and long hair in front still shows;
@@ -427,7 +427,7 @@ def render_figure(a: dict) -> None:
         b = set(base)
         if layer.startswith(("top/", "outer/")) or layer == "shoes":
             return b | {"bottom"}
-        if layer in ("acc/scarf", "bottom", "dress/shift") or layer.startswith(("tell/", "mouth/")):
+        if layer in ("acc/scarf", "bottom", "dress/shift") or layer.startswith(("tell/", "mouth/", "bottom/")):
             return b
         return b | {"top/tee"} | ({"carry/box"} if layer == "carry/plant" else set())
 
@@ -647,7 +647,9 @@ def render_figure(a: dict) -> None:
         unknown = [l for l in only if l not in figure.LAYERS]
         if unknown:
             raise SystemExit(f"render.py: --layers names no figure layer: {unknown}")
-        if any(prev[k] != spec[k] for k in ("scale", "frame", "anchor", "anims", "mirror")):
+        # a clip's `layers` list is allowed to differ: that is exactly what adding a layer changes
+        strip = lambda an: {n: {k: v for k, v in c.items() if k != "layers"} for n, c in an.items()}
+        if any(prev[k] != spec[k] for k in ("scale", "frame", "anchor", "mirror")) or strip(prev["anims"]) != strip(spec["anims"]):
             raise SystemExit("render.py: --layers needs the figure.json on disk to have this run's frame and clips; render the whole figure")
         spec["layers"] = [x for x in prev["layers"] if x["id"] not in only]
         spec["cells"] = {k: v for k, v in prev["cells"].items() if k.split("@")[0] not in only}

@@ -2799,3 +2799,16 @@ The "Questions from seats" section (Buzz/Quiet per channel, Default/Always/Never
 Five takes from CC0 BigSoundBank clips (ADR 776): `machine-1` 25 KB (32 kbps, 6.2 s), `doorbell-1` 24 KB, `bottle-1` 21 KB, `bottle-2` 21 KB, `pop-1` 9 KB. nick heard eight on the soundboard and kept these five. Takes load lazily on the first LIFE moment, never on the initial page, so initial JS and CSS are unchanged.
 
 - Falsify: `pnpm perf:check` after a build reports office sounds over 260,000 B with this lane in.
+
+## 2026-11-01 — figure v2-6b-skirt; Office art RAISED 8,820,000 → 8,900,000 B (lane 01M6CB8WTFDF8XN8VGAXXTWPZ4)
+
+| Budget     | Before (ceiling)    | This branch (CI/files) | Ceiling                          |
+| ---------- | ------------------- | ---------------------- | -------------------------------- |
+| office art | 8,820,000 B          | ~8,835,072 B (170)  | RAISED 8,820,000 → 8,900,000 B |
+
+One new sheet, `bottom-skirt` 72 KB, rendered on its own with `render.py --layers bottom/skirt` against the
+render cache (the other sheets are byte-identical). A skirt is a bottom cut, so a member wears it instead of
+`bottom`, never as well; a viewer's download grows only for members in skirts. A re-baseline to measured + 15%
+would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 8,900,000 B with this lane in.

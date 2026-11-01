@@ -1789,6 +1789,7 @@ const RECEPTIONIST_LOOK: Appearance = {
   neck: 'none',
   wrist: 'none',
   onePiece: 'none',
+  bottomCut: 'trousers',
   outer: 'none',
   underColor: null,
   accessory: 'none',
