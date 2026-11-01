@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   envelopePosition,
   makeEnvelope,
@@ -15,7 +17,7 @@ import { readHookStdin } from '../hookStdin.js';
 import { pendingPickLine, takePendingPick } from '../pick/marker.js';
 import { isActionNeeded, renderInbox, renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
-import { tapHook } from '../trace/hook.js';
+import { tapHook, traceClient } from '../trace/hook.js';
 import {
   findWorkspaceDir,
   kindLookup,
@@ -451,6 +453,27 @@ const DEFERRED_TOOL_HARNESSES: Record<string, string> = {
 /** The `--hook` values whose hook line pipes its payload to the probe, so the probe taps it (ADR 445). */
 const TAPPED_HOOKS: ReadonlySet<string> = new Set(['claude-code', 'grok', 'opencode']);
 
+/**
+ * The `--hook` values whose payload also feeds the inferred-question catcher (ADR 785): their Stop
+ * runs this probe, and no other musterd process sees that turn end. Claude Code and OpenCode are
+ * caught on the trace tap instead.
+ */
+const isCaughtHook = (hook: string): boolean => hook === 'grok' || hook === 'muse';
+
+/**
+ * Whether this probe run has anything for the catcher: a turn end, or (Grok's PreToolUse) a raised
+ * card to withdraw. Keeps the import and the session read off the ordinary tool call.
+ */
+function catcherDue(hook: string, raw: string, dir: string): boolean {
+  if (hook === 'muse') return true;
+  if (existsSync(join(dir, '.musterd', 'inferred-question.json'))) return true;
+  try {
+    return (JSON.parse(raw) as { reason?: unknown }).reason === 'end_turn';
+  } catch {
+    return false;
+  }
+}
+
 async function interruptCheck(parsed: Parsed): Promise<number> {
   // Which harness's hook is running us, if any: decides whether a raised line (or the deaf line) is
   // printed bare or wrapped in that harness's injection JSON. Unknown value → bare, never a throw.
@@ -498,18 +521,34 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
   // out at the end, when `raised` is known. Only a probe whose hook line names its harness reads
   // stdin: a bare probe cannot tell a harness pipe from any other stdin.
   const tapHarness = TAPPED_HOOKS.has(hookFlag) ? hookFlag : undefined;
-  const payload: Promise<string> = tapHarness ? readHookStdin(750) : Promise.resolve('');
+  const caught = isCaughtHook(hookFlag);
+  const payload: Promise<string> = tapHarness || caught ? readHookStdin(750) : Promise.resolve('');
   let raised = false;
   let deaf = false;
   const tap = async (): Promise<void> => {
     const raw = await payload;
     if (!raw) return;
-    await tapHook(raw, {
-      binding: findBinding(),
-      dir: process.cwd(),
-      harness: tapHarness,
-      outcome: { hook: 'interrupt', detail: deaf ? { raised, deaf } : { raised } },
-    });
+    const binding = findBinding();
+    const dir = process.cwd();
+    if (tapHarness) {
+      await tapHook(raw, {
+        binding,
+        dir,
+        harness: tapHarness,
+        outcome: { hook: 'interrupt', detail: deaf ? { raised, deaf } : { raised } },
+      });
+    }
+    if (caught && catcherDue(hookFlag, raw, dir)) {
+      // Lazily, like the drift refresh below: the catcher reaches the harness session readers, and
+      // this probe runs on every tool call of every harness.
+      const { catchHookTurn } = await import('../trace/inferredQuestion.js');
+      await catchHookTurn(raw, hookFlag, {
+        binding,
+        dir,
+        client: binding ? traceClient(binding, dir) : null,
+        doorbellRang: raised,
+      });
+    }
   };
   // Spec 2026-09-16 / ADR 408 increment 4: keep `.musterd/drift.json` warm on this cadence, so the
   // adapter's inbox-check surface can REPORT provisioning drift without inspecting the workspace on

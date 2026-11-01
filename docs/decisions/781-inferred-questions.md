@@ -76,6 +76,9 @@ field). This is phase 3a: the decision, the shared check, and Claude Code. OpenC
 - 2026-11-01: 3c is ADR 783. The host cannot act as the seat once a headless run has exited, so it
   reports the run's last message on the supplementary wake report and the daemon raises the
   question as the seat, under §3's rules.
+- 2026-11-01: 3b is ADR 785. None of the OpenCode, Grok or Muse hook payloads carries the message, so
+  each catcher reads it from the harness's session store. Grok and Muse have no prompt hook, so
+  §4's withdrawal comes at their next tool call or turn end instead.
 
 ## Observability & Evaluation
 

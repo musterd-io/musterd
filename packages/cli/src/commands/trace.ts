@@ -115,8 +115,14 @@ export async function traceCommand(parsed: Parsed): Promise<number> {
     const binding = findBinding(dir);
     const harness = flagStr(parsed.flags, 'harness') ?? 'claude-code';
     noteTurnMarker(raw, dir); // ADR 558 — the idle-wake turn markers ride the same tap
-    // ADR 781 — the inferred-question catcher rides it too: raise on Stop, withdraw on the next prompt.
-    await catchTurnEnd(raw, { binding, dir, client: binding ? traceClient(binding, dir) : null });
+    // ADR 781 — the inferred-question catcher rides it too: raise on Stop, withdraw on the next prompt
+    // (OpenCode's bare idle boundary reads its message from the store, ADR 785).
+    await catchTurnEnd(raw, {
+      binding,
+      dir,
+      client: binding ? traceClient(binding, dir) : null,
+      harness,
+    });
     await tapHook(raw, {
       binding,
       dir,
