@@ -7,6 +7,8 @@ import {
   OPENCODE_TRANSCRIPT_PARSER,
   opencodeDbPath,
   opencodeReadSql,
+  opencodeReadSqlV2,
+  readOpencodeRows,
   type OpencodeRow,
   parseOpencodeRows,
 } from './opencode.js';
@@ -150,4 +152,88 @@ describe('opencodeReadSql', () => {
       expect(parseOpencodeRows(got).find((r) => r.kind === 'usage')?.detail['tool_uses']).toBe(1);
     },
   );
+
+  it.skipIf(!hasSqlite)('reads the 2.x session_message layout (OpenCode 2.2.2)', () => {
+    dir = mkdtempSync(join(tmpdir(), 'oc-db-'));
+    const db = join(dir, 'opencode.db');
+    const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
+    const v2 = (completed: number | null) =>
+      JSON.stringify({ time: { created: 1, completed }, content: [{ type: 'text', text: 'hi' }] });
+    execFileSync('sqlite3', [
+      db,
+      [
+        'CREATE TABLE session_message (id text, session_id text, type text, seq integer, time_created integer, time_updated integer, data text);',
+        `INSERT INTO session_message VALUES ('m1','s','assistant',1,100,0,${q(v2(150))});`,
+        `INSERT INTO session_message VALUES ('m2','s','assistant',2,200,0,${q(v2(250))});`,
+        `INSERT INTO session_message VALUES ('m3','s','assistant',3,300,0,${q(v2(null))});`,
+        `INSERT INTO session_message VALUES ('u1','s','user',4,210,0,${q('{}')});`,
+        `INSERT INTO session_message VALUES ('x1','other','assistant',1,220,0,${q(v2(260))});`,
+      ].join('\n'),
+    ]);
+    const out = execFileSync(
+      'sqlite3',
+      ['-readonly', '-json', db, opencodeReadSqlV2('s', 100, 10)],
+      {
+        encoding: 'utf8',
+      },
+    );
+    expect((JSON.parse(out) as { mid: string }[]).map((r) => r.mid)).toEqual(['m2']);
+  });
+});
+
+describe('readOpencodeRows (OpenCode 2.x store, lane 01M6C85RT9)', () => {
+  const md = JSON.stringify({
+    time: { created: 10, completed: 20 },
+    model: { id: 'big-pickle', providerID: 'opencode' },
+    finish: 'tool-calls',
+    tokens: { input: 5, output: 7, reasoning: 0, cache: { read: 100, write: 0 } },
+    content: [
+      { type: 'text', text: 'Looking.' },
+      {
+        type: 'tool',
+        id: 'call_1',
+        name: 'shell',
+        state: { input: { command: 'ls' } },
+        time: { created: 12 },
+      },
+    ],
+  });
+
+  it('reads session_message first and yields v1-shaped rows the parser counts', async () => {
+    const asked: string[] = [];
+    const rows = await readOpencodeRows(
+      async (_db, sql) => (asked.push(sql), JSON.stringify([{ mid: 'm1', mt: 10, md }])),
+      '/db',
+      'ses_1',
+      0,
+      400,
+    );
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain('FROM session_message');
+    expect(rows).toHaveLength(2);
+    const records = parseOpencodeRows(rows!);
+    const usage = records.find((r) => r.kind === 'usage')!;
+    expect(usage.tool_use_id).toBe('call_1');
+    expect(usage.detail).toMatchObject({
+      model: 'big-pickle',
+      input_tokens: 5,
+      output_tokens: 7,
+      cache_read_tokens: 100,
+      tool_uses: 1,
+    });
+    expect(records.find((r) => r.kind === 'assistant_text')?.text).toBe('Looking.');
+  });
+
+  it('falls back to the v1 tables when session_message is missing, and is null when neither reads', async () => {
+    const v1 = JSON.stringify([{ mid: 'm1', mt: 3, md: '{}', pd: null }]);
+    const fallback = await readOpencodeRows(
+      async (_db, sql) => (sql.includes('session_message') ? null : v1),
+      '/db',
+      's',
+      0,
+      10,
+    );
+    expect(fallback).toEqual([{ mid: 'm1', mt: 3, md: '{}', pd: null }]);
+    expect(await readOpencodeRows(async () => null, '/db', 's', 0, 10)).toBeNull();
+  });
 });

@@ -168,6 +168,85 @@ export function opencodeReadSql(sessionId: string, after: number, limit: number)
  ORDER BY m.time_created, m.id, p.id;`;
 }
 
+/**
+ * The same read on OpenCode 2.x, which moved messages to `session_message` (measured on 2.2.2,
+ * 2026-11-01): one row per message, `type` the role, and the parts inline as `data.content`. The
+ * v1 `message` / `part` tables are gone there, so {@link opencodeReadSql} errors and reads nothing.
+ */
+export function opencodeReadSqlV2(sessionId: string, after: number, limit: number): string {
+  const sid = sessionId.replace(/'/g, "''");
+  return `SELECT id AS mid, time_created AS mt, data AS md FROM session_message
+ WHERE session_id = '${sid}' AND type = 'assistant' AND time_created > ${String(Math.floor(after))}
+   AND json_extract(data, '$.time.completed') IS NOT NULL
+ ORDER BY time_created, id LIMIT ${String(limit)};`;
+}
+
+/**
+ * A v2 message row as the v1 rows this file and the wake watcher parse: one row per part, a tool
+ * part's `id` / `name` as v1's `callID` / `tool`, its `time.created` as `time.start`, and the
+ * message's `model.id` as `modelID`. A message with no parts is one row with `pd` null.
+ */
+export function v2ToV1Rows(
+  rows: readonly { mid: string; mt: number; md: string }[],
+): OpencodeRow[] {
+  const out: OpencodeRow[] = [];
+  for (const r of rows) {
+    const message = parseJson(r.md);
+    if (!message) {
+      out.push({ mid: r.mid, mt: r.mt, md: r.md, pd: null });
+      continue;
+    }
+    const { content, ...rest } = message;
+    const model = str(obj(rest['model'])?.['id']);
+    const md = JSON.stringify({ role: 'assistant', ...(model ? { modelID: model } : {}), ...rest });
+    const parts = Array.isArray(content) ? content.map(obj).filter(Boolean) : [];
+    if (parts.length === 0) out.push({ mid: r.mid, mt: r.mt, md, pd: null });
+    for (const p of parts as Record<string, unknown>[]) {
+      const time = obj(p['time']);
+      const part = {
+        ...p,
+        ...(p['type'] === 'tool'
+          ? { callID: p['callID'] ?? p['id'], tool: p['tool'] ?? p['name'] }
+          : {}),
+        ...(time && time['start'] === undefined && time['created'] !== undefined
+          ? { time: { ...time, start: time['created'] } }
+          : {}),
+      };
+      out.push({ mid: r.mid, mt: r.mt, md, pd: JSON.stringify(part) });
+    }
+  }
+  return out;
+}
+
+function jsonRows<T>(raw: string): T[] | undefined {
+  try {
+    const v: unknown = raw.trim() ? JSON.parse(raw) : [];
+    return Array.isArray(v) ? (v as T[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Completed assistant messages of one session after `after`, as v1-shaped rows, from either store
+ * layout: v2 first, the v1 tables when v2's is missing. Null when neither can be read.
+ */
+export async function readOpencodeRows(
+  run: RunSqlite,
+  db: string,
+  sessionId: string,
+  after: number,
+  limit: number,
+): Promise<OpencodeRow[] | null> {
+  const v2 = await run(db, opencodeReadSqlV2(sessionId, after, limit));
+  if (v2 !== null) {
+    const rows = jsonRows<{ mid: string; mt: number; md: string }>(v2);
+    return rows ? v2ToV1Rows(rows) : null;
+  }
+  const v1 = await run(db, opencodeReadSql(sessionId, after, limit));
+  return v1 === null ? null : (jsonRows<OpencodeRow>(v1) ?? null);
+}
+
 export type RunSqlite = (db: string, sql: string) => Promise<string | null>;
 
 export const runSqlite: RunSqlite = (db, sql) =>
@@ -208,17 +287,14 @@ export async function tailOpencodeSession(opts: {
     if (cursor?.downgraded) return false;
     const after = cursor && cursor.path === db ? cursor.offset : 0;
 
-    const raw = await (opts.run ?? runSqlite)(
+    const rows = await readOpencodeRows(
+      opts.run ?? runSqlite,
       db,
-      opencodeReadSql(opts.sessionId, after, OPENCODE_READ_MESSAGES),
+      opts.sessionId,
+      after,
+      OPENCODE_READ_MESSAGES,
     );
-    if (raw === null) return false;
-    let rows: OpencodeRow[];
-    try {
-      rows = raw.trim() ? (JSON.parse(raw) as OpencodeRow[]) : [];
-    } catch {
-      return false;
-    }
+    if (rows === null) return false;
     if (rows.length === 0) return true;
 
     const http = traceClient(binding, opts.dir);
