@@ -84,6 +84,14 @@ export interface ApnsResult {
   reason?: string;
 }
 
+/** Where one send's time went, filled in by {@link sendApns} for the caller to log. */
+export interface ApnsTiming {
+  /** Minting (or reusing) the provider token. */
+  tokenMs?: number;
+  /** The request to APNs, up to its response or failure. */
+  fetchMs?: number;
+}
+
 /**
  * Send one alert push. The collapse id is the ask ref when it fits Apple's 64 bytes, so a
  * re-delivery of the same ask replaces its notification rather than stacking a second one.
@@ -94,9 +102,13 @@ export async function sendApns(
   input: { body: string; expiresAt: number; collapseId: string },
   nowMs: number,
   fetchImpl: typeof fetch = fetch,
+  timing: ApnsTiming = {},
 ): Promise<ApnsResult> {
+  const tokenStart = Date.now();
+  const token = await bearer(config, nowMs);
+  timing.tokenMs = Date.now() - tokenStart;
   const headers: Record<string, string> = {
-    authorization: `bearer ${await bearer(config, nowMs)}`,
+    authorization: `bearer ${token}`,
     'apns-topic': config.topic,
     'apns-push-type': 'alert',
     'apns-priority': '10',
@@ -106,6 +118,7 @@ export async function sendApns(
   if (new TextEncoder().encode(input.collapseId).length <= 64)
     headers['apns-collapse-id'] = input.collapseId;
   let res: Response;
+  const fetchStart = Date.now();
   try {
     res = await fetchImpl(`${APNS_HOSTS[push.environment]}/3/device/${push.token}`, {
       method: 'POST',
@@ -114,8 +127,10 @@ export async function sendApns(
       signal: AbortSignal.timeout(RELAY_PROVIDER_TIMEOUT_MS),
     });
   } catch {
+    timing.fetchMs = Date.now() - fetchStart;
     return { ok: false };
   }
+  timing.fetchMs = Date.now() - fetchStart;
   if (res.ok) {
     const apnsId = res.headers.get('apns-id') ?? undefined;
     return { ok: true, status: res.status, ...(apnsId ? { apnsId } : {}) };

@@ -131,6 +131,27 @@ describe('APNs provider token and send (ADR 676 §9)', () => {
     });
   });
 
+  it('times the token and the request apart, on success and on a network failure', async () => {
+    const { pem } = await p8();
+    const config = { keyP8: pem, keyId: 'K', teamId: 'T', topic: 'io.musterd.app' };
+    const input = { body: '{}', expiresAt: 1_800_000_300_000, collapseId: 'ask-1' };
+    const push = { token: TOKEN, environment: 'production' as const };
+    const slow = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return new Response(null, { status: 200 });
+    });
+    const timing: { tokenMs?: number; fetchMs?: number } = {};
+    await sendApns(config, push, input, 1_800_000_000_000, slow, timing);
+    expect(timing.tokenMs).toBeGreaterThanOrEqual(0);
+    expect(timing.fetchMs).toBeGreaterThanOrEqual(25);
+    const down = vi.fn(async () => {
+      throw new Error('network');
+    });
+    const failed: { tokenMs?: number; fetchMs?: number } = {};
+    await sendApns(config, push, input, 1_800_000_000_000, down, failed);
+    expect(failed.fetchMs).toBeGreaterThanOrEqual(0);
+  });
+
   it('needs every piece of operator config', () => {
     expect(apnsConfigFrom({ APNS_KEY_P8: 'k', APNS_KEY_ID: 'i', APNS_TEAM_ID: 't' })).toBeNull();
     expect(
