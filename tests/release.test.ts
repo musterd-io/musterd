@@ -42,6 +42,7 @@ describe('release helpers (ADR 156)', () => {
       allowDirty: true,
       publish: false,
       pack: false,
+      smoke: false,
       noProvenance: false,
       version: '0.3.1',
     });
@@ -102,7 +103,7 @@ describe('release helpers (ADR 156)', () => {
       ).toThrow(/no --version/);
       expect(() => parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--dry-run'])).toThrow();
       expect(() => parseReleaseArgs(['--tag', 'v0.7.0'])).toThrow(/only applies with/);
-      expect(() => parseReleaseArgs(['--no-provenance'])).toThrow(/only apply with --publish/);
+      expect(() => parseReleaseArgs(['--no-provenance'])).toThrow(/only applies with --publish/);
       expect(parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--tarballs', '/t']).tarballs).toBe(
         '/t',
       );
@@ -118,6 +119,14 @@ describe('release helpers (ADR 156)', () => {
       expect(() => parseReleaseArgs(['--pack', '--out', '/t'])).toThrow(/--tag/);
       expect(() =>
         parseReleaseArgs(['--pack', '--publish', '--tag', 'v0.7.0', '--out', '/t']),
+      ).toThrow(/separate jobs/);
+      expect(parseReleaseArgs(['--smoke', '--tag', 'v0.7.0', '--tarballs', '/t'])).toMatchObject({
+        smoke: true,
+        tarballs: '/t',
+      });
+      expect(() => parseReleaseArgs(['--smoke', '--tag', 'v0.7.0'])).toThrow(/--tarballs/);
+      expect(() =>
+        parseReleaseArgs(['--smoke', '--publish', '--tag', 'v0.7.0', '--tarballs', '/t']),
       ).toThrow(/separate jobs/);
       expect(() =>
         parseReleaseArgs(['--pack', '--tag', 'v0.7.0', '--out', '/t', '--tarballs', '/x']),
@@ -153,16 +162,27 @@ describe('release helpers (ADR 156)', () => {
       expect(steps).not.toMatch(/pnpm publish|npm publish/);
     });
 
-    it('the release workflow: only the publish job can mint a token, and it installs nothing', () => {
+    it('the release workflow: untrusted installs cannot mint a token or change what ships', () => {
       const wf = readFileSync('.github/workflows/release.yml', 'utf8');
-      const pack = wf.slice(wf.indexOf('\n  pack:'), wf.indexOf('\n  publish:'));
-      const publish = wf.slice(wf.indexOf('\n  publish:'));
-      // The smoke runs third-party install scripts; nothing in that job may ask for OIDC.
+      const job = (name: string, next?: string) =>
+        wf.slice(wf.indexOf(`\n  ${name}:`), next ? wf.indexOf(`\n  ${next}:`) : undefined);
+      const pack = job('pack', 'smoke');
+      const smoke = job('smoke', 'publish');
+      const publish = job('publish');
+      // Only publish can ask for OIDC; the smoke runs unlocked third-party install scripts.
       expect(pack).not.toContain('id-token');
-      expect(pack).toContain('--pack --tag "$GITHUB_REF_NAME"');
+      expect(smoke).not.toContain('id-token');
       expect(publish).toContain('id-token: write');
       expect(publish).toContain('environment: npm-release');
+      // pack records the hashes as job outputs before any unlocked install runs ...
+      expect(pack).toContain('--pack --tag "$GITHUB_REF_NAME"');
+      expect(pack).toContain('GITHUB_OUTPUT');
+      expect(pack).not.toContain('--smoke');
+      expect(smoke).toContain('--smoke --tag "$GITHUB_REF_NAME" --tarballs');
+      // ... and publish checks against those outputs, not a file another job wrote.
+      expect(publish).toContain('needs.pack.outputs.sums');
       expect(publish).toContain('--publish --tag "$GITHUB_REF_NAME" --tarballs');
+      expect(publish).toMatch(/needs: \[pack, smoke\]/);
       expect(publish).not.toMatch(/pnpm install|\.\/\.github\/actions\/setup/);
       // No long-lived npm token anywhere in the release path.
       expect(wf).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN/);

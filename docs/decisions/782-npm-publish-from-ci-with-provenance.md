@@ -35,8 +35,8 @@ consumer smoke gate that 0.4.0 taught us to run before the first registry write?
    (`scripts/release/smoke.ts`) and uploads **the tarballs the smoke installed and ran** with
    `npm publish <tarball> --provenance`, in ADR 156's lockstep order. A last step reads every
    package back from the registry and fails the run if any lacks a provenance attestation.
-   _(Amended 2026-11-01: split into a `pack` job with no OIDC token and a `publish` job that only
-   publishes — see Consequences.)_
+   _(Amended 2026-11-01: split into `pack`, `smoke` and `publish` jobs so the smoke's third-party
+   install scripts can neither mint a token nor change what ships — see Consequences.)_
 2. **npm trusted publishing, no token.** Each of the five packages on npmjs.com names
    `musterd-io/musterd`, `release.yml` and the `npm-release` environment as its trusted publisher.
    No `NPM_TOKEN` exists in the repo or its environments; a run from another workflow, a fork or
@@ -65,15 +65,20 @@ consumer smoke gate that 0.4.0 taught us to run before the first registry write?
   command.
 - The smoked tarball and the published tarball are now the same file. Before, `pnpm publish`
   packed a second time and the two were trusted to agree.
-- 2026-11-01 (#3697 follow-up, before any release ran): Decision 1's single job is split in two.
+- 2026-11-01 (#3697 follow-up, before any release ran): Decision 1's single job is split in three.
   As merged, one job held `id-token: write` while the smoke's `npm install` resolved third-party
   deps unlocked and ran their install scripts, so a compromised transitive dep could have requested
-  a publish credential for our packages. **`pack`** (no OIDC) refuses a tag off `main`, builds,
-  smokes and uploads the tarballs with their `SHA256SUMS` (`pnpm release --pack --tag vX --out
-  DIR`); the smoke hashes every tarball before and after its install and fails on any change.
-  **`publish`** (the `npm-release` environment, the only job with `id-token: write`) runs node and
-  the pinned npm only, checks the sums and publishes exactly those files (`--publish --tarballs
-  DIR`). Without `--tarballs`, Decision 4's break-glass `--publish` still builds and smokes itself.
+  a publish credential for our packages, or swapped the tarballs. A two-job split with the smoke
+  beside the pack still let such a script rewrite the tarballs and their sums file before upload.
+  So: **`pack`** refuses a tag off `main`, does the locked workspace install and build (the trust
+  every CI run already extends), `pnpm pack`s, and records each tarball's sha256 as a **job
+  output** before any unlocked install runs (`pnpm release --pack --tag vX --out DIR`).
+  **`smoke`** installs those tarballs into a clean dir and runs them (`--smoke --tarballs DIR`);
+  it has no OIDC token and its only power is to fail. **`publish`** (the `npm-release`
+  environment, the only job with `id-token: write`, needs both) runs node and the pinned npm only,
+  checks the tarballs against `pack`'s outputs and publishes exactly those files (`--publish
+  --tarballs DIR`). Without `--tarballs`, Decision 4's break-glass `--publish` still builds and
+  smokes itself.
 - Consumers can check a release: `npm audit signatures`, or the provenance panel on npmjs.com, ties
   each tarball to the workflow run and the tagged commit.
 - Brew, the MCP Registry and the GitHub Release stay as ADR 669 orders them; the workflow prints
@@ -81,7 +86,8 @@ consumer smoke gate that 0.4.0 taught us to run before the first registry write?
 - The publish job gets `id-token: write` and nothing else beyond `contents: read`. The code in
   reach of the one-time credential is node, the pinned npm (`npm@11.21.1`), the pinned
   checkout/setup-node/download-artifact actions and `scripts/release.ts`, which imports only node
-  builtins.
+  builtins. The tarballs themselves come from `pack`, so the bytes we publish are only as
+  trustworthy as the locked workspace install: the same bar as before, now with a record.
 
 ## Observability & Evaluation
 

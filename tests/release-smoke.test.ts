@@ -136,24 +136,6 @@ describe('smokeConsumerInstall', () => {
     for (const name of PUBLISH_ORDER) expect(tarballs[name].startsWith(keep)).toBe(true);
   });
 
-  it('fails when a tarball changes while the smoke install runs (ADR 782)', () => {
-    const h = harness((e) => (e.includes('cli') ? '0.4.1' : `THROW:${HEALTHY_NO_BINDING}`));
-    let installed = false;
-    const run = h.deps.run;
-    const deps = {
-      ...h.deps,
-      run: (cmd: string, args: string[], cwd: string) => {
-        if (cmd === 'npm') installed = true;
-        return run(cmd, args, cwd);
-      },
-      // The hash of every tarball differs once the install has run: an install script rewrote it.
-      hash: () => (installed ? 'after' : 'before'),
-    };
-    expect(() => smokeConsumerInstall(fakeRoot('0.4.1'), deps)).toThrow(/changed while/);
-    const steady = { ...h.deps, hash: () => 'same' };
-    expect(() => smokeConsumerInstall(fakeRoot('0.4.1'), steady)).not.toThrow();
-  });
-
   it('passes when the adapter merely lacks a binding', () => {
     const h = harness((e) => (e.includes('cli') ? '0.4.1' : `THROW:${HEALTHY_NO_BINDING}`));
     expect(() => smokeConsumerInstall(fakeRoot('0.4.1'), h.deps)).not.toThrow();

@@ -30,14 +30,21 @@ export interface ReleaseArgs {
    */
   publish: boolean;
   /**
-   * `--pack --out DIR` — the workflow's first job (ADR 782): build, smoke, and leave the smoked
-   * tarballs in DIR. Runs with no OIDC token, because the smoke executes third-party install scripts.
+   * `--pack --out DIR` — the workflow's first job (ADR 782): build and `pnpm pack` into DIR, with
+   * their SHA256SUMS. No smoke here: the hashes are recorded before any unlocked install runs.
    */
   pack: boolean;
   out?: string;
   /**
-   * `--publish --tarballs DIR` — the workflow's second job: publish the tarballs the pack job
-   * smoked, building nothing and installing nothing. Without it, `--publish` builds and smokes
+   * `--smoke --tarballs DIR` — the workflow's second job: install the packed tarballs into a clean
+   * directory and run them. It runs third-party install scripts, so it holds no publish credential
+   * and its result can only stop a release, never change what ships.
+   */
+  smoke: boolean;
+  /**
+   * `--publish --tarballs DIR` / `--smoke --tarballs DIR` — the tarballs the pack job made. Publish
+   * checks them against DIR/SHA256SUMS, which the workflow writes from the pack job's outputs, and
+   * builds and installs nothing. Without it, `--publish` builds and smokes
    * itself (the break-glass laptop path).
    */
   tarballs?: string;
@@ -67,6 +74,7 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
   let allowDirty = false;
   let publish = false;
   let pack = false;
+  let smoke = false;
   let noProvenance = false;
   let version: string | undefined;
   let tag: string | undefined;
@@ -83,6 +91,7 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
     else if (a === '--allow-dirty') allowDirty = true;
     else if (a === '--publish') publish = true;
     else if (a === '--pack') pack = true;
+    else if (a === '--smoke') smoke = true;
     else if (a === '--out') out = value(a, ++i);
     else if (a === '--tarballs') tarballs = value(a, ++i);
     else if (a === '--no-provenance') noProvenance = true;
@@ -106,8 +115,10 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
   if (version !== undefined && !SEMVER.test(version)) {
     throw new Error(`invalid --version ${JSON.stringify(version)} (want X.Y.Z)`);
   }
-  if (publish && pack) throw new Error('--pack and --publish are separate jobs: pass one');
-  const mode = publish ? '--publish' : pack ? '--pack' : null;
+  if (Number(publish) + Number(pack) + Number(smoke) > 1) {
+    throw new Error('--pack, --smoke and --publish are separate jobs: pass one');
+  }
+  const mode = publish ? '--publish' : pack ? '--pack' : smoke ? '--smoke' : null;
   if (mode && (version !== undefined || dryRun)) {
     // The number comes from the tag and the tree, both already reviewed and merged; a second number
     // on the command line could only disagree with them.
@@ -116,10 +127,13 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
   if (mode && tag === undefined) {
     throw new Error(`${mode} requires --tag vX.Y.Z (the tag the release workflow runs for)`);
   }
-  if (!mode && tag !== undefined) throw new Error('--tag only applies with --pack or --publish');
+  if (!mode && tag !== undefined)
+    throw new Error('--tag only applies with --pack, --smoke or --publish');
   if (pack !== (out !== undefined)) throw new Error('--pack and --out DIR go together');
-  if (!publish && (noProvenance || tarballs !== undefined)) {
-    throw new Error('--no-provenance and --tarballs only apply with --publish');
+  if (smoke && tarballs === undefined) throw new Error('--smoke requires --tarballs DIR');
+  if (!publish && noProvenance) throw new Error('--no-provenance only applies with --publish');
+  if (!publish && !smoke && tarballs !== undefined) {
+    throw new Error('--tarballs only applies with --smoke or --publish');
   }
   // `version` is optional-and-absent, not optional-and-undefined: under exactOptionalPropertyTypes
   // those are different types, and the whole point of having no default (above) is that "nobody
@@ -129,6 +143,7 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
     allowDirty,
     publish,
     pack,
+    smoke,
     noProvenance,
     ...(version !== undefined ? { version } : {}),
     ...(tag !== undefined ? { tag } : {}),

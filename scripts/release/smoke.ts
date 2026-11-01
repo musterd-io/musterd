@@ -19,7 +19,6 @@
  * worse, silently resolve the PREVIOUS release and test the wrong code.
  */
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -110,20 +109,9 @@ export function probesFor(version: string): SmokeProbe[] {
 export interface SmokeDeps {
   run: (cmd: string, args: string[], cwd: string) => string;
   log: (line: string) => void;
-  /**
-   * sha256 of a file. When present, every tarball is hashed right after packing and again after the
-   * consumer install has run, and a mismatch fails the smoke. The install resolves third-party deps
-   * from the registry and runs their install scripts; this proves none of them rewrote what we are
-   * about to publish (ADR 782). Absent in unit tests, whose tarballs are not real files.
-   */
-  hash?: (path: string) => string;
 }
 
-const sha256File = (path: string): string =>
-  createHash('sha256').update(readFileSync(path)).digest('hex');
-
 const defaultDeps: SmokeDeps = {
-  hash: sha256File,
   // stdio pipe, not inherit: the probes' output is the assertion, and a failing probe is expected
   // to exit non-zero, so the throw must be caught rather than killing the release.
   run: (cmd, args, cwd) => execFileSync(cmd, args, { cwd, encoding: 'utf8', stdio: 'pipe' }),
@@ -138,7 +126,11 @@ const defaultDeps: SmokeDeps = {
  * a tarball that is not the one we publish, which is the exact class of self-deception this gate is
  * supposed to end.
  */
-function packAll(root: string, dest: string, deps: SmokeDeps): Record<PublishPackageName, string> {
+export function packAll(
+  root: string,
+  dest: string,
+  deps: SmokeDeps = defaultDeps,
+): Record<PublishPackageName, string> {
   const out = {} as Record<PublishPackageName, string>;
   for (const name of PUBLISH_ORDER) {
     const dir = join(root, 'packages', PACKAGE_DIRS[name]);
@@ -150,35 +142,20 @@ function packAll(root: string, dest: string, deps: SmokeDeps): Record<PublishPac
 }
 
 /**
- * Install the packed tarballs into a clean directory and run the probes.
+ * Install already-packed tarballs into a clean directory and run the probes.
  *
  * Throws on the first failure — this gates a publish, so it must stop the release rather than warn.
- *
- * With `packInto`, the tarballs are packed there and left in place, and their paths are returned:
- * the CI publish (ADR 782) uploads exactly the files this gate installed and ran, rather than
- * packing a second time and trusting the two packs to agree. Without it they go with the scratch dir.
+ * The install resolves third-party deps from the registry and runs their install scripts, which is
+ * why the release workflow runs this in a job of its own that can neither mint a publish credential
+ * nor change which bytes get published (ADR 782).
  */
-export function smokeConsumerInstall(
-  root: string,
+export function smokeTarballs(
+  tarballs: Record<PublishPackageName, string>,
+  version: string,
   deps: SmokeDeps = defaultDeps,
-  packInto?: string,
-): Record<PublishPackageName, string> {
-  // The version to assert is whatever the packed CLI actually carries — read from disk, never from
-  // the caller's `--version`. On `--dry-run` no bump happens, so those two disagree, and trusting
-  // the flag made the gate fail a perfectly good dry run on its own bookkeeping.
-  const version = (
-    JSON.parse(
-      readFileSync(join(root, 'packages', PACKAGE_DIRS['@musterd/cli'], 'package.json'), 'utf8'),
-    ) as { version: string }
-  ).version;
+): void {
   const work = mkdtempSync(join(tmpdir(), 'musterd-smoke-'));
   try {
-    deps.log(`consumer smoke @ ${version} — packing…`);
-    const tarballs = packAll(root, packInto ?? work, deps);
-    const packed = deps.hash
-      ? Object.fromEntries(PUBLISH_ORDER.map((n) => [n, deps.hash!(tarballs[n])]))
-      : null;
-
     const app = join(work, 'app');
     mkdirSync(app, { recursive: true });
     writeFileSync(join(app, 'package.json'), JSON.stringify(smokeManifest(tarballs), null, 2));
@@ -217,20 +194,41 @@ export function smokeConsumerInstall(
       }
       deps.log(`  ✓ ${probe.label}`);
     }
-    if (packed) {
-      for (const name of PUBLISH_ORDER) {
-        if (deps.hash!(tarballs[name]) !== packed[name]) {
-          throw new Error(
-            `consumer smoke FAILED — ${name}'s tarball changed while the smoke install ran.\n` +
-              `  Something the install executed rewrote a file we were about to publish. Nothing is\n` +
-              `  published; treat the runner as compromised.`,
-          );
-        }
-      }
-    }
     deps.log('✓ consumer smoke passed — the tarballs load outside the workspace');
-    return tarballs;
   } finally {
     rmSync(work, { recursive: true, force: true });
+  }
+}
+
+/** The version the packed CLI carries — read from disk, never from a caller's flag. */
+export function onDiskVersion(root: string): string {
+  // On `--dry-run` no bump happens, so the flag and the tree disagree, and trusting the flag made
+  // the gate fail a perfectly good dry run on its own bookkeeping.
+  return (
+    JSON.parse(
+      readFileSync(join(root, 'packages', PACKAGE_DIRS['@musterd/cli'], 'package.json'), 'utf8'),
+    ) as { version: string }
+  ).version;
+}
+
+/**
+ * Pack, then smoke — the one-shot form `--dry-run`, `--version` and the break-glass `--publish` use.
+ * With `packInto` the tarballs are left there and their paths returned; otherwise they go with the
+ * scratch dir.
+ */
+export function smokeConsumerInstall(
+  root: string,
+  deps: SmokeDeps = defaultDeps,
+  packInto?: string,
+): Record<PublishPackageName, string> {
+  const version = onDiskVersion(root);
+  const scratch = packInto ? null : mkdtempSync(join(tmpdir(), 'musterd-pack-'));
+  try {
+    deps.log(`consumer smoke @ ${version} — packing…`);
+    const tarballs = packAll(root, packInto ?? scratch!, deps);
+    smokeTarballs(tarballs, version, deps);
+    return tarballs;
+  } finally {
+    if (scratch) rmSync(scratch, { recursive: true, force: true });
   }
 }
