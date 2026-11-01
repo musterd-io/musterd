@@ -1213,6 +1213,9 @@ answer's text.
 - `inferred: true` marks a question a turn-end catcher raised from the seat's last message (ADR
   781). A server MUST refuse one from a sender that is not an agent (`forbidden`), and MUST refuse
   one with `409 question_already_open` while its sender has any open question.
+- A supplementary wake report MAY carry `final_message` (≤ 2,000 characters): the settled run's last
+  assistant message (ADR 783). When it ends on a question, the server raises it as the wake's seat
+  under the same rules, unless the report says `yielded`. The server MUST NOT log or audit it.
 
 ## A.32 Quick actions and PR events (unreleased — ADR 779)
 

@@ -825,6 +825,9 @@ export type WakeUsage = z.infer<typeof WakeUsageSchema>;
  * daemon must never learn: no session ids, no transcript paths (ADR 131 §5 — the resumable
  * attestation carries a class and a one-way digest; ids stay in the workspace `binding.session`).
  */
+/** ADR 783: the bound on a wake report's `final_message` — ADR 781's inferred-question body. */
+export const WAKE_FINAL_MESSAGE_MAX = 2_000;
+
 export const WakeReportBodySchema = z.object({
   lease_id: z.string(),
   /** Did the woken session occupy the seat (verified from the roster, never from stdout)? */
@@ -877,6 +880,10 @@ export const WakeReportBodySchema = z.object({
   /** Failure summary for a not-occupied outcome (watchdog timeout, spawn error) — host-composed,
    *  never model output. */
   reason: z.string().max(200).optional(),
+  /** ADR 783: the settled run's last assistant message, clipped, on the SUPPLEMENTARY report of an
+   *  occupied wake. The daemon looks for a question in it (`inferQuestion`, ADR 781) and raises it
+   *  as the seat. The one field here that is model output; it is never logged or audited. */
+  final_message: z.string().min(1).max(WAKE_FINAL_MESSAGE_MAX).optional(),
   /** Typed wakeability axis (ADR 189) — same enum as `WakeCandidate.wakeability`, so audits can
    *  query "how many wakes failed because the workspace is gone" without parsing prose. Optional
    *  for back-compat with hosts that have not yet upgraded. */

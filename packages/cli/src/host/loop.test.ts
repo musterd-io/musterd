@@ -8,6 +8,7 @@ import {
   type WakeOrder,
   type WakeReportBody,
   type WakeTurnBody,
+  WAKE_FINAL_MESSAGE_MAX,
 } from '@musterd/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { saveBinding } from '../config.js';
@@ -19,6 +20,7 @@ import type {
   MeteringGatewayOptions,
 } from './gateway.js';
 import {
+  finalMessage,
   healBeforeWake,
   pollHostOnce,
   waitedClause,
@@ -1088,6 +1090,38 @@ describe('the supplementary wake-cost report (inc 5)', () => {
       { lease_id: 'L1', occupied: true, session: 'fresh' },
       { lease_id: 'L1', occupied: true, cost_usd: 0.42, duration_ms: 34_000 },
     ]);
+  });
+
+  it("carries the run's final message, trimmed, with its END kept when clipped (ADR 783)", async () => {
+    const long = `${'x'.repeat(3_000)}\n\nWant me to open the PR?`;
+    const { client, calls } = fakeClient([order(), order({ lease_id: 'L2', act_id: 'A2' })]);
+    const said = ['  Shall I deploy?\n', long];
+    const backend: ActuatorBackend = {
+      harness: 'claude-code',
+      wake: async () => ({
+        outcome: { occupied: true, session: 'fresh' },
+        settled: Promise.resolve({ duration_ms: 10, final_message: said.shift()! }),
+      }),
+    };
+    const result = await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+      }),
+    );
+    await Promise.all(result.settled);
+    const finals = calls.reports.map((r) => (r as { final_message?: string }).final_message);
+    expect(finals.filter((f) => f !== undefined)).toHaveLength(2);
+    expect(finals).toContain('Shall I deploy?');
+    const clipped = finals.find((f) => f?.startsWith('…'))!;
+    expect(clipped).toHaveLength(WAKE_FINAL_MESSAGE_MAX);
+    expect(clipped.endsWith('Want me to open the PR?')).toBe(true);
+  });
+
+  it('sends no final_message for a blank one', () => {
+    expect(finalMessage(undefined)).toEqual({});
+    expect(finalMessage('  \n ')).toEqual({});
   });
 
   it('a taken-over run posts one supplement that says yielded, with no cost or duration (ADR 546)', async () => {

@@ -122,6 +122,23 @@ const TurnCompletedSchema = z.object({
   }),
 });
 
+/** Codex's finished assistant message (`codex exec --json`): `{"type":"item.completed","item":
+ *  {"id","type":"agent_message","text"}}`. ADR 783: the last one is the run's last word. */
+const AgentMessageSchema = z.object({
+  type: z.literal('item.completed'),
+  item: z.object({ type: z.literal('agent_message'), text: z.string() }),
+});
+
+/** External JSONL boundary: an assistant message's text, or nothing. */
+export function parseCodexMessageLine(line: string): string | undefined {
+  try {
+    const result = AgentMessageSchema.safeParse(JSON.parse(line));
+    return result.success ? result.data.item.text : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** External JSONL boundary: the usage a turn-end record carries, or nothing. Never a guess. */
 export function parseCodexUsageLine(line: string): WakeUsage | undefined {
   try {
@@ -299,6 +316,7 @@ async function attempt(
       : undefined;
   let threadId: string | undefined;
   let usage: WakeUsage | undefined;
+  let lastMessage: string | undefined;
   let buffer = '';
   child.stdout?.on('data', (chunk: Buffer) => {
     buffer += chunk.toString();
@@ -309,6 +327,7 @@ async function attempt(
       if (threadId) lease?.setSession(threadId);
       const turn = parseCodexUsageLine(line);
       if (turn) usage = addUsage(usage, turn);
+      lastMessage = parseCodexMessageLine(line) ?? lastMessage;
     }
   });
   let timedOut = false;
@@ -328,6 +347,7 @@ async function attempt(
   const settled: Promise<WakeCompletion | undefined> = exited.then((code) => {
     clearTimeout(watchdog);
     threadId ??= parseCodexThreadLine(buffer);
+    lastMessage = parseCodexMessageLine(buffer) ?? lastMessage;
     // The lease file dies with the run, success or failure — a killed wake must not leave a lease
     // for the next occupant of this workspace to find (ADR 354).
     const yielded = lease?.settle() ?? false;
@@ -347,6 +367,7 @@ async function attempt(
       // ADR 436 clause 4: the capture this run made or resumed — the loop stamps it ended.
       captures: [{ harness: 'codex', ids: [threadId, expectedId] }],
       ...(yielded ? { yielded: true } : {}),
+      ...(lastMessage && code === 0 ? { final_message: lastMessage } : {}),
     };
   });
   const verified = await Promise.race([

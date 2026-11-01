@@ -9,6 +9,7 @@ import {
   ResidencyPolicyOverrideSchema,
   ResidencyPolicySchema,
   WAKE_CONTEXT_BUDGET,
+  WAKE_FINAL_MESSAGE_MAX,
   WakeContextPacketSchema,
   WakeContextRequestSchema,
   WakeContextResponseSchema,
@@ -219,6 +220,18 @@ describe('portable wake context (ADR 209)', () => {
     expect(() =>
       WakeReportBodySchema.parse({ lease_id: 'L1', occupied: true, transcript_age_ms: -1 }),
     ).toThrow();
+  });
+
+  it("carries the run's final message up to the inferred-question bound (ADR 783)", () => {
+    const at = 'x'.repeat(WAKE_FINAL_MESSAGE_MAX);
+    expect(
+      WakeReportBodySchema.parse({ lease_id: 'L1', occupied: true, final_message: at })
+        .final_message,
+    ).toBe(at);
+    for (const final_message of ['', `${at}x`])
+      expect(
+        WakeReportBodySchema.safeParse({ lease_id: 'L1', occupied: true, final_message }).success,
+      ).toBe(false);
   });
 });
 

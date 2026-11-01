@@ -702,6 +702,77 @@ withDrivers('residency-http', (_o, kind) => {
       });
     });
 
+    // ADR 783: a headless run that ended on a question raises it as the seat, under ADR 781's rules.
+    it('a supplement whose final message ends on a question raises an inferred ask from the seat', async () => {
+      const leaseId = await reportedLease();
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const asks = async () =>
+        (
+          await server.store.all<{ id: string; body: string; meta: string }>(
+            `SELECT m.id, m.body, m.meta FROM messages m JOIN members mem ON mem.id = m.from_member
+              WHERE m.team_id = ? AND mem.name = 'Ada' AND m.act = 'ask'`,
+            [team.id],
+          )
+        ).map((r) => ({ ...r, meta: JSON.parse(r.meta) }));
+      const r = await post(
+        '/teams/dawn/residency/wake-report',
+        {
+          lease_id: leaseId,
+          occupied: true,
+          duration_ms: 9_000,
+          final_message: 'Fixed the flake.\n\nWant me to open the PR?',
+        },
+        agentKey,
+      );
+      expect(r.status).toBe(200);
+      expect(r.json.status).toBe('cost_recorded');
+      const raised = await asks();
+      expect(raised).toHaveLength(1);
+      expect(raised[0]!.body).toBe('Fixed the flake.\n\nWant me to open the PR?');
+      expect(raised[0]!.meta).toMatchObject({
+        species: 'consult',
+        question: {
+          text: 'Want me to open the PR?',
+          options: [{ label: 'Yes' }, { label: 'No' }],
+          audience: 'team',
+          blocking: false,
+          inferred: true,
+        },
+      });
+      // The model's words never reach the audit row.
+      const cost = (await audits('residency.wake_cost'))[0]!.detail as string;
+      expect(cost).not.toContain('open the PR');
+    });
+
+    it('raises nothing for a statement, a yielded run, or while the seat has a question open', async () => {
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const asks = async () =>
+        (
+          await server.store.all<{ id: string }>(
+            `SELECT m.id FROM messages m JOIN members mem ON mem.id = m.from_member
+              WHERE m.team_id = ? AND mem.name = 'Ada' AND m.act = 'ask'`,
+            [team.id],
+          )
+        ).length;
+      const supplement = (leaseId: string, extra: Record<string, unknown>) =>
+        post(
+          '/teams/dawn/residency/wake-report',
+          { lease_id: leaseId, occupied: true, duration_ms: 1, ...extra },
+          agentKey,
+        );
+      const first = await reportedLease();
+      expect((await supplement(first, { final_message: 'Done. Merged.' })).status).toBe(200);
+      expect(
+        (await supplement(first, { final_message: 'Shall I deploy?', yielded: true })).status,
+      ).toBe(200);
+      expect(await asks()).toBe(0);
+      // One open question per seat (ADR 781 §3): the second wake's question is refused, the report
+      // is not.
+      expect((await supplement(first, { final_message: 'Shall I deploy?' })).status).toBe(200);
+      expect((await supplement(first, { final_message: 'Should I retry?' })).status).toBe(200);
+      expect(await asks()).toBe(1);
+    });
+
     // ADR 210's Eval splits the eligible cohort by exact-match result, so the result has to survive
     // the wire onto BOTH audit rows the Eval reads. Before this it existed only in a host log line.
     it('carries the exact-match result onto residency.woke and residency.wake_cost', async () => {

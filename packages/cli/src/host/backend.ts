@@ -80,6 +80,10 @@ export interface WakeCompletion {
   /** ADR 546: the run ended because a person took the seat over (a yield marker named its lease).
    *  Rides the supplementary report; never changes the primary outcome. */
   yielded?: boolean;
+  /** ADR 783: the run's last assistant message, as the harness printed it at exit. The loop clips
+   *  it onto the supplementary report, where the daemon looks for a question in it. Undefined when
+   *  the harness printed none, or the run ended in an error. */
+  final_message?: string;
 }
 
 /** A backend's claim on the binding's captured session (ADR 436 clause 4): the ids this run made

@@ -9,6 +9,7 @@ import {
   type WakeTurnBody,
   type WakeUsage,
   type WorkspaceRepairBody,
+  WAKE_FINAL_MESSAGE_MAX,
 } from '@musterd/protocol';
 import { resolveWorkspace } from '@musterd/protocol/project';
 import { SpanStatusCode, trace } from '@opentelemetry/api';
@@ -224,6 +225,20 @@ async function settleAll(tasks: Promise<void>[]): Promise<void> {
 
 /** The deferral reason an actuator sends for an order it was stopped before starting. */
 export const ACTUATOR_RESTART_REASON = 'actuator_restart';
+
+/** ADR 783: the run's last message, clipped to the report's bound — or nothing, never an empty
+ *  string (the daemon's schema refuses one, and with it the whole cost record). The clip keeps the
+ *  END: the daemon looks for the question there. */
+export function finalMessage(said: string | undefined): { final_message?: string } {
+  const text = said?.trim() ?? '';
+  if (!text) return {};
+  return {
+    final_message:
+      text.length <= WAKE_FINAL_MESSAGE_MAX
+        ? text
+        : `…${text.slice(-(WAKE_FINAL_MESSAGE_MAX - 1)).trimStart()}`,
+  };
+}
 
 /** ADR 583 §2: fold the gateway's summary into the settled completion. The harness's own figure,
  *  when it printed one, rides as `harness_cost_usd` (its claim, ADR 364) beside the metered one. */
@@ -951,6 +966,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
             completion.yielded !== true
           )
             return;
+          const { final_message: said, ...priced } = completion;
           await client
             .wakeReport(group.team, {
               lease_id: order.lease_id,
@@ -967,7 +983,8 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
               ...(actuation.outcome.transcript_age_ms !== undefined
                 ? { transcript_age_ms: actuation.outcome.transcript_age_ms }
                 : {}),
-              ...completion,
+              ...priced,
+              ...finalMessage(said),
             })
             .then(() =>
               deps.log(

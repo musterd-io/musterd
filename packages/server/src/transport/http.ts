@@ -247,6 +247,7 @@ import {
 import { quickActionLineFor, startAll } from '../protocol/quickActions.js';
 import { announceIncidentResolved, routeEnvelope } from '../protocol/route.js';
 import { parseEnvelope, parseOrBadRequest } from '../protocol/validate.js';
+import { raiseWakeQuestion } from '../protocol/wakeQuestion.js';
 import { claimedLanesByOwner, resolveActivity } from '../store/activity.js';
 import {
   appEnrollPayload,
@@ -6438,10 +6439,11 @@ export async function handleHttp(
             body.duration_ms !== undefined ||
             body.yielded === true
           ) {
+            const settledSeat = await getMemberById(ctx.db, settled.member_id);
             await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'residency.wake_cost',
-              target: (await getMemberById(ctx.db, settled.member_id))?.name ?? '?',
+              target: settledSeat?.name ?? '?',
               result: 'allow',
               detail: {
                 act: wakeExhaustionKey(settled.act_id, settled.lane_id),
@@ -6481,6 +6483,10 @@ export async function handleHttp(
                   : {}),
               },
             });
+            // ADR 783: a headless run that ended on a question raises it as the seat. A person who
+            // took the seat over (`yielded`) is at the terminal, so nothing is raised for them.
+            if (body.final_message && body.occupied && !body.yielded && settledSeat)
+              await raiseWakeQuestion(ctx, team, settledSeat, body.final_message, settled.lane_id);
             return sendJson(res, 200, {
               ok: true,
               lease_id: body.lease_id,

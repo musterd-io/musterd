@@ -554,6 +554,23 @@ describe('claudeCodeBackend.wake', () => {
     expect(completion?.cost_usd).toBeUndefined();
   });
 
+  it("a clean run's last message settles as final_message (ADR 783)", async () => {
+    const child = new FakeChild();
+    const { backend } = harness(child);
+    const wake = backend.wake(
+      spec({ bounds: { timeout_ms: 1_000 } }),
+      ctx(async () => ({ occupied: false })),
+    );
+    await Promise.resolve();
+    child.stdout.emit(
+      'data',
+      Buffer.from(JSON.stringify({ type: 'result', is_error: false, result: 'Want me to merge?' })),
+    );
+    child.exit(0);
+    const completion = await (await wake).settled;
+    expect(completion?.final_message).toBe('Want me to merge?');
+  });
+
   // A host that cannot spawn is DEFERRED, never FAILED (ADR 221). A failure consumes an attempt
   // against attempt_cap and an hourly-cap slot; three of them retire the act as
   // residency.wake_exhausted — terminally undeliverable, with the seat reading as if it refused.
@@ -1047,9 +1064,9 @@ describe('parseRunSummary (completion telemetry, never verification)', () => {
       error_text: 'Credit balance is too low',
     });
   });
-  it('a clean result carries no error_text, even when `result` is set', () => {
-    const out = JSON.stringify({ type: 'result', is_error: false, result: 'done' });
-    expect(parseRunSummary(out)).toEqual({ is_error: false });
+  it('a clean result carries its last message as final_text, never as error_text (ADR 783)', () => {
+    const out = JSON.stringify({ type: 'result', is_error: false, result: 'Shall I deploy?' });
+    expect(parseRunSummary(out)).toEqual({ is_error: false, final_text: 'Shall I deploy?' });
   });
 });
 
