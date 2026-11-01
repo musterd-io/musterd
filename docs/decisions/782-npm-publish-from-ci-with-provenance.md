@@ -30,11 +30,17 @@ consumer smoke gate that 0.4.0 taught us to run before the first registry write?
 
 ## Decision
 
-1. **The publish runs in `.github/workflows/release.yml`, from a tag.** A push of `vX.Y.Z` starts
-   it. The job refuses a tag whose commit is not on `main`, builds, runs the consumer smoke
-   (`scripts/release/smoke.ts`) and uploads **the tarballs the smoke installed and ran** with
-   `npm publish <tarball> --provenance`, in ADR 156's lockstep order. A last step reads every
-   package back from the registry and fails the run if any lacks a provenance attestation.
+1. **The publish runs in `.github/workflows/release.yml`, from a tag, in two jobs.** A push of
+   `vX.Y.Z` starts it.
+   - **`pack`** has no OIDC token. It refuses a tag whose commit is not on `main`, builds, runs the
+     consumer smoke (`scripts/release/smoke.ts`) and uploads the smoked tarballs with their
+     `SHA256SUMS`. The smoke's install pulls third-party deps from the registry and runs their
+     install scripts, so it must not run where a publish credential can be requested. It also
+     hashes every tarball before and after that install and fails if any changed.
+   - **`publish`** is the only job with `id-token: write`. It installs and builds nothing. It
+     checks the sums, then runs `npm publish <tarball> --provenance` on **the tarballs the smoke
+     installed and ran**, in ADR 156's lockstep order. A last step reads every package back from
+     the registry and fails the run if any lacks a provenance attestation.
 2. **npm trusted publishing, no token.** Each of the five packages on npmjs.com names
    `musterd-io/musterd`, `release.yml` and the `npm-release` environment as its trusted publisher.
    No `NPM_TOKEN` exists in the repo or its environments; a run from another workflow, a fork or
@@ -46,8 +52,8 @@ consumer smoke gate that 0.4.0 taught us to run before the first registry write?
    `gates` (ADR 106). The tag goes on that PR's merge commit, and `--publish` refuses a tag that
    does not name the on-disk version.
 4. **Break-glass, not a second path.** If the workflow cannot run, `pnpm release --publish --tag
-   vX.Y.Z --no-provenance` publishes the same way from a laptop with human credentials, and must say
-   so in that version's release notes. `--publish` without `--no-provenance` refuses to run outside
+   vX.Y.Z --no-provenance` builds, smokes and publishes in one go from a laptop with human
+   credentials, and must say so in that version's release notes. `--publish` without `--no-provenance` refuses to run outside
    GitHub Actions. `pnpm train status` shows such a version's `provenance` car as missing.
 5. **A re-run finishes a half release.** `--publish` skips any package already on the registry at
    that version, so a run that fails between packages is re-run, not repaired by hand.
@@ -63,12 +69,17 @@ consumer smoke gate that 0.4.0 taught us to run before the first registry write?
   command.
 - The smoked tarball and the published tarball are now the same file. Before, `pnpm publish`
   packed a second time and the two were trusted to agree.
+- The job split came from review of the first draft (one job held the OIDC token while the smoke
+  ran unlocked third-party install scripts, so a compromised transitive dep could have requested
+  a publish credential for our packages).
 - Consumers can check a release: `npm audit signatures`, or the provenance panel on npmjs.com, ties
   each tarball to the workflow run and the tagged commit.
 - Brew, the MCP Registry and the GitHub Release stay as ADR 669 orders them; the workflow prints
   their steps in its log, as the laptop run did.
-- The publish job gets `id-token: write` and nothing else beyond `contents: read`. The pinned npm
-  (`npm@11.21.1`) and the shared setup action are the code that holds the one-time credential.
+- The publish job gets `id-token: write` and nothing else beyond `contents: read`. The code in
+  reach of the one-time credential is node, the pinned npm (`npm@11.21.1`), the pinned
+  checkout/setup-node/download-artifact actions and `scripts/release.ts`, which imports only node
+  builtins.
 
 ## Observability & Evaluation
 

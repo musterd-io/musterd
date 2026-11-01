@@ -11,6 +11,7 @@ import {
   nextStepsAfterPublish,
   npmPublishArgs,
   parseReleaseArgs,
+  tarballFileName,
 } from '../scripts/release/helpers.ts';
 
 describe('release helpers (ADR 156)', () => {
@@ -40,6 +41,7 @@ describe('release helpers (ADR 156)', () => {
       dryRun: true,
       allowDirty: true,
       publish: false,
+      pack: false,
       noProvenance: false,
       version: '0.3.1',
     });
@@ -99,8 +101,31 @@ describe('release helpers (ADR 156)', () => {
         parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--version', '0.7.0']),
       ).toThrow(/no --version/);
       expect(() => parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--dry-run'])).toThrow();
-      expect(() => parseReleaseArgs(['--tag', 'v0.7.0'])).toThrow(/only apply with --publish/);
+      expect(() => parseReleaseArgs(['--tag', 'v0.7.0'])).toThrow(/only applies with/);
       expect(() => parseReleaseArgs(['--no-provenance'])).toThrow(/only apply with --publish/);
+      expect(parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--tarballs', '/t']).tarballs).toBe(
+        '/t',
+      );
+    });
+
+    it('--pack needs --tag and --out, and is never the same run as --publish', () => {
+      expect(parseReleaseArgs(['--pack', '--tag', 'v0.7.0', '--out', '/t'])).toMatchObject({
+        pack: true,
+        out: '/t',
+        tag: 'v0.7.0',
+      });
+      expect(() => parseReleaseArgs(['--pack', '--tag', 'v0.7.0'])).toThrow(/--out/);
+      expect(() => parseReleaseArgs(['--pack', '--out', '/t'])).toThrow(/--tag/);
+      expect(() =>
+        parseReleaseArgs(['--pack', '--publish', '--tag', 'v0.7.0', '--out', '/t']),
+      ).toThrow(/separate jobs/);
+      expect(() =>
+        parseReleaseArgs(['--pack', '--tag', 'v0.7.0', '--out', '/t', '--tarballs', '/x']),
+      ).toThrow();
+    });
+
+    it('names tarballs as pnpm pack does', () => {
+      expect(tarballFileName('@musterd/cli', '0.7.0')).toBe('musterd-cli-0.7.0.tgz');
     });
 
     it('refuses a tag that does not name the version on disk', () => {
@@ -128,11 +153,17 @@ describe('release helpers (ADR 156)', () => {
       expect(steps).not.toMatch(/pnpm publish|npm publish/);
     });
 
-    it('the release workflow publishes from the tag, with OIDC and behind the environment', () => {
+    it('the release workflow: only the publish job can mint a token, and it installs nothing', () => {
       const wf = readFileSync('.github/workflows/release.yml', 'utf8');
-      expect(wf).toContain('id-token: write');
-      expect(wf).toContain('environment: npm-release');
-      expect(wf).toContain('pnpm release --publish --tag "$GITHUB_REF_NAME"');
+      const pack = wf.slice(wf.indexOf('\n  pack:'), wf.indexOf('\n  publish:'));
+      const publish = wf.slice(wf.indexOf('\n  publish:'));
+      // The smoke runs third-party install scripts; nothing in that job may ask for OIDC.
+      expect(pack).not.toContain('id-token');
+      expect(pack).toContain('--pack --tag "$GITHUB_REF_NAME"');
+      expect(publish).toContain('id-token: write');
+      expect(publish).toContain('environment: npm-release');
+      expect(publish).toContain('--publish --tag "$GITHUB_REF_NAME" --tarballs');
+      expect(publish).not.toMatch(/pnpm install|\.\/\.github\/actions\/setup/);
       // No long-lived npm token anywhere in the release path.
       expect(wf).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN/);
     });

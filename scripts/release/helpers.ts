@@ -29,7 +29,19 @@ export interface ReleaseArgs {
    * release workflow was pushed with. Never bumps. Exclusive with `--version` and `--dry-run`.
    */
   publish: boolean;
-  /** `--tag vX.Y.Z` — the git tag that triggered the publish; must name the on-disk version. */
+  /**
+   * `--pack --out DIR` — the workflow's first job (ADR 782): build, smoke, and leave the smoked
+   * tarballs in DIR. Runs with no OIDC token, because the smoke executes third-party install scripts.
+   */
+  pack: boolean;
+  out?: string;
+  /**
+   * `--publish --tarballs DIR` — the workflow's second job: publish the tarballs the pack job
+   * smoked, building nothing and installing nothing. Without it, `--publish` builds and smokes
+   * itself (the break-glass laptop path).
+   */
+  tarballs?: string;
+  /** `--tag vX.Y.Z` — the git tag that triggered the run; must name the on-disk version. */
   tag?: string;
   /**
    * `--no-provenance` — publish without a provenance attestation. Outside GitHub Actions npm cannot
@@ -54,14 +66,25 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
   let dryRun = false;
   let allowDirty = false;
   let publish = false;
+  let pack = false;
   let noProvenance = false;
   let version: string | undefined;
   let tag: string | undefined;
+  let out: string | undefined;
+  let tarballs: string | undefined;
+  const value = (flag: string, i: number): string => {
+    const v = argv[i];
+    if (!v || v.startsWith('-')) throw new Error(`${flag} requires a value`);
+    return v;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--dry-run') dryRun = true;
     else if (a === '--allow-dirty') allowDirty = true;
     else if (a === '--publish') publish = true;
+    else if (a === '--pack') pack = true;
+    else if (a === '--out') out = value(a, ++i);
+    else if (a === '--tarballs') tarballs = value(a, ++i);
     else if (a === '--no-provenance') noProvenance = true;
     else if (a === '--tag') {
       const v = argv[++i];
@@ -83,16 +106,20 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
   if (version !== undefined && !SEMVER.test(version)) {
     throw new Error(`invalid --version ${JSON.stringify(version)} (want X.Y.Z)`);
   }
-  if (publish && (version !== undefined || dryRun)) {
-    // The publish takes its number from the tag and the tree, both already reviewed and merged; a
-    // second number on the command line could only disagree with them.
-    throw new Error('--publish takes no --version and no --dry-run: it publishes what is on disk');
+  if (publish && pack) throw new Error('--pack and --publish are separate jobs: pass one');
+  const mode = publish ? '--publish' : pack ? '--pack' : null;
+  if (mode && (version !== undefined || dryRun)) {
+    // The number comes from the tag and the tree, both already reviewed and merged; a second number
+    // on the command line could only disagree with them.
+    throw new Error(`${mode} takes no --version and no --dry-run: it releases what is on disk`);
   }
-  if (publish && tag === undefined) {
-    throw new Error('--publish requires --tag vX.Y.Z (the tag the release workflow runs for)');
+  if (mode && tag === undefined) {
+    throw new Error(`${mode} requires --tag vX.Y.Z (the tag the release workflow runs for)`);
   }
-  if (!publish && (tag !== undefined || noProvenance)) {
-    throw new Error('--tag and --no-provenance only apply with --publish');
+  if (!mode && tag !== undefined) throw new Error('--tag only applies with --pack or --publish');
+  if (pack !== (out !== undefined)) throw new Error('--pack and --out DIR go together');
+  if (!publish && (noProvenance || tarballs !== undefined)) {
+    throw new Error('--no-provenance and --tarballs only apply with --publish');
   }
   // `version` is optional-and-absent, not optional-and-undefined: under exactOptionalPropertyTypes
   // those are different types, and the whole point of having no default (above) is that "nobody
@@ -101,10 +128,18 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
     dryRun,
     allowDirty,
     publish,
+    pack,
     noProvenance,
     ...(version !== undefined ? { version } : {}),
     ...(tag !== undefined ? { tag } : {}),
+    ...(out !== undefined ? { out } : {}),
+    ...(tarballs !== undefined ? { tarballs } : {}),
   };
+}
+
+/** The file `pnpm pack` writes for a package: `@musterd/cli` at 0.7.0 → `musterd-cli-0.7.0.tgz`. */
+export function tarballFileName(name: PublishPackageName, version: string): string {
+  return `${name.replace(/^@/, '').replace('/', '-')}-${version}.tgz`;
 }
 
 /**

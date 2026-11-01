@@ -19,6 +19,7 @@
  * worse, silently resolve the PREVIOUS release and test the wrong code.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -109,9 +110,20 @@ export function probesFor(version: string): SmokeProbe[] {
 export interface SmokeDeps {
   run: (cmd: string, args: string[], cwd: string) => string;
   log: (line: string) => void;
+  /**
+   * sha256 of a file. When present, every tarball is hashed right after packing and again after the
+   * consumer install has run, and a mismatch fails the smoke. The install resolves third-party deps
+   * from the registry and runs their install scripts; this proves none of them rewrote what we are
+   * about to publish (ADR 782). Absent in unit tests, whose tarballs are not real files.
+   */
+  hash?: (path: string) => string;
 }
 
+const sha256File = (path: string): string =>
+  createHash('sha256').update(readFileSync(path)).digest('hex');
+
 const defaultDeps: SmokeDeps = {
+  hash: sha256File,
   // stdio pipe, not inherit: the probes' output is the assertion, and a failing probe is expected
   // to exit non-zero, so the throw must be caught rather than killing the release.
   run: (cmd, args, cwd) => execFileSync(cmd, args, { cwd, encoding: 'utf8', stdio: 'pipe' }),
@@ -163,6 +175,9 @@ export function smokeConsumerInstall(
   try {
     deps.log(`consumer smoke @ ${version} — packing…`);
     const tarballs = packAll(root, packInto ?? work, deps);
+    const packed = deps.hash
+      ? Object.fromEntries(PUBLISH_ORDER.map((n) => [n, deps.hash!(tarballs[n])]))
+      : null;
 
     const app = join(work, 'app');
     mkdirSync(app, { recursive: true });
@@ -201,6 +216,17 @@ export function smokeConsumerInstall(
         );
       }
       deps.log(`  ✓ ${probe.label}`);
+    }
+    if (packed) {
+      for (const name of PUBLISH_ORDER) {
+        if (deps.hash!(tarballs[name]) !== packed[name]) {
+          throw new Error(
+            `consumer smoke FAILED — ${name}'s tarball changed while the smoke install ran.\n` +
+              `  Something the install executed rewrote a file we were about to publish. Nothing is\n` +
+              `  published; treat the runner as compromised.`,
+          );
+        }
+      }
     }
     deps.log('✓ consumer smoke passed — the tarballs load outside the workspace');
     return tarballs;
