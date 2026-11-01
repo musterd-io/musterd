@@ -1,0 +1,71 @@
+# npm release of @musterd/* (ADR 782). Pushing a tag vX.Y.Z on the merge commit of a
+# `pnpm release --version X.Y.Z` bump PR starts it; the `npm-release` environment holds the run for
+# nick's approval, so a tag alone publishes nothing. The job builds, runs the consumer smoke
+# (scripts/release/smoke.ts) and uploads the very tarballs the smoke installed, in lockstep order.
+#
+# No npm token: npm trusted publishing exchanges this run's OIDC token (id-token: write) for a
+# one-time publish credential, and npm signs a provenance statement that ties each tarball to this
+# workflow, this repo and the tagged commit. Each @musterd/* package on npmjs.com names this file and
+# the `npm-release` environment as its trusted publisher — a run from any other workflow, fork or
+# environment is refused by the registry, not by us.
+name: release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish @musterd/* with provenance
+    runs-on: ubuntu-latest
+    environment: npm-release
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Only code that landed through gates ships: a tag on a branch commit that never merged is
+      # refused before the approval it would otherwise ask for means anything.
+      - name: Tagged commit is on main
+        run: |
+          git fetch --no-tags --depth=200 origin main
+          git merge-base --is-ancestor HEAD origin/main || {
+            echo "::error title=Not on main::$GITHUB_REF_NAME points at a commit that is not on main"
+            exit 1
+          }
+
+      - uses: ./.github/actions/setup
+        with:
+          build: 'false'
+
+      # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10. Pinned, because this is the
+      # binary that holds the publish credential.
+      - name: Install npm 11
+        run: npm install -g npm@11.21.1 && npm --version
+
+      - name: Publish (build → smoke → npm publish --provenance)
+        run: pnpm release --publish --tag "$GITHUB_REF_NAME"
+
+      # The lane's done-condition, checked where it can fail the run: every package at this version
+      # carries a provenance attestation on the registry.
+      - name: Verify provenance on the registry
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          missing=()
+          for name in @musterd/protocol @musterd/telemetry @musterd/server @musterd/mcp @musterd/cli; do
+            att="$(npm view "$name@$version" dist.attestations.provenance.predicateType 2>/dev/null || true)"
+            if [ -n "$att" ]; then echo "✓ $name@$version — $att"; else missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error title=No provenance::published without a provenance attestation: ${missing[*]}"
+            exit 1
+          fi

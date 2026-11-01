@@ -1,28 +1,33 @@
 /**
- * Lockstep publish of @musterd/* (ADR 156).
+ * Lockstep release of @musterd/* (ADR 156), published from CI with provenance (ADR 782).
  *
  *   pnpm release --dry-run              # build → consumer smoke → pack, no registry write
- *   pnpm release                        # bump → build → consumer smoke → publish (human creds)
- *   pnpm release --version 0.3.1        # override target version
+ *   pnpm release --version 0.7.0        # bump → build → consumer smoke; the bump lands as a PR
+ *   pnpm release --publish --tag v0.7.0 # CI only (.github/workflows/release.yml): build → smoke →
+ *                                       #   npm publish the smoked tarballs, with provenance
  *
  * Publish order: protocol → telemetry → server → mcp → cli.
  *
- * Every run — dry or real — installs the packed tarballs into a clean directory outside the
+ * Every run — dry, bump or publish — installs the packed tarballs into a clean directory outside the
  * workspace and runs them before anything is published (release/smoke.ts). That gate exists because
  * 0.4.0 reached npm unloadable: a workspace install has the dev deps, so the whole suite passes on
  * a package no consumer can import, and npm versions cannot be replaced.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   PACKAGE_DIRS,
   PUBLISH_ORDER,
   assertPublishable,
+  assertTagMatches,
   bumpPackageJson,
   bumpServerJson,
+  nextStepsAfterBump,
   nextStepsAfterPublish,
+  npmPublishArgs,
   parseReleaseArgs,
   type PublishPackageName,
 } from './release/helpers.ts';
@@ -31,17 +36,24 @@ import { smokeConsumerInstall } from './release/smoke.ts';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 function usage(): string {
-  return `Usage: pnpm release --version X.Y.Z [--dry-run] [--allow-dirty]
+  return `Usage: pnpm release --version X.Y.Z [--allow-dirty]
+       pnpm release --dry-run
+       pnpm release --publish --tag vX.Y.Z [--no-provenance]
 
-Publishes @musterd/* in lockstep (ADR 156).
+Releases @musterd/* in lockstep (ADR 156), published from CI with provenance (ADR 782).
 
---version is REQUIRED for a real release and has no default: an npm version can never be
-unpublished, so the number is a decision, not a fallback. It must also be higher than the
-one on disk — npm accepts a LOWER version and would move \`latest\` backwards.
+--version bumps every package to X.Y.Z, builds and smoke-tests. It publishes nothing: the bump
+lands as a PR, and pushing tag vX.Y.Z on its merge commit starts the release workflow. --version
+has no default — an npm version can never be unpublished, so the number is a decision — and it
+must be higher than the one on disk, or npm would move \`latest\` backwards.
 --dry-run builds, smoke-tests and packs at the versions already on disk; never bumps or publishes.
+--publish is the workflow's step: the tag must name the version on disk, and it uploads the very
+tarballs the smoke installed. Packages already on the registry at that version are skipped, so a
+re-run finishes a half-published release. Outside GitHub Actions npm cannot sign provenance, so a
+laptop publish (break-glass only) must pass --no-provenance.
 
-Every run installs the packed tarballs into a clean directory outside the workspace and
-runs them, BEFORE any registry write — the check that would have caught 0.4.0.
+Every run installs the packed tarballs into a clean directory outside the workspace and runs
+them, BEFORE any registry write — the check that would have caught 0.4.0.
 `;
 }
 
@@ -97,17 +109,70 @@ function packOne(name: PublishPackageName): void {
   execFileSync('npm', ['pack', '--dry-run'], { cwd: dir, stdio: 'inherit' });
 }
 
-function publishOne(name: PublishPackageName): void {
-  const dir = join(ROOT, 'packages', PACKAGE_DIRS[name]);
-  if (!existsSync(join(dir, 'dist'))) {
-    throw new Error(`${name}: missing dist/ — build first`);
+/** True when `name@version` is already on the registry — read, never assumed. */
+function alreadyPublished(name: PublishPackageName, version: string): boolean {
+  try {
+    const out = execFileSync('npm', ['view', `${name}@${version}`, 'version'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return out.trim() === version;
+  } catch {
+    // E404 for a package npm has never seen. Anything else (a network failure) also lands here, and
+    // the publish that follows will then fail loudly on its own — never silently skip on doubt.
+    return false;
   }
-  // Must use pnpm publish — raw `npm publish` leaves `workspace:*` in the tarball (broken installs).
-  console.log(`pnpm publish ${name}…`);
-  execFileSync('pnpm', ['publish', '--access', 'public', '--no-git-checks'], {
-    cwd: dir,
-    stdio: 'inherit',
-  });
+}
+
+function publishTarball(name: PublishPackageName, tarball: string, provenance: boolean): void {
+  console.log(`npm publish ${name}${provenance ? ' (with provenance)' : ' (NO provenance)'}…`);
+  execFileSync('npm', npmPublishArgs(tarball, provenance), { cwd: ROOT, stdio: 'inherit' });
+}
+
+/** The CI half (ADR 782): publish what is on disk, from the tag that names it. */
+function runPublish(tag: string, noProvenance: boolean, allowDirty: boolean): number {
+  const version = currentVersion();
+  try {
+    assertTagMatches(tag, version);
+    assertCleanTree(allowDirty);
+  } catch (e) {
+    process.stderr.write(`${e instanceof Error ? e.message : e}\n`);
+    return 1;
+  }
+  const provenance = !noProvenance;
+  if (provenance && process.env.GITHUB_ACTIONS !== 'true') {
+    process.stderr.write(
+      `npm can sign provenance only inside a supported CI run. Releases publish from ` +
+        `.github/workflows/release.yml (push tag ${tag}); a break-glass laptop publish must pass ` +
+        `--no-provenance and say why in the release notes (ADR 782 §4).\n`,
+    );
+    return 1;
+  }
+
+  console.log(`publish @ ${version} from ${tag} (order: ${PUBLISH_ORDER.join(' → ')})`);
+  buildAll();
+  const packDir = mkdtempSync(join(process.env.RUNNER_TEMP ?? tmpdir(), 'musterd-release-'));
+  let tarballs: Record<PublishPackageName, string>;
+  try {
+    tarballs = smokeConsumerInstall(ROOT, undefined, packDir);
+  } catch (e) {
+    process.stderr.write(`${e instanceof Error ? e.message : e}\n`);
+    return 1;
+  }
+
+  for (const name of PUBLISH_ORDER) {
+    if (alreadyPublished(name, version)) {
+      console.log(`${name}@${version} is already on the registry — skipped`);
+      continue;
+    }
+    publishTarball(name, tarballs[name], provenance);
+  }
+
+  console.log(`\n✓ published @musterd/*@${version}`);
+  console.log('\nNext:');
+  for (const line of nextStepsAfterPublish(version)) console.log(`  ${line}`);
+  return 0;
 }
 
 export function runRelease(argv: string[]): number {
@@ -124,9 +189,11 @@ export function runRelease(argv: string[]): number {
     return 1;
   }
 
+  if (args.publish) return runPublish(args.tag!, args.noProvenance, args.allowDirty);
+
   const current = currentVersion();
 
-  // A real publish must be told its version, and that version must be able to BE a release. Both
+  // A real bump must be told its version, and that version must be able to BE a release. Both
   // checks are here rather than in the parser because a dry run legitimately needs neither: it
   // never bumps and never writes, so it just reports the versions already on disk.
   if (!args.dryRun) {
@@ -155,7 +222,7 @@ export function runRelease(argv: string[]): number {
   console.log(
     args.dryRun
       ? `dry-run release @ ${current} (on disk; order: ${PUBLISH_ORDER.join(' → ')})`
-      : `release @ ${args.version} (order: ${PUBLISH_ORDER.join(' → ')})`,
+      : `bump @ ${args.version} (order: ${PUBLISH_ORDER.join(' → ')})`,
   );
 
   if (!args.dryRun) {
@@ -178,23 +245,16 @@ export function runRelease(argv: string[]): number {
     return 1;
   }
 
-  for (const name of PUBLISH_ORDER) {
-    if (args.dryRun) packOne(name);
-    else publishOne(name);
-  }
-
   if (args.dryRun) {
+    for (const name of PUBLISH_ORDER) packOne(name);
     console.log('\n✓ dry-run complete — no registry writes');
   } else {
-    // A real publish cannot reach here without a version: the `!args.dryRun` precondition block
-    // returns 1 on a missing one, before anything is bumped, built, or written. Same fact
-    // `bumpAll(args.version!)` already relies on, asserted in one place here.
+    // A bump cannot reach here without a version: the `!args.dryRun` precondition block returns 1
+    // on a missing one, before anything is bumped. Same fact `bumpAll(args.version!)` relies on.
     const version = args.version!;
-    console.log(`\n✓ published @musterd/*@${version}`);
-    console.log('\nNext:');
-    for (const line of nextStepsAfterPublish(version)) {
-      console.log(`  ${line}`);
-    }
+    console.log(`\n✓ bumped and smoke-tested @musterd/*@${version} — nothing published`);
+    console.log('\nNext (ADR 782 — the publish runs in CI, from the tag):');
+    for (const line of nextStepsAfterBump(version)) console.log(`  ${line}`);
   }
   return 0;
 }

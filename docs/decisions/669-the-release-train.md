@@ -35,7 +35,8 @@ nobody asked for?
    notice, patch for fixes. The launch train is **0.6.0**. A red gate stops the train.
 3. **D3 — npm publish stays on nick's laptop** (ADR 156 unchanged) for 0.6.0. CI publishing with npm
    trusted publishing is revisited after launch, under its own ADR, because it reverses ADR 156's
-   "no CI publish".
+   "no CI publish". _(Amended 2026-11-01: that ADR is [782](782-npm-publish-from-ci-with-provenance.md)
+   — from the next release, car 2 is a tag push and an approval, not a laptop publish.)_
 4. **D4 — Registry name `io.musterd/musterd`**, DNS-verified on musterd.io (#2923).
 5. **D5 — Release notes are generated, then edited by a human**, kept as `docs/releases/vX.md` and
    used as the GitHub Release body. No CHANGELOG.md beside them — one fact, one home.
@@ -59,6 +60,10 @@ one install block every surface renders from, with a test that fails when any su
   tag, Homebrew and the site ✓; **no GitHub Release ✗** (0.5.0 never had one); MCP Registry `?`
   from a machine that could not reach it. A notes draft for v0.5.0..main took 75 s and kept 350 of
   521 commits under 30 goals — the editing pass is where it becomes a release body.
+- 2026-11-01 (lane `01M6AMQQETY7NZPNCVAAKGG6PY`): D3's revisit is
+  [ADR 782](782-npm-publish-from-ci-with-provenance.md). Car 2 becomes: bump PR merged → tag pushed →
+  nick approves the `npm-release` run → npm publishes with provenance. `pnpm train status` gains a
+  `provenance` car that is green only when every package at the version carries an attestation.
 
 ## Observability & Evaluation
 

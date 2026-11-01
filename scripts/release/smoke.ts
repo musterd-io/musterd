@@ -141,8 +141,16 @@ function packAll(root: string, dest: string, deps: SmokeDeps): Record<PublishPac
  * Install the packed tarballs into a clean directory and run the probes.
  *
  * Throws on the first failure — this gates a publish, so it must stop the release rather than warn.
+ *
+ * With `packInto`, the tarballs are packed there and left in place, and their paths are returned:
+ * the CI publish (ADR 782) uploads exactly the files this gate installed and ran, rather than
+ * packing a second time and trusting the two packs to agree. Without it they go with the scratch dir.
  */
-export function smokeConsumerInstall(root: string, deps: SmokeDeps = defaultDeps): void {
+export function smokeConsumerInstall(
+  root: string,
+  deps: SmokeDeps = defaultDeps,
+  packInto?: string,
+): Record<PublishPackageName, string> {
   // The version to assert is whatever the packed CLI actually carries — read from disk, never from
   // the caller's `--version`. On `--dry-run` no bump happens, so those two disagree, and trusting
   // the flag made the gate fail a perfectly good dry run on its own bookkeeping.
@@ -154,7 +162,7 @@ export function smokeConsumerInstall(root: string, deps: SmokeDeps = defaultDeps
   const work = mkdtempSync(join(tmpdir(), 'musterd-smoke-'));
   try {
     deps.log(`consumer smoke @ ${version} — packing…`);
-    const tarballs = packAll(root, work, deps);
+    const tarballs = packAll(root, packInto ?? work, deps);
 
     const app = join(work, 'app');
     mkdirSync(app, { recursive: true });
@@ -195,6 +203,7 @@ export function smokeConsumerInstall(root: string, deps: SmokeDeps = defaultDeps
       deps.log(`  ✓ ${probe.label}`);
     }
     deps.log('✓ consumer smoke passed — the tarballs load outside the workspace');
+    return tarballs;
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
