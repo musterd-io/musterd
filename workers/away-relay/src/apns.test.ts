@@ -196,7 +196,25 @@ describe('app frames and payload (ADR 676 §2)', () => {
       ),
     ).toBe('ask-1');
     expect(
+      appCallbackRef(
+        JSON.stringify({
+          app: 1,
+          kind: 'question_key',
+          binding: 'b1',
+          ref: 'qk-0123456789abcdef',
+          expires_at: 1,
+          sealed,
+        }),
+      ),
+    ).toBe('qk-0123456789abcdef');
+    expect(
+      appCallbackRef(JSON.stringify({ app: 1, kind: 'question_key', binding: 'b1', ref: 'qk-1' })),
+    ).toBeNull();
+    expect(
       appCallbackRef(JSON.stringify({ app: 1, kind: 'answer', binding: 'b1', ref: 'a' })),
+    ).toBeNull();
+    expect(
+      appCallbackRef(JSON.stringify({ app: 1, kind: 'other', binding: 'b1', ref: 'a', sealed })),
     ).toBeNull();
     expect(appCallbackRef(JSON.stringify({ app: 2, kind: 'redeliver', binding: 'b1' }))).toBeNull();
     expect(appCallbackRef('payload=x')).toBeNull();
