@@ -61,6 +61,8 @@ TOPS = ["tee", "long", "stripe", "hoodie", "vest"]
 OUTERS = ["cardigan", "blazer", "zip"]
 # one-pieces (v2-6a): worn instead of a top and a bottom
 DRESSES = ["shift"]
+# bottoms beside the trousers (v2-6b, spec §2.4: a skirt is a bottom, not a one-piece)
+BOTTOMS = ["skirt"]
 ACCS = ["glasses", "glasses-square", "glasses-browline", "headphones", "scarf", "earrings-stud", "earrings-hoop", "watch", "bracelet", "headphones-neck"]
 # Carried things (increment 3b, plan Task 16): `figure.ts` maps a pose's CarryKind onto these. The
 # moving box is `carry/box` in kraft with `carry/plant` poking out of it. `folder` is appended last so
@@ -73,7 +75,9 @@ LAYERS = (
     + [f"top/{t}" for t in TOPS]
     + [f"outer/{o}" for o in OUTERS]
     + [f"dress/{d}" for d in DRESSES]
-    + ["bottom", "shoes"]
+    + ["bottom"]
+    + [f"bottom/{b}" for b in BOTTOMS]
+    + ["shoes"]
     + [f"hat/{h}" for h in HATS]
     + [f"acc/{a}" for a in ACCS]
     # an agent's tell (nick, 2026-10-22: no visors on anyone): its eyes and a collar light glow, white
@@ -648,6 +652,14 @@ def build_figure(zs: float, origin: Vector) -> Rig:
         r.cyl("thigh", f"hip{side}", "bottom", denim, 0, y, KNEE, 3.0 * FIG, 4.2 * FIG, HIP - KNEE + 1 * FIG)["fuse"] = "bottom"
         r.orb("knee", f"knee{side}", "bottom", denim, 0, y, KNEE, 3.0 * FIG, 3.0 * FIG, 3.1 * FIG, "bottom")
         r.cyl("shin", f"knee{side}", "bottom", denim, 0, y, ANKLE + 1.5 * FIG, 2.5 * FIG, 3.0 * FIG, KNEE - ANKLE - 1.5 * FIG)["fuse"] = "bottom"
+    # ── the skirt (v2-6b, spec §2.4): a bottom worn instead of the trousers, legs bare under it — a
+    # waistband on the hips, then the dress's three fused panels (two on the thighs that follow the
+    # leg when seated, a centre panel on the hips that drapes between the knees) to just above the knee.
+    skirt_hem = KNEE + 1.5 * FIG
+    r.orb("waistband", "hips", "bottom/skirt", denim, 0.3, 0, HIP + 2.6 * FIG, 5.5 * FIG, 8.1 * FIG, 1.6 * FIG, "bottom/skirt")
+    r.frustum("skirt-mid", "hips", "bottom/skirt", denim, 0.3, 0, skirt_hem, 4.6 * FIG, 5.5 * FIG, HIP + 2.4 * FIG - skirt_hem, sy=1.3)["fuse"] = "bottom/skirt"
+    for side, sy in (("L", 1), ("R", -1)):
+        r.cyl("skirt-leg", f"hip{side}", "bottom/skirt", denim, 0.2, sy * HIP_W * 0.85, skirt_hem, 5.0 * FIG, 4.3 * FIG, HIP + 1.0 * FIG - skirt_hem)["fuse"] = "bottom/skirt"
         # shoes: a rounded upper on a sole, not a block
         r.orb("shoe", f"ankle{side}", "shoes", shoe, 2.2 * FIG, y, 0.9 * FIG + 2.4 * FIG * 0.5, 5.2 * FIG, 2.7 * FIG, 2.4 * FIG, "shoes")
         r.orb("sole", f"ankle{side}", "shoes", shoe, 2.4 * FIG, y, 0.65 * FIG, 5.4 * FIG, 2.8 * FIG, 0.65 * FIG, "shoes")
@@ -1170,7 +1182,7 @@ CARRY_BASE = {"walk-hold2": "walk", "walk-hold1": "walk", "walk-call": "walk", "
 CARRY_OWN = ("skin", "top/", "outer/", "dress/", "carry/", "lanyard", "acc/watch", "acc/bracelet")
 # Layers a carrying clip stores beyond CARRY_OWN: the lap arms lie across the trousers, so sit-lap's
 # `bottom` cells are its own (spec §8); every other carrying clip keeps the base clip's.
-CARRY_OWN_EXTRA = {"sit-lap": ("bottom",)}
+CARRY_OWN_EXTRA = {"sit-lap": ("bottom", "bottom/skirt")}
 
 
 def own_layers(clip: str) -> tuple[str, ...]:

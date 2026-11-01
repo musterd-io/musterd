@@ -33,6 +33,7 @@ const femme: Appearance = {
   neck: 'none',
   wrist: 'none',
   onePiece: 'none',
+  bottomCut: 'trousers',
   outer: 'none',
   underColor: null,
   accessory: 'glasses',
@@ -60,6 +61,16 @@ describe('layersFor (office realism Task 11)', () => {
     expect(layers.find((l) => l.id === 'top/long')?.color).toBe('#f2eee6');
     expect(layers.find((l) => l.id === 'outer/cardigan')?.color).toBe('#3366cc');
     expect(layers.findIndex((l) => l.id === 'outer/cardigan')).toBe(layers.findIndex((l) => l.id === 'top/long') + 1);
+  });
+
+  it('a skirt is a bottom: it takes the trousers’ place and colour, and a dress still excludes it (v2-6b)', () => {
+    const ids = layersFor({ ...femme, bottomCut: 'skirt' }, 'human', '#3366cc');
+    expect(ids.map((l) => l.id)).toContain('bottom/skirt');
+    expect(ids.map((l) => l.id)).not.toContain('bottom');
+    expect(ids.find((l) => l.id === 'bottom/skirt')?.color).toBe(femme.bottom);
+    const dressed = layersFor({ ...femme, bottomCut: 'skirt', onePiece: 'shift' }, 'human', '#3366cc').map((l) => l.id);
+    expect(dressed).not.toContain('bottom/skirt');
+    expect(dressed).toContain('dress/shift');
   });
 
   it('a dress is worn instead of the top and the bottom, and carries the hue (v2-6a)', () => {

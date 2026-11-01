@@ -196,6 +196,14 @@ const UNDER_COLORS = ['#f2eee6', '#c9d6e3', '#9aa0a6', '#2b3038', '#e8dcc4'] as 
  * legs. Open to anyone (§2.5); weighted by style, never by anything else.
  */
 export type OnePiece = 'none' | 'shift';
+/** The cut of the bottom (v2-6b, spec §2.4): trousers, or a knee-length skirt with the legs bare under it. */
+export type BottomCut = 'trousers' | 'skirt';
+const BOTTOM_CUTS_BY_STYLE: Record<Style, readonly BottomCut[]> = {
+  formal: ['trousers', 'trousers', 'skirt'],
+  smart: ['trousers', 'trousers', 'trousers', 'skirt'],
+  casual: ['trousers', 'trousers', 'trousers', 'trousers', 'skirt'],
+  athletic: ['trousers'],
+};
 const ONE_PIECES_BY_STYLE: Record<Style, readonly OnePiece[]> = {
   formal: ['none', 'none', 'none', 'shift'],
   smart: ['none', 'none', 'none', 'none', 'shift'],
@@ -292,6 +300,8 @@ export interface Appearance {
   cut: TopCut;
   /** A dress worn instead of the top and the bottom, or 'none'. */
   onePiece: OnePiece;
+  /** Trousers or a skirt (v2-6b); moot under a dress. */
+  bottomCut: BottomCut;
   /** An outer layer over the top, or 'none'. */
   outer: Outer;
   /** The top's own colour when an outer layer carries the hue; null when the top carries it. */
@@ -339,6 +349,7 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
   // a hood does not go under a jacket: a hoodie is its own outermost layer
   const outer = cut === 'hoodie' ? 'none' : pick(OUTERS_BY_STYLE[style], name, 23);
   const onePiece = pick(ONE_PIECES_BY_STYLE[style], name, 25);
+  const bottomCut = pick(BOTTOM_CUTS_BY_STYLE[style], name, 26);
   const skin = pick(SKINS, name, 1);
   // Agents never wear glasses — the eye glow is their tell, and frames would sit on it.
   const eyes = kind === 'agent' ? 'none' : pick(EYES, name, 18);
@@ -362,6 +373,7 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
     hatColor: pickContrasting(HAT_COLORS, name, 7, skin),
     cut,
     onePiece,
+    bottomCut,
     outer,
     underColor: outer === 'none' ? null : pick(UNDER_COLORS, name, 24),
     // an outer layer's long sleeves cover the arms whatever the top under it

@@ -28,6 +28,7 @@ export type LayerId =
   | `acc/${Neck}`
   | `outer/${Exclude<Outer, 'none'>}`
   | `dress/${Exclude<OnePiece, 'none'>}`
+  | 'bottom/skirt'
   | 'tell/eyes'
   | 'tell/collar'
   | `carry/${CarryLayer}`
@@ -113,7 +114,8 @@ export function layersFor(a: Appearance, kind: OfficeNode['kind'], topColor: str
   const inner = a.outer === 'none' ? topColor : a.underColor;
   if (a.onePiece !== 'none') out.push({ id: `dress/${a.onePiece}`, color: inner });
   else {
-    out.push({ id: 'bottom', color: a.bottom });
+    // a skirt (v2-6b) is a bottom in the trousers' colour; the legs under it are the base's
+    out.push({ id: a.bottomCut === 'skirt' ? 'bottom/skirt' : 'bottom', color: a.bottom });
     out.push({ id: `top/${a.cut}`, color: inner });
   }
   if (a.outer !== 'none') out.push({ id: `outer/${a.outer}`, color: topColor });
