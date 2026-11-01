@@ -89,6 +89,7 @@ const TAKE_GAIN: Record<string, number> = {
   sip: 0.018,
   eat: 0.021,
   bark: 0.037, // -6 dB (nick, 2026-10-30: too loud)
+  growl: 0.009, // both takes peak near -5 dBFS (take 1 pulled down 4.7 dB); ~6 dB under the bark
   pant: 0.012, // a breath, not a bark: ~5 dB under it at the clip's higher peak (-5 dBFS vs -12)
   jingle: 0.041,
   nameplate: 0.0073,
@@ -948,6 +949,7 @@ export class RoomTone {
       case 'yawn': return this.blow(ctx, out, true);
       case 'bark': return this.bark(ctx, out);
       case 'pant': return this.pant(ctx, out);
+      case 'growl': return this.growl(ctx, out);
       case 'nightair': return this.nightair(ctx, out);
     }
   }
@@ -1212,6 +1214,12 @@ export class RoomTone {
    *  "very creepy" — so until the take lands, the dog is quiet. */
   private pant(ctx: AudioContext, out: AudioNode): void {
     this.take(ctx, out, 'pant');
+  }
+
+  /** A low growl, recorded only (nick kept two of three takes, 2026-10-31): the bark's cousin, and
+   *  as with the pant, no synth stand-in — a noise-band growl is the bark recipe slowed, which is mush. */
+  private growl(ctx: AudioContext, out: AudioNode): void {
+    this.take(ctx, out, 'growl');
   }
 
   /** Night air for the late shift (E2 spec §4): a distant cricket-ish pulse train — a few tremolo'd
