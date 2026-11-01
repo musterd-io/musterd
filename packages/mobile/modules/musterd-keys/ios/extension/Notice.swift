@@ -15,6 +15,8 @@ enum Notice {
   static let unverifiedText = "New ask — open musterd to see it."
   static let staleText = "This ask is no longer available."
   static let answerHint = "Press and hold to answer"
+  /// A question this phone cannot answer from the lock screen (no key, or the daemon holds another).
+  static let openHint = "Open musterd to answer"
   static let advisoryCategory = "musterd.ask.advisory"
   static let actionApprove = "musterd.answer.approve"
   static let actionReject = "musterd.answer.reject"
@@ -68,8 +70,8 @@ enum Notice {
     }
   }
 
-  /// `questionKey`: this binding has an enrolled question key, so a question can be answered from
-  /// the notification itself. Without one, a question only opens the app.
+  /// `questionKey`: this binding has an enrolled question key the daemon holds, so a question can be
+  /// answered from the notification itself. Without one, a question only opens the app, and says so.
   static func render(body: Body, verdict: SeenNonce.Verdict, questionKey: Bool = false) -> Rendered {
     if verdict != .fresh { return stale() }
     switch body {
@@ -83,7 +85,7 @@ enum Notice {
       return Rendered(
         title: from,
         body: category == nil ? Readable.summary(question.text, max: 180) : Readable.plain(question.text),
-        subtitle: category == nil ? nil : answerHint,
+        subtitle: category == nil ? openHint : answerHint,
         category: category,
         sound: !quiet,
         passive: quiet

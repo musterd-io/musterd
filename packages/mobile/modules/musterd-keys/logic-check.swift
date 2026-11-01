@@ -196,6 +196,15 @@ check(
 check(
   Question.signingBytes(team: "t", binding: "b", ask: "a", token: "k", nonce: "n", choice: nil,
     text: nil) == nil, "nothing to answer with signs nothing")
+// The daemon's `question_key` thumbprint (lane 01M69KHDVJ). The same fixture as questionKey.test.ts.
+let fixtureKey = "BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0-P0A"
+let fixtureHeld = "DtOmq5V_9vWaljCkc9MafQT8tGVIuJAWGWmAx-llhPY"
+check(Question.thumbprint(fixtureKey) == fixtureHeld, "thumbprint matches the daemon's")
+check(Question.daemonHolds(enrolledKey: fixtureKey, heldKey: fixtureHeld), "held key: buttons")
+check(!Question.daemonHolds(enrolledKey: fixtureKey, heldKey: nil), "daemon holds none: no buttons")
+check(!Question.daemonHolds(enrolledKey: fixtureKey, heldKey: String(repeating: "x", count: 43)),
+  "daemon holds another key: no buttons")
+check(!Question.daemonHolds(enrolledKey: nil, heldKey: fixtureHeld), "not enrolled: no buttons")
 check(Question.choice(action: "musterd.question.choice.2") == 2, "third button")
 check(Question.choice(action: "musterd.question.choice.3") == nil, "only three buttons")
 check(Question.choice(action: "musterd.answer.approve") == nil, "approve is not an option")
@@ -222,7 +231,7 @@ check(answerable.category == Question.optionsCategory(nonce: "nq"), "a question 
 check(answerable.body == "Which branch?" && answerable.subtitle == Notice.answerHint, "question copy")
 check(answerable.category != Notice.advisoryCategory, "a question is never approve or decline")
 let noKey = Notice.render(body: question, verdict: .fresh)
-check(noKey.category == nil && noKey.subtitle == nil, "no question key: the tap opens the app")
+check(noKey.category == nil && noKey.subtitle == Notice.openHint, "no question key: the tap opens the app, and says so")
 let open = Notice.Body.ask(text: "Why?", from: "ryder", actionClass: "advisory", hasApproval: false,
   waiting: 0, nonce: "n2", question: Question.Info(text: "Why?", options: [], token: "k"), quiet: true)
 let openShown = Notice.render(body: open, verdict: .fresh, questionKey: true)

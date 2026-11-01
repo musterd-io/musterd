@@ -60,7 +60,10 @@ export default function AsksScreen() {
       setView(next);
       try {
         const { needsQuestionKey } = await import('../native/questionKey');
-        const needed = await needsQuestionKey(current);
+        const needed = await needsQuestionKey(
+          current,
+          next.asks.map((entry) => entry.delivery),
+        );
         if (alive.current) setOfferKey(needed && !keyDeclined.current);
       } catch {
         if (alive.current) setOfferKey(false);

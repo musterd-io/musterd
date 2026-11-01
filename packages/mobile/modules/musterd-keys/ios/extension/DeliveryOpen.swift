@@ -110,6 +110,11 @@ enum DeliveryOpen {
         else { return nil }
         question = info
       }
+      if object.keys.contains("question_key") {
+        guard question != nil, let held = object["question_key"] as? String, held.count == 43
+        else { return nil }
+        question?.heldKey = held
+      }
       var quiet = false
       if ask.keys.contains("interruption") {
         guard let interruption = ask["interruption"] as? String,

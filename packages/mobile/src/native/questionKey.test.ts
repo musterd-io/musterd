@@ -12,6 +12,7 @@ import {
   buildQuestionKeyEnroll,
   enrollQuestionKey,
   needsQuestionKey,
+  questionKeyThumbprint,
   sendQuestionAnswer,
   signQuestionAnswer,
 } from './questionKey';
@@ -203,6 +204,36 @@ describe('needsQuestionKey', () => {
     });
     expect(await needsQuestionKey(pin)).toBe(true);
     expect(await needsQuestionKey(null)).toBe(false);
+  });
+
+  it('asks again when a question asked after enrolling names another key, or none', async () => {
+    const enrolled = { binding: 'bind-1', key: KEY, expires_at: 10 * 60_000 };
+    const mine = questionKeyThumbprint(KEY)!;
+    const question = (ts: number, question_key?: string) =>
+      ({
+        ask: { ts, question: { text: 'which?' } },
+        ...(question_key ? { question_key } : {}),
+      }) as unknown as AskDelivery;
+    const asks = async (...deliveries: AskDelivery[]) => {
+      vi.mocked(phoneKeys.questionEnrollment).mockReturnValueOnce(enrolled);
+      return needsQuestionKey(pin, deliveries);
+    };
+    // Enrolled at 60 000 (the seal expires nine minutes later).
+    expect(await asks(question(70_000, mine))).toBe(false);
+    expect(await asks(question(70_000))).toBe(true);
+    expect(await asks(question(70_000, 'x'.repeat(43)))).toBe(true);
+    // Asked before the enrollment: it may name the previous key.
+    expect(await asks(question(50_000))).toBe(false);
+  });
+});
+
+describe('questionKeyThumbprint', () => {
+  it("matches the daemon's: base64url SHA-256 of the raw point (Question.swift pins the same)", () => {
+    expect(
+      questionKeyThumbprint(
+        'BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0-P0A',
+      ),
+    ).toBe('DtOmq5V_9vWaljCkc9MafQT8tGVIuJAWGWmAx-llhPY');
   });
 });
 

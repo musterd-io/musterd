@@ -288,7 +288,8 @@ seen-nonce store blocks a second display; it does not block the answer of the no
 already on screen.
 
 A question (ADR 773) is never approved or declined. Once this binding's question key is
-enrolled (ADR 774 §5), its notification gets the first three options as buttons and a **Reply**
+enrolled (ADR 774 §5) and the delivery's `question_key` — the thumbprint of the key the daemon
+holds, base64url SHA-256 of its raw point — matches it, its notification gets the first three options as buttons and a **Reply**
 text field. The buttons' titles are the question's own labels, so the extension registers a
 category per question (`musterd.question.options.<nonce>`) just before it hands the notification
 over; a question with no options uses the app's fixed Reply-only `musterd.question`. Every caller
@@ -301,7 +302,10 @@ locked phone in someone else's hand can pick one of the seat's own options, but 
 text into a seat's session. What it answers is the extension's own keychain record of the
 verified delivery (`question-routes`: route, token, nonce, option count). A relay that refuses
 twice leaves the callback in `question-outbox`, re-sent on every open, and a local notification
-says so. `PhoneKeys.signQuestion` refuses anything that does not start with the question-answer
+says so. A question whose `question_key` is absent or names another key gets no actions, and
+says to open musterd: the relay's 202 is all an enrollment hears, so this is how the phone learns
+the daemon refused or lost it. The home screen then offers to turn it on again, for a question
+asked after the enrollment (an older one may name the previous key). `PhoneKeys.signQuestion` refuses anything that does not start with the question-answer
 domain tag. Before enrollment a question has no actions and opens the app, where the question card
 answers it with the Face ID key instead (`key: 'signing'`). The home screen offers enrollment once
 per binding and key: one Face ID, then the `question_key` callback with a fresh random nonce and a

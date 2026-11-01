@@ -25,11 +25,12 @@ import {
 import { canonicalJson } from '@musterd/protocol/approval';
 import { relayUrl, samePlace, sealAndSend, type AnswerOutcome } from './answer';
 import type { AskDelivery } from './asks';
-import { b64urlEncode, utf8Encode } from './bytes';
+import { b64urlDecode, b64urlEncode, utf8Encode } from './bytes';
 import { post, RETRY_MS, type OutboxStorage } from './outbox';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys, phoneKeysErrorCode } from './phoneKeys';
 import type { PushRoute } from './push';
+import { sha256 } from './sha256';
 
 type Answer = AppQuestionAnswer['answer'];
 
@@ -103,11 +104,28 @@ export type EnrollOutcome = 'enrolled' | 'cancelled' | 'unpaired' | 'failed';
  * Whether this phone should enroll: paired, and the question key the daemon last heard of is not
  * this binding's current key (never enrolled, re-paired, or the key was re-created).
  */
-export async function needsQuestionKey(pin: PairingPin | null): Promise<boolean> {
+export async function needsQuestionKey(
+  pin: PairingPin | null,
+  deliveries: readonly AskDelivery[] = [],
+): Promise<boolean> {
   if (!pin?.binding) return false;
   const enrolled = phoneKeys.questionEnrollment();
   if (!enrolled || enrolled.binding !== pin.binding) return true;
-  return enrolled.key !== (await phoneKeys.questionPublicKey());
+  if (enrolled.key !== (await phoneKeys.questionPublicKey())) return true;
+  // The relay's 202 is all an enrollment hears. A question asked after it that names a different
+  // key, or none, means the daemon refused or lost it: offer to turn it on again. Older questions
+  // were issued before the enrollment and may name the previous key, so they say nothing.
+  const enrolledAt = enrolled.expires_at - ENROLL_AHEAD_MS;
+  const mine = questionKeyThumbprint(enrolled.key);
+  return deliveries.some(
+    (d) => d.ask.question !== undefined && d.ask.ts > enrolledAt && d.question_key !== mine,
+  );
+}
+
+/** `questionKeyThumbprint` (the daemon's): base64url SHA-256 of the key's raw point. */
+export function questionKeyThumbprint(key: string): string | null {
+  const raw = b64urlDecode(key);
+  return raw ? b64urlEncode(sha256(raw)) : null;
 }
 
 /**

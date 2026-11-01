@@ -12,6 +12,7 @@
 //  redeems nothing without a signature from this phone's question key.
 //
 
+import CryptoKit
 import Foundation
 
 enum Question {
@@ -37,6 +38,28 @@ enum Question {
     var text: String
     var options: [String]
     var token: String
+    /// The delivery's `question_key`: the thumbprint of the question key the daemon holds for this
+    /// binding, nil when it holds none.
+    var heldKey: String? = nil
+  }
+
+  /// `questionKeyThumbprint`: base64url (no padding) of SHA-256 over the key's raw point. Nil for
+  /// a key that is not base64url.
+  static func thumbprint(_ key: String) -> String? {
+    var base64 = key.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+    base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+    guard let raw = Data(base64Encoded: base64) else { return nil }
+    return Data(SHA256.hash(data: raw)).base64EncodedString()
+      .replacingOccurrences(of: "+", with: "-")
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "=", with: "")
+  }
+
+  /// Lock-screen answers only when the daemon holds the key this phone enrolled: a refused or
+  /// lost enrollment would otherwise give buttons whose every answer is refused.
+  static func daemonHolds(enrolledKey: String?, heldKey: String?) -> Bool {
+    guard let enrolledKey, let heldKey else { return false }
+    return thumbprint(enrolledKey) == heldKey
   }
 
   static func optionsCategory(nonce: String) -> String {

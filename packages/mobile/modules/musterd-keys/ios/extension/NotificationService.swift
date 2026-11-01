@@ -170,7 +170,12 @@ final class NotificationService: UNNotificationServiceExtension {
           now: now
         )
       }
-      questionKey = recorded && SharedStore.questionKeyEnrolled(binding: route.binding)
+      // The daemon names the key it holds; a refused or lost enrollment gets no buttons, and the
+      // notification says to open musterd instead (lane 01M69KHDVJ).
+      questionKey = recorded
+        && Question.daemonHolds(
+          enrolledKey: SharedStore.enrolledQuestionKey(binding: route.binding),
+          heldKey: question.heldKey)
       if questionKey && !question.options.isEmpty {
         await QuestionCategory.register(
           [QuestionCategory.options(nonce: nonce, labels: question.options)],

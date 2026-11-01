@@ -108,9 +108,10 @@ enum SharedStore {
     return save(data, account: questionKeyAccount)
   }
 
-  /// Whether a question on `binding` can be answered from its notification.
-  static func questionKeyEnrolled(binding: String) -> Bool {
-    loadQuestionEnrollment()?.binding == binding
+  /// The question key this phone enrolled on `binding`, nil if none.
+  static func enrolledQuestionKey(binding: String) -> String? {
+    guard let enrolled = loadQuestionEnrollment(), enrolled.binding == binding else { return nil }
+    return enrolled.key
   }
 
   /// Lock-screen answers the relay did not take, each `{url, body, ref, expires_at}`.

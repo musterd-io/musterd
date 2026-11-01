@@ -61,6 +61,7 @@ describe('noticeFor', () => {
     });
     expect(noticeFor(question(), 'fresh', 5_000, now, true).category).toBe(QUESTION_REPLY_CATEGORY);
     expect(noticeFor(question(), 'fresh', 5_000, now).category).toBeUndefined();
+    expect(noticeFor(question(), 'fresh', 5_000, now).subtitle).toBe('Open musterd to answer');
   });
 
   it('gives an advisory ask its actions and says to press and hold, with a count when more wait', () => {

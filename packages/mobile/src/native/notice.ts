@@ -35,6 +35,8 @@ export const NOTICE_TITLE = 'musterd';
 
 /** On an ask with lock-screen actions: they only show on a press and hold (nick, 2026-10-29). */
 export const ANSWER_HINT = 'Press and hold to answer';
+/** A question this phone cannot answer from the lock screen (no key, or the daemon holds another). */
+export const OPEN_HINT = 'Open musterd to answer';
 
 export const ADVISORY_CATEGORY = 'musterd.ask.advisory';
 export const ACTION_APPROVE = 'musterd.answer.approve';
@@ -110,7 +112,7 @@ export function noticeFor(
     return {
       title: NOTICE_TITLE,
       body: question.text,
-      ...(category ? { category, subtitle: ANSWER_HINT } : {}),
+      ...(category ? { category, subtitle: ANSWER_HINT } : { subtitle: OPEN_HINT }),
       sound: delivery.ask.interruption !== 'passive',
     };
   }
