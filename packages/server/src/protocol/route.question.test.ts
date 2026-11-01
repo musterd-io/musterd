@@ -226,4 +226,55 @@ withDrivers('route.question', (o) => {
     });
     expect((await questionView(db, team.id, 'q1'))?.state).toBe('open');
   });
+
+  function inferred(id: string, from: string): Envelope {
+    return makeEnvelope({
+      id,
+      team: 'revive',
+      from,
+      to: { kind: 'team' },
+      act: 'ask',
+      body: 'Want me to start on 3a?',
+      meta: {
+        species: 'consult',
+        question: { text: 'Want me to start on 3a?', audience: 'team', inferred: true },
+      },
+    });
+  }
+
+  it('ADR 781: an inferred question waits while the seat has any open question', async () => {
+    const { db, team, ryder, ctx } = await seed();
+    // ryder's explicit q1 is still open, so the catcher's card is refused.
+    await expect(routeEnvelope(ctx, team, ryder, inferred('i1', 'ryder'))).rejects.toMatchObject({
+      code: 'conflict',
+      message: expect.stringContaining('question_already_open'),
+    });
+    await routeEnvelope(
+      ctx,
+      team,
+      ryder,
+      makeEnvelope({
+        id: 'w1',
+        team: 'revive',
+        from: 'ryder',
+        to: { kind: 'team' },
+        act: 'resolve',
+        thread: 'q1',
+        meta: { withdrawn: 'answered_in_session' },
+      }),
+    );
+    await routeEnvelope(ctx, team, ryder, inferred('i2', 'ryder'));
+    expect((await questionView(db, team.id, 'i2'))?.question.inferred).toBe(true);
+    // A second turn ending on a question while i2 is open adds no second card.
+    await expect(routeEnvelope(ctx, team, ryder, inferred('i3', 'ryder'))).rejects.toMatchObject({
+      code: 'conflict',
+    });
+  });
+
+  it("ADR 781: a person's own session never raises an inferred question", async () => {
+    const { team, swetha, ctx } = await seed();
+    await expect(routeEnvelope(ctx, team, swetha, inferred('i1', 'swetha'))).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+  });
 });

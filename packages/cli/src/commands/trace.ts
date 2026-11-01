@@ -7,7 +7,8 @@ import { writeIdleWakeState } from '../idleWake/state.js';
 import { theme } from '../render/theme.js';
 import { sessionDigest } from '../session/digest.js';
 import { snapshotTodos } from '../todos/snapshot.js';
-import { tapHook } from '../trace/hook.js';
+import { tapHook, traceClient } from '../trace/hook.js';
+import { catchTurnEnd } from '../trace/inferredQuestion.js';
 import { tailOpencodeSession } from '../trace/opencode.js';
 import { subagentTranscriptPathFor, tailTranscript } from '../trace/tail.js';
 import { findWorkspaceDir, resolveRead } from './helpers.js';
@@ -114,6 +115,8 @@ export async function traceCommand(parsed: Parsed): Promise<number> {
     const binding = findBinding(dir);
     const harness = flagStr(parsed.flags, 'harness') ?? 'claude-code';
     noteTurnMarker(raw, dir); // ADR 558 — the idle-wake turn markers ride the same tap
+    // ADR 781 — the inferred-question catcher rides it too: raise on Stop, withdraw on the next prompt.
+    await catchTurnEnd(raw, { binding, dir, client: binding ? traceClient(binding, dir) : null });
     await tapHook(raw, {
       binding,
       dir,

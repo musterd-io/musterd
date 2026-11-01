@@ -1210,6 +1210,9 @@ answer's text.
   to ` ⏎ `, `«`/`»` escaped as `‹‹`/`››`, the answer capped at 2,000 characters and the line at
   2,400. Every other wake line keeps ADR 088 §4's ids-only rule. The recap form, for a session that
   cannot be resumed, inserts `you asked: «<question text>» —` before the answer.
+- `inferred: true` marks a question a turn-end catcher raised from the seat's last message (ADR
+  781). A server MUST refuse one from a sender that is not an agent (`forbidden`), and MUST refuse
+  one with `409 question_already_open` while its sender has any open question.
 
 ## A.32 Quick actions and PR events (unreleased — ADR 779)
 

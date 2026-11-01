@@ -76,7 +76,12 @@ import {
   withEnvelopeSpan,
 } from '../telemetry.js';
 import { acceptedHandoffOf, applyDisputeAnswer, stampDispute } from './dispute.js';
-import { auditQuestionAnswer, prepareQuestionAnswer, stripAnswerProof } from './questionAnswer.js';
+import {
+  auditQuestionAnswer,
+  checkInferredQuestion,
+  prepareQuestionAnswer,
+  stripAnswerProof,
+} from './questionAnswer.js';
 
 export interface RouteResult {
   message: MessageRow;
@@ -624,6 +629,8 @@ async function routeEnvelopeInner(
   if (outgoingEnv.meta?.['quick_action'] !== undefined && sender.kind !== 'human') {
     throw new MusterdError('forbidden', "a quick action is a person's, not a seat's (ADR 779)");
   }
+  // ADR 781 §3: an inferred question is a seat's, one open at a time.
+  if (!daemonComposed) await checkInferredQuestion(ctx.db, team, sender, outgoingEnv);
   // ADR 779 §4: `pr_event` is the hub's PR watch speaking — server-controlled, a client copy goes.
   if (!daemonComposed && outgoingEnv.meta && 'pr_event' in outgoingEnv.meta) {
     const { pr_event: _clientPrEvent, ...restMeta } = outgoingEnv.meta;
