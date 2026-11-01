@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Binding, Envelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import type { HttpClient } from '../client.js';
-import { catchTurnEnd, readRaised } from './inferredQuestion.js';
+import { catchHookTurn, catchTurnEnd, readRaised } from './inferredQuestion.js';
 
 const binding = {
   server: 'http://127.0.0.1:4849',
@@ -95,5 +95,95 @@ describe('catchTurnEnd (ADR 781)', () => {
     const refusing = fakeClient(true);
     await catchTurnEnd(stop('Want me to start?'), { binding, dir, client: refusing.client });
     expect(readRaised(dir)).toBeNull();
+  });
+});
+
+describe('catchTurnEnd on OpenCode (ADR 785)', () => {
+  it("reads the bare idle boundary's message from the store, and the next busy withdraws it", async () => {
+    const dir = workspace();
+    const { client, sent } = fakeClient();
+    const readOpencode = async (session: string) =>
+      session === 'ses_1' ? 'Merged.\n\nWant me to start 3c?' : undefined;
+    const opts = { binding, dir, client, harness: 'opencode', readOpencode };
+    await catchTurnEnd(JSON.stringify({ session_id: 'ses_1', hook_event_name: 'Stop' }), opts);
+    expect(sent[0]).toMatchObject({ act: 'ask', meta: { question: { inferred: true } } });
+    await catchTurnEnd(
+      JSON.stringify({ session_id: 'ses_1', hook_event_name: 'UserPromptSubmit' }),
+      opts,
+    );
+    expect(sent[1]).toMatchObject({ act: 'resolve', thread: sent[0]!.id });
+  });
+});
+
+describe('catchHookTurn (ADR 785)', () => {
+  const grokStop = (extra: Record<string, unknown> = {}) =>
+    JSON.stringify({ sessionId: 'g1', hookEventName: 'Stop', reason: 'end_turn', ...extra });
+  const grokPre = JSON.stringify({
+    sessionId: 'g1',
+    hookEventName: 'PreToolUse',
+    toolName: 'bash',
+  });
+
+  it('Grok: raises at end_turn from the session log; the next tool call withdraws it', async () => {
+    const dir = workspace();
+    const { client, sent } = fakeClient();
+    const readGrok = () => 'Which first?\n\n- A\n- B\n\nWhich one?';
+    const opts = { binding, dir, client, doorbellRang: false, readGrok };
+    await catchHookTurn(grokStop(), 'grok', opts);
+    expect(sent[0]).toMatchObject({ act: 'ask', meta: { question: { inferred: true } } });
+    expect(readRaised(dir)).toEqual({ id: sent[0]!.id, session_id: 'g1' });
+    await catchHookTurn(grokPre, 'grok', opts);
+    expect(sent[1]).toMatchObject({ act: 'resolve', thread: sent[0]!.id });
+  });
+
+  it('Grok: nothing when the doorbell blocked the stop, on a re-entered stop, or on shutdown', async () => {
+    const dir = workspace();
+    const { client, sent } = fakeClient();
+    const readGrok = () => 'Want me to merge?';
+    await catchHookTurn(grokStop(), 'grok', { binding, dir, client, doorbellRang: true, readGrok });
+    await catchHookTurn(grokStop({ stopHookActive: true }), 'grok', {
+      binding,
+      dir,
+      client,
+      doorbellRang: false,
+      readGrok,
+    });
+    await catchHookTurn(grokStop({ reason: 'shutdown' }), 'grok', {
+      binding,
+      dir,
+      client,
+      doorbellRang: false,
+      readGrok,
+    });
+    expect(sent).toHaveLength(0);
+  });
+
+  it('Muse: the next turn end withdraws the last card before judging its own message', async () => {
+    const dir = workspace();
+    const { client, sent } = fakeClient();
+    const said = ['Shall I deploy?', 'Deployed.'];
+    const readMuse = () => said.shift();
+    const opts = {
+      binding,
+      dir,
+      client,
+      doorbellRang: false,
+      readMuse,
+      env: { MUSE_SESSION_ID: 'm1' },
+    };
+    await catchHookTurn(JSON.stringify({}), 'muse', opts);
+    expect(sent[0]).toMatchObject({ act: 'ask' });
+    await catchHookTurn(JSON.stringify({}), 'muse', opts);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({ act: 'resolve', thread: sent[0]!.id });
+    expect(readRaised(dir)).toBeNull();
+    // A payload message wins over the store; a re-entered stop is skipped.
+    await catchHookTurn(JSON.stringify({ stop_hook_active: true }), 'muse', opts);
+    await catchHookTurn(
+      JSON.stringify({ session_id: 'm1', last_assistant_message: 'Want me to?' }),
+      'muse',
+      { ...opts, readMuse: () => undefined },
+    );
+    expect(sent).toHaveLength(3);
   });
 });
