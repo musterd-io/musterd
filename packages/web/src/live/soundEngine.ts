@@ -91,6 +91,10 @@ const TAKE_GAIN: Record<string, number> = {
   bark: 0.037, // -6 dB (nick, 2026-10-30: too loud)
   growl: 0.009, // both takes peak near -5 dBFS (take 1 pulled down 4.7 dB); ~6 dB under the bark
   pant: 0.012, // a breath, not a bark: ~5 dB under it at the clip's higher peak (-5 dBFS vs -12)
+  machine: 0.006, // s2446 pod machine, switch + pump start; nick (2026-11-01): keep it quiet — a third of the sip
+  doorbell: 0.012, // s3588 shop doorbell, whole clip; the arrive cousin's level (0.014) less a shade
+  bottle: 0.012, // s1242/s1243 a glass filled from a bottle; wetter and lower than the coffee sip (0.018)
+  pop: 0.02, // s0648 champagne cork with a short room tail; the synth sparkle still rides on top
   jingle: 0.041,
   nameplate: 0.0073,
   board: 0.011,
@@ -564,7 +568,8 @@ export class RoomTone {
       case 'ring': return this.ring(ctx, out);
       case 'ratchet': return this.ratchet(ctx, out);
       case 'rattle': return this.rattle(ctx, out);
-      case 'doorbell': return this.cueNotes(ctx, out, CUES['arrive']!, 0.014); // retuned: the door cousin
+      case 'doorbell': // the recorded shop chime (2026-11-01); the door cousin's bars until it loads
+        return this.take(ctx, out, 'doorbell') ? undefined : this.cueNotes(ctx, out, CUES['arrive']!, 0.014);
       case 'pop': return this.pop(ctx, out);
       // sound tied to motion (lane 01M5XS6KAD)
       case 'stepPlank': return this.click(ctx, out, ctx.currentTime + 0.01, 110 + Math.random() * 50, 0.05, 0.07);
@@ -698,6 +703,7 @@ export class RoomTone {
    *  labours up a little as the pressure builds, coffee trickles into the cup, and it ends on a
    *  few drips. Nothing in it is steady, which is what keeps it from reading as noise on the line. */
   private machine(ctx: AudioContext, out: AudioNode): void {
+    if (this.take(ctx, out, 'machine')) return; // recorded (2026-11-01, s2446 take 1)
     // Every level halved, -6 dB (nick, 2026-10-30: too loud).
     const t0 = ctx.currentTime + 0.02;
     const pumpOn = t0 + 0.12;
@@ -776,10 +782,11 @@ export class RoomTone {
     }
   }
 
-  /** The confetti pop: one bright click, then a sparkle of three high ticks. */
+  /** The confetti pop: the recorded cork (s0648, with a short tail — nick, 2026-11-01: "could be a
+   *  little longer") or a bright click, then a sparkle of three high ticks either way. */
   private pop(ctx: AudioContext, out: AudioNode): void {
     const t0 = ctx.currentTime + 0.01;
-    this.click(ctx, out, t0, 900, 0.05, 0.05);
+    if (!this.take(ctx, out, 'pop')) this.click(ctx, out, t0, 900, 0.05, 0.05);
     for (let i = 0; i < 3; i++) this.click(ctx, out, t0 + 0.08 + i * 0.05, 2600 + i * 400, 0.01, 0.02);
   }
 
@@ -1112,8 +1119,7 @@ export class RoomTone {
   /** A sip — coffee at full body, water lower and wetter via `body`. A short liquid intake, then the
    *  tiny swallow underneath it. */
   private sip(ctx: AudioContext, out: AudioNode, body: number): void {
-    // the water bottle (body < 1) keeps its synth recipe until it has a recording of its own
-    if (body >= 1 && this.take(ctx, out, 'sip')) return;
+    if (this.take(ctx, out, body >= 1 ? 'sip' : 'bottle')) return; // the bottle recorded 2026-11-01
     const t0 = ctx.currentTime + 0.02;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer(ctx);

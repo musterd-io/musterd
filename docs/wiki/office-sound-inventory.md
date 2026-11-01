@@ -116,13 +116,17 @@ Each file is in `packages/web/src/live/sounds/` and is trimmed from a CC0 (publi
 | growl | `growl-1`, `growl-2` | Small dogs bark growl (s1060), two growls cut from the bark run; recorded only — added 2026-10-31, nick kept takes 1 and 2 |
 | pant | `pant-1`, `pant-2` | Dog panting (BigSoundBank, CC0); recorded only, no synth fallback — added 2026-10-31, lane 01M67J1YDR |
 | collar jingle | `jingle-1`, `jingle-2` | Keys in a hand (s0445) |
+| coffee machine | `machine-1` | Electric coffee machine (s2446) at 10.3 s: the switch and the pump starting; added 2026-11-01, nick kept 1 of 4 takes and asked for it quiet (gain 0.006) |
+| front-door chime | `doorbell-1` | Shop doorbell chime (s3588), whole; added 2026-11-01 |
+| water bottle | `bottle-1`, `bottle-2` | Glass of water filling #1 and #2 (s1242, s1243), whole; added 2026-11-01 |
+| confetti pop | `pop-1` | Champagne cork #2 (s0648) with a 0.6 s echo tail (nick: "could be a little longer"); the synth sparkle plays on top; added 2026-11-01 |
 | nameplate open/close | `nameplate-1` | Turned Page (s0164) |
 | board open/close | `board-1` | News paper, pages (s1250) |
 
 - Rejected: `whisper`, two takes from Whisper #1 (s3255). nick heard them as "very creepy", so chatter left the roll instead.
-- Still synthesized, with recordings to come: the water bottle, the coffee machine, the wagon's phone, wheels, front-door chime and confetti pop, and the paws, yawn, label maker and toss. The growl is recorded (2026-10-31).
-- Each take is mono at 48 kbps. Its gain on the LIFE bus (`TAKE_GAIN`) matches the peak of the synth voice it replaced.
-- Falsify: `pnpm perf:check` reports office sounds above `officeSoundBytes` (160,000 B).
+- Still synthesized, with recordings to come: the wagon's phone and wheels, and the paws, yawn, label maker and toss. The growl is recorded (2026-10-31); the bottle, machine, chime and pop are recorded (2026-11-01).
+- Each take is mono at 32–48 kbps. Its gain on the LIFE bus (`TAKE_GAIN`) matches the peak of the synth voice it replaced.
+- Falsify: `pnpm perf:check` reports office sounds above `officeSoundBytes` (260,000 B since 2026-11-01; 160,000 B before).
 
 **Re-levelled 2026-10-30 (nick, lane 01M67J1YDR): "the coffee machine and the dog bark are too loud and still happen slightly too often".**
 - The coffee machine's synth levels are all halved (-6 dB), and its errand weight goes from 4 to 2.

@@ -2789,3 +2789,13 @@ measured + 15% would loosen (ADR 183).
 The "Questions from seats" section (Buzz/Quiet per channel, Default/Always/Never per seat) sits in the existing lazy settings chunk and adds about 1 KB gzip. Main had already grown to within 0.2 KB of the ceiling, so CI measured 386.9 KB against 386.7 KB. Initial JS and every CSS group are unchanged.
 
 - Falsify: `pnpm perf:check` reports total JS over the new ceiling with this lane in.
+
+## 2026-11-01 — recorded coffee machine, front-door chime, water bottle and confetti pop; Office sounds RAISED 160,000 → 260,000 B (lane 01M6CA2JKE)
+
+| Budget        | Before (ceiling) | This branch (files) | Ceiling                      |
+| ------------- | ---------------- | ------------------- | ---------------------------- |
+| office sounds | 160,000 B        | 254,854 B (23)      | RAISED 160,000 → 260,000 B |
+
+Five takes from CC0 BigSoundBank clips (ADR 776): `machine-1` 25 KB (32 kbps, 6.2 s), `doorbell-1` 24 KB, `bottle-1` 21 KB, `bottle-2` 21 KB, `pop-1` 9 KB. nick heard eight on the soundboard and kept these five. Takes load lazily on the first LIFE moment, never on the initial page, so initial JS and CSS are unchanged.
+
+- Falsify: `pnpm perf:check` after a build reports office sounds over 260,000 B with this lane in.
