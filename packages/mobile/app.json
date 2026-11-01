@@ -30,6 +30,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-updates",
       [
         "expo-font",
         {
@@ -58,6 +59,22 @@
         "projectId": "78a9a6c8-5f2f-4a82-9d18-e5dc5ee8763e"
       }
     },
-    "owner": "nas4146"
+    "owner": "nas4146",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/78a9a6c8-5f2f-4a82-9d18-e5dc5ee8763e",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      },
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "codeSigningCertificate": "./certs/certificate.pem",
+      "codeSigningMetadata": {
+        "keyid": "main",
+        "alg": "rsa-v1_5-sha256"
+      }
+    }
   }
 }
