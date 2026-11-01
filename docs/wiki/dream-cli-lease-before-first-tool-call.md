@@ -8,6 +8,8 @@ On a fresh dream wake, the first `musterd dream` from the workspace printed `✗
 
 Workaround: if `musterd dream` refuses the lease, make one `team_*` call (`team_inbox_check` is enough), then run `musterd dream` again. Do not run `team_join` as some other seat to get past the refusal.
 
+Night 2026-10-31 wanderer (darwin, Grok) did not hit the first-call refusal: `team_inbox_check` ran before `musterd dream`, and that first packet read printed used_bytes 12794. The same night TJ, ryder, slippy, sloane, wallow, lazara and dolly all hit the refusal when `musterd dream` was their first call. The page's workaround held on this seat by accident of order, not because the Grok/darwin path is immune.
+
 ## Why, not yet checked
 
 A session lease is valid only while its presence row exists (`hasValidSessionLease` joins on it, ADR 337; comment above `reapStale` in `packages/server/src/store/presence.ts`). One reading that fits: at spawn the CLI presents a lease whose row is already gone, and the adapter's first `team_*` call attaches a new row with a fresh lease that the CLI then picks up. Nobody has read `.musterd/binding.json` or `.musterd/wake-lease.json` before and after that first call, so this is a hypothesis, not a finding (2026-10-31; falsify: the session lease in the workspace binding is the same value before and after the first `team_*` call, and the refusal still clears) <!-- claim: other -->
