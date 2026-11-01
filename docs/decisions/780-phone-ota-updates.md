@@ -1,9 +1,9 @@
 # 780 — Over-the-air JavaScript updates for the phone app, signed with our own key
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-31
 - Lane: `01M6AMENY6J25KE7YGD5Z685X3`
-- Deciders: nick (asked for over-the-air updates, 2026-10-31), cider
+- Deciders: nick (asked for over-the-air updates and accepted this ADR, 2026-10-31), cider
 - Relates to: [ADR 520](520-mobile-toolchain-expo.md) (Expo, with EAS Update named for
   over-the-air JavaScript), [ADR 676](676-mobile-app-sealed-ask-client.md) (the phone signs what it
   shows), [ADR 774](774-verified-answer-enters-the-session.md) (the question key), hard rule 6
