@@ -82,6 +82,9 @@ All three were read on this laptop's own sessions on 2026-11-01.
 - OpenCode 2.x moved its store from `message` and `part` to `session_message`. The R2 transcript
   tail (`trace/opencode.ts`) still reads only the v1 tables, so it records nothing on 2.x.
   Follows-up: lane `01M6C85RT9`.
+- 2026-11-01: lane `01M6C85RT9` fixed it. `readOpencodeRows` reads `session_message` first and the
+  v1 tables when it is missing. The `/live` wake watcher shared the same v1-only read, so it is
+  fixed too.
 - A headless OpenCode wake is caught twice: here on idle, while the session is live, and at settle
   by ADR 783. The daemon's one-open-question rule makes the second a no-op.
 - Follows-up: lane `01M67EA48P` (3d: interactive Codex).

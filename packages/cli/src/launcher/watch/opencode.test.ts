@@ -96,7 +96,9 @@ describe('opencodeReader (ADR 546)', () => {
     const answers = [JSON.stringify(rows.slice(0, 5)), JSON.stringify(rows.slice(5)), '[]'];
     const r = opencodeReader({
       dbPath: '/db',
-      run: async (_db, sql) => (asked.push(sql), answers.shift()!),
+      // A 1.x store: the v2 table is missing, so the read falls back to `message` / `part`.
+      run: async (_db, sql) =>
+        sql.includes('session_message') ? null : (asked.push(sql), answers.shift()!),
     });
     const first = await r.snapshot(wake);
     expect(first).toEqual({ events: expect.any(Array), endedCleanly: false });
@@ -112,7 +114,9 @@ describe('opencodeReader (ADR 546)', () => {
 
   it('is null when sqlite cannot read it, and keeps the last good answer afterwards', async () => {
     const answers: Array<string | null> = [null, JSON.stringify(rows), null];
-    const r = opencodeReader({ run: async () => answers.shift()! });
+    const r = opencodeReader({
+      run: async (_db, sql) => (sql.includes('session_message') ? null : answers.shift()!),
+    });
     expect(await r.snapshot(wake)).toBeNull();
     const good = await r.snapshot(wake);
     expect(good!.events).toHaveLength(3);
@@ -125,5 +129,40 @@ describe('opencodeReader (ADR 546)', () => {
     expect(await r.snapshot({ ...wake, session_id: "x'; DROP TABLE message;--" })).toBeNull();
     expect(await r.snapshot({ ...wake, session_id: null })).toBeNull();
     expect(ran).toBe(false);
+  });
+});
+
+describe('opencodeReader on OpenCode 2.x (session_message)', () => {
+  it('reads the inline content parts: text, and a tool by its v2 name', async () => {
+    const md = JSON.stringify({
+      time: { created: 1, completed: 5 },
+      finish: 'stop',
+      content: [
+        {
+          type: 'tool',
+          id: 'c1',
+          name: 'shell',
+          state: { input: { command: 'ls' } },
+          time: { created: 2 },
+        },
+        { type: 'text', text: 'Done.' },
+      ],
+    });
+    const r = opencodeReader({
+      run: async (_db, sql) =>
+        sql.includes('session_message') ? JSON.stringify([{ mid: 'm1', mt: 1, md }]) : null,
+    });
+    const snap = await r.snapshot({
+      lease_id: 'L',
+      pid: 1,
+      session_id: 'ses_1',
+      harness: 'opencode',
+      started_at: 1,
+      workspace: '/w',
+    });
+    expect(snap!.endedCleanly).toBe(true);
+    expect(snap!.events).toHaveLength(2);
+    expect(JSON.stringify(snap!.events)).toContain('shell');
+    expect(JSON.stringify(snap!.events)).toContain('Done.');
   });
 });

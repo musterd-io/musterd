@@ -1,6 +1,6 @@
 import {
   opencodeDbPath,
-  opencodeReadSql,
+  readOpencodeRows,
   runSqlite,
   type RunSqlite,
 } from '../../trace/opencode.js';
@@ -104,25 +104,21 @@ export function opencodeReader(deps: OpencodeReaderDeps = {}): WatchReader {
     async snapshot(wake: LocalWake) {
       const id = wake.session_id;
       if (!id || !/^[\w-]+$/.test(id)) return null;
-      const raw = await (deps.run ?? runSqlite)(
+      // Either store layout: OpenCode 2.x's `session_message`, else the 1.x tables.
+      const rows = await readOpencodeRows(
+        deps.run ?? runSqlite,
         deps.dbPath ?? opencodeDbPath(),
-        opencodeReadSql(id, after, READ_MESSAGES),
+        id,
+        after,
+        READ_MESSAGES,
       );
-      if (raw !== null) {
-        let rows: Row[] | undefined;
-        try {
-          rows = raw.trim() ? (JSON.parse(raw) as Row[]) : [];
-        } catch {
-          rows = undefined;
-        }
-        if (rows) {
-          read = true;
-          if (rows.length > 0) {
-            const next = watchRows(rows);
-            events.push(...next.events);
-            finish = next.finish ?? finish;
-            after = Math.max(after, ...rows.map((r) => r.mt));
-          }
+      if (rows) {
+        read = true;
+        if (rows.length > 0) {
+          const next = watchRows(rows);
+          events.push(...next.events);
+          finish = next.finish ?? finish;
+          after = Math.max(after, ...rows.map((r) => r.mt));
         }
       }
       return read ? { events: [...events], endedCleanly: finish === 'stop' } : null;
