@@ -1,13 +1,22 @@
 # npm release of @musterd/* (ADR 782). Pushing a tag vX.Y.Z on the merge commit of a
-# `pnpm release --version X.Y.Z` bump PR starts it; the `npm-release` environment holds the run for
-# nick's approval, so a tag alone publishes nothing. The job builds, runs the consumer smoke
-# (scripts/release/smoke.ts) and uploads the very tarballs the smoke installed, in lockstep order.
+# `pnpm release --version X.Y.Z` bump PR starts it. Three jobs, split so that the code we do not
+# control can neither mint a publish credential nor change which bytes are published:
 #
-# No npm token: npm trusted publishing exchanges this run's OIDC token (id-token: write) for a
-# one-time publish credential, and npm signs a provenance statement that ties each tarball to this
-# workflow, this repo and the tagged commit. Each @musterd/* package on npmjs.com names this file and
-# the `npm-release` environment as its trusted publisher — a run from any other workflow, fork or
-# environment is refused by the registry, not by us.
+#   pack     The locked workspace install (the same trust as every CI run), build, `pnpm pack`.
+#            Records each tarball's sha256 as a JOB OUTPUT before any unlocked install has run.
+#   smoke    The consumer smoke (scripts/release/smoke.ts): installs the tarballs into a clean dir,
+#            which resolves third-party deps from the registry and runs their install scripts, then
+#            runs them. No OIDC token. Its only power is to fail, which stops the release.
+#   publish  The only job that can mint a publish credential. Held by the `npm-release` environment
+#            for nick's approval, so a tag alone publishes nothing. Installs and builds nothing:
+#            checks the tarballs against pack's outputs (not against any file a job wrote) and runs
+#            `npm publish --provenance` on them.
+#
+# No npm token: npm trusted publishing exchanges the publish job's OIDC token for a one-time
+# credential, and npm signs a provenance statement tying each tarball to this workflow, this repo
+# and the tagged commit. Each @musterd/* package on npmjs.com names this file and the `npm-release`
+# environment as its trusted publisher; any other workflow, fork or environment is refused by the
+# registry, not by us.
 name: release
 
 on:
@@ -22,19 +31,17 @@ permissions:
   contents: read
 
 jobs:
-  publish:
-    name: publish @musterd/* with provenance
+  pack:
+    name: build and pack
     runs-on: ubuntu-latest
-    environment: npm-release
     timeout-minutes: 20
-    permissions:
-      contents: read
-      id-token: write
+    outputs:
+      sums: ${{ steps.sums.outputs.sums }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      # Only code that landed through gates ships: a tag on a branch commit that never merged is
-      # refused before the approval it would otherwise ask for means anything.
+      # Only code that landed through gates ships: a tag on a commit that never merged is refused
+      # before it can ask for an approval.
       - name: Tagged commit is on main
         run: |
           git fetch --no-tags --depth=200 origin main
@@ -47,13 +54,89 @@ jobs:
         with:
           build: 'false'
 
+      - name: Build and pack
+        run: pnpm release --pack --tag "$GITHUB_REF_NAME" --out "$RUNNER_TEMP/tarballs"
+
+      - name: Record the hashes as job outputs
+        id: sums
+        run: |
+          {
+            echo 'sums<<SUMS_EOF'
+            cat "$RUNNER_TEMP/tarballs/SHA256SUMS"
+            echo 'SUMS_EOF'
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo '### Tarballs to publish'
+            echo '```'
+            cat "$RUNNER_TEMP/tarballs/SHA256SUMS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tarballs
+          path: ${{ runner.temp }}/tarballs/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke:
+    name: consumer smoke
+    needs: pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tarballs
+          path: ${{ runner.temp }}/tarballs
+
+      - name: Install the tarballs into a clean dir and run them
+        run: >-
+          node --disable-warning=ExperimentalWarning scripts/release.ts
+          --smoke --tag "$GITHUB_REF_NAME" --tarballs "$RUNNER_TEMP/tarballs"
+
+  publish:
+    name: publish @musterd/* with provenance
+    needs: [pack, smoke]
+    runs-on: ubuntu-latest
+    environment: npm-release
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Node only — no pnpm, no install: scripts/release.ts imports nothing but node builtins.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
       # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10. Pinned, because this is the
       # binary that holds the publish credential.
       - name: Install npm 11
         run: npm install -g npm@11.21.1 && npm --version
 
-      - name: Publish (build → smoke → npm publish --provenance)
-        run: pnpm release --publish --tag "$GITHUB_REF_NAME"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tarballs
+          path: ${{ runner.temp }}/tarballs
+
+      # The sums come from the pack job's outputs, recorded before the smoke ran anything; whatever
+      # the artifact holds is checked against them.
+      - name: Publish the tarballs pack recorded
+        env:
+          SUMS: ${{ needs.pack.outputs.sums }}
+        run: |
+          printf '%s\n' "$SUMS" > "$RUNNER_TEMP/tarballs/SHA256SUMS"
+          node --disable-warning=ExperimentalWarning scripts/release.ts \
+            --publish --tag "$GITHUB_REF_NAME" --tarballs "$RUNNER_TEMP/tarballs"
 
       # The lane's done-condition, checked where it can fail the run: every package at this version
       # carries a provenance attestation on the registry.

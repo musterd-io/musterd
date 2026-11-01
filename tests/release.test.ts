@@ -11,6 +11,7 @@ import {
   nextStepsAfterPublish,
   npmPublishArgs,
   parseReleaseArgs,
+  tarballFileName,
 } from '../scripts/release/helpers.ts';
 
 describe('release helpers (ADR 156)', () => {
@@ -40,6 +41,8 @@ describe('release helpers (ADR 156)', () => {
       dryRun: true,
       allowDirty: true,
       publish: false,
+      pack: false,
+      smoke: false,
       noProvenance: false,
       version: '0.3.1',
     });
@@ -99,8 +102,39 @@ describe('release helpers (ADR 156)', () => {
         parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--version', '0.7.0']),
       ).toThrow(/no --version/);
       expect(() => parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--dry-run'])).toThrow();
-      expect(() => parseReleaseArgs(['--tag', 'v0.7.0'])).toThrow(/only apply with --publish/);
-      expect(() => parseReleaseArgs(['--no-provenance'])).toThrow(/only apply with --publish/);
+      expect(() => parseReleaseArgs(['--tag', 'v0.7.0'])).toThrow(/only applies with/);
+      expect(() => parseReleaseArgs(['--no-provenance'])).toThrow(/only applies with --publish/);
+      expect(parseReleaseArgs(['--publish', '--tag', 'v0.7.0', '--tarballs', '/t']).tarballs).toBe(
+        '/t',
+      );
+    });
+
+    it('--pack needs --tag and --out, and is never the same run as --publish', () => {
+      expect(parseReleaseArgs(['--pack', '--tag', 'v0.7.0', '--out', '/t'])).toMatchObject({
+        pack: true,
+        out: '/t',
+        tag: 'v0.7.0',
+      });
+      expect(() => parseReleaseArgs(['--pack', '--tag', 'v0.7.0'])).toThrow(/--out/);
+      expect(() => parseReleaseArgs(['--pack', '--out', '/t'])).toThrow(/--tag/);
+      expect(() =>
+        parseReleaseArgs(['--pack', '--publish', '--tag', 'v0.7.0', '--out', '/t']),
+      ).toThrow(/separate jobs/);
+      expect(parseReleaseArgs(['--smoke', '--tag', 'v0.7.0', '--tarballs', '/t'])).toMatchObject({
+        smoke: true,
+        tarballs: '/t',
+      });
+      expect(() => parseReleaseArgs(['--smoke', '--tag', 'v0.7.0'])).toThrow(/--tarballs/);
+      expect(() =>
+        parseReleaseArgs(['--smoke', '--publish', '--tag', 'v0.7.0', '--tarballs', '/t']),
+      ).toThrow(/separate jobs/);
+      expect(() =>
+        parseReleaseArgs(['--pack', '--tag', 'v0.7.0', '--out', '/t', '--tarballs', '/x']),
+      ).toThrow();
+    });
+
+    it('names tarballs as pnpm pack does', () => {
+      expect(tarballFileName('@musterd/cli', '0.7.0')).toBe('musterd-cli-0.7.0.tgz');
     });
 
     it('refuses a tag that does not name the version on disk', () => {
@@ -128,11 +162,28 @@ describe('release helpers (ADR 156)', () => {
       expect(steps).not.toMatch(/pnpm publish|npm publish/);
     });
 
-    it('the release workflow publishes from the tag, with OIDC and behind the environment', () => {
+    it('the release workflow: untrusted installs cannot mint a token or change what ships', () => {
       const wf = readFileSync('.github/workflows/release.yml', 'utf8');
-      expect(wf).toContain('id-token: write');
-      expect(wf).toContain('environment: npm-release');
-      expect(wf).toContain('pnpm release --publish --tag "$GITHUB_REF_NAME"');
+      const job = (name: string, next?: string) =>
+        wf.slice(wf.indexOf(`\n  ${name}:`), next ? wf.indexOf(`\n  ${next}:`) : undefined);
+      const pack = job('pack', 'smoke');
+      const smoke = job('smoke', 'publish');
+      const publish = job('publish');
+      // Only publish can ask for OIDC; the smoke runs unlocked third-party install scripts.
+      expect(pack).not.toContain('id-token');
+      expect(smoke).not.toContain('id-token');
+      expect(publish).toContain('id-token: write');
+      expect(publish).toContain('environment: npm-release');
+      // pack records the hashes as job outputs before any unlocked install runs ...
+      expect(pack).toContain('--pack --tag "$GITHUB_REF_NAME"');
+      expect(pack).toContain('GITHUB_OUTPUT');
+      expect(pack).not.toContain('--smoke');
+      expect(smoke).toContain('--smoke --tag "$GITHUB_REF_NAME" --tarballs');
+      // ... and publish checks against those outputs, not a file another job wrote.
+      expect(publish).toContain('needs.pack.outputs.sums');
+      expect(publish).toContain('--publish --tag "$GITHUB_REF_NAME" --tarballs');
+      expect(publish).toMatch(/needs: \[pack, smoke\]/);
+      expect(publish).not.toMatch(/pnpm install|\.\/\.github\/actions\/setup/);
       // No long-lived npm token anywhere in the release path.
       expect(wf).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN/);
     });
