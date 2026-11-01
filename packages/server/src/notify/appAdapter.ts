@@ -54,6 +54,7 @@ import {
   QUESTION_APP_TTL_MS,
   questionAudience,
   questionInterruption,
+  questionKeyThumbprint,
   questionTier,
   sendQuestionAnswer,
   verifyQuestionAnswer,
@@ -387,6 +388,9 @@ async function issueAskDelivery(
       token,
       nonce: appDeliveryNonce(token),
       expires_at: expiresAt,
+      ...(question && target.keys.question_key
+        ? { question_key: questionKeyThumbprint(target.keys.question_key) }
+        : {}),
     },
   };
 }
