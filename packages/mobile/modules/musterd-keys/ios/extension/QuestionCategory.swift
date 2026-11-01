@@ -3,8 +3,10 @@
 //  MusterdKeys
 //
 //  A question's notification actions (ADR 773/774): its first three options as buttons, and Reply.
-//  None of them asks for Face ID or opens the app — the silent question key signs the answer in the
-//  background — so a question can be answered with the phone locked. An action's title is fixed
+//  None of them opens the app — the silent question key signs the answer in the background. The
+//  option buttons work with the phone locked; Reply asks for an unlock first
+//  (`authenticationRequired`), so a locked phone in someone else's hand can pick one of the seat's
+//  own options but cannot type free text into a seat's session. An action's title is fixed
 //  when its category is registered, so a question with options gets a category of its own,
 //  registered by the extension just before it hands the notification over.
 //
@@ -40,7 +42,7 @@ enum QuestionCategory {
     UNTextInputNotificationAction(
       identifier: Question.actionReply,
       title: Question.replyTitle,
-      options: [],
+      options: [.authenticationRequired],
       textInputButtonTitle: Question.replySend,
       textInputPlaceholder: Question.replyPlaceholder
     )

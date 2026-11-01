@@ -41,7 +41,8 @@ export const ACTION_APPROVE = 'musterd.answer.approve';
 export const ACTION_REJECT = 'musterd.answer.reject';
 /**
  * A question's actions (ADR 773/774, `Question.swift`): its first three options as buttons and a
- * Reply field, answered in the background with the silent question key. A question with options
+ * Reply field (which asks for an unlock first), answered in the background with the silent
+ * question key. A question with options
  * gets a category of its own (`QUESTION_OPTIONS_CATEGORY_PREFIX` + its nonce); one without, Reply
  * only. Neither has actions until this binding's question key is enrolled.
  */

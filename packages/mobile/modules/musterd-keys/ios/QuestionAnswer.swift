@@ -3,8 +3,8 @@
 //  MusterdKeys
 //
 //  A question answered from its notification (ADR 773/774): an option button or Reply. The action
-//  has no `foreground` and no `authenticationRequired`, so iOS wakes the app in the background and
-//  this runs with the phone still locked. It signs with the silent question key, seals to the
+//  has no `foreground`, so iOS wakes the app in the background; an option button runs with the
+//  phone still locked, and Reply after an unlock (`authenticationRequired`). It signs with the silent question key, seals to the
 //  daemon, and POSTs through the relay — the same callback `answer.ts` sends — with no JavaScript.
 //
 //  What it answers comes from the extension's own record of the question (`Question.Pending`),

@@ -293,10 +293,12 @@ text field. The buttons' titles are the question's own labels, so the extension 
 category per question (`musterd.question.options.<nonce>`) just before it hands the notification
 over; a question with no options uses the app's fixed Reply-only `musterd.question`. Every caller
 of `setNotificationCategories` keeps the others, and drops per-question categories whose question
-is no longer live. None of these actions is `foreground` or `authenticationRequired`: iOS wakes
-the app in the background, and `QuestionAnswer.swift` signs `appQuestionAnswerSigningBytes` with
-the silent question key, seals it, and POSTs the same `answer` callback as above — no Face ID, no
-JavaScript, phone still locked. What it answers is the extension's own keychain record of the
+is no longer live. None of these actions is `foreground`: iOS wakes the app in the background, and
+`QuestionAnswer.swift` signs `appQuestionAnswerSigningBytes` with the silent question key, seals
+it, and POSTs the same `answer` callback as above — no Face ID, no JavaScript. The option buttons
+work with the phone locked; Reply is `authenticationRequired`, so it asks for an unlock first: a
+locked phone in someone else's hand can pick one of the seat's own options, but cannot type free
+text into a seat's session. What it answers is the extension's own keychain record of the
 verified delivery (`question-routes`: route, token, nonce, option count). A relay that refuses
 twice leaves the callback in `question-outbox`, re-sent on every open, and a local notification
 says so. `PhoneKeys.signQuestion` refuses anything that does not start with the question-answer
