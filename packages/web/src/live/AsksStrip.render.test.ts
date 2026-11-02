@@ -338,3 +338,15 @@ describe("a seat's question is a row of the rail (ADR 773, lane 01M6EP0ZR9)", ()
     expect(html).toContain('body of a1');
   });
 });
+
+describe('the lead ask shows once (lane 01M6ETDT29)', () => {
+  it('is on the bar with Approve, Deny and Deciding, and not again as a sheet card', () => {
+    const html = render([ask('lead', 'blocking', 10_000), ask('second', 'blocking', 5_000)]);
+    // The bar: one Approve/Deny pair plus Deciding for the lead.
+    expect(html).toContain('Deciding — 1h');
+    // The sheet lists only the second ask; the lead's body is on the bar, nowhere else.
+    expect(html.split('body of lead').length - 1).toBe(1);
+    expect(html).toContain('body of second');
+    expect(html).toContain('2 need you');
+  });
+});

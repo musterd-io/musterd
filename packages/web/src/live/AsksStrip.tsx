@@ -389,13 +389,13 @@ export function AsksStrip({
                 >
                   {bannerView.hold}
                 </span>
-                <span
-                  className={`lc-ask__clock lc-asks__clock${
-                    lead.state === 'held' || frac === 0 ? ' lc-ask__clock--over' : ''
-                  }`}
-                >
-                  {bannerView.clock}
-                </span>
+                {/* Past its clock the bar says what the card said (lane 01M6ETDT29): "timed out — agent
+                    holding" is the claim that matters, and the card is no longer there to make it. */}
+                {lead.state === 'held' || frac === 0 ? (
+                  <AskClock ask={lead} now={now} />
+                ) : (
+                  <span className="lc-ask__clock lc-asks__clock">{bannerView.clock}</span>
+                )}
               </>
             )}
             {askIsLoud(lead.state) && canAnswer && leadIsOurs && leadChoices && (
@@ -442,6 +442,15 @@ export function AsksStrip({
                 >
                   <CrossIcon />
                   Deny
+                </button>
+                <button
+                  type="button"
+                  disabled={busy === lead.env.id}
+                  className="lc-ask__btn lc-ask__btn--later lc-asks__later"
+                  onClick={() => void answer(lead, 'deciding')}
+                  title="Tell them you are deciding — the clock stops, they check back in an hour"
+                >
+                  Deciding — 1h
                 </button>
               </span>
             )}
@@ -596,7 +605,11 @@ export function AsksStrip({
                 style={{ '--i': i } as React.CSSProperties}
               />
             ))}
-            {cards.map((ask, i) => {
+            {/* The lead is on the bar with its buttons (lane 01M6ETDT29): "+N" means N besides it, so
+                the sheet lists the others. A question lead keeps its row — its options live here. */}
+            {cards
+              .filter((ask) => !(!leadQuestion && lead && askIsLoud(lead.state) && ask.env.id === lead.env.id))
+              .map((ask, i) => {
               const aud = askAudience(ask, ctx);
               return (
                 <AskCard
