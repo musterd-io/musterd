@@ -11,7 +11,8 @@ cadence:    read once, at revisit_by
 opened:     2026-09-30
 opened_by:  dolly
 revisit_by: 2026-11-01
-status:     open
+status:     void
+resolution: "unattended — revisit_by passed with nobody reading the series. No verdict."
 ---
 
 Opened with ADR 487, on nick's instruction that this problem be solved permanently. It is the third
