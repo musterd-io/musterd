@@ -9,7 +9,7 @@ import { LiveFetchError, sendAct, type LiveConfig } from './client';
 import { holdStateLine } from './holdState';
 import { MemberFace } from './MemberFace';
 import { QuickActionBar } from './quickActions';
-import { waitedLabel, type WaitingItem } from './questions';
+import { askHeadline, askWhy, waitedLabel, type WaitingItem } from './questions';
 import { alreadyAnswered, answerOf, triageKey } from './triage';
 
 /** Where a seat wakes, for the "Sent to …" line: its live presence's machine, else where it lives. */
@@ -184,9 +184,7 @@ export function QuestionTriage({
   const ctx = card?.question.context;
   const choices = askItem ? askChoicesOf(askItem.ask.env) : null;
   const hold = askItem ? holdStateLine(askItem.ask, now) : null;
-  const laneReview = askItem
-    ? /^\[lane\] acceptance requested: "([^"]+)"/.exec(askItem.ask.env.body ?? '')?.[1]
-    : null;
+  const askWhyText = askItem && !choices ? askWhy(askItem.ask) : null;
   return (
     <div className="qt">
       <button type="button" className="qt__backdrop" tabIndex={-1} aria-label="Close" onClick={onClose} />
@@ -218,7 +216,7 @@ export function QuestionTriage({
         {card && (
           <article key={card.id} className="qt__card">
             <header className="qt__who">
-              <MemberFace name={card.asker} roster={members} size={34} />
+              <MemberFace name={card.asker} roster={members} size={28} />
               <div className="qt__whoText">
                 <span className="qt__seat">{card.asker}</span>
                 {(ctx?.lane || ctx?.pr || ctx?.branch) && (
@@ -315,7 +313,7 @@ export function QuestionTriage({
         {askItem && (
           <article key={askItem.id} className="qt__card qt__card--ask">
             <header className="qt__who">
-              <MemberFace name={askItem.asker} roster={members} size={34} />
+              <MemberFace name={askItem.asker} roster={members} size={28} />
               <div className="qt__whoText">
                 <span className="qt__seat">{askItem.asker}</span>
                 <span className="qt__ctx">{SPECIES_VERB_YOU[askItem.ask.species]}</span>
@@ -325,15 +323,10 @@ export function QuestionTriage({
               </span>
             </header>
 
-            {laneReview ? (
-              <h2 id="qt-question" className="qt__q">
-                Accept <q>{laneReview}</q>?
-              </h2>
-            ) : (
-              <h2 id="qt-question" className="qt__q">
-                {choices?.question || askItem.ask.env.body}
-              </h2>
-            )}
+            <h2 id="qt-question" className="qt__q">
+              {choices?.question || askHeadline(askItem.ask)}
+            </h2>
+            {askWhyText && <p className="qt__why qt__why--body">{askWhyText}</p>}
             {hold && (
               <p className="qt__why" title={hold.title}>
                 {hold.line}
