@@ -17,7 +17,9 @@ import {
   finishPage,
   PAGE_CSP,
   signInPage,
+  teamCreatedPage,
   wrongBrowserPage,
+  type CreateTeamForm,
 } from './pages.js';
 import {
   finishFlow,
@@ -90,6 +92,8 @@ export interface ConsoleDeps {
   sendEmail?: typeof sendSignInEmail;
   /** Cloud KMS, or a test signer. Absent: nothing signs and the JWKS is empty (ADR 685). */
   signer?: TokenSigner;
+  /** Tests only: the HTTP client that reaches a team server (default: global fetch). */
+  fetch?: typeof fetch;
 }
 
 /** Routes that change state, and the only paths a POST may reach (ADR 620 decision 8). */
@@ -100,7 +104,17 @@ const POST_ROUTES = new Set([
   '/auth/email/start',
   '/auth/email/confirm',
   '/tokens',
+  '/teams',
 ]);
+/** Teams created per account per hour (lane 01M3Z44MTV): a person makes a few, a script makes many. */
+const TEAM_PER_ACCOUNT = 5;
+const TEAM_WINDOW_MS = 60 * 60 * 1000;
+/** How long the console waits on the team server's `POST /teams`. */
+const TEAM_CREATE_TIMEOUT_MS = 15_000;
+/** The team server's own rule (`store/teams.ts` SLUG_RE), checked here first so the refusal is a field error. */
+const TEAM_SLUG = /^[a-z0-9-]{1,32}$/;
+/** A member name: what `addMember` accepts (no whitespace), bounded. */
+const SEAT_NAME = /^[A-Za-z0-9_.-]{1,32}$/;
 /**
  * Magic-link limits (ADR 620 decisions 6 and 9). None of them is global, because a global limit
  * is a switch any one client can flip for everyone (security review, 2026-10-16):
@@ -155,6 +169,23 @@ function emailAddress(input: string | null): string | null {
   if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(domain))
     return null;
   return `${v.slice(0, at)}@${domain}`;
+}
+/** What `POST /teams` on a team server answers with — the three fields the page shows. */
+function teamCreatedOf(
+  body: unknown,
+): { slug: string; humanCredential: string; agentKey: string } | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as { team?: unknown; human_credential?: unknown; agent_key?: unknown };
+  const slug = (b.team as { slug?: unknown } | undefined)?.slug;
+  if (typeof slug !== 'string' || !slug) return null;
+  if (typeof b.human_credential !== 'string' || !b.human_credential) return null;
+  if (typeof b.agent_key !== 'string' || !b.agent_key) return null;
+  return { slug, humanCredential: b.human_credential, agentKey: b.agent_key };
+}
+/** A team server's error body carries `error.code`; anything else is read as no code. */
+function errorCodeOf(body: unknown): string | null {
+  const code = (body as { error?: { code?: unknown } } | null)?.error?.code;
+  return typeof code === 'string' ? code : null;
 }
 const START = /^\/auth\/(github|google)\/start$/;
 const CALLBACK = /^\/auth\/(github|google)\/callback$/;
@@ -522,6 +553,168 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
               );
               return send(res, 200, { token: issued.token });
             }
+            if (path === '/teams') {
+              // Create a team from the console (Cloud spec §4.3; lane 01M3Z44MTV). The one admin
+              // operation with no prior owner: the console mints a 60-second token for the team
+              // servers' audience and POSTs it to the new team's host; the team server redeems the
+              // jti once and makes the requester's seat the first admin. The secrets it answers
+              // with are rendered once and never stored or logged (hard rule 5).
+              route = 'team_create';
+              if (!deps.signer || !config.teams)
+                return send(res, 404, err('not_found', 'not found'));
+              const teams = config.teams;
+              const sid = cookie(req, SESSION_COOKIE);
+              const t = now();
+              const session = await loadSession(db, sid, t);
+              if (!session || !sid) return send(res, 401, err('signed_out', 'not signed in'));
+              if (!csrfTokenValid(sid, form.get('csrf')))
+                return send(res, 403, err('forbidden', 'forbidden'));
+              if (!isFresh(session, t)) return send(res, 403, err('stale', 'sign in again'));
+              const values = {
+                slug: (form.get('slug') ?? '').trim().toLowerCase(),
+                display: (form.get('display') ?? '').trim(),
+                name: (form.get('name') ?? '').trim(),
+              };
+              const page = async (
+                error: NonNullable<CreateTeamForm['error']>,
+                status: number,
+              ): Promise<void> =>
+                sendHtml(
+                  res,
+                  status,
+                  accountPage({
+                    methods: await methodsOf(db, session.accountId, {
+                      provider: session.identityProvider,
+                      subject: session.identitySubject,
+                    }),
+                    csrf: csrfTokenFor(sid),
+                    teams: { suffix: teams.suffix, values, error },
+                  }),
+                );
+              if (!TEAM_SLUG.test(values.slug))
+                return page(
+                  { field: 'slug', message: 'Use 1 to 32 lowercase letters, digits or dashes.' },
+                  400,
+                );
+              if (
+                values.display.length > 80 ||
+                [...values.display].some((c) => c.charCodeAt(0) < 0x20)
+              )
+                return page({ field: 'display', message: 'Up to 80 characters, one line.' }, 400);
+              if (!SEAT_NAME.test(values.name))
+                return page(
+                  {
+                    field: 'name',
+                    message: 'Use 1 to 32 letters, digits, dots, dashes or underscores.',
+                  },
+                  400,
+                );
+              if (
+                !(await hit(
+                  db,
+                  {
+                    bucket: `team:${session.accountId}`,
+                    max: TEAM_PER_ACCOUNT,
+                    windowMs: TEAM_WINDOW_MS,
+                  },
+                  t,
+                ))
+              )
+                return page(
+                  {
+                    field: 'form',
+                    message: 'That is enough teams for this hour. Try again later.',
+                  },
+                  429,
+                );
+              const issued = await signConsoleToken(deps.signer, {
+                iss: config.issuer,
+                sub: session.accountId,
+                aud: teams.audience,
+                nowS: Math.floor(t / 1000),
+              });
+              const host = `https://${values.slug}.${teams.suffix}`;
+              const doFetch = deps.fetch ?? fetch;
+              let answer: { status: number; body: unknown } | { failed: string };
+              try {
+                const r = await doFetch(`${host}/teams`, {
+                  method: 'POST',
+                  headers: {
+                    authorization: `Bearer ${issued.token}`,
+                    'content-type': 'application/json',
+                    accept: 'application/json',
+                  },
+                  body: JSON.stringify({
+                    slug: values.slug,
+                    display: values.display || null,
+                    creator: { name: values.name },
+                  }),
+                  signal: AbortSignal.timeout(TEAM_CREATE_TIMEOUT_MS),
+                });
+                answer = { status: r.status, body: await r.json().catch(() => null) };
+              } catch (e) {
+                answer = { failed: e instanceof Error ? e.name : 'error' };
+              }
+              await appendAudit(
+                db,
+                {
+                  action: 'team.create',
+                  requestId: rid,
+                  actorAccountId: session.accountId,
+                  detail: {
+                    slug: values.slug,
+                    jti: issued.jti,
+                    ...('failed' in answer ? { failed: answer.failed } : { status: answer.status }),
+                  },
+                },
+                t,
+              );
+              if ('failed' in answer) {
+                log.warn('team_create_unreachable', {
+                  rid,
+                  slug: values.slug,
+                  failed: answer.failed,
+                });
+                return page(
+                  {
+                    field: 'form',
+                    message:
+                      'The team server could not be reached. Nothing was created. Try again in a minute.',
+                  },
+                  502,
+                );
+              }
+              const created = answer.status === 201 ? teamCreatedOf(answer.body) : null;
+              if (created) {
+                return sendHtml(
+                  res,
+                  200,
+                  teamCreatedPage({
+                    slug: created.slug,
+                    host,
+                    name: values.name,
+                    humanCredential: created.humanCredential,
+                    agentKey: created.agentKey,
+                  }),
+                );
+              }
+              const reason = errorCodeOf(answer.body);
+              if (answer.status === 409 || reason === 'conflict')
+                return page({ field: 'slug', message: 'That team name is taken.' }, 409);
+              log.warn('team_create_refused', {
+                rid,
+                slug: values.slug,
+                status: answer.status,
+                code: reason,
+              });
+              return page(
+                {
+                  field: 'form',
+                  message: `The team server refused (${reason ?? answer.status}). Nothing was created.`,
+                },
+                502,
+              );
+            }
           }
           const readOnlyGet =
             (req.method === 'GET' || req.method === 'HEAD') && path === '/auth/email/confirm';
@@ -676,6 +869,8 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
                     subject: session.identitySubject,
                   }),
                   csrf: csrfTokenFor(sid!),
+                  // The form shows only when the console can create teams AND can sign for them.
+                  teams: config.teams && deps.signer ? { suffix: config.teams.suffix } : null,
                 }),
               );
             }

@@ -34,6 +34,14 @@ export interface ConsoleConfig {
    * are both set. Off: the JWKS stays empty and nothing signs. There is no dev key.
    */
   kms: { keyVersion: string; credentialsFile: string } | null;
+  /**
+   * Creating a team from the console (Cloud spec §4.3, lane 01M3Z44MTV). On only when both the
+   * team-host suffix and the audience the team servers pin are set; off, `POST /teams` answers 404
+   * and the account page shows no form. `suffix` is the Cloud team host suffix (`musterd.dev`:
+   * team `acme` is `https://acme.musterd.dev`); `audience` is the string the team servers run with
+   * as `MUSTERD_CONSOLE_AUDIENCE`.
+   */
+  teams: { suffix: string; audience: string } | null;
 }
 
 type Env = Record<string, string | undefined>;
@@ -50,6 +58,22 @@ function kmsOf(env: Env): ConsoleConfig['kms'] {
   if (!KMS_KEY_VERSION.test(key))
     throw new Error('MUSTERD_CONSOLE_KMS_KEY is not a Cloud KMS cryptoKeyVersion resource name');
   return { keyVersion: key, credentialsFile: file };
+}
+
+/** Both team variables, or neither. The suffix is a bare host suffix, never a URL. */
+function teamsOf(env: Env): ConsoleConfig['teams'] {
+  const suffix = env['MUSTERD_CONSOLE_TEAM_SUFFIX']?.trim().toLowerCase() ?? '';
+  const audience = env['MUSTERD_CONSOLE_TEAM_AUDIENCE']?.trim() ?? '';
+  if (!suffix && !audience) return null;
+  if (!suffix || !audience)
+    throw new Error(
+      'MUSTERD_CONSOLE_TEAM_SUFFIX and MUSTERD_CONSOLE_TEAM_AUDIENCE must be set together',
+    );
+  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(suffix))
+    throw new Error('MUSTERD_CONSOLE_TEAM_SUFFIX must be a bare host suffix like musterd.dev');
+  if (audience.length > 200 || /\s/.test(audience))
+    throw new Error('MUSTERD_CONSOLE_TEAM_AUDIENCE must be one audience string, no whitespace');
+  return { suffix, audience };
 }
 
 function required(env: Env, name: string): string {
@@ -131,9 +155,11 @@ export function resolveConsoleConfig(env: Env, build: string | null = null): Con
         }
       : null;
   const kms = kmsOf(env);
+  const teams = teamsOf(env);
   return {
     email,
     kms,
+    teams,
     providers,
     databaseUrl: required(env, 'MUSTERD_CONSOLE_DATABASE_URL'),
     issuer: issuerUrl.origin,

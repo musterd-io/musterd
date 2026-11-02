@@ -17,6 +17,7 @@ const config: ConsoleConfig = {
   providers: {},
   email: null,
   kms: null,
+  teams: null,
 };
 const okDb: Queryable = { query: async () => ({ rows: [] }) };
 const downDb: Queryable = {

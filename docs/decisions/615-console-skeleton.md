@@ -69,6 +69,13 @@ gets them wrong is undone by the lanes that follow.
   forged rows. Tamper evidence is the KMS lane's audit log, out of band.
 - CSRF and session design wait for the sign-in lane, which is safe only while the console has no
   cookie-authenticated state change — the skeleton has none.
+- _2026-11-02 (fifty, lane 01M3Z44MTV):_ the console's first state change on a team server:
+  `POST /teams` on the account page creates a team. It is the one admin operation with no prior
+  owner (Cloud spec §4.3): the console mints a 60-second token for the team servers' audience,
+  posts it to the new team's host, and renders the answer's two secrets once — stored and logged
+  nowhere. Membership still never lives here: the team server makes the requester's seat the
+  first admin and binds it to the account; the console keeps only an audit row naming the slug and
+  the token's `jti`. On only with `MUSTERD_CONSOLE_TEAM_SUFFIX` + `MUSTERD_CONSOLE_TEAM_AUDIENCE`.
 
 ## Observability & Evaluation
 
