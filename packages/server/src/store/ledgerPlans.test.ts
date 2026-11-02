@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
 import { WAKE_AUDIT_SQL, WAKE_LEASED_SQL } from './insights.js';
+import { OWED_REVIEWS_SQL } from './orientation.js';
 
 /**
  * The open-directed ledger's thread lookups must seek, not scan (lane 01M4S7GW7P). On the Air's 23k
@@ -78,4 +79,46 @@ withDrivers('inbox count plans', (open, kind) => {
       }
     },
   );
+});
+
+withDrivers('owed reviews plan', (open, kind) => {
+  // ADR 778's re-read (2026-11-02, lane 01M6EV84VH): with `l.id = json_extract(...)` the TEXT
+  // column's affinity kept SQLite off `idx_messages_lane_review`, so every orientation walked all
+  // messages addressed to the seat — 611 slow runs, 374 s in four daytime hours on the hub. The plan
+  // depends on statistics, so the store is shaped like a hub (most lanes closed, a seat that
+  // receives far more messages than it owes reviews) and analyzed, as the ladder does on boot.
+  it.skipIf(kind !== 'sqlite')('the owed-reviews read seeks the lane_review index', async () => {
+    const db = await open();
+    await db.run('PRAGMA foreign_keys = OFF');
+    for (const id of ['m0', 'm1'])
+      await db.run(
+        "INSERT INTO members (id, team_id, name, kind, created_at, updated_at) VALUES (?, 't', ?, 'agent', 0, 0)",
+        [id, id === 'm0' ? 'seat' : 'other'],
+      );
+    for (let i = 0; i < 300; i++)
+      await db.run(
+        "INSERT INTO lanes (id, team_id, project, title, state, owner_seat, created_by, created_at, updated_at) VALUES (?, 't', 'p', 'x', ?, 'other', 'other', ?, ?)",
+        [`L${i}`, i < 3 ? 'awaiting_acceptance' : 'done', i, i],
+      );
+    for (let i = 0; i < 2000; i++) {
+      const ask = i % 20 === 0;
+      await db.run(
+        "INSERT INTO messages (id, team_id, from_member, to_member, to_kind, act, body, meta, ts, created_at) VALUES (?, 't', 'm1', 'm0', 'member', ?, 'b', ?, ?, ?)",
+        [
+          `M${i}`,
+          ask ? 'ask' : 'message',
+          ask ? JSON.stringify({ lane_review: { lane: `L${i % 300}` } }) : null,
+          i,
+          i,
+        ],
+      );
+    }
+    await db.run('ANALYZE');
+    const plan = await db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${OWED_REVIEWS_SQL}`, [
+      't',
+      'seat',
+      'seat',
+    ]);
+    expect(plan.map((r) => r.detail).join(' | ')).toContain('idx_messages_lane_review');
+  });
 });

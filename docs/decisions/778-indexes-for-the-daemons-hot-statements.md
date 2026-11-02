@@ -87,7 +87,7 @@ The owed-reviews join compares `json_extract(m.meta, …)` with the TEXT column 
 not use an expression index for that comparison
 ([affinity](../wiki/sqlite-expression-index-affinity.md)). With no index it can seek, it stays at
 today's plan, 29 ms on the copy. A virtual generated column would close that gap, but every query would then name a
-column Postgres does not have. That is left for a measured follow-up, not done here.
+column Postgres does not have. That is left for a measured follow-up, not done here. _(Amended 2026-11-02: done without the column, by comparing with `l.id || ''`; see Consequences.)_
 
 ## Consequences
 
@@ -103,6 +103,29 @@ column Postgres does not have. That is left for a measured follow-up, not done h
 - The interrupt-raises and wake-count statements (978 and 294 slow runs in the window) are
   unchanged. A fix there needs a `detail` expression that tolerates non-JSON text, in both the index
   and the query. That is a follow-up, not part of this change.
+- 2026-11-02, the daytime re-read (lane `01M6EV84VH`). Measured at 07:00–11:00 PST, against
+  10-30 11:16–15:22. The load was lighter; it read 4–7 at 11:02 and has no history before that.
+
+  | statement | 10-30 runs / total / max | 11-02 |
+  | --- | --- | --- |
+  | owed reviews | 1,307 / 867 s / 7.4 s | 611 / 374 s / 2.3 s |
+  | `dbstat` walk | 28 / 704 s / 70 s | 5 / 92 s / 24 s |
+  | interrupt raises | 978 / 352 s / 3.6 s | 1 / 0.4 s |
+  | review ask by lane | 533 / 330 s / 3.7 s | 61 / 15 s / 0.5 s |
+  | digest by day | 204 / 176 s / 4.6 s | none |
+  | lane lists | 689 / 244 s / 5.0 s | 246 / 66 s / 0.8 s |
+
+  The falsifier did not fire: review ask, digest and lane lists are out of the top five. The
+  experiment failed: 150 probes at 11:07–11:17 (load 4–41, 84 samples at 10 or above) gave the
+  static page p95 2.31 s (4.43 s at load ≥10, max 16.3 s) against the 1 s target. In 16 samples both
+  pages were over 1 s together (19 before), so the whole event loop still blocks. Owed reviews
+  stayed first at the same cost per run (0.66 s, then 0.61 s): as Decision noted, the join compared
+  `json_extract` with the TEXT column `l.id`, so it never used `idx_messages_lane_review`. It now
+  compares with `l.id || ''`, which has no affinity. The planner drives from the lanes awaiting
+  review and seeks the index (`ledgerPlans.test.ts`), with the same rows on a synthetic hub-shaped
+  store and 2–3× faster there. The new top four after it: the inbox window read (348 s), the
+  `residency.wake_deferred` audit read (274 s), the wake count by act (235 s), and the goals scan
+  (122 s).
 
 ## Observability & Evaluation
 
