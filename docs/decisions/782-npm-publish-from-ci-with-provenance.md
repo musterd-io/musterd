@@ -79,6 +79,11 @@ consumer smoke gate that 0.4.0 taught us to run before the first registry write?
   checks the tarballs against `pack`'s outputs and publishes exactly those files (`--publish
   --tarballs DIR`). Without `--tarballs`, Decision 4's break-glass `--publish` still builds and
   smokes itself.
+- 2026-11-01 (v0.7.0, the first CI release, lane `01M6CBSMQB`): all five packages published with
+  a signed SLSA provenance statement (`https://slsa.dev/provenance/v1`), but the run went red at
+  the verify step. It read the registry seconds after the publish, and `npm view` showed the last
+  three packages about 4 minutes later. The verify step now re-reads for up to 10 minutes and
+  fails only on a package still without an attestation.
 - Consumers can check a release: `npm audit signatures`, or the provenance panel on npmjs.com, ties
   each tarball to the workflow run and the tagged commit.
 - Brew, the MCP Registry and the GitHub Release stay as ADR 669 orders them; the workflow prints

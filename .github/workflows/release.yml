@@ -139,16 +139,24 @@ jobs:
             --publish --tag "$GITHUB_REF_NAME" --tarballs "$RUNNER_TEMP/tarballs"
 
       # The lane's done-condition, checked where it can fail the run: every package at this version
-      # carries a provenance attestation on the registry.
+      # carries a provenance attestation on the registry. A fresh version takes minutes to show in
+      # `npm view` (0.7.0: about 4 min for the last of the five), so it re-reads for up to 10 min
+      # and fails only on a package still without one.
       - name: Verify provenance on the registry
+        timeout-minutes: 12
         run: |
           version="${GITHUB_REF_NAME#v}"
-          missing=()
-          for name in @musterd/protocol @musterd/telemetry @musterd/server @musterd/mcp @musterd/cli; do
-            att="$(npm view "$name@$version" dist.attestations.provenance.predicateType 2>/dev/null || true)"
-            if [ -n "$att" ]; then echo "✓ $name@$version — $att"; else missing+=("$name"); fi
+          pending=(@musterd/protocol @musterd/telemetry @musterd/server @musterd/mcp @musterd/cli)
+          for attempt in $(seq 1 20); do
+            still=()
+            for name in "${pending[@]}"; do
+              att="$(npm view "$name@$version" dist.attestations.provenance.predicateType --prefer-online 2>/dev/null || true)"
+              if [ -n "$att" ]; then echo "✓ $name@$version — $att"; else still+=("$name"); fi
+            done
+            pending=("${still[@]}")
+            [ "${#pending[@]}" -eq 0 ] && exit 0
+            echo "not on the registry yet (attempt $attempt/20): ${pending[*]}"
+            sleep 30
           done
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error title=No provenance::published without a provenance attestation: ${missing[*]}"
-            exit 1
-          fi
+          echo "::error title=No provenance::no provenance attestation after 10 min: ${pending[*]}"
+          exit 1
