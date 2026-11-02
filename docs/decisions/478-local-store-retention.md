@@ -131,6 +131,11 @@ backends run the same SQL (ADR 475).
 - Not decided here, on purpose: any prune of `messages` (the acts are the product), of
   decision-class `audit`, or of `sync_log`.
 
+- **2026-11-02, [ADR 786](786-audit-folds-host-key-polling.md):** the largest churn action on a
+  joiner, `bootstrap_credential.used` (149k live rows, 58% of delta-2's `audit`, all inside the
+  window — the prune was working), now folds in `appendAudit` to one row per credential per hour
+  with a `uses` count. Retention is unchanged; the input shrank.
+
 - **2026-09-29, amended by [ADR 480](480-audit-churn-five-days.md):** the first live pass archived
   9,183 rows — 99% of churn was under 30 days old, so the window is 5 days. The rest of this ADR
   stands.

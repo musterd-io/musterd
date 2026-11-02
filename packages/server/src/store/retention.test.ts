@@ -284,11 +284,13 @@ withDrivers('retention', (o, kind) => {
       ).toBe(3);
     });
 
-    it('the churn allow-list is read back by exactly the two latest-per-seat readers', () => {
+    it('the churn allow-list is read back by exactly the pinned readers', () => {
       // A new daemon query that names a churn action fails here rather than on a seat whose row
       // aged out (ADR 478 §Consequences). Add the reader to the pin only if it keeps working with
-      // the rows of the last 30 days plus the newest row per seat.
+      // the rows of the last 30 days plus the newest row per seat. ADR 786's fold reads only the
+      // last hour of `bootstrap_credential.used`, well inside the window.
       expect(auditReadersOfChurnActions()).toEqual({
+        'bootstrap_credential.used': ['store/audit.ts'],
         'mcp.surface_rendered': ['store/toolCalls.ts'],
         'occupancy.model_attested': ['store/review.ts'],
       });
