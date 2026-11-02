@@ -244,7 +244,7 @@ export function verifyRegistration(input: {
 }
 
 /** Verify an assertion against an enrolled credential's public key (SPKI base64url). */
-export function verifyAssertion(input: {
+export interface AssertionInput {
   authenticatorData: Uint8Array;
   clientDataJson: string;
   signature: Uint8Array;
@@ -252,15 +252,39 @@ export function verifyAssertion(input: {
   expectedChallenge: string;
   /** ADR 662 dec. 5: origins this daemon accepts ceremonies from (its own, musterd.io). */
   expectedOrigins?: readonly string[] | undefined;
-}): boolean {
+}
+
+export function verifyAssertion(input: AssertionInput): boolean {
+  return assertionFailure(input) === null;
+}
+
+/**
+ * Why an assertion does not verify, as a sentence for the audit and the person (lane 01M6EPWAJP), or
+ * null when it does. The origin case names the page's origin and the daemon's list, because that is
+ * the one a person can act on: open musterd at an address the daemon accepts.
+ */
+export function assertionFailure(input: AssertionInput): string | null {
   try {
-    checkRpAndChallenge(
-      input.authenticatorData,
-      input.clientDataJson,
-      'webauthn.get',
-      input.expectedChallenge,
-      input.expectedOrigins,
-    );
+    let clientOrigin = '?';
+    try {
+      clientOrigin = parseClientData(input.clientDataJson).origin;
+    } catch {
+      /* the check below says what is wrong with it */
+    }
+    try {
+      checkRpAndChallenge(
+        input.authenticatorData,
+        input.clientDataJson,
+        'webauthn.get',
+        input.expectedChallenge,
+        input.expectedOrigins,
+      );
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      if (m.includes('origin not configured'))
+        return `the passkey ceremony ran on origin ${clientOrigin}, which this daemon does not accept (it accepts ${(input.expectedOrigins ?? []).join(', ')})`;
+      return `the passkey assertion failed its ${m.replace(/^webauthn: /, '')}`;
+    }
     const clientHash = createHash('sha256').update(input.clientDataJson, 'utf8').digest();
     const signed = Buffer.concat([Buffer.from(input.authenticatorData), clientHash]);
     const key = createPublicKey({
@@ -269,14 +293,15 @@ export function verifyAssertion(input: {
       type: 'spki',
     });
     const type = (key.asymmetricKeyType ?? '') as string;
-    if (type === 'ed25519') return cryptoVerify(null, signed, key, input.signature);
+    let ok = false;
+    if (type === 'ed25519') ok = cryptoVerify(null, signed, key, input.signature);
     // WebAuthn ES256 (COSE alg -7) assertion signatures are ASN.1 DER, not raw r‖s — every
     // platform passkey (Apple, Google, Windows Hello) sends DER, and the page posts it as is.
-    if (type === 'ec') {
-      return cryptoVerify('sha256', signed, { key, dsaEncoding: 'der' }, input.signature);
-    }
-    return false;
-  } catch {
-    return false;
+    else if (type === 'ec')
+      ok = cryptoVerify('sha256', signed, { key, dsaEncoding: 'der' }, input.signature);
+    else return `the enrolled key is of an unsupported type (${type || 'unknown'})`;
+    return ok ? null : 'the passkey signature does not verify against the enrolled key';
+  } catch (e) {
+    return `the passkey assertion could not be read (${e instanceof Error ? e.message : String(e)})`;
   }
 }

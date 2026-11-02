@@ -323,7 +323,7 @@ export async function fetchLiveLaneBoard(cfg: LiveConfig): Promise<LaneBoard> {
 export interface VerdictReport {
   lane_verdict?: { lane: string; state: 'done' | 'active' };
   lane_escalation?: { lane: string };
-  lane_authority_refused?: { lane: string; reason: string };
+  lane_authority_refused?: { lane: string; reason: string; why?: string };
 }
 
 type SendActInput = {

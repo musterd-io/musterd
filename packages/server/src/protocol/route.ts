@@ -102,7 +102,7 @@ export interface RouteResult {
    * nothing. Absent for every other act. Reported on the ack for the same reason
    * `lane_verdict` is — before this, the refusal existed only in the audit and a log line,
    * and the sender's surface marked the ask answered. */
-  lane_authority_refused?: { lane: string; reason: string };
+  lane_authority_refused?: { lane: string; reason: string; why?: string };
   /** Lane 01M5Z3NAJE — an agent's verdict on a `lane_review` ask that the lane's own close rules
    *  refused (ADR 644: a lane that reads on a day closes `done` only with a read verdict): the act
    *  landed, the lane did not move, and the ask stays open. `guidance` says why and what unblocks
@@ -2083,7 +2083,13 @@ async function applyAcceptanceVerdict(
       // Lane 01M5DTPMXN: the refusal goes back on the ack, not only into the audit — the
       // sender's surface must be able to say "that did not count" instead of answering
       // the ask away. `check.reason` is one of AUTHORITY_REFUSAL_REASONS.
-      return { authorityRefused: { lane: laneId, reason: check.reason ?? 'no_signature' } };
+      return {
+        authorityRefused: {
+          lane: laneId,
+          reason: check.reason ?? 'no_signature',
+          ...(check.why ? { why: check.why } : {}),
+        },
+      };
     }
   }
 

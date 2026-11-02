@@ -194,7 +194,12 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
         },
         expectedOrigins: ['https://example.com'],
       }),
-    ).resolves.toMatchObject({ ok: false, reason: 'descriptor_mismatch' });
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: 'descriptor_mismatch',
+      // the refusal names the check (lane 01M6EPWAJP): the page's origin, and what the daemon accepts
+      why: expect.stringMatching(/origin https:\/\/relay\.example\.net.*https:\/\/example\.com/),
+    });
   });
 
   it('spends an enrollment challenge only for its bound node and WebAuthn origin', async () => {

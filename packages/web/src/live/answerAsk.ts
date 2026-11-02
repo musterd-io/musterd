@@ -52,12 +52,11 @@ export async function answerAsk(
       meta: { in_reply_to: ask.env.id, ...(proof ? { approval: proof } : {}) },
     });
     if (sent.lane_authority_refused) {
-      // The reason is a code for the audit, not a sentence for the card (slippy, review of #3078).
+      // The same sentence the daemon's 403 would carry, so `refusalCopy` reads it the same way on
+      // both paths (lane 01M6EPWAJP): the person gets the line, the record keeps the code and why.
+      const r = sent.lane_authority_refused;
       return {
-        error:
-          sent.lane_authority_refused.reason === 'no_signature'
-            ? "Your verdict wasn't recorded: this needs your passkey, and none was used. The ask is still open; try again."
-            : "Your verdict wasn't recorded: the daemon refused it. The ask is still open; try again.",
+        error: `authority refused (${r.reason}): a verdict on a lane needs an A2 device signature (ADR 662)${r.why ? ` — ${r.why}` : ''}`,
       };
     }
     if (!sent.lane_verdict && !sent.lane_escalation) {
