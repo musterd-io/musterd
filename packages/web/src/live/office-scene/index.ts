@@ -63,6 +63,7 @@ import {
 } from './layout';
 import { computeLightEnv, deskLampOn, type LightEnv } from './lighting';
 import { fetchWeather, type Weather, type WeatherReading, weatherDue, weatherMoves, weatherOverride } from './weather';
+import { DEFAULT_VIEW, viewOverride, type ViewSetting } from './windowView';
 import { isWithinWorkingHours } from './workingHours';
 import { assignSeats, workingAtDesk, type Placement } from './seating';
 import {
@@ -889,6 +890,10 @@ export function mountOffice(
   // an hour by this browser; `?weather=` pins it. Clear until the first reading lands.
   const weatherPinned = weatherOverride(typeof window === 'undefined' ? '' : window.location.search);
   let weather: Weather = weatherPinned ?? 'clear';
+  // What is outside the windows (window views, lane 01M6ENGW2H): `?view=` picks it; the chooser is
+  // increment 3. The movers outside read the wall clock, seeded per team; still mode freezes them.
+  const view: ViewSetting = viewOverride(typeof window === 'undefined' ? '' : window.location.search) ?? DEFAULT_VIEW;
+  const outsideNow = (): number => (STILL ? 0 : Date.now());
   let weatherRead: WeatherReading | null = null;
   function pollWeather(): void {
     if (weatherPinned !== null || typeof fetch === 'undefined') return;
@@ -1275,7 +1280,7 @@ export function mountOffice(
       recep,
       wallBoardNow(),
       teamWorkingHours,
-      { welcome: welcomeRoom.paint, rendered, weather, chimes: chimeHits, visitor: visit?.dog ?? null },
+      { welcome: welcomeRoom.paint, rendered, weather, chimes: chimeHits, visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
     );
     heads = anchors.heads;
     // The receptionist's bubble anchor — synthetic head above her desk. syncLabels skips names
@@ -2451,7 +2456,7 @@ export function mountOffice(
       recep,
       f.board,
       teamWorkingHours,
-      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, chimes: chimeHits, visitor: visit?.dog ?? null },
+      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, chimes: chimeHits, visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
     );
     if (units) units.run(() => drawCues(c));
     else drawCues(c);

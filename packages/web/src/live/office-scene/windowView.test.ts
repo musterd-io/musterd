@@ -5,7 +5,7 @@ import { computeLightEnv } from './lighting';
 import { recordingCtx } from './recording-ctx';
 import type { RenderedAssets } from './rendered/assets';
 import { parseManifest } from './rendered/manifest';
-import { drawWindowViews, paneQuad, plateTint, skyStops } from './windowView';
+import { drawWindowViews, paneQuad, plateTint, skyStops, viewOverride } from './windowView';
 
 const fit = fitFloor(1200, 900);
 const camera = { kx: 0.70710678, ky: 0.33729 };
@@ -82,5 +82,14 @@ describe('drawWindowViews', () => {
     expect(ops.filter((o) => o.name === 'drawImage')).toHaveLength(8);
     const alphas = ops.filter((o) => o.name === 'set:globalAlpha').map((o) => o.args[0] as number);
     expect(alphas.some((a) => Math.abs(a - 1 / 3) < 0.01)).toBe(true);
+  });
+});
+
+describe('viewOverride', () => {
+  it('reads ?view= and ignores junk', () => {
+    expect(viewOverride('?view=coast')).toBe('coast');
+    expect(viewOverride('?view=MOUNTAIN')).toBe('mountain');
+    expect(viewOverride('?view=mars')).toBeNull();
+    expect(viewOverride('')).toBeNull();
   });
 });
