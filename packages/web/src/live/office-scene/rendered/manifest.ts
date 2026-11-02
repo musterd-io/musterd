@@ -9,6 +9,8 @@
  * Hand-written shape check rather than zod: the web package carries no schema library, and a
  * manifest is a build input we author, not external input (hard rule 4 is about the wire).
  */
+import { WINDOWS } from '../layout';
+
 export interface RenderedAsset {
   /** Stable id the painters look up, e.g. `desk/base`, `room/floor`, `desk/lamp-on`. */
   id: string;
@@ -21,6 +23,17 @@ export interface RenderedAsset {
   anchor: { x: number; y: number };
   /** Source px per floor unit at 2×; the same for every asset of one render. */
   scale: number;
+  /** A window-view plate (window views, lane 01M6ENGW2H): the pane it was framed to. */
+  view?: ViewSpan;
+}
+
+/** Which wall (0 = the lx=0 wall, 1 = the ly=0 wall) and the pane's span along and up it, as `WINDOWS`. */
+export interface ViewSpan {
+  which: 0 | 1;
+  t0: number;
+  t1: number;
+  u0: number;
+  u1: number;
 }
 
 export interface RenderedManifest {
@@ -42,7 +55,16 @@ function parseAsset(v: unknown, i: number): RenderedAsset {
   if (!isRecord(anchor) || !isNum(anchor['x']) || !isNum(anchor['y']))
     throw new Error(`manifest asset ${id} needs an anchor {x, y}`);
   if (!isNum(scale) || scale <= 0) throw new Error(`manifest asset ${id} needs a positive scale`);
-  return { id, file, w, h, anchor: { x: anchor['x'], y: anchor['y'] }, scale };
+  const view = parseViewSpan(v['view']);
+  return { id, file, w, h, anchor: { x: anchor['x'], y: anchor['y'] }, scale, ...(view ? { view } : {}) };
+}
+
+/** A malformed span is dropped, not fatal: the plate then never matches a window and the sky still paints. */
+function parseViewSpan(v: unknown): ViewSpan | undefined {
+  if (!isRecord(v)) return undefined;
+  const { which, t0, t1, u0, u1 } = v;
+  if ((which !== 0 && which !== 1) || !isNum(t0) || !isNum(t1) || !isNum(u0) || !isNum(u1)) return undefined;
+  return { which, t0, t1, u0, u1 };
 }
 
 /** Parse a manifest JSON value; throws with the offending field named. */
@@ -72,4 +94,31 @@ export function cameraMatches(m: RenderedManifest, cam: { kx: number; ky: number
 
 export function assetById(m: RenderedManifest, id: string): RenderedAsset | undefined {
   return m.assets.find((a) => a.id === id);
+}
+
+export type DayState = 'day' | 'evening' | 'night';
+const DAY_STATES: readonly DayState[] = ['day', 'evening', 'night'];
+
+/**
+ * The plates for one pane: `view/<setting>/<which>-<i>-<state>` whose `view` span matches the window the
+ * scene will clip to (`layout.ts` WINDOWS) within 1e-3. A stale plate — rendered when WINDOWS sat
+ * elsewhere — is left out rather than stretched across the wrong quad; the pane then shows sky alone.
+ */
+export function viewPlates(
+  m: RenderedManifest,
+  setting: string,
+  which: 0 | 1,
+  i: number,
+  win: { t0: number; t1: number; u0: number; u1: number } = WINDOWS[i]!,
+): Partial<Record<DayState, RenderedAsset>> {
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1e-3;
+  const out: Partial<Record<DayState, RenderedAsset>> = {};
+  for (const state of DAY_STATES) {
+    const a = assetById(m, `view/${setting}/${which}-${i}-${state}`);
+    if (!a?.view || a.view.which !== which) continue;
+    if (!near(a.view.t0, win.t0) || !near(a.view.t1, win.t1) || !near(a.view.u0, win.u0) || !near(a.view.u1, win.u1))
+      continue;
+    out[state] = a;
+  }
+  return out;
 }
