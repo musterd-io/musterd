@@ -124,6 +124,7 @@ describe('POST /tokens (ADR 685)', () => {
       providers: {},
       email: null,
       kms: null,
+      teams: null,
     };
     const server = createConsoleServer({
       config,
@@ -259,6 +260,7 @@ describe('POST /tokens with no signer', () => {
       providers: {},
       email: null,
       kms: null,
+      teams: null,
     };
     const server = createConsoleServer({
       config,

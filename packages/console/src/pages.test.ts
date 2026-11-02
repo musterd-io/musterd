@@ -26,6 +26,7 @@ const config: ConsoleConfig = {
     fromName: 'musterd',
   },
   kms: null,
+  teams: null,
 };
 const okDb: Queryable = { query: async () => ({ rows: [] }) };
 

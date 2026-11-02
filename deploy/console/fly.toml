@@ -20,6 +20,10 @@ primary_region = "iad"
   MUSTERD_CONSOLE_ISSUER = "https://app.musterd.io"
   MUSTERD_CONSOLE_HOST = "0.0.0.0"
   MUSTERD_CONSOLE_PORT = "8080"
+  # Create a team from the console (lane 01M3Z44MTV): the team-host suffix and the audience the
+  # team servers pin (deploy/cloud/fly.toml MUSTERD_CONSOLE_AUDIENCE). Both, or the form is off.
+  MUSTERD_CONSOLE_TEAM_SUFFIX = "musterd.dev"
+  MUSTERD_CONSOLE_TEAM_AUDIENCE = "https://musterd.dev"
 
 [http_service]
   internal_port = 8080

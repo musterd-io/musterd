@@ -41,6 +41,7 @@ async function boot(opts: { email?: boolean; failSend?: boolean } = {}) {
             fromName: 'musterd',
           },
     kms: null,
+    teams: null,
   };
   const server = createConsoleServer({
     config,

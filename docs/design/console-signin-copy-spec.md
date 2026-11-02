@@ -133,3 +133,39 @@ Sign in and Check your email do. The body is the rest of that row.
 | Account disabled | This account is disabled | You can't sign in with it. | Shown only after a redemption or a provider callback resolved to a disabled account. The check-your-email page stays the sent strings. ADR 620 names no support address, so the page shows none. |
 | Too many attempts | Too many attempts | Try again in a little while. | A pause on this request (decision 9). ADR 620 names no window, so the string names none. The account is unchanged. Do not say locked or disabled. |
 | Unknown failure | Something went wrong | Quote this if you ask for help: {request_id} | `{request_id}` is the server-generated id (decision 10), as selectable text. This is the unknown-cause state. A known cause uses its own row. |
+
+## 8. Create a team
+
+On the signed-in page (§6), between the sign-in methods and the Sign out button, when the console
+can create teams (lane `01M3Z44MTV`, 2026-11-02).
+
+| Surface | State | Exact string | Notes |
+| --- | --- | --- | --- |
+| Label | form | Create a team | |
+| Field label | team name | Team name | `[a-z0-9-]`, 1–32. Lowercased as typed. |
+| Field note | team name | Lowercase letters, digits and dashes. Your team lives at {slug}.{suffix}. | `{slug}` is what they typed, or `name` before they type. |
+| Field error | bad team name | Use 1 to 32 lowercase letters, digits or dashes. | |
+| Field error | taken | That team name is taken. | The team server said so. What they typed stays in the fields. |
+| Field label | display | Shown as | Optional, up to 80 characters. |
+| Field note | display | Optional. The name people see. | |
+| Field label | seat | Your seat | Their member name on the team. |
+| Field note | seat | Your name on the team. You will be its first owner. | |
+| Field error | bad seat | Use 1 to 32 letters, digits, dots, dashes or underscores. | |
+| Button | form | Create team | POST. |
+| Notice | too many | That is enough teams for this hour. Try again later. | Five an account an hour. |
+| Notice | unreachable | The team server could not be reached. Nothing was created. Try again in a minute. | |
+| Notice | refused | The team server refused ({reason}). Nothing was created. | `{reason}` is the server's error code, or its status. |
+
+`<title>` Team created — musterd — after a create.
+
+| Surface | State | Exact string | Notes |
+| --- | --- | --- | --- |
+| Heading | created | Team created | |
+| Lede | created | {slug} is yours. You are its first owner, as {name}. | |
+| Notice | created | Copy these now. They are shown once and never again. | The page is the only place the two secrets ever appear. A reload is `/account`. |
+| Label | link | Your team | Links to `{host}/live`. |
+| Label | credential | Your credential | The `mscr_` value the person presents. |
+| Label | key | Agent key | The `mskey_` value agents present to claim a seat. |
+| Note | created | Agents present the agent key to claim a seat; you present your credential. Keep both out of chat and out of git. | |
+| Link | created | Back to your account | |
+

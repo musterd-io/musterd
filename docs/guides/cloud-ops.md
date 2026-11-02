@@ -62,6 +62,9 @@ do, every deploy stops at the migrate step with `password authentication failed 
 
 ## Create a team on staging
 
+The product path is the console's form ([Create a team](#create-a-team-lane-01m3z44mtv)). While
+staging still trusts the staging issuer rather than the console's JWKS:
+
 ```sh
 node scripts/cloud/staging-issuer.mjs create-team <slug> --creator <name>
 ```
@@ -112,6 +115,27 @@ FLY_APP=musterd-console FLY_MIGRATE_APP=musterd-console-migrate CLOUD_PROBE_HOST
 CLOUD_FLY_CONFIG=deploy/console/fly.toml \
 CLOUD_MIGRATE_CMD="node packages/console/dist/bin.js migrate" node scripts/cloud/deploy.mjs
 ```
+
+### Create a team (lane `01M3Z44MTV`)
+
+Signed in at `app.musterd.io/account`, a person creates a team from the form there: a team name
+(`[a-z0-9-]`, 1–32), an optional display name, and their own seat name. The console mints one
+60-second console token for the team servers' audience, POSTs it to `https://<slug>.<suffix>/teams`,
+and shows the answer's two secrets — the creator's human credential and the team's agent key —
+**once**, on that page only; it stores and logs neither (hard rule 5). The creator's seat is the
+team's first admin (owner). A taken name is a field error; an unreachable team server is a form
+error and nothing is created. Five teams an account an hour.
+
+The form is on only when both are set on `musterd-console` (and the console can sign, ADR 685):
+
+```
+MUSTERD_CONSOLE_TEAM_SUFFIX = "musterd.dev"            # team acme lives at https://acme.musterd.dev
+MUSTERD_CONSOLE_TEAM_AUDIENCE = "https://musterd.dev"   # == the team servers' MUSTERD_CONSOLE_AUDIENCE
+```
+
+Both are in `deploy/console/fly.toml`. Until the team servers read the console's JWKS
+(lane `01M5E0543HNPG3EKFXZ287Y80N`), a token the console signs is refused by staging, and
+`scripts/cloud/staging-issuer.mjs create-team` stays the way to make a staging team.
 
 ### Sign-in providers (ADR 620)
 

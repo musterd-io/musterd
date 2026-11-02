@@ -154,9 +154,62 @@ export const errorPages = {
     ),
 };
 
+/** The "Create a team" form's state on the account page (copy spec §8). */
+export interface CreateTeamForm {
+  /** The team-host suffix, shown beside the name field: `acme` becomes `acme.musterd.dev`. */
+  suffix: string;
+  /** What the person typed, echoed back on a refusal so they need not retype it. */
+  values?: { slug: string; display: string; name: string };
+  /** The refusal, under the field it is about. */
+  error?: { field: 'slug' | 'display' | 'name' | 'form'; message: string } | null;
+}
+
+function createTeamForm(f: CreateTeamForm, csrf: string): string {
+  const v = f.values ?? { slug: '', display: '', name: '' };
+  const errFor = (field: 'slug' | 'display' | 'name') =>
+    f.error && f.error.field === field
+      ? `<p class="c-field__error" id="team-${field}-error">${esc(f.error.message)}</p>`
+      : '';
+  const cls = (field: 'slug' | 'display' | 'name') =>
+    f.error && f.error.field === field ? 'c-field c-field--error' : 'c-field';
+  const aria = (field: 'slug' | 'display' | 'name') =>
+    f.error && f.error.field === field
+      ? ` aria-invalid="true" aria-describedby="team-${field}-error"`
+      : '';
+  const formError =
+    f.error && f.error.field === 'form'
+      ? `<p class="c-notice" role="alert">${esc(f.error.message)}</p>\n`
+      : '';
+  return (
+    `<h2 class="c-section-label">Create a team</h2>\n` +
+    formError +
+    `<form method="post" action="/teams" class="c-stack">\n` +
+    `<input type="hidden" name="csrf" value="${esc(csrf)}">\n` +
+    `<div class="${cls('slug')}">\n<label for="team-slug">Team name</label>\n` +
+    `<input id="team-slug" name="slug" value="${esc(v.slug)}" autocomplete="off" spellcheck="false" required maxlength="32" pattern="[a-z0-9-]{1,32}" inputmode="url"${aria('slug')}>\n` +
+    `<p class="c-note">Lowercase letters, digits and dashes. Your team lives at <code class="c-code">${esc(v.slug || 'name')}.${esc(f.suffix)}</code>.</p>\n` +
+    errFor('slug') +
+    `</div>\n` +
+    `<div class="${cls('display')}">\n<label for="team-display">Shown as</label>\n` +
+    `<input id="team-display" name="display" value="${esc(v.display)}" autocomplete="off" maxlength="80"${aria('display')}>\n` +
+    `<p class="c-note">Optional. The name people see.</p>\n` +
+    errFor('display') +
+    `</div>\n` +
+    `<div class="${cls('name')}">\n<label for="team-name">Your seat</label>\n` +
+    `<input id="team-name" name="name" value="${esc(v.name)}" autocomplete="username" spellcheck="false" required maxlength="32" pattern="[A-Za-z0-9_.-]{1,32}"${aria('name')}>\n` +
+    `<p class="c-note">Your name on the team. You will be its first owner.</p>\n` +
+    errFor('name') +
+    `</div>\n` +
+    `<button class="c-button c-button--primary" type="submit">Create team</button>\n` +
+    `</form>`
+  );
+}
+
 export function accountPage(o: {
   methods: { provider: string; email: string | null; current?: boolean }[];
   csrf: string;
+  /** Present when the console can create teams (config.teams); absent, no form is shown. */
+  teams?: CreateTeamForm | null;
 }): string {
   const rows = o.methods
     .map((m) => {
@@ -172,8 +225,36 @@ export function accountPage(o: {
       return `<li>${icon}<span class="c-list__who">${who}</span>${now}</li>`;
     })
     .join('\n');
+  const teams = o.teams ? `\n${createTeamForm(o.teams, o.csrf)}` : '';
   return shell(
     'Your account — musterd',
-    `<h1>Your account</h1>\n<p class="c-lede">You are signed in.</p>\n<h2 class="c-section-label">Sign-in methods</h2>\n<ul class="c-list">\n${rows}\n</ul>\n<form method="post" action="/logout">\n<input type="hidden" name="csrf" value="${esc(o.csrf)}">\n<button class="c-button" type="submit">Sign out</button>\n</form>`,
+    `<h1>Your account</h1>\n<p class="c-lede">You are signed in.</p>\n<h2 class="c-section-label">Sign-in methods</h2>\n<ul class="c-list">\n${rows}\n</ul>${teams}\n<form method="post" action="/logout">\n<input type="hidden" name="csrf" value="${esc(o.csrf)}">\n<button class="c-button" type="submit">Sign out</button>\n</form>`,
+  );
+}
+
+/**
+ * The page after a team is created (copy spec §8). The two secrets the team server minted are
+ * shown here ONCE and nowhere else (hard rule 5): the console neither stores nor logs them, and
+ * a reload of this URL is a GET to /account, which shows nothing of them.
+ */
+export function teamCreatedPage(o: {
+  slug: string;
+  host: string;
+  name: string;
+  humanCredential: string;
+  agentKey: string;
+}): string {
+  return shell(
+    'Team created — musterd',
+    `<h1>Team created</h1>\n` +
+      `<p class="c-lede">${esc(o.slug)} is yours. You are its first owner, as ${esc(o.name)}.</p>\n` +
+      `<p class="c-notice" role="alert">Copy these now. They are shown once and never again.</p>\n` +
+      `<dl class="c-stack">\n` +
+      `<dt class="c-section-label">Your team</dt>\n<dd><a class="c-link" href="${esc(o.host)}/live">${esc(o.host)}/live</a></dd>\n` +
+      `<dt class="c-section-label">Your credential</dt>\n<dd><code class="c-code">${esc(o.humanCredential)}</code></dd>\n` +
+      `<dt class="c-section-label">Agent key</dt>\n<dd><code class="c-code">${esc(o.agentKey)}</code></dd>\n` +
+      `</dl>\n` +
+      `<p class="c-note">Agents present the agent key to claim a seat; you present your credential. Keep both out of chat and out of git.</p>\n` +
+      `<p><a class="c-link" href="/account">Back to your account</a></p>`,
   );
 }
