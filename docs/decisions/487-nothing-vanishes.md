@@ -167,3 +167,10 @@ four-slice audit finds any item in that population with no lane or disposition. 
 **Experiment.** n/a — the close check and the docs gate are deterministic and covered by unit tests
 (each signal refuses; no signal passes; goal attach and refusal; baseline burn-down). The eval reads
 the outcome in production.
+
+- _Dated note (2026-11-01) — the watch closed unread._
+  [The watch](../watches/2026-09-30-nothing-vanishes.md) reached `revisit_by` 2026-11-01 with
+  `status: open`, and `watch:check` turned main's gates red. Nobody reran the four-slice audit. The
+  watch is `void`, resolution the gate's unattended line: no verdict. ADR 487 is neither confirmed
+  nor falsified by this note.
+  Follows-up: none — a new window is a new watch, and this diff does not open one (2026-11-01).
