@@ -8455,6 +8455,47 @@
    browser, on the painted pixel — a translucent text layer over the sheet is exactly the stack
    `pnpm a11y:contrast` exists to score honestly, and dimming would spend contrast rather than
    change hue. */
+/* A seat's question as a row (ADR 773, lane 01M6EP0ZR9): its "why" under the question, a
+   consequence after each option, and one reply line with its Send. The textarea is one row and
+   grows with the text; ↵ sends, ⇧↵ breaks a line (QuestionRow). */
+.lc-ask__body--q {
+  font-weight: 600;
+  -webkit-line-clamp: 4;
+}
+.lc-ask__why {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--lc-dim);
+}
+.lc-choice__cons {
+  color: var(--lc-muted);
+}
+.lc-ask__reply {
+  display: flex;
+  gap: var(--lc-2);
+  align-items: flex-end;
+}
+.lc-ask__reply textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  field-sizing: content;
+  min-height: 30px;
+  max-height: 96px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: var(--lc-2) var(--lc-3);
+  border-radius: 12px;
+  border: 1px solid var(--lc-border-2);
+  background: var(--lc-surface-2);
+  color: var(--lc-text);
+}
+.lc-ask__reply textarea:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 1px;
+}
 .lc-ask__note--lapsed {
   color: var(--lc-muted);
 }

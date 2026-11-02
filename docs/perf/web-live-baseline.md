@@ -2829,3 +2829,20 @@ A re-baseline to measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports initial JS at or under 153,500 B and total JS at or
   under 405,500 B with this lane in.
+
+## 2026-11-02 — the asks rail is the one surface; Initial JS RAISED 153,500 → 154,500 B (lane 01M6EP0ZR9FYP2G3T94GA3PGVK)
+
+| Budget     | Before (ceiling) | This branch (local) | Ceiling                       |
+| ---------- | ---------------- | ------------------- | ----------------------------- |
+| initial JS | 153,500 B        | ~154,010 B (150.4 KB) | RAISED 153,500 → 154,500 B |
+| total JS   | 405,500 B        | ~400,486 B (391.1 KB) | unchanged; −4.9 KB          |
+| live CSS   | 30,200 B         | ~29,981 B            | RAISED 30,200 → 30,500 B     |
+
+The "Waiting on you" card and its triage modal (seats ask 1e, lane 01M6DBDSGH) are retired; a seat's
+question is a row of the asks rail's sheet (`QuestionRow`), which is eager because the rail is. The
+lazy chunk's 5.4 KB leaves the total; ~0.5 KB of row joins the initial graph. ADR 183: a raise, not
+a re-baseline; the remedy for the initial budget is lazy-loading, and this lane deliberately spends
+it to remove a chunk. A re-baseline to measured + 15% would loosen.
+
+- Falsify: `pnpm perf:check` after a build reports initial JS at or under 154,500 B, total JS
+  under 405,500 B and live CSS at or under 30,500 B with this lane in.

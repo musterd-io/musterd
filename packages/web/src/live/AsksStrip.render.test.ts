@@ -287,3 +287,54 @@ describe('every human seat this machine holds (ADR 557)', () => {
     expect(html).toContain('Sign in as Ada');
   });
 });
+
+describe("a seat's question is a row of the rail (ADR 773, lane 01M6EP0ZR9)", () => {
+  const question = (id: string, text: string): Envelope =>
+    ({
+      id,
+      v: PROTOCOL_VERSION,
+      team: 'revive',
+      from: 'izzo',
+      to: { kind: 'member', name: 'nick' },
+      act: 'ask',
+      body: text,
+      thread: null,
+      meta: {
+        species: 'consult',
+        tier: 'advisory',
+        question: {
+          text,
+          why: 'CI is still running.',
+          options: [{ label: 'Merge now', consequence: 'merges on its own if it passes' }, { label: 'Wait' }],
+          blocking: false,
+          audience: 'addressee',
+          inferred: false,
+        },
+      },
+      ts: Date.now() - 120_000,
+    }) as Envelope;
+
+  it('leads the rail as "izzo is asking you" with Answer… and counts as needing you', () => {
+    const html = render([question('q1', 'Merge now or wait for CI?')]);
+    expect(html).toContain('is asking <b>you</b>');
+    expect(html).toContain('Merge now or wait for CI?');
+    expect(html).toContain('Answer…');
+    expect(html).toContain('1 needs you');
+    expect(html).not.toContain('Waiting on you');
+  });
+
+  it('its sheet row carries the keyed options with consequences, the why, and a reply line', () => {
+    const html = render([question('q1', 'Merge now or wait for CI?')]);
+    expect(html).toContain('lc-ask--question');
+    expect(html).toContain('merges on its own if it passes');
+    expect(html).toContain('CI is still running.');
+    expect(html).toContain('Or tell izzo something else…');
+    expect(html).toContain('Send');
+  });
+
+  it('an approval routed to nick is a rail row again, beside the question', () => {
+    const html = render([question('q1', 'Merge now or wait?'), ask('a1', 'standard', 60_000)]);
+    expect(html).toContain('2 need you');
+    expect(html).toContain('body of a1');
+  });
+});

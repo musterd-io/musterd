@@ -71,6 +71,13 @@ answer goes straight back into that seat's session.**
 
 ### `/live`: rest, then triage (nick chose this; the mockup is `question-card-v2`)
 
+_(Amended 2026-11-02, lane 01M6EP0ZR9FYP2G3T94GA3PGVK: nick, seeing both on /live — "I liked the much
+more compact original ask bar". The "Waiting on you" list and the triage modal are retired. The asks
+rail (ADR 149) is the one surface: a seat's question is a row of its sheet with the keyed options,
+each with its consequence, and a reply line; the rail's banner reads "ryder is asking you: …" with
+Answer…, its button counts "N need you", and ⌘K opens the sheet. The v2 mockup stays as the
+reference for a question's content, not its chrome.)_
+
 _(Amended 2026-11-02, lane 01M6EF2Z4B70VG4JWMRWNZDV2R: the two brainstorm mockups are committed at
 `docs/design/assets/question-card-mockups/` — `question-card.html` and `question-card-v2.html`. The
 built card follows v2's proportions a notch tighter (nick: the shipped sheet read gigantic), and an

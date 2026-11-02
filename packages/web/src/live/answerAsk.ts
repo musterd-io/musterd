@@ -7,7 +7,7 @@ export type AnswerKind = 'accept' | 'decline' | 'deciding';
 
 /**
  * Answer an ask the way the rail always has — one path for every surface that answers (the rail's
- * sheet, and since lane 01M6DBDSGH the "Waiting on you" triage card). Lifted out of `AsksStrip`
+ * sheet; lane 01M6DBDSGH's "Waiting on you" card used it too until lane 01M6EP0ZR9 retired it). Lifted out of `AsksStrip`
  * unchanged so a verdict signed on the card is the same act as a verdict signed on the rail:
  *
  * - `deciding` sends the ADR 147 §5 deferral (`wait` + `ask_ref`, "check back in 1h").
