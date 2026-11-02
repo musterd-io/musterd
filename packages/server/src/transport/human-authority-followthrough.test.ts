@@ -145,6 +145,67 @@ withDrivers('human-authority-followthrough', (_o, kind) => {
     expect(JSON.parse(stored!.meta)).toMatchObject({ human_authority_checked: true });
   });
 
+  it("accepts a human's signed answer to an ADVISORY approve ask carrying meta.lane (nick, 2026-11-02, lane 01M6EPWAJP)", async () => {
+    // The shape /live refused with descriptor_mismatch: species approve, tier advisory, meta.lane set.
+    const askId = ulid();
+    const ask = makeEnvelope({
+      id: askId,
+      team: 'dawn',
+      from: 'ada',
+      to: { kind: 'member', name: 'nick' },
+      act: 'ask',
+      body: 'Redeploy the machine to pick up main?',
+      meta: { species: 'approve', tier: 'advisory', lane: '01M6EPWAJPXY3TKTD3VZW6VWSP' },
+      ts: Date.now(),
+    });
+    expect((await call('POST', '/teams/dawn/messages', ada, { envelope: ask })).status).toBe(201);
+    const approval = humanAskAnswerApproval(askId, 'accept');
+    const d = await descriptor(approval);
+    const reply = makeEnvelope({
+      id: ulid(),
+      team: 'dawn',
+      from: 'nick',
+      to: { kind: 'member', name: 'ada' },
+      act: 'accept',
+      thread: askId,
+      meta: { in_reply_to: askId, approval: proof(d) },
+      ts: Date.now(),
+    });
+    const accepted = await call('POST', '/teams/dawn/messages', nick, { envelope: reply });
+    expect(accepted.status).toBe(201);
+  });
+
+  it('a refused answer says which check failed', async () => {
+    const askId = ulid();
+    const ask = makeEnvelope({
+      id: askId,
+      team: 'dawn',
+      from: 'ada',
+      to: { kind: 'member', name: 'nick' },
+      act: 'ask',
+      body: 'Approve?',
+      meta: { species: 'approve', tier: 'advisory' },
+      ts: Date.now(),
+    });
+    expect((await call('POST', '/teams/dawn/messages', ada, { envelope: ask })).status).toBe(201);
+    // Signed over a different ask's descriptor: the digest check must name itself.
+    const other = await descriptor(humanAskAnswerApproval(ulid(), 'accept'));
+    const reply = makeEnvelope({
+      id: ulid(),
+      team: 'dawn',
+      from: 'nick',
+      to: { kind: 'member', name: 'ada' },
+      act: 'accept',
+      thread: askId,
+      meta: { in_reply_to: askId, approval: proof(other) },
+      ts: Date.now(),
+    });
+    const refused = await call('POST', '/teams/dawn/messages', nick, { envelope: reply });
+    expect(refused.status).toBe(403);
+    expect(JSON.stringify(refused.json)).toContain('descriptor_mismatch');
+    expect(JSON.stringify(refused.json)).toContain('different act, target or payload');
+  });
+
   it('requires A2 for approve on request.decide before settling the request', async () => {
     const team = (await getTeamBySlug(server.store, 'dawn'))!;
     const request = await createRequest(server.store, team.id, {

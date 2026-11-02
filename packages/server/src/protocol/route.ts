@@ -729,7 +729,7 @@ async function routeEnvelopeInner(
         if (!check.ok) {
           throw new MusterdError(
             'forbidden',
-            `authority refused (${check.reason}): human answers to privileged asks require an A2 device signature (ADR 662)`,
+            `authority refused (${check.reason}): human answers to privileged asks require an A2 device signature (ADR 662)${check.why ? ` — ${check.why}` : ''}`,
           );
         }
         outgoingEnv = {

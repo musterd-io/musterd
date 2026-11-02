@@ -868,12 +868,12 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
       // descriptor, and the signature is for a different act.
       await expect(
         attempt({ decision: 'approve', approval: phoneSigns(s, d.approval.reject) }),
-      ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+      ).resolves.toMatchObject({ ok: false, reason: 'descriptor_mismatch' });
       // Signed by a key that is not this binding's phone key.
       const stranger = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey;
       await expect(
         attempt({ approval: phoneSigns(s, d.approval.approve, stranger) }),
-      ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+      ).resolves.toMatchObject({ ok: false, reason: 'descriptor_mismatch' });
       await expect(
         attempt({ approval: { ...phoneSigns(s, d.approval.approve), key_id: 'key_other' } }),
       ).resolves.toEqual({ ok: false, reason: 'key_revoked' });

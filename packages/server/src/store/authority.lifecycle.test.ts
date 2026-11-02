@@ -104,7 +104,7 @@ withDrivers('device-key lifecycle (ADR 662 decision 6)', (o) => {
         keyId: key1.id,
         proof: { key_id: key1.id, nonce: dSelf.nonce, signature: k1.sign(dSelf) },
       }),
-    ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+    ).resolves.toMatchObject({ ok: false, reason: 'descriptor_mismatch' });
     const dRevoke = await buildDescriptor(db, {
       teamId: team.id,
       audience: team.slug,
