@@ -605,7 +605,9 @@ export function startSyncPull(ctx: Ctx): () => void {
             stopped: () => stopped,
           });
           // `cursor` names the row the ADR 689 d7 freshness check reads, as this tick left it.
-          const at = cursor ? { last_hub_seq: cursor.last_hub_seq, cursor_at: cursor.updated_at } : {};
+          const at = cursor
+            ? { last_hub_seq: cursor.last_hub_seq, cursor_at: cursor.updated_at }
+            : {};
           if (pages > 1) log.info({ msg: 'sync_drained', team: team.slug, pages, applied, ...at });
           else if (applied > 0) log.info({ msg: 'sync_pulled', team: team.slug, applied, ...at });
         } catch (error) {
