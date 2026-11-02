@@ -136,7 +136,7 @@ export function QuestionNotify({
         <>
           <p className="lc-set__hint">
             Per seat: <b>Always buzz</b> rings for every question from that seat. <b>Never buzz</b> stays
-            quiet even when it&rsquo;s blocked, but its card still lands in Waiting on you.
+            quiet even when it&rsquo;s blocked, but its row still lands on the asks rail.
           </p>
           {seats.map((seat) => (
             <Row key={seat} label={seat}>

@@ -10,6 +10,7 @@ import {
   type AudienceContext,
 } from './asks';
 import type { LiveConfig } from './client';
+import { deriveQuestions, type QuestionCard } from './questions';
 import { stillMode } from './stillMode';
 import { useRecoveredAsks } from './useRecoveredAsks';
 
@@ -23,6 +24,8 @@ export interface AskViews {
   asks: AskView[];
   /** The timeline-only derivation, before the clock — what `settledAt` is read from. */
   derived: AskView[];
+  /** The seats' open questions to the reader (ADR 773), oldest first; rows on the rail. */
+  questions: QuestionCard[];
   /** The one instant the countdowns and the tier verdicts are read at. */
   now: number;
   /** Fold an answer this browser just sent, so its ask settles before the firehose copy lands. */
@@ -30,7 +33,7 @@ export interface AskViews {
 }
 
 /**
- * The asks rail's derivation, lifted out of `AsksStrip` (lane 01M6DBDSGH) so the "Waiting on you"
+ * The asks rail's derivation, lifted out of `AsksStrip` (lane 01M6DBDSGH) so the (since retired) "Waiting on you"
  * list reads the same asks the rail does — same recovered history, same clock, same local answers —
  * instead of each deriving its own and disagreeing about what waits on the reader. `live.tsx` calls
  * it once and hands the result to both; a surface rendered alone (tests, previews) calls it itself.
@@ -82,7 +85,11 @@ export function useAskViews({
     () => resurrectRefusedVerdicts(applyTierClock(derived, now), board?.lanes ?? [], ctx.humans),
     [derived, board, ctx.humans, now],
   );
-  const loudCount = asks.filter((a) => askIsLoud(a.state)).length;
+  const questions = useMemo(
+    () => (cfg ? deriveQuestions([...envelopes, ...localAnswers], cfg.as, now, board) : []),
+    [cfg, envelopes, localAnswers, now, board],
+  );
+  const loudCount = asks.filter((a) => askIsLoud(a.state)).length + questions.length;
   // A 1s tick while any clock is running, so the countdowns are honest; off when nothing is loud
   // (idle cost is paid by every viewer, forever). Held under `?still` (ADR 285). Keeps ticking
   // through a settle (lane 01M511XNQC) so "nick approved ✓" gets its few seconds.
@@ -96,5 +103,5 @@ export function useAskViews({
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [loudCount, settling, still]);
-  return { ctx, canAnswer, asks, derived, now, addLocal };
+  return { ctx, canAnswer, asks, derived, questions, now, addLocal };
 }

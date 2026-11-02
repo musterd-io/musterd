@@ -107,8 +107,6 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
 /** The log drawer hosts today's `Stream` unchanged (ADR 464 lane 2) — fetched the first time it
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
 /** The log drawer only exists while open (L, or the log button); its chunk loads then. */
-// Seats ask 1e: the "Waiting on you" list and its triage sheet — downloaded only once a question is open.
-const LazyWaitingOnYou = lazy(() => import('../live/WaitingOnYou').then((m) => ({ default: m.WaitingOnYou })));
 const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })));
 /** "Who is here" (ADR 692) is chrome the room does not need to paint: it follows the first roster
  *  read in its own chunk, so the faces and their cards stay off /live's eager graph. */
@@ -653,19 +651,13 @@ function LivePage() {
     setCfg(null);
   };
 
-  // One ask derivation for the page (lane 01M6DBDSGH): "Waiting on you" takes the asks routed to
-  // the reader, the rail keeps the rest, and both read the same clock and the same local answers.
+  // One ask derivation for the page (lane 01M6DBDSGH): the rail reads it — every ask and every
+  // seat's question (ADR 773) is a row there since lane 01M6EP0ZR9 retired the "Waiting on you" card.
   const askViews = useAskViews({ cfg, roster, board, envelopes, localIdentity, loading });
   const connected = cfg != null;
   // The ask banner (ADR 464 §6). Inside the office on a desk; on a phone the office is hidden, so
   // the banner sits ABOVE the team list instead — spec §2's phone order, and the answer to dolly's
   // note that a phone could not see an open question at all.
-  // Seats ask 1e: derives and renders inside its own lazy chunk, so the eager graph pays only the stub.
-  const waitingOnYou = connected ? (
-    <Suspense fallback={null}>
-      <LazyWaitingOnYou roster={roster} cfg={cfg} envelopes={envelopes} board={board} views={askViews} />
-    </Suspense>
-  ) : null;
   const asksStrip = connected ? (
     <AsksStrip
       loading={loading}
@@ -777,7 +769,6 @@ function LivePage() {
           )}
           {phone && (
             <div className="lc__phone-asks">
-              {waitingOnYou}
               {asksStrip}
             </div>
           )}
@@ -850,8 +841,7 @@ function LivePage() {
                 topSlot={
                   phone ? null : (
                     <>
-                      {waitingOnYou}
-                      {asksStrip}
+                              {asksStrip}
                     </>
                   )
                 }

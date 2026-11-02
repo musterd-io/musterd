@@ -21,8 +21,10 @@ import { initial, memberDisc, memberColor, kindOf, hueOf } from './format';
 import { newRings, notifyBrowser, openRingsFor, ringNotice } from './doorbellNotify';
 import { scrollToMessage } from './reveal';
 import { AskChoices } from './AskChoices';
+import { waitedLabel } from './questions';
 import { useAskViews, type AskViews } from './useAskViews';
 import { MemberFace } from './MemberFace';
+import { QuestionRow } from './QuestionRow';
 
 /**
  * The asks & approvals rail (ADR 149) — the above-the-fold home of the to-human ask stream (ADR 147)
@@ -82,9 +84,9 @@ export function AsksStrip({
   /** Show an act in the log. On /live the log is a drawer (ADR 464 lane 2), so the route opens it
    *  first; the default is the bare reveal event, which is right wherever the stream is mounted. */
   onReveal?: (id: string) => void;
-  /** The page's shared ask derivation (lane 01M6DBDSGH): when given, the asks routed to the reader
-   *  live in "Waiting on you" above, and this rail keeps the rest — the team pool, other people's
-   *  asks, the review queue. Rendered alone it derives its own and shows everything. */
+  /** The page's shared ask derivation (lane 01M6DBDSGH): one clock and one local fold for the page.
+   *  Rendered alone the rail derives its own. Either way it shows everything — every ask and every
+   *  seat's question to the reader (lane 01M6EP0ZR9: the rail is the one surface). */
   views?: AskViews;
 }) {
   /* A choice just picked stays on screen for a beat (lane 01M511XNQC): the answer is already sent, but
@@ -107,14 +109,7 @@ export function AsksStrip({
   // instant, or a card could say "0:00 left" while still offering Approve. Rendered alone, the rail
   // derives for itself; on /live the page derives once and hands the views to the rail and the list.
   const own = useAskViews({ cfg, roster, board, envelopes, localIdentity, loading, enabled: views === undefined });
-  const { ctx, canAnswer, now, addLocal } = views ?? own;
-  /** With shared views, an ask routed to the reader is a row in "Waiting on you", never here too:
-   *  one place to look (spec 2026-10-30). Everything else — the team pool, other people's asks,
-   *  settled and lapsed ones for the sheet's counters — stays the rail's. */
-  const asks = useMemo(
-    () => (views ? views.asks.filter((a) => askAudience(a, ctx) !== 'you') : own.asks),
-    [views, own.asks, ctx],
-  );
+  const { ctx, canAnswer, now, addLocal, asks, questions } = views ?? own;
   const loud = asks.filter((a) => askIsLoud(a.state)).sort(byAudienceThenUrgency(ctx, now));
   const deferred = asks.filter((a) => a.state === 'deferred');
   /**
@@ -137,7 +132,11 @@ export function AsksStrip({
   // Is the lead a choice (lane 01M511XNQC)? Then the rail offers Choose…, never a one-click Approve.
   const leadChoices = lead ? askChoicesOf(lead.env) : null;
   // Counts both surfaces' asks — the rows above and the pool here — so the tab says what waits.
-  const yoursCount = answerableCount((views ?? own).asks.filter((a) => askIsLoud(a.state)), ctx);
+  const yoursCount =
+    answerableCount(asks.filter((a) => askIsLoud(a.state)), ctx) + (canAnswer ? questions.length : 0);
+  // A seat's question (ADR 773) leads the rail (lane 01M6EP0ZR9): it is to the reader by name, and
+  // its answer needs the sheet — options and a reply line — so the rail says who asks and opens it.
+  const leadQuestion = questions[0] ?? null;
 
   // The review queue (nick, 2026-08-05): every lane in acceptance and who it waits on, at a glance.
   const reviews = useMemo(() => (board ? deriveReviewQueue(board.lanes, asks) : []), [board, asks]);
@@ -177,6 +176,18 @@ export function AsksStrip({
     if (typeof Notification === 'undefined') return;
     void Notification.requestPermission().then(setNotifyPermission);
   }, []);
+
+  // ⌘K / Ctrl+K opens the sheet when something needs the reader (what "Answer all" was).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && yoursCount > 0) {
+        e.preventDefault();
+        setOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [yoursCount]);
 
   // Dismissal: Escape, and a click anywhere outside. Both are what a floating layer owes the reader —
   // it covers the canvas, so it must be as easy to put away as it was to open.
@@ -231,23 +242,20 @@ export function AsksStrip({
   );
 
   const idx = new Map(roster.map((m) => [m.name, m]));
-  const rest = cards.length - (lead && askIsLoud(lead.state) ? 1 : 0);
+  const rest = cards.length + questions.length - (leadQuestion || (lead && askIsLoud(lead.state)) ? 1 : 0);
   /* The banner wears the lead asker's colour — rim and hand — the way a bubble's ring wears its
      speaker's: "who is asking" is the same colour as their body on the floor. `memberColor` is the
      FILL (a ring, a stroke; never text — the fill/ink split in format.ts). The clock is the arc
      round their avatar: how much of the tier is left, read off the same `now` the words read, so
      the two can never disagree. Both are inline variables, so the cost is CSS. */
-  const frac = lead ? clockFraction(lead, now) : null;
-  const leadStyle = lead
+  const frac = lead && !leadQuestion ? clockFraction(lead, now) : null;
+  const leadName = leadQuestion ? leadQuestion.asker : lead?.env.from;
+  const leadStyle = leadName
     ? ({
-        '--lc-asks-hue': memberColor(
-          lead.env.from,
-          kindOf(lead.env.from, idx),
-          hueOf(lead.env.from, idx),
-        ),
+        '--lc-asks-hue': memberColor(leadName, kindOf(leadName, idx), hueOf(leadName, idx)),
       } as CSSProperties)
     : undefined;
-  const mode = bannerView.mode;
+  const mode = leadQuestion ? 'open' : bannerView.mode;
 
   return (
     <section
@@ -263,14 +271,59 @@ export function AsksStrip({
             verdict's mark; idle, the bell the rail always carried. */}
         {mode === 'open' ? (
           // Keyed on the ask, so a new question raises the hand again: it rises and waves, once.
-          <span key={lead?.env.id} className="lc-asks__hand" aria-hidden="true">
+          <span key={leadQuestion?.id ?? lead?.env.id} className="lc-asks__hand" aria-hidden="true">
             ✋
           </span>
         ) : (
           <BellIcon />
         )}
 
-        {lead && bannerView.mode !== 'idle' ? (
+        {leadQuestion ? (
+          <>
+            <span
+              className={`lc-chip__avatar lc-asks__who${idx.has(leadQuestion.asker) ? ' has-face' : ''}`}
+              style={memberDisc(leadQuestion.asker, kindOf(leadQuestion.asker, idx), hueOf(leadQuestion.asker, idx))}
+              aria-hidden="true"
+            >
+              {idx.has(leadQuestion.asker) ? (
+                <MemberFace name={leadQuestion.asker} roster={idx} size={22} />
+              ) : (
+                initial(leadQuestion.asker)
+              )}
+            </span>
+            <button
+              type="button"
+              className="lc-asks__lead"
+              onClick={() => onReveal(leadQuestion.id)}
+              title="Open this question in the log"
+            >
+              <b>{leadQuestion.asker}</b>
+              <span className="lc-asks__verb">
+                is asking <b>you</b>:
+              </span>
+              <span className="lc-asks__q">{leadQuestion.question.text}</span>
+            </button>
+            <span
+              className={`lc-asks__hold lc-ask__hold lc-ask__hold--${leadQuestion.question.blocking ? 'blocking' : 'advisory'}`}
+            >
+              {leadQuestion.question.blocking ? 'holds until answered' : 'waiting on you'}
+            </span>
+            <span className="lc-ask__clock lc-asks__clock">{waitedLabel(leadQuestion.waitedMs)}</span>
+            {canAnswer && (
+              <span className="lc-asks__quick">
+                <button
+                  type="button"
+                  className="lc-ask__btn lc-ask__btn--choose"
+                  aria-expanded={open}
+                  onClick={() => setOpen(true)}
+                  title={`answer ${leadQuestion.asker} — the options and a reply line are in the sheet`}
+                >
+                  Answer…
+                </button>
+              </span>
+            )}
+          </>
+        ) : lead && bannerView.mode !== 'idle' ? (
           <>
             <span
               className={`lc-chip__avatar lc-asks__who${
@@ -429,16 +482,25 @@ export function AsksStrip({
 
         <span className="lc-asks__spacer" />
 
-        {(cards.length > 0 || reviews.length > 0) && (
+        {(cards.length > 0 || questions.length > 0 || reviews.length > 0) && (
           <button
             type="button"
             className="lc-ask__btn lc-asks__more"
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
+            title={yoursCount > 0 ? 'open the sheet — ⌘K' : undefined}
           >
-            {rest > 0 && <span className="lc-asks__restcount">+{rest}</span>}
+            {rest > 0 && !(yoursCount > 0 && !open) && (
+              <span className="lc-asks__restcount">+{rest}</span>
+            )}
             <span className="lc-asks__morelabel">
-              {open ? 'close' : rest > 0 ? 'more waiting' : 'details'}
+              {open
+                ? 'close'
+                : yoursCount > 0
+                  ? `${yoursCount} need${yoursCount === 1 ? 's' : ''} you${rest > yoursCount - 1 ? ` · +${rest - (yoursCount - 1)}` : ''}`
+                  : rest > 0
+                    ? 'more waiting'
+                    : 'details'}
             </span>
             <ChevronIcon />
           </button>
@@ -505,7 +567,7 @@ export function AsksStrip({
       {error && <div className="lc-asks__error">{error}</div>}
 
       {/* Closed, the sheet is inert: no tab stops into a layer the reader cannot see. */}
-      {(cards.length > 0 || reviews.length > 0) && (
+      {(cards.length > 0 || questions.length > 0 || reviews.length > 0) && (
         <div className="lc-asks__sheet" data-open={open || undefined} inert={!open}>
           {/* The operator counters live HERE, not on the banner (spec §6; dolly, lane-3 acceptance):
               on the rail they crowded the question out at 1300px. Counted apart on purpose: an ask
@@ -521,6 +583,19 @@ export function AsksStrip({
             {closed > 0 && <span className="lc-asks__meta">{closed} settled</span>}
           </p>
           <div className="lc-asks__cards">
+            {/* The seats' questions first (ADR 773, lane 01M6EP0ZR9): to the reader by name, oldest at the top. */}
+            {questions.map((q, i) => (
+              <QuestionRow
+                key={q.id}
+                card={q}
+                idx={idx}
+                cfg={cfg}
+                canAnswer={canAnswer}
+                onAnswered={addLocal}
+                onReveal={onReveal}
+                style={{ '--i': i } as React.CSSProperties}
+              />
+            ))}
             {cards.map((ask, i) => {
               const aud = askAudience(ask, ctx);
               return (
