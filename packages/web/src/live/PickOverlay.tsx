@@ -1,5 +1,6 @@
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
 // Runtime from the browser-safe entry: the root index also carries node-only modules (guidance-epoch).
+import { refusalOf } from './Refusal';
 import { pickerRows, type PickerRow, type PickerView } from '@musterd/protocol/wire';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchLaneBoard, updateLane, type LiveConfig } from './client';
@@ -54,7 +55,7 @@ export function PickOverlay({
       setError(null);
       return b;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(refusalOf(e).line);
       return null;
     }
   }, [cfg]);
@@ -112,7 +113,7 @@ export function PickOverlay({
         if (patch) await updateLane(cfg, row.id, patch);
         setPicked(row);
       } catch (e) {
-        setNote(e instanceof Error ? e.message : String(e));
+        setNote(refusalOf(e).line);
         void load();
       } finally {
         setBusy(false);
