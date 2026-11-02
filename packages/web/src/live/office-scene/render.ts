@@ -53,6 +53,8 @@ import type { ReadStatus } from '../experimentReads';
 import { READ_PIN_CAP, readPins, stickySway, WALL_COLUMNS, type WallBoard } from './wallboard';
 import { DAY_ENV, deskLampOn, sunBeam, type LightEnv } from './lighting';
 import type { Weather } from './weather';
+import { drawMovers, moversAt } from './windowSprites';
+import { DEFAULT_VIEW, drawWindowViews, type ViewSetting } from './windowView';
 import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
 import { workingAtDesk, type Placement } from './seating';
@@ -369,14 +371,6 @@ function drawVignette(ctx: CanvasRenderingContext2D): void {
  * glow by night. Interpolated on `daylight`, so it tracks the same PST clock as the beam and the veil.
  */
 
-export function glassColor(env: LightEnv): string {
-  const [sr, sg, sb] = hexRgb('#0f1626'); // night pane
-  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(env.skyTint);
-  const [dr, dg, db] = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [206, 226, 244];
-  const t = env.daylight;
-  const c = (n: number, d: number) => Math.round(n + (d - n) * t);
-  return `rgb(${c(sr, dr)}, ${c(sg, dg)}, ${c(sb, db)})`;
-}
 
 /**
  * Draw the two back walls and their windows. `edge(t,u)` maps a wall coordinate to the floor point + lift,
@@ -2039,6 +2033,12 @@ export interface RenderOpts {
    * the ones a partial frame cannot touch. Absent → every unit runs, exactly as before.
    */
   units?: UnitHook | undefined;
+  /** What is outside the windows (windowView.ts, lane 01M6ENGW2H). Absent → `DEFAULT_VIEW`. */
+  view?: ViewSetting | undefined;
+  /** The wall clock, ms, for the movers outside (windowSprites.ts): seeded per team so every viewer
+   *  sees the same tram. Absent (or 0, under still mode) → nothing moves: the renderer is pure, and
+   *  `index.ts` passes the clock. */
+  nowMs?: number | undefined;
   /** The sky at the windows (weather.ts, lane 01M5XS6597). Absent → clear, which draws nothing. */
   weather?: Weather | undefined;
   /** When each shelf-chime bar was last struck, in scene-clock seconds (sound identity inc 4): a bar
@@ -4483,10 +4483,19 @@ function sunBucket(env: LightEnv): number {
  * itself is a live fixture. The state follows the clock quantised, so a 45-minute fade re-bakes in
  * 32 steps and the sun in 15-minute steps, not every frame (plan Task 8).
  */
-export function backgroundKey(fit: Fit, env: LightEnv, dpr: number): string {
+export function backgroundKey(
+  fit: Fit,
+  env: LightEnv,
+  dpr: number,
+  view: ViewSetting = DEFAULT_VIEW,
+  weather: Weather = 'clear',
+): string {
   const m = roomMixFor(env);
   return [
     'bg',
+    // the sky outside is on the continuous clock (window views): a quarter-hour bucket re-bakes it
+    // by day, the sun pools' cadence; at night the sky holds, so the key does too
+    `${view}·${weather}·${env.hours > 4.5 && env.hours < 21.5 ? Math.floor(env.hours * 4) : 'n'}`,
     `${m.from}→${m.to}@${Math.round(m.mix * 32)}`,
     env.daylight.toFixed(3),
     `sun${sunBucket(env)}`,
@@ -4600,6 +4609,8 @@ export function renderScene(
     : undefined;
   const shell = (c: CanvasRenderingContext2D): void => {
     drawGroundShadow(c, fit);
+    // The outside, under the shell's transparent panes (window views, lane 01M6ENGW2H).
+    drawWindowViews(c, fit, env, rendered, opts.weather ?? 'clear', opts.view ?? DEFAULT_VIEW);
     blitIf(c, fit, rendered, `room/light-${dayOf(mix.from)}`, 0, 0);
     if (mix.mix > 0) blitIf(c, fit, rendered, `room/light-${dayOf(mix.to)}`, 0, 0, mix.mix);
     drawSunPools(c, fit, env); // the window pools, at this quarter hour's sun (lane 01M5ZW21JH)
@@ -4623,8 +4634,17 @@ export function renderScene(
     ro('rug/reception', RECEPTION.rug.lx, RECEPTION.rug.ly)(c);
     // No nook rug (office v3-2): the café's tile, painted in the shell, is the zone.
   }
+  // The movers outside the windows (window views): over the baked sky and plates, under the walls'
+  // fixtures and the weather. Seeded by the wall clock; still mode passes 0.
+  const movers = moversAt(
+    opts.view ?? DEFAULT_VIEW,
+    opts.nowMs ?? 0,
+    env,
+    opts.weather ?? 'clear',
+    teamName,
+  );
   if (cache) {
-    const bg = backgroundKey(fit, env, dpr);
+    const bg = backgroundKey(fit, env, dpr, opts.view ?? DEFAULT_VIEW, opts.weather ?? 'clear');
     run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
     // On the stage, in their existing order: the live fixtures over the blitted walls, then the
     // additive bulb strands (see `drawWalls`).
@@ -4634,6 +4654,7 @@ export function renderScene(
   } else {
     run(() => shell(ctx));
   }
+  run(() => drawMovers(ctx, fit, movers));
   {
     const draw = ro('meeting/table', MEETING.lx, MEETING.ly);
     items.push({

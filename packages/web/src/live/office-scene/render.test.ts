@@ -2283,3 +2283,18 @@ describe('chairPull — the desk chair pulled out and tucked in around its sitte
     expect(chairPull(pose(0.9), seat, 16)).toBeCloseTo(0);
   });
 });
+
+describe('window views (lane 01M6ENGW2H)', () => {
+  const fit = fitFloor(1200, 900);
+  const env = computeLightEnv(12, true);
+  it('the shell cache key changes with the view and with the weather, so a pick never shows stale plates', () => {
+    expect(backgroundKey(fit, env, 1, 'city')).not.toBe(backgroundKey(fit, env, 1, 'coast'));
+    expect(backgroundKey(fit, env, 1, 'city', 'clear')).not.toBe(backgroundKey(fit, env, 1, 'city', 'snow'));
+  });
+  it('the sky outside re-bakes by the quarter hour by day and holds through the night', () => {
+    expect(backgroundKey(fit, { ...env, hours: 10 }, 1)).toBe(backgroundKey(fit, { ...env, hours: 10 + 14 / 60 }, 1));
+    expect(backgroundKey(fit, { ...env, hours: 10 }, 1)).not.toBe(backgroundKey(fit, { ...env, hours: 10 + 16 / 60 }, 1));
+    const night = computeLightEnv(23, true);
+    expect(backgroundKey(fit, night, 1)).toBe(backgroundKey(fit, { ...night, hours: 23.5 }, 1));
+  });
+});

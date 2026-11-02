@@ -141,6 +141,8 @@ FLOOR_TILE = srgb("#ebae64")  # DARK_PALETTE.floor — the planks' middle tone (
 CAFE_TILE = srgb("#cfc6b6")   # small pale ceramic under the café (a shade down from the swatch: the window pool lifts it)
 CAFE_GROUT = srgb("#a89d8a")
 FLOOR_SIDE = srgb("#c8863c")  # DARK_PALETTE.floor2
+DRAPE = srgb("#c76b45")       # terracotta cloth (window views mockup v2)
+DRAPE_ROD = srgb("#5a4a38")   # the rod and the tiebacks
 WALL = srgb("#d6cbbc")        # warm greige plaster: nick 2026-10-20, the lilac "looks purpleish"; a neutral that takes the warm key
 APPLIANCE = srgb("#d8d2c6")
 COUCH = srgb("#e3a72b")       # DARK_PALETTE.couch
@@ -353,6 +355,26 @@ def glow(name: str, rgb: tuple[float, float, float], strength: float = 1.6) -> b
     bsdf.inputs["Emission Color"].default_value = (*rgb, 1)
     bsdf.inputs["Emission Strength"].default_value = strength
     bsdf.inputs["Roughness"].default_value = 0.2
+    return m
+
+
+def clear_glass(name: str) -> bpy.types.Material:
+    """A pane that renders as nothing (window views, lane 01M6ENGW2H): alpha 0, no emission, so the shell
+    shows a hole where the runtime paints the sky and the plates behind it. The frame, mullions and sill
+    stay solid around it."""
+    m = bpy.data.materials.get(name)
+    if m:
+        return m
+    m = bpy.data.materials.new(name)
+    nt, nodes, links, bsdf = _nodes(m)
+    bsdf.inputs["Base Color"].default_value = (1, 1, 1, 1)
+    bsdf.inputs["Alpha"].default_value = 0.0
+    bsdf.inputs["Emission Strength"].default_value = 0.0
+    m.blend_method = "BLEND"
+    if hasattr(m, "surface_render_method"):
+        m.surface_render_method = "BLENDED"
+    if hasattr(m, "shadow_method"):
+        m.shadow_method = "NONE"
     return m
 
 
@@ -1632,7 +1654,9 @@ def wall(asset_id: str, which: int, zs: float, col) -> bpy.types.Object:
     cap = paint("wall-cap", tuple(c * 0.8 for c in WALL), 0.9)
     skirt = wood("skirting", srgb("#4e3a24"), grain=0.1)
     frame = paint("window-frame", tuple(c * 0.7 for c in WALL), 0.6)
-    pane = glow("window-pane", srgb("#f6e7c4"), strength=2.2)
+    pane = clear_glass("window-pane")
+    cloth = paint("drape", DRAPE, 0.95)
+    rod = wood("drape-rod", DRAPE_ROD, grain=0.08)
     T = 8.0  # wall thickness, behind the room
     parts = []
     along = lambda t: t * FLOOR  # noqa: E731
@@ -1645,7 +1669,16 @@ def wall(asset_id: str, which: int, zs: float, col) -> bpy.types.Object:
             return box(name, -T / 2 + depth_off, c, z0, thick, L, h, mat, zs)
         return box(name, c, -T / 2 + depth_off, z0, L, thick, h, mat, zs)
 
-    parts.append(place(f"{asset_id}/face", 0, 1, 0, WALL_H, 0, T, plaster))
+    # The plaster, in pieces that leave each pane open (window views): a solid face behind a transparent
+    # pane would show plaster where the sky goes. Strips between the windows, full height; a lintel and
+    # an apron above and below each.
+    edges = [0.0] + [e for w in WINDOWS for e in (w[0], w[1])] + [1.0]
+    for k in range(0, len(edges), 2):
+        parts.append(place(f"{asset_id}/face{k // 2}", edges[k], edges[k + 1], 0, WALL_H, 0, T, plaster))
+    for i, (t0, t1, u0, u1, _) in enumerate(WINDOWS):
+        z0, z1 = u0 * WALL_H, u1 * WALL_H
+        parts.append(place(f"{asset_id}/apron{i}", t0, t1, 0, z0, 0, T, plaster))
+        parts.append(place(f"{asset_id}/lintel{i}", t0, t1, z1, WALL_H - z1, 0, T, plaster))
     parts.append(place(f"{asset_id}/cap", 0, 1, WALL_H, WALL_H * 0.04, 0.5, T + 1, cap))
     parts.append(place(f"{asset_id}/skirt", 0, 1, 0, 7, T / 2 + 1.0, 2, skirt))
     for i, (t0, t1, u0, u1, mull) in enumerate(WINDOWS):
@@ -1660,6 +1693,15 @@ def wall(asset_id: str, which: int, zs: float, col) -> bpy.types.Object:
             tt = t0 + (t1 - t0) * k / mull
             parts.append(place(f"{asset_id}/win{i}-mullion{k}", tt - 0.0015, tt + 0.0015, z0, z1 - z0, T / 2 + 1.3, 2, frame))
         parts.append(place(f"{asset_id}/win{i}-sill", t0 - 0.006, t1 + 0.006, z0 - 2.5, 2.5, T / 2 + 3.5, 7, skirt))
+        # Drapes (window views, lane 01M6ENGW2H): a rod above the frame and two tied-back panels hung on the
+        # wall BESIDE the frame — never over the pane, so the visible glass and the floor light are unchanged.
+        dw = 0.045  # a panel's width along the wall, as a fraction of it
+        parts.append(place(f"{asset_id}/win{i}-rod", t0 - dw - 0.01, t1 + dw + 0.01, z1 + 6, 1.6, T / 2 + 4.5, 1.6, rod))
+        for name, a, b in (("drape-l", t0 - dw - 0.004, t0 - 0.006), ("drape-r", t1 + 0.006, t1 + dw + 0.004)):
+            # the panel: full drop from the rod to below the sill, pinched at two-thirds by a tieback
+            parts.append(place(f"{asset_id}/win{i}-{name}", a, b, z0 - 10, z1 + 5 - (z0 - 10), T / 2 + 2.2, 4.0, cloth))
+            mid = (a + b) / 2
+            parts.append(place(f"{asset_id}/win{i}-{name}-tie", mid - 0.012, mid + 0.012, z0 + (z1 - z0) * 0.36, 3.0, T / 2 + 6.4, 2.0, rod))
     return finish(asset_id, parts, 0, 0, col)
 
 
@@ -1668,11 +1710,11 @@ def wall(asset_id: str, which: int, zs: float, col) -> bpy.types.Object:
 # window panes emit. The ceiling bank is a separate set of area lights, on / off / spill.
 LIGHT_STATES = {
     "day": dict(sun=(3.0, (1.0, 0.93, 0.82), 50), fill=(0.9, (0.82, 0.9, 1.0)), world=(0.35, (0.9, 0.86, 0.8)),
-                pane=(2.2, "#f6e7c4"), window=(900.0, (1.0, 0.93, 0.8))),
+                window=(900.0, (1.0, 0.93, 0.8))),
     "evening": dict(sun=(2.2, (1.0, 0.62, 0.36), 18), fill=(0.5, (0.7, 0.62, 0.9)), world=(0.22, (0.75, 0.55, 0.6)),
-                    pane=(1.7, "#f3b57a"), window=(700.0, (1.0, 0.66, 0.4))),
+                    window=(700.0, (1.0, 0.66, 0.4))),
     "night": dict(sun=(0.0, (0.5, 0.6, 1.0), 30), fill=(0.32, (0.55, 0.65, 1.0)), world=(0.1, (0.35, 0.4, 0.65)),
-                  pane=(0.18, "#1b2440"), window=(0.0, (0.5, 0.6, 1.0))),
+                  window=(0.0, (0.5, 0.6, 1.0))),
 }
 CEILING = {"on": 1.0, "spill": 0.42, "off": 0.0}
 
@@ -1716,14 +1758,7 @@ def lights(state: str = "day", ceiling: str = "off", zs: float = 1.0, window_spo
     w_strength, w_color = L["world"]
     bg.inputs["Color"].default_value = (*w_color, 1.0)
     bg.inputs["Strength"].default_value = w_strength
-    # the panes' glow follows the state (the glow material is shared by every window)
-    pane = bpy.data.materials.get("window-pane")
-    if pane:
-        bsdf = pane.node_tree.nodes.get("Principled BSDF")
-        p_strength, p_hex = L["pane"]
-        bsdf.inputs["Emission Color"].default_value = (*srgb(p_hex), 1)
-        bsdf.inputs["Base Color"].default_value = (*srgb(p_hex), 1)
-        bsdf.inputs["Emission Strength"].default_value = p_strength
+    # the panes are transparent in every state (window views): the runtime paints the sky behind them
     # window spots: one per window per wall, just outside the pane, aimed down across the floor
     w_energy, w_color = L["window"]
     if w_energy > 0 and window_spots:

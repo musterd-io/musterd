@@ -2846,3 +2846,20 @@ it to remove a chunk. A re-baseline to measured + 15% would loosen.
 
 - Falsify: `pnpm perf:check` after a build reports initial JS at or under 154,500 B, total JS
   under 405,500 B and live CSS at or under 30,500 B with this lane in.
+
+## 2026-11-02 — window views, city; Office art RAISED 8,900,000 → 9,730,000 B (lane 01M6ENGW2H25MYV40Z2TPWBNJB)
+
+| Budget     | Before (ceiling) | This branch (files)   | Ceiling                          |
+| ---------- | ---------------- | --------------------- | -------------------------------- |
+| office art | 8,900,000 B      | ~9,257,984 B (182)    | RAISED 8,900,000 → 9,730,000 B   |
+| total JS   | 405,500 B        | ~405,811 B (CI, 396.3 KB) | RAISED 405,500 → 407,500 B |
+
+The shell's five layers are re-rendered with transparent panes and a rod and two drapes per window
+(~90 KB over the three day states and the two ceiling overlays), and the city arrives as twelve
+plates — two walls × two panes × three day states, each the pane's span on a transparent sky, ~25 KB
+after pngquant + WebP (`packages/web/art/office/exterior.py`). Coast and mountain (increment 2) add
+twenty-four more of the same size, ~600 KB, inside this ceiling. A re-baseline to measured + 15%
+would loosen (ADR 183).
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 9,730,000 B and total JS
+  at or under 407,500 B with this lane in.
