@@ -92,8 +92,10 @@ describe('console HTTP boundary (ADR 615)', () => {
 
   it('exposes nothing else: unknown routes 404, non-GET 405, a foreign host 404', async () => {
     const { call } = await boot();
-    for (const p of ['/login', '/token', '/teams', '/.well-known/openid-configuration'])
+    for (const p of ['/login', '/token', '/team', '/.well-known/openid-configuration'])
       expect((await call(p)).status, p).toBe(404);
+    // `/teams` is a POST route now (lane 01M3Z44MTV): a GET is 405, like `/tokens`.
+    expect((await call('/teams')).status).toBe(405);
     const post = await call('/health', { method: 'POST' });
     expect(post.status).toBe(405);
     expect(post.headers['allow']).toBe('GET, HEAD');
