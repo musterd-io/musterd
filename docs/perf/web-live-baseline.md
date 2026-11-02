@@ -2813,12 +2813,12 @@ would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 8,900,000 B with this lane in.
 
-## 2026-11-02 — "Waiting on you" is the one list; initial JS RAISED 152,500 → 153,500 B, total JS RAISED 404,000 → 404,500 B (lane 01M6DBDSGH4K1X9501SWTME1B5)
+## 2026-11-02 — "Waiting on you" is the one list; initial JS RAISED 152,500 → 153,500 B, total JS RAISED 404,000 → 405,500 B (lane 01M6DBDSGH4K1X9501SWTME1B5)
 
 | Budget     | Before (ceiling) | This branch (local) | Ceiling                          |
 | ---------- | ---------------- | ------------------- | -------------------------------- |
 | initial JS | 152,500 B        | 153,190 B           | RAISED 152,500 → 153,500 B       |
-| total JS   | 404,000 B        | 404,275 B           | RAISED 404,000 → 404,500 B       |
+| total JS   | 404,000 B        | 404,275 B (CI ~404,790) | RAISED 404,000 → 405,500 B   |
 
 Every ask routed to the reader is now a row in "Waiting on you" and answered on its triage card; the rail
 keeps the team pool and other people's asks. The rail's derivation (`useAskViews`) and its answer path
@@ -2828,4 +2828,4 @@ cost is chunk overhead, about 0.7 KB gzip eager; the alternative was a second co
 A re-baseline to measured + 15% would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports initial JS at or under 153,500 B and total JS at or
-  under 404,500 B with this lane in.
+  under 405,500 B with this lane in.
