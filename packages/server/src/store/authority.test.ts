@@ -145,7 +145,7 @@ withDrivers('human authority (ADR 662)', (o) => {
         proof,
         expectedNodeId: 'node-hub',
       }),
-    ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+    ).resolves.toMatchObject({ ok: false, reason: 'descriptor_mismatch' });
     await expect(
       requireAuthority(db, {
         ...act,
@@ -309,7 +309,7 @@ withDrivers('human authority (ADR 662)', (o) => {
         payload: { state: 'active' },
         proof: { key_id: key.id, nonce: d1.nonce, signature: kp.sign(d1) },
       }),
-    ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+    ).resolves.toMatchObject({ ok: false, reason: 'descriptor_mismatch' });
     // Expired.
     const d2 = await buildDescriptor(db, {
       teamId: team.id,

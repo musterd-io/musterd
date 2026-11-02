@@ -460,7 +460,7 @@ export async function getDescriptorByNonce(
 export type AuthorityCheck =
   | { ok: true; assurance: 'A2'; keyId: string; kind: AuthenticatorKind }
   | { ok: true; assurance: 'bearer_unenrolled' }
-  | { ok: false; reason: AuthorityRefusalReason };
+  | { ok: false; reason: AuthorityRefusalReason; why?: string };
 
 /**
  * The gate. `presenter` is the member whose authority the act exercises (for
@@ -494,7 +494,10 @@ export async function requireAuthority(
   },
 ): Promise<AuthorityCheck> {
   const now = input.now ?? Date.now();
-  const refuse = async (reason: AuthorityRefusalReason): Promise<AuthorityCheck> => {
+  // `why` names the check that failed, for the audit and the person (lane 01M6EPWAJP): four checks
+  // share the `descriptor_mismatch` reason, and a human refused on /live could not tell a stale
+  // nonce from a signature over the wrong ask. The reason stays the contract; the sentence is detail.
+  const refuse = async (reason: AuthorityRefusalReason, why?: string): Promise<AuthorityCheck> => {
     await appendAudit(db, input.teamId, {
       actor: input.presenter.name,
       action: 'authority.refused',
@@ -503,10 +506,11 @@ export async function requireAuthority(
       detail: {
         act: input.act,
         reason,
+        ...(why ? { why } : {}),
         ...(input.proof ? { key_id: input.proof.key_id } : {}),
       },
     });
-    return { ok: false, reason };
+    return { ok: false, reason, ...(why ? { why } : {}) };
   };
 
   if (input.credential === 'agent' || input.presenter.kind !== 'human') {
@@ -525,14 +529,24 @@ export async function requireAuthority(
       WHERE team_id = ? AND nonce = ?`,
     [input.teamId, proof.nonce],
   );
-  if (!nonce || nonce.member_id !== input.presenter.id) return refuse('descriptor_mismatch');
+  if (!nonce)
+    return refuse(
+      'descriptor_mismatch',
+      'no live descriptor for that nonce (used, expired, or minted elsewhere)',
+    );
+  if (nonce.member_id !== input.presenter.id)
+    return refuse(
+      'descriptor_mismatch',
+      `the descriptor was minted for another member, not ${input.presenter.name}`,
+    );
   if (input.expectedNodeId !== undefined && nonce.node_id !== input.expectedNodeId)
-    return refuse('descriptor_mismatch');
+    return refuse('descriptor_mismatch', 'the descriptor was minted on another node');
   if (nonce.used_at !== null) return refuse('nonce_reused');
   if (now > Number(nonce.expires_at)) return refuse('expired');
 
   const key = await getDeviceKey(db, input.teamId, proof.key_id);
-  if (!key || key.memberId !== input.presenter.id) return refuse('descriptor_mismatch');
+  if (!key || key.memberId !== input.presenter.id)
+    return refuse('descriptor_mismatch', `the signing key is not ${input.presenter.name}'s`);
   if (key.revokedAt !== null) return refuse('key_revoked');
   // Decision 5: a software key's private half is readable by any same-user process,
   // so it never qualifies as A2 — however valid its signature is.
@@ -549,7 +563,10 @@ export async function requireAuthority(
     nonce: proof.nonce,
   };
   if (payloadDigest(descriptorSigningBytes(descriptor)) !== nonce.descriptor_digest) {
-    return refuse('descriptor_mismatch');
+    return refuse(
+      'descriptor_mismatch',
+      `the signature covers a different act, target or payload (expected ${descriptor.act} on ${descriptor.target})`,
+    );
   }
   let valid = false;
   if (key.kind === 'passkey') {
