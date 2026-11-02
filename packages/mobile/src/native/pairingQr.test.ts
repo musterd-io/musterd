@@ -47,16 +47,29 @@ describe('relayOrigin', () => {
 });
 
 describe('daemonFingerprint', () => {
-  it('is the daemon page fingerprint: sha256 of the raw identity key, grouped', () => {
-    const raw = Buffer.from(identity, 'base64url');
+  // ADR 788: the value the person compares commits to both daemon keys, so a QR with a swapped
+  // receive key no longer matches the page. The vector is pinned on the daemon side too.
+  it('is sha256 of the v1 tag, the identity key and the receive key, grouped', () => {
+    const id = Buffer.alloc(32, 1).toString('base64url');
+    const rc = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 2)]).toString('base64url');
+    expect(daemonFingerprint(id, rc)).toBe('bf07 79a6 2f44 eeb0');
     const expected = createHash('sha256')
-      .update(raw)
+      .update('musterd/pairing-fingerprint/v1')
+      .update(Buffer.from(identity, 'base64url'))
+      .update(Buffer.from(receive, 'base64url'))
       .digest('hex')
       .slice(0, 16)
       .match(/.{4}/g)!
       .join(' ');
-    expect(daemonFingerprint(identity)).toBe(expected);
-    expect(daemonFingerprint('short')).toBeNull();
+    expect(daemonFingerprint(identity, receive)).toBe(expected);
+  });
+
+  it('changes when either key changes, and refuses a key of the wrong length', () => {
+    const base = daemonFingerprint(identity, receive);
+    expect(daemonFingerprint(b64(32, 9), receive)).not.toBe(base);
+    expect(daemonFingerprint(identity, b64(65, 9))).not.toBe(base);
+    expect(daemonFingerprint('short', receive)).toBeNull();
+    expect(daemonFingerprint(identity, b64(33, 2))).toBeNull();
   });
 });
 
@@ -80,7 +93,7 @@ describe('readPairingQr', () => {
     expect(read.ok).toBe(true);
     if (!read.ok) return;
     expect(read.scanned.relay).toBe('https://relay.example');
-    expect(read.scanned.fingerprint).toBe(daemonFingerprint(identity));
+    expect(read.scanned.fingerprint).toBe(daemonFingerprint(identity, receive));
     expect(read.scanned.qr.code).toBe(code);
   });
 

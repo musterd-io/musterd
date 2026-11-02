@@ -3,7 +3,7 @@
  *
  * The QR text is `AppPairingQrSchema` JSON (ADR 690). This file parses it, turns the relay into
  * the https origin the pin store accepts, and computes the two hashes the daemon already
- * computes: the identity fingerprint shown beside the QR, and the App Attest challenge. Nothing
+ * computes: the fingerprint of both daemon keys shown beside the QR, and the App Attest challenge. Nothing
  * here touches a key, the camera, or the network. The screen confirms the fingerprint before
  * `pair.ts` generates keys or sends anything — the code is single-use, and a request sealed to
  * the wrong daemon burns it.
@@ -26,7 +26,7 @@ export interface ScannedPairing {
   qr: AppPairingQr;
   /** `https` origin, no userinfo and no path. The pin and every callback use this. */
   relay: string;
-  /** The daemon identity fingerprint, grouped the way the page prints it. */
+  /** The fingerprint of both daemon keys, grouped the way the page prints it (ADR 788). */
   fingerprint: string;
 }
 
@@ -55,14 +55,23 @@ export function relayOrigin(value: string): string | null {
   return `https://${url.host}`;
 }
 
+const FINGERPRINT_TAG = utf8Encode('musterd/pairing-fingerprint/v1');
+
 /**
- * What the page prints beside the QR (`keyFingerprint`): sha256 of the raw identity key, first
- * 16 hex characters, grouped in fours. The identity key only — not the receive key.
+ * What the page prints beside the QR (ADR 788): sha256 of the v1 tag, the raw Ed25519 identity
+ * key (32 bytes) and the raw P-256 receive key (65 bytes), first 16 hex characters, grouped in
+ * fours. It covers both keys because pair requests and answers are sealed to the receive key: a
+ * QR with a swapped receive key must not match the page.
  */
-export function daemonFingerprint(identityB64url: string): string | null {
-  const raw = b64urlDecode(identityB64url);
-  if (!raw || raw.length !== 32) return null;
-  const groups = toHex(sha256(raw)).slice(0, 16).match(/.{4}/g);
+export function daemonFingerprint(identityB64url: string, receiveB64url: string): string | null {
+  const identity = b64urlDecode(identityB64url);
+  const receive = b64urlDecode(receiveB64url);
+  if (!identity || identity.length !== 32 || !receive || receive.length !== 65) return null;
+  const joined = new Uint8Array(FINGERPRINT_TAG.length + identity.length + receive.length);
+  joined.set(FINGERPRINT_TAG, 0);
+  joined.set(identity, FINGERPRINT_TAG.length);
+  joined.set(receive, FINGERPRINT_TAG.length + identity.length);
+  const groups = toHex(sha256(joined)).slice(0, 16).match(/.{4}/g);
   if (!groups || groups.length !== 4) return null;
   return groups.join(' ');
 }
@@ -168,7 +177,10 @@ export function readPairingQr(text: string, now = Date.now()): QrRead {
   if (parsed.data.expires_at <= now) return { ok: false, reason: 'expired' };
   const relay = relayOrigin(parsed.data.relay);
   if (!relay) return { ok: false, reason: 'relay' };
-  const fingerprint = daemonFingerprint(parsed.data.daemon_identity_public_key);
+  const fingerprint = daemonFingerprint(
+    parsed.data.daemon_identity_public_key,
+    parsed.data.daemon_receive_public_key,
+  );
   if (!fingerprint) return { ok: false, reason: 'unreadable' };
   return { ok: true, scanned: { qr: parsed.data, relay, fingerprint } };
 }

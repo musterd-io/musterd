@@ -215,7 +215,8 @@ one gets tapped through.
   on the security review path before it ships. Spec §9 open question 2 (a notification action
   cannot present the enclave prompt) is settled by this note.
 - 2026-10-23, lane 01M5K60EPK (pairing on the phone, decision 5): the app scans the QR with
-  `expo-camera` ([ADR 727](727-phone-scans-pairing-qr.md)), shows the daemon identity fingerprint,
+  `expo-camera` ([ADR 727](727-phone-scans-pairing-qr.md)), shows the daemon identity fingerprint
+  _(since 2026-11-02 the fingerprint of both daemon keys, [ADR 788](788-pairing-fingerprint-covers-both-keys.md))_,
   and generates keys only after the person says that fingerprint matches the page. The code is
   single-use, so a request sealed to the wrong daemon would burn it. The sealed `AppPairRequest`
   goes to the relay with purpose `pair`. A relay `202` stores the pin without a binding. The

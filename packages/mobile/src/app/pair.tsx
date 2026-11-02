@@ -77,7 +77,7 @@ export default function PairScreen() {
         const { loadPairingPin } = await import('../native/pairingPin');
         const pin = await loadPairingPin();
         if (!alive || lock.current || !pin) return;
-        const fingerprint = daemonFingerprint(pin.identity);
+        const fingerprint = daemonFingerprint(pin.identity, pin.receive);
         setPhase(
           pin.binding
             ? { name: 'paired', fingerprint, team: pin.team }
@@ -104,7 +104,7 @@ export default function PairScreen() {
           success();
           setPhase({
             name: 'paired',
-            fingerprint: daemonFingerprint(pin.identity),
+            fingerprint: daemonFingerprint(pin.identity, pin.receive),
             team: pin.team,
           });
         } catch {

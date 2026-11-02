@@ -56,9 +56,9 @@ small change.
   daemon decides, so a phone learns the verdict only from a later redelivery — 202 means *delivered*,
   not *accepted*.
 - **Pairing.** `musterd channels pair --channel app` (ADR 690) prints a QR carrying the relay route,
-  a one-time code and both daemon public keys, and the daemon identity fingerprint beside it. The
-  app scans that QR ([ADR 727](../decisions/727-phone-scans-pairing-qr.md)), shows the same
-  fingerprint, and only then generates its keys and sends an App Attest–vouched pair request sealed
+  a one-time code and both daemon public keys, and the fingerprint of both daemon keys beside it
+  ([ADR 788](../decisions/788-pairing-fingerprint-covers-both-keys.md)). The app scans that QR
+  ([ADR 727](../decisions/727-phone-scans-pairing-qr.md)), shows the same fingerprint, and only then generates its keys and sends an App Attest–vouched pair request sealed
   to the daemon through the relay. The phone never holds the daemon's HTTP credential, and it never
   approves its own key. The screen stays on "Waiting for approval" until the extension has stored
   the binding from the signed `paired` delivery. A phone with no push token pairs, and stays on
