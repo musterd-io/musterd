@@ -46,18 +46,29 @@ export interface ConsoleConfig {
 
 type Env = Record<string, string | undefined>;
 
-/** Both KMS variables, or neither. A bad resource name is refused without echoing it. */
+/**
+ * The key and ONE credential source, or nothing. The credential is a service-account JSON, read
+ * from a mode-600 file (`_FILE`, a machine with a disk) or carried whole in `_JSON` (a Fly secret:
+ * the image has no writable, private file to read, lane 01M5E0543H). Either lands in
+ * `credentialsFile`, which `loadServiceAccount` reads as a path or, when it begins with `{`, as the
+ * JSON itself. A bad resource name is refused without echoing it; a credential is never echoed.
+ */
 function kmsOf(env: Env): ConsoleConfig['kms'] {
   const key = env['MUSTERD_CONSOLE_KMS_KEY']?.trim() ?? '';
   const file = env['MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE']?.trim() ?? '';
-  if (!key && !file) return null;
-  if (!key || !file)
+  const json = env['MUSTERD_CONSOLE_KMS_CREDENTIALS_JSON']?.trim() ?? '';
+  if (!key && !file && !json) return null;
+  if (file && json)
     throw new Error(
-      'MUSTERD_CONSOLE_KMS_KEY and MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE must be set together',
+      'MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE and MUSTERD_CONSOLE_KMS_CREDENTIALS_JSON are one or the other',
+    );
+  if (!key || (!file && !json))
+    throw new Error(
+      'MUSTERD_CONSOLE_KMS_KEY and MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE (or _JSON) must be set together',
     );
   if (!KMS_KEY_VERSION.test(key))
     throw new Error('MUSTERD_CONSOLE_KMS_KEY is not a Cloud KMS cryptoKeyVersion resource name');
-  return { keyVersion: key, credentialsFile: file };
+  return { keyVersion: key, credentialsFile: file || json };
 }
 
 /** Both team variables, or neither. The suffix is a bare host suffix, never a URL. */

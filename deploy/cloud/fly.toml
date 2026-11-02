@@ -22,7 +22,8 @@ primary_region = "iad"
   # Checked in here. This file does not post it. Deploy stays scripts/cloud/deploy.mjs.
   # Increment 1D's staging issuer (workers/staging-jwks). Increment 2's console replaces both lines.
   MUSTERD_CONSOLE_AUDIENCE = "https://musterd.dev"
-  MUSTERD_CONSOLE_JWKS_URL = "https://musterd-staging-jwks.nick-sanders-a.workers.dev/jwks"
+  # The console's own key set (ADR 685; cut over from the staging issuer in lane 01M5E0543H).
+  MUSTERD_CONSOLE_JWKS_URL = "https://app.musterd.io/.well-known/jwks.json"
   # The web build writes dist/client (the published /live bundle, as `service` publishes it locally).
   MUSTERD_WEB_ROOT = "/app/packages/web/dist/client"
 

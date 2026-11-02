@@ -75,6 +75,12 @@ root that certifies the KMS key is spec §11. This record does not add one.
   _(2026-10-20.)_ That ops change is lane `01M5E0543HNPG3EKFXZ287Y80N`: set the KMS env on Fly,
   point team servers at the console JWKS, and retire `workers/staging-jwks` and the staging key.
   `app.musterd.io` still serves an empty JWKS. Staging team servers still name the staging issuer.
+- _(2026-11-02, lane 01M5E0543H.)_ The Fly image has no private file to hold the service-account
+  key, so the console also accepts the credential whole in `MUSTERD_CONSOLE_KMS_CREDENTIALS_JSON`
+  (a Fly secret), one or the other with `_FILE`. The cutover itself: both KMS secrets on
+  `musterd-console`, the console republished, `/.well-known/jwks.json` carrying the key, then
+  `deploy/cloud/fly.toml` pointing team servers at that URL and the cloud app redeployed. The
+  staging worker and key are retired once a staging team server accepts a console-signed token.
 - _(2026-10-20.)_ A live `asymmetricSign` on version 1 of `console-signing` produced a signature
   that `node:crypto` verifies with the JWK `getPublicKey` returned (`kms.test.ts`, "signs with the
   configured key and the published JWK verifies it", 633 ms). CI skips that test.

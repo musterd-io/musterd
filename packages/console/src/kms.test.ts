@@ -166,6 +166,16 @@ describe('loadServiceAccount', () => {
     );
   });
 
+  it('reads the JSON itself when the source begins with a brace (a Fly secret)', async () => {
+    const c = await loadServiceAccount(
+      JSON.stringify({
+        client_email: 'svc@example.test',
+        private_key: '-----BEGIN PRIVATE KEY-----\nx',
+      }),
+    );
+    expect(c.clientEmail).toBe('svc@example.test');
+  });
+
   it('does not echo a credential that is not a service-account key', () => {
     expect(() => serviceAccountFrom('{"private_key":"SECRETLEAK"}')).toThrow(
       /client_email or private_key/,
