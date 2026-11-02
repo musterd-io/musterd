@@ -284,6 +284,24 @@ withDrivers('pull', (_o, kind) => {
       expect(await pullTeam(hubCtx(), await hubTeam())).toBe(0);
     });
 
+    it('the sync_pulled cursor is read back from sync_pull_cursor, not the in-memory seq (lane 01M6D9DD0R)', async () => {
+      await send(joiner, 'j-1');
+      await enrollJoiner();
+      await pushTeam(joinerCtx, await joinerTeam());
+      const { cursor } = await drainTeam(hubCtx(), await hubTeam());
+      const row = await hub.store.get<{ last_hub_seq: number; updated_at: number }>(
+        'SELECT last_hub_seq, updated_at FROM sync_pull_cursor WHERE team_id = ?',
+        [(await hubTeam()).id],
+      );
+      // The row the ADR 689 d7 freshness check reads is what the line prints: a frozen row_at
+      // beside a moving last_hub_seq would name a write bug, which the old `cursor_at = now` hid.
+      expect(cursor).toEqual({
+        last_hub_seq: row!.last_hub_seq,
+        row_seq: row!.last_hub_seq,
+        row_at: row!.updated_at,
+      });
+    });
+
     it("a joiner receives the hub's own history AND its own events back, stamps verbatim, ids local", async () => {
       await send(hub, 'h-1');
       await send(joiner, 'j-1');
