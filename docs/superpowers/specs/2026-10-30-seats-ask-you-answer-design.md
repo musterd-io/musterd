@@ -71,6 +71,11 @@ answer goes straight back into that seat's session.**
 
 ### `/live`: rest, then triage (nick chose this; the mockup is `question-card-v2`)
 
+_(Amended 2026-11-02, lane 01M6EF2Z4B70VG4JWMRWNZDV2R: the two brainstorm mockups are committed at
+`docs/design/assets/question-card-mockups/` — `question-card.html` and `question-card-v2.html`. The
+built card follows v2's proportions a notch tighter (nick: the shipped sheet read gigantic), and an
+approval shows its first sentence as the headline with the rest as its "why" line.)_
+
 - **At rest:** a calm **"Waiting on you · N"** list. Each row shows the seat, its question in one
   line, what it is working on, and how long it has waited. _(Amended 2026-11-02, lane
   01M6DBDSGH4K1X9501SWTME1B5: the list is the one place to look — any other ask routed to this

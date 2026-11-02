@@ -1,7 +1,7 @@
 import type { Envelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { deriveAsks } from './asks';
-import { deriveQuestions, waitedLabel } from './questions';
+import { askHeadline, askWhy, deriveQuestions, waitedLabel } from './questions';
 
 const T0 = 1_800_000_000_000;
 let n = 0;
@@ -63,5 +63,48 @@ describe('deriveQuestions (seats ask 1e)', () => {
 
   it('reads waits the way the list prints them', () => {
     expect([30_000, 120_000, 3_600_000, 2 * 86_400_000].map(waitedLabel)).toEqual(['now', '2m', '1h', '2d']);
+  });
+});
+
+describe('askHeadline / askWhy (lane 01M6EF2Z4B)', () => {
+  const approval = (body: string) =>
+    deriveAsks([
+      env({
+        act: 'ask',
+        from: 'fifty',
+        to: { kind: 'member', name: 'nick' },
+        body,
+        meta: { species: 'approve', tier: 'blocking' },
+      }),
+    ])[0]!;
+
+  it('a long approval gets its first sentence as the headline and the rest as why', () => {
+    const a = approval(
+      'Redeploy Fly machine musterd-agent-delta-2 to pick up main at 3a27298. Build on the machine is pinned 2026-10-28, no autorefresh. Accept and I run it; decline and it waits.',
+    );
+    expect(askHeadline(a)).toBe('Redeploy Fly machine musterd-agent-delta-2 to pick up main at 3a27298.');
+    expect(askWhy(a)).toBe(
+      'Build on the machine is pinned 2026-10-28, no autorefresh. Accept and I run it; decline and it waits.',
+    );
+  });
+
+  it('a short approval is the headline alone', () => {
+    const a = approval('Restart the daemon?');
+    expect(askHeadline(a)).toBe('Restart the daemon?');
+    expect(askWhy(a)).toBeNull();
+  });
+
+  it('one run-on sentence is cut at a word and the whole body stays as why', () => {
+    const body = `Redeploy ${'word '.repeat(40)}end`;
+    const a = approval(body);
+    expect(askHeadline(a).length).toBeLessThanOrEqual(97);
+    expect(askHeadline(a).endsWith('\u2026')).toBe(true);
+    expect(askWhy(a)).toBe(body);
+  });
+
+  it('a lane review reads as an acceptance question', () => {
+    const a = approval('[lane] acceptance requested: "Joiner says last pulled" (server, 1 file)');
+    expect(askHeadline(a)).toBe('Accept \u201cJoiner says last pulled\u201d?');
+    expect(askWhy(a)).toBeNull();
   });
 });

@@ -103,7 +103,7 @@ export function WaitingOnYou({
             it.kind === 'question' ? it.card.question.blocking : it.ask.tier === 'blocking';
           return (
             <li key={it.id} className={`wy__row wy__row--${it.kind}`}>
-              <MemberFace name={it.asker} roster={members} size={26} />
+              <MemberFace name={it.asker} roster={members} size={24} />
               <div className="wy__body">
                 <p className="wy__q">{itemLine(it)}</p>
                 <p className="wy__meta">

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Seats ask, you answer — three directions</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f3ee; --panel:#ffffff; --ink:#1d1b18; --muted:#7a736a; --line:#ece6dd;
+    --teal:#0f8b8d; --teal-soft:#e3f3f2; --sand:#e9dcc6; --sand-deep:#c9a978;
+    --amber:#f2a541; --amber-soft:#fdf1df; --shadow:0 1px 2px rgba(29,27,24,.04),0 8px 24px rgba(29,27,24,.07);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:"DM Sans",system-ui,sans-serif;color:var(--ink);padding:28px 28px 60px}
+  h1{font-size:22px;margin:0 0 4px;font-weight:700;letter-spacing:-.01em}
+  .sub{color:var(--muted);margin:0 0 26px;font-size:14px}
+  .row{display:grid;grid-template-columns:repeat(3,minmax(300px,1fr));gap:22px;align-items:start}
+  .dir{background:transparent;border-radius:20px;padding:0;cursor:pointer;transition:transform .15s}
+  .dir:hover{transform:translateY(-2px)}
+  .dir.selected .label{background:var(--teal);color:#fff}
+  .label{display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:13px;padding:6px 12px;border-radius:999px;background:var(--panel);box-shadow:var(--shadow);margin-bottom:12px}
+  .label b{font-weight:700}
+  .note{color:var(--muted);font-size:13px;margin:12px 4px 0;line-height:1.45}
+  .avatar{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;font-weight:700;color:#fff;flex:none}
+  .ryder{background:linear-gradient(135deg,#0f8b8d,#3bb3a3)}
+  .pill{font-size:11.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:var(--amber-soft);color:#a8670f}
+  .ctx{font-size:12.5px;color:var(--muted)}
+  .ctx code{background:#f3eee6;padding:1px 6px;border-radius:6px;font-size:11.5px;color:#5c544a}
+  /* A — conversation */
+  .a{background:var(--panel);border-radius:20px;box-shadow:var(--shadow);padding:18px}
+  .a .msg{display:flex;gap:10px}
+  .a .bubble{background:#f7f4ef;border-radius:4px 16px 16px 16px;padding:12px 14px;font-size:14px;line-height:1.45}
+  .a .who{font-weight:600;font-size:13px;margin-bottom:3px;display:flex;gap:8px;align-items:center}
+  .a .chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 12px 44px}
+  .chip{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:8px 13px;font-size:13px;font-weight:500;transition:.15s}
+  .chip:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-soft)}
+  .composer{display:flex;gap:8px;align-items:center;border:1.5px solid var(--line);border-radius:14px;padding:6px 6px 6px 14px;font-size:13.5px;color:#a49c91}
+  .composer .send{margin-left:auto;background:var(--teal);color:#fff;border-radius:10px;padding:7px 12px;font-weight:600;font-size:12.5px}
+  /* B — decision card */
+  .b{background:var(--panel);border-radius:20px;box-shadow:var(--shadow);overflow:hidden}
+  .b .head{display:flex;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .b .q{padding:16px 16px 6px;font-size:16.5px;font-weight:600;line-height:1.35;letter-spacing:-.01em}
+  .b .why{padding:0 16px 12px;font-size:13px;color:var(--muted);line-height:1.45}
+  .b .opt{display:flex;gap:12px;align-items:flex-start;margin:0 12px 8px;padding:11px 12px;border:1.5px solid var(--line);border-radius:14px;font-size:13.5px;transition:.15s}
+  .b .opt:hover{border-color:var(--teal);background:var(--teal-soft)}
+  .b .k{width:22px;height:22px;border-radius:7px;background:#f3eee6;font-weight:700;font-size:12px;display:grid;place-items:center;flex:none;color:#5c544a}
+  .b .opt small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  .b .foot{padding:6px 12px 14px}
+  .b .quick{display:flex;gap:6px;padding:10px 12px 14px;border-top:1px solid var(--line);background:#fbf9f6}
+  .qa{font-size:12px;font-weight:600;padding:6px 10px;border-radius:9px;background:#fff;border:1px solid var(--line);color:#5c544a}
+  /* C — spotlight triage */
+  .c{background:rgba(29,27,24,.06);border-radius:20px;padding:26px 16px 30px;position:relative}
+  .c .sheet{background:var(--panel);border-radius:18px;box-shadow:0 20px 50px rgba(29,27,24,.18);overflow:hidden}
+  .c .top{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line)}
+  .c .dots{display:flex;gap:5px}.c .dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}.c .dots i.on{background:var(--teal)}
+  .c .body{padding:16px}
+  .c .q{font-size:17px;font-weight:600;line-height:1.35;margin:10px 0 6px;letter-spacing:-.01em}
+  .c .keys{display:grid;gap:7px;margin:14px 0}
+  .c .key{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:12px;background:#f7f4ef;font-size:13.5px}
+  .c .kbd{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:#fff;border:1px solid var(--line);color:#5c544a}
+  .c .hint{font-size:11.5px;color:var(--muted);text-align:center;margin-top:10px}
+</style>
+</head>
+<body>
+<h1>Seats ask, you answer — three directions</h1>
+<p class="sub">Same real question in each: ryder ends its turn asking what to do about a red PR. Click the direction that feels closest; tell me what to steal from the others.</p>
+
+<div class="row">
+
+  <!-- A -->
+  <div class="dir" data-choice="a-conversation" onclick="toggleSelect(this)">
+    <div class="label"><b>A</b> Conversation</div>
+    <div class="a">
+      <div class="msg">
+        <div class="avatar ryder">R</div>
+        <div>
+          <div class="who">ryder <span class="pill">waiting on you · 2m</span></div>
+          <div class="bubble">#3618 is red on one flaky shard (<code style="font-size:12px">authority-relay</code>, not my code). Should I re-run it, or fix the flake first?</div>
+          <div class="ctx" style="margin-top:6px">on <code>ledger row cache</code> · branch <code>perf/ledger-rows-cache</code></div>
+        </div>
+      </div>
+      <div class="chips">
+        <span class="chip">Re-run the shard</span>
+        <span class="chip">Fix the flake first</span>
+        <span class="chip">Hand it to big-body</span>
+      </div>
+      <div class="composer">Reply to ryder…<span class="send">Send</span></div>
+    </div>
+    <p class="note">Feels like texting a teammate. Lightest weight; options are chips under the message. Best for fast back-and-forth.</p>
+  </div>
+
+  <!-- B -->
+  <div class="dir" data-choice="b-decision-card" onclick="toggleSelect(this)">
+    <div class="label"><b>B</b> Decision card</div>
+    <div class="b">
+      <div class="head">
+        <div class="avatar ryder">R</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:14px">ryder <span class="pill" style="margin-left:6px">waiting · 2m</span></div>
+          <div class="ctx">ledger row cache · <code>#3618</code></div>
+        </div>
+      </div>
+      <div class="q">Re-run the red shard, or fix the flake first?</div>
+      <div class="why">One shard failed in <code>authority-relay-http</code> — a test my change doesn't touch. It has failed twice today on other PRs.</div>
+      <div class="opt"><span class="k">A</span><div>Re-run the shard<small>Fastest; merges if it passes</small></div></div>
+      <div class="opt"><span class="k">B</span><div>Fix the flake first<small>~20 min; unblocks everyone</small></div></div>
+      <div class="opt"><span class="k">C</span><div>Hand it to big-body<small>Their test, their call</small></div></div>
+      <div class="foot"><div class="composer">Or tell ryder something else…<span class="send">Send</span></div></div>
+      <div class="quick"><span class="qa">Start</span><span class="qa">Check inbox</span><span class="qa">Check PR</span><span class="qa">Resume</span></div>
+    </div>
+    <p class="note">Question up top, the seat's reason underneath, options with a one-line consequence each. Quick actions live in the footer. Most "SaaS".</p>
+  </div>
+
+  <!-- C -->
+  <div class="dir" data-choice="c-spotlight" onclick="toggleSelect(this)">
+    <div class="label"><b>C</b> Spotlight triage</div>
+    <div class="c">
+      <div class="sheet">
+        <div class="top"><span>3 seats waiting on you</span><span class="dots"><i class="on"></i><i></i><i></i></span></div>
+        <div class="body">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="avatar ryder">R</div>
+            <div><div style="font-weight:600;font-size:14px">ryder</div><div class="ctx">ledger row cache · #3618</div></div>
+          </div>
+          <div class="q">Re-run the red shard, or fix the flake first?</div>
+          <div class="ctx">Failed in a test this change doesn't touch.</div>
+          <div class="keys">
+            <div class="key">Re-run the shard <span class="kbd">1</span></div>
+            <div class="key">Fix the flake first <span class="kbd">2</span></div>
+            <div class="key">Hand it to big-body <span class="kbd">3</span></div>
+          </div>
+          <div class="composer">Type to answer…<span class="send">↵</span></div>
+          <div class="hint">⌘K anywhere · answer and the next one slides in</div>
+        </div>
+      </div>
+    </div>
+    <p class="note">One question at a time, keyboard-first, like a triage inbox. Clear three seats in ten seconds. Most "magical" on desktop; becomes swipe cards on the phone.</p>
+  </div>
+
+</div>
+</body>
+</html>

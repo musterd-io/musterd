@@ -131,8 +131,35 @@ export function waitingItems(questions: readonly QuestionCard[], asks: WaitingIt
   return [...q, ...asks].sort((a, b) => a.askedAt - b.askedAt || a.id.localeCompare(b.id));
 }
 
-/** The one line a row shows: the question, or the ask's body (a choice shows its question). */
+/** The one line a row shows: the question, or the ask's headline (a choice shows its question). */
 export function itemLine(item: WaitingItem): string {
   if (item.kind === 'question') return item.card.question.text;
-  return (item.ask.env.body ?? '').split('\n')[0] ?? '';
+  return askHeadline(item.ask);
+}
+
+const HEADLINE_MAX = 96;
+
+/**
+ * An ask's headline (lane 01M6EF2Z4B): the first sentence of its body, capped, so an approval
+ * reads at question-card-v2's scale — one line in the headline slot, the rest as "why" below it.
+ * A lane review reads "Accept “title”?"; a choice reads its question.
+ */
+export function askHeadline(ask: AskView): string {
+  const body = (ask.env.body ?? '').trim();
+  const review = /^\[lane\] acceptance requested: "([^"]+)"/.exec(body)?.[1];
+  if (review) return `Accept “${review}”?`;
+  const first = body.split('\n')[0] ?? '';
+  const sentence = /^(.{12,}?[.?!])(?:\s|$)/.exec(first)?.[1] ?? first;
+  if (sentence.length <= HEADLINE_MAX) return sentence;
+  const cut = sentence.slice(0, HEADLINE_MAX);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 60)).trimEnd()}…`;
+}
+
+/** The rest of an ask's body, when the headline did not say it all; the card's "why" line. */
+export function askWhy(ask: AskView): string | null {
+  const body = (ask.env.body ?? '').trim();
+  const head = askHeadline(ask);
+  if (!body || body === head || /^\[lane\] acceptance requested/.test(body)) return null;
+  const rest = head.endsWith('…') ? body : body.slice(head.length).trim();
+  return rest || null;
 }
