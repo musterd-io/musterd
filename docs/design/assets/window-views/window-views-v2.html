@@ -1,0 +1,147 @@
+<h2>One panorama, two windows on the wall</h2>
+<p class="subtitle">City, as a stand-in for the rendered look: lit faces and shadow faces, haze that deepens with distance, soft sun. The two windows look onto different slices of the same scene, the way the real wall will. Drag the hour.</p>
+
+<style>
+  .v2{display:grid;gap:14px}
+  .v2-ctl{display:flex;gap:14px;align-items:center;font-size:13px;color:#6b655c}
+  .v2-ctl input{width:340px}.v2-ctl b{min-width:60px;color:#1d1b18;font-variant-numeric:tabular-nums}
+  .wallv2{position:relative;height:420px;border-radius:16px;overflow:hidden;background:linear-gradient(180deg,#ece5d7 0%,#dbd3c3 100%)}
+  .wallv2::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34%;background:linear-gradient(180deg,#c9bda6,#b8a98f);box-shadow:inset 0 10px 18px rgba(0,0,0,.12)}
+  .pano{position:absolute;left:-10%;width:120%;top:0;height:66%;}
+  .win{position:absolute;top:10%;height:52%;width:28%;overflow:hidden;border:10px solid #8b7e6e;border-radius:3px;box-shadow:inset 0 0 0 2px rgba(0,0,0,.18),0 2px 0 rgba(255,255,255,.3),0 6px 14px rgba(0,0,0,.12)}
+  .win.a{left:12%}.win.b{left:58%}
+  .win .view{position:absolute;top:0;height:100%;width:357%;}
+  .win.a .view{left:0}.win.b .view{left:-164%}
+  .sky{position:absolute;inset:0}
+  .haze{position:absolute;left:0;right:0;bottom:0;height:60%;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,230,200,.35) 60%,rgba(255,230,200,.5));mix-blend-mode:screen;pointer-events:none}
+  .sun{position:absolute;width:34px;height:34px;border-radius:50%;background:radial-gradient(circle,#fff8d8,#ffd77a 55%,rgba(255,215,122,0) 70%);box-shadow:0 0 50px 18px rgba(255,200,110,.45)}
+  .moon{position:absolute;width:18px;height:18px;border-radius:50%;background:#f3efe2;box-shadow:0 0 22px 6px rgba(215,225,255,.35)}
+  .stars{position:absolute;inset:0;background-image:radial-gradient(1px 1px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 33% 12%,#fff,transparent),radial-gradient(1.4px 1.4px at 48% 30%,#fff,transparent),radial-gradient(1px 1px at 64% 18%,#fff,transparent),radial-gradient(1px 1px at 78% 26%,#fff,transparent),radial-gradient(1.2px 1.2px at 90% 10%,#fff,transparent),radial-gradient(1px 1px at 22% 40%,#fff,transparent),radial-gradient(1px 1px at 70% 42%,#fff,transparent)}
+  .cloud{position:absolute;height:22px;width:90px;border-radius:30px;background:linear-gradient(180deg,#fff,#e9e4dc);box-shadow:0 6px 10px rgba(0,0,0,.08);animation:drift linear infinite}
+  .cloud::before{content:"";position:absolute;left:18px;top:-14px;width:40px;height:40px;border-radius:50%;background:inherit}
+  .cloud::after{content:"";position:absolute;left:48px;top:-8px;width:28px;height:28px;border-radius:50%;background:inherit}
+  @keyframes drift{from{transform:translateX(-120px)}to{transform:translateX(1100px)}}
+  .layer{position:absolute;left:0;right:0;bottom:0}
+  .layer svg{display:block;width:100%}
+  .glass{position:absolute;inset:0;pointer-events:none;background:linear-gradient(112deg,rgba(255,255,255,.26) 0%,rgba(255,255,255,.04) 30%,rgba(255,255,255,0) 55%,rgba(255,255,255,.14) 100%)}
+  .reflect{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse 30% 22% at 28% 70%,rgba(255,220,160,.35),transparent 70%),radial-gradient(ellipse 22% 18% at 74% 64%,rgba(255,220,160,.25),transparent 70%)}
+  .mull{position:absolute;background:#8b7e6e;box-shadow:1px 0 0 rgba(255,255,255,.25),-1px 0 0 rgba(0,0,0,.2)}
+  .mull.v{left:50%;top:0;bottom:0;width:7px;margin-left:-3.5px}.mull.h{top:50%;left:0;right:0;height:7px;margin-top:-3.5px}
+  .sill{position:absolute;height:12px;background:linear-gradient(180deg,#c4b7a0,#a89b85);box-shadow:0 4px 6px rgba(0,0,0,.2)}
+  .sill.a{left:10.5%;width:31%;top:62.5%}.sill.b{left:56.5%;width:31%;top:62.5%}
+  .pool{position:absolute;top:66%;height:22%;width:40%;background:radial-gradient(ellipse at top,rgba(255,225,165,.55),rgba(255,225,165,0) 68%);transform:skewX(-18deg)}
+  .pool.a{left:9%}.pool.b{left:55%}
+  /* drapes, same on both */
+  .rod{position:absolute;top:8.2%;height:6px;border-radius:3px;background:linear-gradient(180deg,#7a6650,#5a4a38);box-shadow:0 2px 3px rgba(0,0,0,.3)}
+  .rod.a{left:9%;width:34%}.rod.b{left:55%;width:34%}
+  .rod::before,.rod::after{content:"";position:absolute;top:-5px;width:15px;height:15px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#8d7a62,#4e3f2f)}
+  .rod::before{left:-8px}.rod::after{right:-8px}
+  .drape{position:absolute;top:9.5%;height:55%;width:7.5%;border-radius:0 0 10px 10px;background:repeating-linear-gradient(90deg,#c76b45 0 7px,#a9532f 7px 11px,#d57b55 11px 19px,#b85d38 19px 24px);box-shadow:inset -8px 0 12px rgba(0,0,0,.22),inset 6px 0 10px rgba(255,255,255,.08),5px 6px 14px rgba(0,0,0,.22)}
+  .drape::after{content:"";position:absolute;left:-6%;right:-6%;top:58%;height:8px;border-radius:6px;background:linear-gradient(180deg,#e9c27b,#b5862f);box-shadow:0 2px 3px rgba(0,0,0,.3)}
+  .drape.al{left:9.5%}.drape.ar{left:36.5%}.drape.bl{left:55.5%}.drape.br{left:82.5%}
+  .tram{position:absolute;bottom:5%;width:50px;height:12px;border-radius:3px;background:linear-gradient(180deg,#ef6b4d,#c7472c);animation:tram 26s linear infinite;box-shadow:0 2px 4px rgba(0,0,0,.3)}
+  .tram::before{content:"";position:absolute;left:5px;right:5px;top:2px;height:4px;background:rgba(255,245,200,.85);border-radius:1px}
+  @keyframes tram{from{left:-8%}to{left:104%}}
+  .plane{position:absolute;top:16%;width:16px;height:3px;background:#dcdcdc;border-radius:2px;animation:plane 48s linear infinite;opacity:.9}
+  .plane::after{content:"";position:absolute;right:16px;top:1px;width:160px;height:1.5px;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.7))}
+  @keyframes plane{from{left:-30%}to{left:110%}}
+</style>
+
+<div class="v2">
+  <div class="v2-ctl"><label for="h2">Hour</label><input id="h2" type="range" min="0" max="24" step="0.25" value="17.5"><b id="h2l">17:30</b><span>· tram, plane, clouds and the lit windows are live</span></div>
+  <div class="wallv2" id="wall">
+    <div class="win a"><div class="view"></div></div>
+    <div class="win b"><div class="view"></div></div>
+    <div class="sill a"></div><div class="sill b"></div>
+    <div class="pool a"></div><div class="pool b"></div>
+    <div class="rod a"></div><div class="rod b"></div>
+    <div class="drape al"></div><div class="drape ar"></div><div class="drape bl"></div><div class="drape br"></div>
+  </div>
+  <p class="subtitle" style="margin:0">In the build the panorama is a Blender render (low-poly city under the shell's own sun rig, three day states, crossfaded by the clock), so the faces and shadows above become real ones. The drapes, rod and sill are rendered with the room so their light matches.</p>
+</div>
+
+<template id="viewTpl">
+  <div class="sky"></div><div class="stars"></div><div class="sun"></div><div class="moon"></div>
+  <div class="cloud" style="top:10%;animation-duration:140s"></div>
+  <div class="cloud" style="top:26%;transform:scale(.6);animation-duration:200s;animation-delay:-90s;opacity:.8"></div>
+  <div class="plane"></div>
+  <div class="layer far"><svg viewBox="0 0 1000 300" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="fz" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#aeb6c7"/><stop offset="1" stop-color="#8e97aa"/></linearGradient>
+    </defs>
+    <g fill="url(#fz)">
+      <rect x="20" y="150" width="60" height="150"/><rect x="100" y="110" width="40" height="190"/><rect x="160" y="140" width="90" height="160"/><rect x="270" y="80" width="46" height="220"/><rect x="340" y="130" width="70" height="170"/><rect x="430" y="100" width="50" height="200"/><rect x="500" y="150" width="110" height="150"/><rect x="640" y="70" width="36" height="230"/><rect x="700" y="120" width="80" height="180"/><rect x="800" y="140" width="60" height="160"/><rect x="880" y="95" width="48" height="205"/><rect x="940" y="150" width="60" height="150"/>
+    </g>
+    <g class="lit" fill="#ffd98a" opacity="0">
+      <rect x="110" y="120" width="5" height="6"/><rect x="124" y="140" width="5" height="6"/><rect x="280" y="100" width="5" height="6"/><rect x="296" y="130" width="5" height="6"/><rect x="650" y="90" width="5" height="6"/><rect x="660" y="140" width="5" height="6"/><rect x="890" y="110" width="5" height="6"/><rect x="905" y="150" width="5" height="6"/><rect x="440" y="120" width="5" height="6"/><rect x="720" y="140" width="5" height="6"/>
+    </g>
+  </svg></div>
+  <div class="layer near"><svg viewBox="0 0 1000 300" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="lf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7b8292"/><stop offset="1" stop-color="#5a6070"/></linearGradient>
+      <linearGradient id="sf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4d5261"/><stop offset="1" stop-color="#363a46"/></linearGradient>
+      <linearGradient id="roof" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9aa0ad"/><stop offset="1" stop-color="#7f8694"/></linearGradient>
+    </defs>
+    <!-- each block: lit face, shadow face, roof -->
+    <g>
+      <polygon points="0,300 0,200 70,190 70,300" fill="url(#lf)"/><polygon points="70,190 110,205 110,300 70,300" fill="url(#sf)"/><polygon points="0,200 70,190 110,205 40,215" fill="url(#roof)"/>
+      <polygon points="150,300 150,170 230,160 230,300" fill="url(#lf)"/><polygon points="230,160 275,178 275,300 230,300" fill="url(#sf)"/><polygon points="150,170 230,160 275,178 195,188" fill="url(#roof)"/>
+      <polygon points="330,300 330,215 420,205 420,300" fill="url(#lf)"/><polygon points="420,205 460,220 460,300 420,300" fill="url(#sf)"/><polygon points="330,215 420,205 460,220 370,230" fill="url(#roof)"/>
+      <polygon points="520,300 520,140 570,132 570,300" fill="url(#lf)"/><polygon points="570,132 605,146 605,300 570,300" fill="url(#sf)"/><polygon points="520,140 570,132 605,146 555,154" fill="url(#roof)"/>
+      <polygon points="660,300 660,190 760,180 760,300" fill="url(#lf)"/><polygon points="760,180 800,196 800,300 760,300" fill="url(#sf)"/><polygon points="660,190 760,180 800,196 700,206" fill="url(#roof)"/>
+      <polygon points="850,300 850,160 910,152 910,300" fill="url(#lf)"/><polygon points="910,152 950,168 950,300 910,300" fill="url(#sf)"/><polygon points="850,160 910,152 950,168 890,176" fill="url(#roof)"/>
+    </g>
+    <g fill="rgba(255,255,255,.18)">
+      <rect x="12" y="215" width="10" height="14"/><rect x="30" y="215" width="10" height="14"/><rect x="48" y="215" width="10" height="14"/><rect x="12" y="245" width="10" height="14"/><rect x="30" y="245" width="10" height="14"/><rect x="48" y="245" width="10" height="14"/>
+      <rect x="165" y="185" width="12" height="16"/><rect x="190" y="185" width="12" height="16"/><rect x="212" y="185" width="12" height="16"/><rect x="165" y="220" width="12" height="16"/><rect x="190" y="220" width="12" height="16"/><rect x="212" y="220" width="12" height="16"/><rect x="165" y="255" width="12" height="16"/><rect x="190" y="255" width="12" height="16"/>
+      <rect x="530" y="160" width="10" height="14"/><rect x="550" y="160" width="10" height="14"/><rect x="530" y="190" width="10" height="14"/><rect x="550" y="190" width="10" height="14"/><rect x="530" y="220" width="10" height="14"/><rect x="550" y="220" width="10" height="14"/>
+      <rect x="675" y="205" width="12" height="16"/><rect x="700" y="205" width="12" height="16"/><rect x="725" y="205" width="12" height="16"/><rect x="675" y="240" width="12" height="16"/><rect x="700" y="240" width="12" height="16"/><rect x="725" y="240" width="12" height="16"/>
+      <rect x="862" y="175" width="10" height="14"/><rect x="884" y="175" width="10" height="14"/><rect x="862" y="205" width="10" height="14"/><rect x="884" y="205" width="10" height="14"/>
+    </g>
+    <g class="lit" fill="#ffd27a" opacity="0">
+      <rect x="12" y="215" width="10" height="14"/><rect x="48" y="245" width="10" height="14"/><rect x="190" y="185" width="12" height="16"/><rect x="212" y="220" width="12" height="16"/><rect x="165" y="255" width="12" height="16"/><rect x="550" y="160" width="10" height="14"/><rect x="530" y="220" width="10" height="14"/><rect x="700" y="205" width="12" height="16"/><rect x="675" y="240" width="12" height="16"/><rect x="884" y="175" width="10" height="14"/><rect x="862" y="205" width="10" height="14"/>
+    </g>
+    <rect x="0" y="286" width="1000" height="14" fill="#3a3d47"/>
+  </svg></div>
+  <div class="tram"></div>
+  <div class="haze"></div>
+  <div class="reflect"></div>
+  <div class="glass"></div>
+  <div class="mull v"></div><div class="mull h"></div>
+</template>
+
+<script>
+(function(){
+  const tpl=document.getElementById('viewTpl');
+  document.querySelectorAll('.view').forEach(v=>v.appendChild(tpl.content.cloneNode(true)));
+  // mullions sit in the window, not the panorama
+  document.querySelectorAll('.win').forEach(w=>{w.querySelectorAll('.mull,.glass,.reflect').forEach(m=>w.appendChild(m));});
+  const slider=document.getElementById('h2'),label=document.getElementById('h2l');
+  const lerp=(a,b,t)=>a+(b-a)*t,mix=(c1,c2,t)=>c1.map((v,i)=>Math.round(lerp(v,c2[i],t))),rgb=c=>`rgb(${c.join(',')})`;
+  const K=[[0,[[12,18,44],[30,38,72]]],[5,[[24,30,68],[96,72,98]]],[6.5,[[112,142,204],[255,176,118]]],[8,[[118,178,236],[205,228,246]]],[12,[[84,158,236],[198,226,246]]],[16,[[108,164,230],[236,214,172]]],[18,[[96,112,172],[255,152,92]]],[19.5,[[38,44,94],[156,82,104]]],[21,[[16,22,54],[38,46,84]]],[24,[[12,18,44],[30,38,72]]]];
+  const sky=h=>{for(let i=0;i<K.length-1;i++){const[a,ca]=K[i],[b,cb]=K[i+1];if(h>=a&&h<=b){const t=(h-a)/(b-a);return[mix(ca[0],cb[0],t),mix(ca[1],cb[1],t)];}}return K[0][1];};
+  const clamp=x=>Math.max(0,Math.min(1,x));
+  function paint(){
+    const h=parseFloat(slider.value),hh=Math.floor(h),mm=Math.round((h-hh)*60);label.textContent=`${hh%24}:${String(mm).padStart(2,'0')}`;
+    const[top,bot]=sky(h),day=clamp((h-6)/1.5)*clamp((19.5-h)/1.5),night=1-clamp((h-5)/1.5)*clamp((21-h)/1.5),sunT=(h-6)/13,golden=clamp(1-Math.abs(h-18)/1.6);
+    document.querySelectorAll('.view').forEach(v=>{
+      v.querySelector('.sky').style.background=`linear-gradient(180deg,${rgb(top)},${rgb(bot)})`;
+      v.querySelector('.stars').style.opacity=night;
+      const s=v.querySelector('.sun'),vis=sunT>-0.05&&sunT<1.05;s.style.opacity=vis?1:0;s.style.left=`${lerp(10,88,sunT)}%`;s.style.top=`${44-Math.sin(clamp(sunT)*Math.PI)*36}%`;
+      const m=v.querySelector('.moon'),mT=((h+5)%24)/11;m.style.opacity=night;m.style.left=`${lerp(80,12,mT)}%`;m.style.top=`${12+Math.cos(mT*Math.PI)*8}%`;
+      const dark=1-day;
+      v.querySelector('.far').style.filter=`brightness(${lerp(1,.32,dark)}) saturate(${lerp(1,.55,dark)}) sepia(${golden*.35})`;
+      v.querySelector('.near').style.filter=`brightness(${lerp(1,.28,dark)}) saturate(${lerp(1,.6,dark)}) sepia(${golden*.3})`;
+      v.querySelector('.haze').style.opacity=lerp(.9,.25,dark);
+      v.querySelectorAll('.lit').forEach(l=>l.style.opacity=night>0.25?night:0);
+      v.querySelector('.plane').style.opacity=day*.9+night*.5;
+    });
+    document.querySelectorAll('.pool').forEach(p=>p.style.opacity=day*.9+golden*.3);
+    document.querySelectorAll('.reflect').forEach(r=>r.style.opacity=night*.9);
+    document.querySelectorAll('.glass').forEach(g=>g.style.opacity=lerp(1,.55,1-day));
+  }
+  slider.addEventListener('input',paint);paint();
+  let auto=setInterval(()=>{if(document.activeElement===slider)return;slider.value=(parseFloat(slider.value)+0.04)%24;paint();},120);
+  slider.addEventListener('pointerdown',()=>clearInterval(auto));
+})();
+</script>

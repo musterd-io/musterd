@@ -1,0 +1,202 @@
+<h2>Three views, one window</h2>
+<p class="subtitle">Drag the hour. The sky, the lights outside and the room's spill are one clock. Each window wears a different treatment so you can compare those too. Click the one you'd pick first.</p>
+
+<style>
+  .wv-ctl{display:flex;gap:14px;align-items:center;margin:0 0 18px;font-size:13px;color:#6b655c}
+  .wv-ctl input{width:320px}
+  .wv-ctl b{min-width:70px;font-variant-numeric:tabular-nums;color:#1d1b18}
+  .wv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+  .wv{cursor:pointer;border-radius:16px;padding:14px;background:#ebe4d6;border:2px solid transparent;transition:border-color .15s}
+  .wv.selected,.wv:hover{border-color:#1b8a7d}
+  .wv h3{margin:12px 0 2px;font-size:15px}
+  .wv p{margin:0;font-size:12.5px;color:#6b655c;line-height:1.4}
+  /* the wall + window */
+  .wall{position:relative;height:300px;border-radius:10px;overflow:hidden;background:linear-gradient(180deg,#e9e2d4,#d9d1c1)}
+  .frame{position:absolute;left:14%;right:14%;top:9%;bottom:14%;border:9px solid #8f8273;border-radius:4px;overflow:hidden;box-shadow:inset 0 0 0 2px rgba(0,0,0,.15),0 0 0 1px rgba(0,0,0,.08)}
+  .sky{position:absolute;inset:0;transition:background .2s}
+  .sun,.moon{position:absolute;width:22px;height:22px;border-radius:50%;transition:all .2s}
+  .sun{background:radial-gradient(circle,#fff5c2,#ffcd5a 60%,rgba(255,205,90,0) 72%);box-shadow:0 0 24px 8px rgba(255,200,100,.45)}
+  .moon{background:#f4f1e6;box-shadow:0 0 18px 4px rgba(220,230,255,.35);opacity:0}
+  .stars{position:absolute;inset:0;opacity:0;transition:opacity .3s;background-image:radial-gradient(1px 1px at 20% 30%,#fff,transparent),radial-gradient(1px 1px at 65% 18%,#fff,transparent),radial-gradient(1.5px 1.5px at 80% 40%,#fff,transparent),radial-gradient(1px 1px at 40% 12%,#fff,transparent),radial-gradient(1px 1px at 10% 55%,#fff,transparent),radial-gradient(1px 1px at 55% 50%,#fff,transparent)}
+  .cloud{position:absolute;height:14px;width:46px;border-radius:12px;background:rgba(255,255,255,.85);filter:blur(.3px);animation:drift linear infinite}
+  .cloud::before{content:"";position:absolute;left:12px;top:-8px;width:22px;height:22px;border-radius:50%;background:inherit}
+  @keyframes drift{from{transform:translateX(-80px)}to{transform:translateX(260px)}}
+  .plate{position:absolute;left:0;right:0;bottom:0;transition:filter .2s}
+  .plate svg{display:block;width:100%}
+  .lit{transition:opacity .3s}
+  .bird{position:absolute;width:10px;height:4px;border:1.5px solid #333;border-width:1.5px 0 0 0;border-radius:50% 50% 0 0;animation:fly 11s linear infinite;opacity:.8}
+  .bird::before{content:"";position:absolute;left:8px;top:-1.5px;width:10px;height:4px;border:1.5px solid #333;border-width:1.5px 0 0 0;border-radius:50% 50% 0 0}
+  @keyframes fly{from{transform:translate(-30px,0)}50%{transform:translate(110px,-14px)}to{transform:translate(250px,-4px)}}
+  .boat{position:absolute;animation:bob 4s ease-in-out infinite,sail 40s linear infinite}
+  @keyframes bob{0%,100%{margin-top:0}50%{margin-top:2px}}
+  @keyframes sail{from{left:-10%}to{left:105%}}
+  .glass{position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,0) 35%,rgba(255,255,255,0) 60%,rgba(255,255,255,.12) 100%);pointer-events:none}
+  .mull{position:absolute;background:#8f8273}
+  .mull.v{left:50%;top:0;bottom:0;width:6px;margin-left:-3px}
+  .mull.h{top:50%;left:0;right:0;height:6px;margin-top:-3px}
+  /* treatments */
+  .curtain{position:absolute;top:-4%;bottom:-4%;width:24%;background:repeating-linear-gradient(90deg,#c9663f 0 6px,#b4552f 6px 10px,#d47650 10px 16px);box-shadow:inset -6px 0 10px rgba(0,0,0,.18),4px 0 10px rgba(0,0,0,.2);border-radius:0 0 6px 6px}
+  .curtain.l{left:-2%;transform:skewY(1.5deg)}.curtain.r{right:-2%;transform:skewY(-1.5deg)}
+  .rod{position:absolute;left:8%;right:8%;top:6.5%;height:5px;border-radius:3px;background:#6d5a44;box-shadow:0 2px 3px rgba(0,0,0,.25)}
+  .rod::before,.rod::after{content:"";position:absolute;top:-4px;width:12px;height:12px;border-radius:50%;background:#6d5a44}
+  .rod::before{left:-7px}.rod::after{right:-7px}
+  .roman{position:absolute;left:0;right:0;top:0;height:38%;background:linear-gradient(180deg,#e8dcc4,#d8c9ab);box-shadow:0 4px 8px rgba(0,0,0,.25)}
+  .roman::before{content:"";position:absolute;left:0;right:0;top:33%;height:34%;background:linear-gradient(180deg,rgba(0,0,0,.08),rgba(255,255,255,.1) 50%,rgba(0,0,0,.1))}
+  .roman::after{content:"";position:absolute;left:0;right:0;bottom:0;height:12px;background:linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.18));border-radius:0 0 8px 8px}
+  .roller{position:absolute;left:0;right:0;top:0;height:28%;background:linear-gradient(180deg,#f3ede1,#e7dfcf);box-shadow:0 3px 6px rgba(0,0,0,.22)}
+  .roller::after{content:"";position:absolute;left:50%;bottom:-10px;width:2px;height:10px;background:#9a8c78}
+  .roller i{position:absolute;left:50%;bottom:-16px;width:8px;height:8px;border-radius:50%;background:#9a8c78;margin-left:-3px}
+  .sill{position:absolute;left:11%;right:11%;top:86%;height:9px;background:#b5a892;box-shadow:0 3px 4px rgba(0,0,0,.18)}
+  .pool{position:absolute;left:10%;right:10%;bottom:0;height:14%;background:radial-gradient(ellipse at top,rgba(255,220,150,.5),rgba(255,220,150,0) 70%);transition:opacity .2s}
+  .plant{position:absolute;left:16%;top:76%;font-size:18px}
+  .wv-legend{margin-top:16px;font-size:12.5px;color:#6b655c}
+</style>
+
+<div class="wv-ctl">
+  <label for="hour">Hour</label>
+  <input id="hour" type="range" min="0" max="24" step="0.25" value="9">
+  <b id="hourLabel">9:00</b>
+  <span>· clouds, birds, boats and traffic are live</span>
+</div>
+
+<div class="wv-grid cards">
+  <div class="wv card" data-choice="city" onclick="toggleSelect(this)">
+    <div class="wall">
+      <div class="frame">
+        <div class="sky"></div><div class="stars"></div><div class="sun"></div><div class="moon"></div>
+        <div class="cloud" style="top:14%;animation-duration:38s"></div>
+        <div class="cloud" style="top:30%;width:30px;animation-duration:55s;animation-delay:-20s;opacity:.7"></div>
+        <div class="bird" style="top:40%"></div>
+        <div class="plate">
+          <svg viewBox="0 0 200 120" preserveAspectRatio="none">
+            <g class="far" fill="#8c93a3">
+              <rect x="0" y="70" width="18" height="50"/><rect x="22" y="52" width="14" height="68"/><rect x="40" y="62" width="26" height="58"/><rect x="70" y="40" width="12" height="80"/><rect x="86" y="58" width="22" height="62"/><rect x="112" y="48" width="16" height="72"/><rect x="132" y="66" width="30" height="54"/><rect x="166" y="36" width="10" height="84"/><rect x="180" y="60" width="20" height="60"/>
+            </g>
+            <g class="near" fill="#4b4f5c">
+              <rect x="-4" y="84" width="34" height="40"/><rect x="36" y="76" width="22" height="48"/><rect x="64" y="90" width="40" height="34"/><rect x="110" y="72" width="18" height="52"/><rect x="134" y="86" width="44" height="38"/><rect x="184" y="78" width="24" height="46"/>
+            </g>
+            <g class="lit" fill="#ffd27a" opacity="0">
+              <rect x="40" y="80" width="3" height="3"/><rect x="47" y="86" width="3" height="3"/><rect x="113" y="76" width="3" height="3"/><rect x="118" y="88" width="3" height="3"/><rect x="138" y="92" width="3" height="3"/><rect x="150" y="98" width="3" height="3"/><rect x="25" y="58" width="2" height="2"/><rect x="72" y="46" width="2" height="2"/><rect x="170" y="44" width="2" height="2"/><rect x="90" y="66" width="2" height="2"/>
+            </g>
+            <rect class="tram" x="0" y="112" width="18" height="5" rx="1" fill="#e2503c">
+              <animate attributeName="x" from="-20" to="210" dur="14s" repeatCount="indefinite"/>
+            </rect>
+          </svg>
+        </div>
+        <div class="glass"></div>
+        <div class="mull v"></div><div class="mull h"></div>
+        <div class="curtain l"></div><div class="curtain r"></div>
+      </div>
+      <div class="rod"></div>
+      <div class="sill"></div><div class="pool"></div>
+    </div>
+    <h3>City · drapes</h3>
+    <p>Two skylines in parallax, windows that light up one by one at dusk, a tram every so often. Terracotta drapes on a rod, tied back.</p>
+  </div>
+
+  <div class="wv card" data-choice="coast" onclick="toggleSelect(this)">
+    <div class="wall">
+      <div class="frame">
+        <div class="sky"></div><div class="stars"></div><div class="sun"></div><div class="moon"></div>
+        <div class="cloud" style="top:12%;animation-duration:46s"></div>
+        <div class="cloud" style="top:24%;width:60px;animation-duration:70s;animation-delay:-35s;opacity:.6"></div>
+        <div class="bird" style="top:28%;animation-delay:-4s"></div>
+        <div class="bird" style="top:33%;animation-delay:-4.6s;transform:scale(.8)"></div>
+        <div class="plate">
+          <svg viewBox="0 0 200 120" preserveAspectRatio="none">
+            <path class="far" d="M0 70 Q30 58 60 66 T120 62 T200 68 V120 H0Z" fill="#9fb1b4"/>
+            <rect class="sea" y="78" width="200" height="42" fill="#3f8fa3"/>
+            <g class="lit" opacity="0"><rect x="150" y="60" width="2" height="12" fill="#eee"/><circle cx="151" cy="60" r="2.5" fill="#ffe08a"/></g>
+            <rect x="148" y="62" width="4" height="16" fill="#e8e2d6"/>
+            <g fill="rgba(255,255,255,.35)">
+              <rect x="10" y="88" width="18" height="1.2"><animate attributeName="x" values="10;22;10" dur="6s" repeatCount="indefinite"/></rect>
+              <rect x="80" y="98" width="24" height="1.2"><animate attributeName="x" values="80;66;80" dur="7s" repeatCount="indefinite"/></rect>
+              <rect x="140" y="108" width="20" height="1.2"><animate attributeName="x" values="140;152;140" dur="5s" repeatCount="indefinite"/></rect>
+            </g>
+            <path class="near" d="M0 104 Q40 96 90 108 T200 100 V120 H0Z" fill="#e9d7b0"/>
+          </svg>
+        </div>
+        <div class="boat" style="top:62%;width:14px;height:10px">
+          <svg viewBox="0 0 14 10"><path d="M1 8 H13 L11 10 H3Z" fill="#6b4a2b"/><path d="M7 0 V8 M7 1 L12 7 H7Z" fill="#fff" stroke="#fff" stroke-width=".6"/></svg>
+        </div>
+        <div class="glass"></div>
+        <div class="mull v"></div><div class="mull h"></div>
+        <div class="roman"></div>
+      </div>
+      <div class="sill"></div><div class="pool"></div>
+      <div class="plant">🪴</div>
+    </div>
+    <h3>Coast · roman shade</h3>
+    <p>Sea with a slow shimmer, a sailboat crossing, gulls, a lighthouse that blinks after dark. A linen roman shade, a third down.</p>
+  </div>
+
+  <div class="wv card" data-choice="mountain" onclick="toggleSelect(this)">
+    <div class="wall">
+      <div class="frame">
+        <div class="sky"></div><div class="stars"></div><div class="sun"></div><div class="moon"></div>
+        <div class="cloud" style="top:18%;animation-duration:60s;opacity:.75"></div>
+        <div class="cloud" style="top:40%;width:70px;animation-duration:90s;animation-delay:-50s;opacity:.5"></div>
+        <div class="bird" style="top:22%;animation-duration:16s;transform:scale(1.3)"></div>
+        <div class="plate">
+          <svg viewBox="0 0 200 120" preserveAspectRatio="none">
+            <path class="far" d="M0 80 L30 40 L52 62 L80 30 L105 58 L130 36 L160 64 L185 44 L200 60 V120 H0Z" fill="#8795a8"/>
+            <path d="M80 30 L88 42 L80 40 L72 42Z M130 36 L137 46 L130 44 L123 46Z" fill="#fff" opacity=".85"/>
+            <path class="mid" d="M0 92 L25 72 L50 86 L78 66 L110 90 L140 74 L170 92 L200 78 V120 H0Z" fill="#4e6b5a"/>
+            <path class="near" d="M0 108 Q50 98 100 110 T200 104 V120 H0Z" fill="#2f4a3b"/>
+            <g class="trees" fill="#243a2e"><path d="M20 108 l4-10 l4 10z M60 112 l4-11 l4 11z M150 110 l4-10 l4 10z M180 112 l3-9 l3 9z"/></g>
+            <g class="lit" opacity="0"><rect x="118" y="100" width="4" height="3" fill="#ffd27a"/><rect x="123" y="100" width="4" height="3" fill="#ffd27a"/></g>
+            <rect x="116" y="97" width="12" height="7" fill="#5a4332"/><path d="M114 97 L122 91 L130 97Z" fill="#3b2a1e"/>
+          </svg>
+        </div>
+        <div class="glass"></div>
+        <div class="mull v"></div><div class="mull h"></div>
+        <div class="roller"><i></i></div>
+      </div>
+      <div class="sill"></div><div class="pool"></div>
+    </div>
+    <h3>Mountain · roller shade</h3>
+    <p>Three ridges in parallax, snow on the peaks, a hawk circling high, one cabin whose windows glow at night. A plain roller shade, a quarter down.</p>
+  </div>
+</div>
+
+<p class="wv-legend">Not shown here but in the build: the glass gets a faint reflection of the room's lamps at night, rain and snow when the team's weather says so, and the view pans a few pixels when the room does.</p>
+
+<script>
+(function(){
+  const slider=document.getElementById('hour'),label=document.getElementById('hourLabel');
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const mix=(c1,c2,t)=>c1.map((v,i)=>Math.round(lerp(v,c2[i],t)));
+  const rgb=c=>`rgb(${c.join(',')})`;
+  // keyframes: hour -> [top, bottom]
+  const K=[
+    [0,[[14,20,46],[34,42,78]]],[5,[[26,32,70],[88,70,96]]],[6.5,[[110,140,200],[255,170,110]]],
+    [8,[[120,180,235],[200,225,245]]],[12,[[88,160,235],[196,224,245]]],[16,[[110,165,230],[230,210,170]]],
+    [18,[[90,110,170],[255,150,90]]],[19.5,[[40,46,96],[150,80,100]]],[21,[[18,24,56],[40,48,86]]],[24,[[14,20,46],[34,42,78]]]];
+  function sky(h){for(let i=0;i<K.length-1;i++){const[a,ca]=K[i],[b,cb]=K[i+1];if(h>=a&&h<=b){const t=(h-a)/(b-a);return[mix(ca[0],cb[0],t),mix(ca[1],cb[1],t)];}}return K[0][1];}
+  function paint(){
+    const h=parseFloat(slider.value);
+    const hh=Math.floor(h),mm=Math.round((h-hh)*60);label.textContent=`${hh%24}:${String(mm).padStart(2,'0')}`;
+    const[top,bot]=sky(h);
+    const day=Math.max(0,Math.min(1,(h-6)/1.5))*Math.max(0,Math.min(1,(19.5-h)/1.5));
+    const night=1-Math.max(0,Math.min(1,(h-5)/1.5))*Math.max(0,Math.min(1,(21-h)/1.5));
+    const sunT=(h-6)/13; // 6→19
+    document.querySelectorAll('.wv').forEach(w=>{
+      w.querySelector('.sky').style.background=`linear-gradient(180deg,${rgb(top)},${rgb(bot)})`;
+      w.querySelector('.stars').style.opacity=night;
+      const s=w.querySelector('.sun');const vis=sunT>-0.05&&sunT<1.05;
+      s.style.opacity=vis?1:0;s.style.left=`${lerp(8,82,sunT)}%`;s.style.top=`${48-Math.sin(Math.max(0,Math.min(1,sunT))*Math.PI)*40}%`;
+      const m=w.querySelector('.moon');const mT=((h+5)%24)/11; // visible roughly 19→6
+      m.style.opacity=night;m.style.left=`${lerp(75,15,mT)}%`;m.style.top=`${14+Math.cos(mT*Math.PI)*8}%`;
+      const dark=1-day;
+      w.querySelector('.plate').style.filter=`brightness(${lerp(1,0.35,dark)}) saturate(${lerp(1,0.6,dark)}) hue-rotate(${lerp(0,-12,dark)}deg)`;
+      w.querySelectorAll('.lit').forEach(l=>l.style.opacity=night>0.3?night:0);
+      w.querySelector('.pool').style.opacity=day;
+      w.querySelector('.glass').style.opacity=lerp(.9,.6,dark);
+      w.querySelectorAll('.bird').forEach(b=>b.style.opacity=day*.8);
+    });
+  }
+  slider.addEventListener('input',paint);paint();
+  let auto=setInterval(()=>{if(document.activeElement===slider)return;slider.value=(parseFloat(slider.value)+0.05)%24;paint();},120);
+  slider.addEventListener('pointerdown',()=>clearInterval(auto));
+})();
+</script>
