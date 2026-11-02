@@ -12,7 +12,12 @@ import {
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { appendAudit } from './audit.js';
-import { extractAuthData, verifyAssertion, verifyRegistration } from './webauthn.js';
+import {
+  assertionFailure,
+  extractAuthData,
+  verifyAssertion,
+  verifyRegistration,
+} from './webauthn.js';
 
 /**
  * Human authority (ADR 662, lane 01M5ANFFVHY07ZTYEECTRSTXTN): the device keys a human's
@@ -568,13 +573,14 @@ export async function requireAuthority(
       `the signature covers a different act, target or payload (expected ${descriptor.act} on ${descriptor.target})`,
     );
   }
-  let valid = false;
+  let why: string | null = null;
   if (key.kind === 'passkey') {
     // A passkey never signs our bytes: it signs an assertion whose challenge is the nonce.
-    valid =
-      proof.authenticator_data !== undefined &&
-      proof.client_data_json !== undefined &&
-      verifyAssertion({
+    if (proof.authenticator_data === undefined || proof.client_data_json === undefined) {
+      why =
+        'the proof carries no passkey assertion (authenticator data and client data are required)';
+    } else {
+      why = assertionFailure({
         authenticatorData: Buffer.from(proof.authenticator_data, 'base64url'),
         clientDataJson: proof.client_data_json,
         signature: Buffer.from(proof.signature, 'base64url'),
@@ -582,6 +588,7 @@ export async function requireAuthority(
         expectedChallenge: proof.nonce,
         expectedOrigins: input.expectedOrigins,
       });
+    }
   } else {
     try {
       const publicKey = createPublicKey({
@@ -589,17 +596,20 @@ export async function requireAuthority(
         format: 'der',
         type: 'spki',
       });
-      valid = cryptoVerify(
-        null,
-        Buffer.from(descriptorSigningBytes(descriptor), 'utf8'),
-        publicKey,
-        Buffer.from(proof.signature, 'base64url'),
-      );
+      if (
+        !cryptoVerify(
+          null,
+          Buffer.from(descriptorSigningBytes(descriptor), 'utf8'),
+          publicKey,
+          Buffer.from(proof.signature, 'base64url'),
+        )
+      )
+        why = 'the signature does not verify against the enrolled key';
     } catch {
-      valid = false;
+      why = 'the enrolled key or the signature could not be read';
     }
   }
-  if (!valid) return refuse('descriptor_mismatch');
+  if (why !== null) return refuse('descriptor_mismatch', why);
   if (input.checkOnly) return { ok: true, assurance: 'A2', keyId: key.id, kind: key.kind };
 
   // One-use, atomically: the conditional update is the consumption, so two concurrent

@@ -33,6 +33,13 @@ const RULES: readonly Rule[] = [
   // ADR 662 — the A2 gate on a human's answer. The reason code is the daemon's; the person gets the move.
   { test: /authority refused \(no_signature\)/, line: `This needs your passkey. ${PASSKEY_AGAIN}` },
   {
+    test: /authority refused \(descriptor_mismatch\).*ran on origin/,
+    line: (m) => {
+      const accepts = /it accepts ([^)]+)\)/.exec(m[0])?.[1]?.split(', ')[0] ?? 'http://localhost:4849';
+      return `Passkeys only work when musterd is open at ${accepts}. Open it there and press Approve again.`;
+    },
+  },
+  {
     test: /authority refused \(descriptor_mismatch\)/,
     line: (_m, why) =>
       why?.includes('another member')

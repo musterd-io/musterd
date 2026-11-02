@@ -28,6 +28,12 @@ describe('refusalCopy (lane 01M6EPXA6Z): the person gets a sentence, the record 
     expect(refusalCopy(`${base} — the signing key is not nick's`).line).toMatch(/not yours/);
   });
 
+  it('a ceremony on the wrong page address says which address to open', () => {
+    const base = 'authority refused (descriptor_mismatch): human answers to privileged asks require an A2 device signature (ADR 662)';
+    const r = refusalCopy(`${base} — the passkey ceremony ran on origin http://mac.lan:4849, which this daemon does not accept (it accepts http://localhost:4849, http://127.0.0.1:4849)`);
+    expect(r.line).toBe('Passkeys only work when musterd is open at http://localhost:4849. Open it there and press Approve again.');
+  });
+
   it('a question answered elsewhere names who and where', () => {
     expect(refusalCopy('question_already_answered: answered by nick on app').line).toBe(
       'Already answered by nick on app. Nothing more to do.',
