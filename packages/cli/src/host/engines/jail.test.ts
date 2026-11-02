@@ -440,6 +440,10 @@ describe('bashAllowed', () => {
     expect(
       bashAllowed('musterd lane submit --pr 12 && musterd send --act status_update x', policy),
     ).toEqual({ ok: true });
+    // The dream wake line says "read your packet with `musterd dream`"; a resident seat ran it and
+    // was refused for 19 nights (wiki: dream-resident-seat-no-packet, lane 01M6D8H4KF). It reads.
+    expect(bashAllowed('musterd dream', policy)).toEqual({ ok: true });
+    expect(bashAllowed('musterd dream --since 2026-10-30', policy)).toEqual({ ok: true });
   });
 
   it('allows pnpm only for declared scripts and the toolchain binaries', () => {

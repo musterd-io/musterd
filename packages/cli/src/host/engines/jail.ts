@@ -160,10 +160,13 @@ const GIT = new Set([
   'status',
   'switch',
 ]);
-/** The seat-shaped half of the musterd CLI — never service, residency, team, host or human admin. */
+/** The seat-shaped half of the musterd CLI — never service, residency, team, host or human admin.
+ *  `dream` is the packet read the dream wake line names (lane 01M6D8H4KF: without it a resident
+ *  seat's dream wake ended on the denial, never joined, and was recorded as a failed wake). */
 const MUSTERD = new Set([
   'board',
   'claim',
+  'dream',
   'goal',
   'help',
   'inbox',
