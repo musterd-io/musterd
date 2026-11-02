@@ -55,7 +55,10 @@ would ship. Without `cwebp` the PNG stays and the runtime reads either.
 ## What is rendered (increment 2)
 
 - **The shell**, `room/light-<day|evening|night>`: floor, both back walls, windows and skirting, all
-  together, under one light rig per day state (`LIGHT_STATES` in `scene.py`: sun, fill, world, what
+  together, under one light rig per day state. Since window views (lane 01M6ENGW2H) the panes are
+  **transparent** — the plaster is built in pieces around them — and each window wears a rod and two
+  tied-back terracotta drapes on the wall beside its frame; the runtime paints the sky and the land
+  plates under the shell (`windowView.ts`), so the glow the panes used to emit lives outside now (`LIGHT_STATES` in `scene.py`: sun, fill, world, what
   the panes emit, the window spots that pool light on the floor). `roomState.ts` crossfades the two
   nearest over 45 minutes at each edge (07:00, 16:30, 19:00).
 - **The ceiling bank**, `room/ceiling-<on|spill>`: the night shell rendered with the four area lights
