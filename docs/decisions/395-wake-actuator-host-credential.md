@@ -73,7 +73,8 @@ on the machine nobody is looking at.
 ## Observability & Evaluation
 
 - **Traces:** `bootstrap_credential.used` with `{ use: 'host', target }` on a successful
-  wake-lease poll; `bootstrap_credential.refused` with `host_mismatch` when a claim-scoped key
+  wake-lease poll _(2026-11-02, [ADR 786](786-audit-folds-host-key-polling.md): one row per
+  credential per hour — a poll inside the hour adds `uses` and `last_ts` to that row instead)_; `bootstrap_credential.refused` with `host_mismatch` when a claim-scoped key
   is presented to the wake path (already shipped, ADR 344). The host log's
   `wake-lease poll failed for <team>` is the client-side trace; it must not carry the secret.
 - **Eval:** the CLI host-loop suite plus the saveBinding merge-guard tests. Baseline: a

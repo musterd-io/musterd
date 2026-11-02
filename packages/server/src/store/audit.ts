@@ -1369,10 +1369,55 @@ export async function appendAudit(db: Driver, teamId: string, entry: AuditEntry)
     }
   }
   try {
+    if (entry.action === 'bootstrap_credential.used' && (await foldHostKeyUse(db, teamId, entry)))
+      return;
     await appendAuditRequired(db, teamId, entry);
   } catch (err) {
     log.warn({ msg: 'audit_append_failed', action: entry.action, err: String(err) });
   }
+}
+
+/** ADR 786: a host key's uses fold into one row per credential per window. */
+export const HOST_KEY_USE_FOLD_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * ADR 786 — `bootstrap_credential.used` is written on every host-key authenticated request, and a
+ * `musterd host` loop polls three endpoints every 10 s: ~1,300 rows an hour per host, 31k a day,
+ * 150k live rows on a joiner inside the 5-day churn window (ADR 480) — all saying the same thing.
+ * The newest row for this credential inside the window takes the use instead: its `detail` gains
+ * `uses` (a count) and `last_ts`; its own `ts` stays the window's first use. One row per credential
+ * per hour at most, and the fact ADR 395 traces — this key was used, for this host, when — is still
+ * on the record. Only locally written rows fold (`origin_seq = 0`): a replicated row is a peer's
+ * fact, never edited here. Returns true when the use was folded and no row is to be inserted.
+ */
+export async function foldHostKeyUse(
+  db: Driver,
+  teamId: string,
+  entry: AuditEntry,
+  now = Date.now(),
+): Promise<boolean> {
+  if (entry.target === null) return false;
+  const row = await db.get<{ id: string; detail: string | null }>(
+    `SELECT id, detail FROM audit
+      WHERE team_id = ? AND action = 'bootstrap_credential.used' AND target = ?
+        AND origin_seq = 0 AND ts >= ?
+      ORDER BY ts DESC, id DESC LIMIT 1`,
+    [teamId, entry.target, now - HOST_KEY_USE_FOLD_WINDOW_MS],
+  );
+  if (!row) return false;
+  let detail: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = row.detail ? JSON.parse(row.detail) : {};
+    if (parsed && typeof parsed === 'object') detail = parsed as Record<string, unknown>;
+  } catch {
+    detail = {};
+  }
+  const uses = typeof detail.uses === 'number' ? detail.uses + 1 : 2;
+  await db.run('UPDATE audit SET detail = ? WHERE id = ?', [
+    JSON.stringify({ ...detail, uses, last_ts: now }),
+    row.id,
+  ]);
+  return true;
 }
 
 /**
