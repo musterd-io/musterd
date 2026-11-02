@@ -330,10 +330,13 @@ async function fetchPage(
 export interface PullPage {
   applied: number;
   full: boolean;
-  /** The cursor after this page, and when it was stamped — on the `sync_pulled` line so a freshness
-   *  refusal (ADR 689 d7) can be read against the pulls that preceded it (lane 01M6D9DD0R: 6.35 h of
-   *  refusals while this line logged applied rows every few seconds). */
-  cursor?: { last_hub_seq: number; updated_at: number };
+  /** The cursor after this page — on the `sync_pulled` line so a freshness refusal (ADR 689 d7)
+   *  can be read against the pulls that preceded it (lane 01M6D9DD0R: 6.35 h of refusals while this
+   *  line logged applied rows every few seconds). `last_hub_seq` is the fold's in-memory seq;
+   *  `row_seq` / `row_at` are read back from `sync_pull_cursor`, the row the freshness check reads.
+   *  A `row_at` that stays put while `last_hub_seq` moves is a write bug; a fresh `row_at` under
+   *  continuing refusals is a read bug. The in-memory stamp alone could not tell them apart. */
+  cursor?: { last_hub_seq: number; row_seq: number | null; row_at: number | null };
 }
 
 /** One team's pull pass. Returns how many events were applied. Exported for through-DB tests. */
@@ -546,10 +549,18 @@ export async function pullPage(
   // ADR 525: a halt decided on the hub reached this node. The fold set the standing and revoked the
   // leases; a live socket here is closed now with the halt's own sentence, as the deciding node does.
   for (const memberId of result.halted ?? []) await evictHalted(ctx, team.id, memberId);
+  const row = await ctx.db.get<{ last_hub_seq: number; updated_at: number }>(
+    'SELECT last_hub_seq, updated_at FROM sync_pull_cursor WHERE team_id = ?',
+    [team.id],
+  );
   return {
     applied: result.applied,
     full: page.events.length === SYNC_PULL_MAX_BATCH && result.stop === null,
-    cursor: { last_hub_seq: result.last_hub_seq, updated_at: now },
+    cursor: {
+      last_hub_seq: result.last_hub_seq,
+      row_seq: row?.last_hub_seq ?? null,
+      row_at: row?.updated_at ?? null,
+    },
   };
 }
 
@@ -604,10 +615,9 @@ export function startSyncPull(ctx: Ctx): () => void {
           const { pages, applied, cursor } = await drainTeam(ctx, team, {
             stopped: () => stopped,
           });
-          // `cursor` names the row the ADR 689 d7 freshness check reads, as this tick left it.
-          const at = cursor
-            ? { last_hub_seq: cursor.last_hub_seq, cursor_at: cursor.updated_at }
-            : {};
+          // `row_*` is the sync_pull_cursor row the ADR 689 d7 freshness check reads, as this tick
+          // left it, beside the fold's in-memory seq.
+          const at = cursor ?? {};
           if (pages > 1) log.info({ msg: 'sync_drained', team: team.slug, pages, applied, ...at });
           else if (applied > 0) log.info({ msg: 'sync_pulled', team: team.slug, applied, ...at });
         } catch (error) {
