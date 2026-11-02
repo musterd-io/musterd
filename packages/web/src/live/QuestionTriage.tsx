@@ -1,10 +1,15 @@
 import type { Envelope, MemberSummary } from '@musterd/protocol';
 import { answerLabel } from '@musterd/protocol/wire';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { answerAsk, type AnswerKind } from './answerAsk';
+import { AskChoices } from './AskChoices';
+import { askChoicesOf, choiceReply } from './askPhrase';
+import { SPECIES_VERB_YOU } from './asks';
 import { LiveFetchError, sendAct, type LiveConfig } from './client';
+import { holdStateLine } from './holdState';
 import { MemberFace } from './MemberFace';
 import { QuickActionBar } from './quickActions';
-import { waitedLabel, type QuestionCard } from './questions';
+import { waitedLabel, type WaitingItem } from './questions';
 import { alreadyAnswered, answerOf, triageKey } from './triage';
 
 /** Where a seat wakes, for the "Sent to …" line: its live presence's machine, else where it lives. */
@@ -22,16 +27,19 @@ type Flash = { kind: 'sent'; text: string } | { kind: 'taken'; text: string } | 
  * `S` skips, `esc` closes; an answer slides the next card in. Rules for the keys are in `triage.ts`.
  */
 export function QuestionTriage({
-  cards,
+  items,
   roster,
   cfg,
+  now = Date.now(),
   recent,
   onClose,
   onAnswered,
 }: {
-  cards: QuestionCard[];
+  items: WaitingItem[];
   roster: MemberSummary[];
   cfg: LiveConfig;
+  /** The ask clock's instant (`useAskViews`), for an ask card's hold line. */
+  now?: number;
   /** The seat's last few acts, for "Show more". */
   recent: (seat: string) => Envelope[];
   onClose: () => void;
@@ -40,11 +48,11 @@ export function QuestionTriage({
 }) {
   // The queue is fixed when the sheet opens: a question arriving mid-triage joins at the end, and an
   // answered one never vanishes from under the cursor.
-  const [queue, setQueue] = useState(() => cards.map((c) => c.id));
+  const [queue, setQueue] = useState(() => items.map((c) => c.id));
   useEffect(() => {
-    setQueue((q) => [...q, ...cards.map((c) => c.id).filter((id) => !q.includes(id))]);
-  }, [cards]);
-  const byId = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
+    setQueue((q) => [...q, ...items.map((c) => c.id).filter((id) => !q.includes(id))]);
+  }, [items]);
+  const byId = useMemo(() => new Map(items.map((c) => [c.id, c])), [items]);
   const [at, setAt] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
   const [text, setText] = useState('');
@@ -55,7 +63,9 @@ export function QuestionTriage({
   const box = useRef<HTMLTextAreaElement | null>(null);
   const members = useMemo(() => new Map(roster.map((m) => [m.name, m])), [roster]);
 
-  const card = byId.get(queue[at] ?? '') ?? null;
+  const item = byId.get(queue[at] ?? '') ?? null;
+  const card = item?.kind === 'question' ? item.card : null;
+  const askItem = item?.kind === 'ask' ? item : null;
   const total = queue.length;
 
   const next = useCallback(() => {
@@ -94,6 +104,31 @@ export function QuestionTriage({
     }
   }, [card, busy, picked, text, cfg, onAnswered, members, next]);
 
+  /** An ask (approval, escalation, lane review) answers the way the rail does — `answerAsk`, one
+   *  path, passkey proof included — then slides the next card in. */
+  const verdict = useCallback(
+    async (kind: AnswerKind, body?: string) => {
+      if (!askItem || busy) return;
+      setBusy(true);
+      try {
+        const r = await answerAsk(cfg, roster, askItem.ask, kind, body);
+        if ('error' in r) {
+          setFlash({ kind: 'error', text: r.error });
+          return;
+        }
+        onAnswered(r.ack);
+        const said = kind === 'accept' ? 'Approved' : kind === 'decline' ? 'Denied' : 'Deciding — 1h';
+        setFlash({ kind: 'sent', text: `${said} — sent to ${askItem.asker}` });
+        next();
+      } catch (e) {
+        setFlash({ kind: 'error', text: e instanceof Error ? e.message : 'Could not send — try again' });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [askItem, busy, cfg, roster, onAnswered, next],
+  );
+
   useEffect(() => {
     if (!flash) return;
     const t = window.setTimeout(() => setFlash(null), 2600);
@@ -122,6 +157,14 @@ export function QuestionTriage({
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (askItem) {
+      // An ask card has no options to number and no text box: only skip and close.
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 's' || e.key === 'S') next();
+      else return;
+      e.preventDefault();
+      return;
+    }
     const k = triageKey(e.key, {
       shift: e.shiftKey,
       inText: document.activeElement === box.current,
@@ -137,8 +180,13 @@ export function QuestionTriage({
     else setPicked(k.choice);
   };
 
-  if (!card) return null;
-  const ctx = card.question.context;
+  if (!item) return null;
+  const ctx = card?.question.context;
+  const choices = askItem ? askChoicesOf(askItem.ask.env) : null;
+  const hold = askItem ? holdStateLine(askItem.ask, now) : null;
+  const laneReview = askItem
+    ? /^\[lane\] acceptance requested: "([^"]+)"/.exec(askItem.ask.env.body ?? '')?.[1]
+    : null;
   return (
     <div className="qt">
       <button type="button" className="qt__backdrop" tabIndex={-1} aria-label="Close" onClick={onClose} />
@@ -167,102 +215,182 @@ export function QuestionTriage({
           </button>
         </div>
 
-        <article key={card.id} className="qt__card">
-          <header className="qt__who">
-            <MemberFace name={card.asker} roster={members} size={34} />
-            <div className="qt__whoText">
-              <span className="qt__seat">{card.asker}</span>
-              {(ctx?.lane || ctx?.pr || ctx?.branch) && (
-                <span className="qt__ctx">
-                  {[card.laneTitle ?? ctx?.lane, ctx?.pr ? `#${ctx.pr}` : null, ctx?.branch]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </span>
-              )}
-            </div>
-            <span className={`qt__pill${card.question.blocking ? ' is-blocking' : ''}`}>
-              {card.question.blocking ? 'blocked' : 'waiting'} · {waitedLabel(card.waitedMs)}
-            </span>
-          </header>
-
-          <h2 id="qt-question" className="qt__q">
-            {card.question.text}
-          </h2>
-          {card.question.why && <p className="qt__why">{card.question.why}</p>}
-
-          {card.question.options && card.question.options.length > 0 && (
-            <div className="qt__opts" role="radiogroup" aria-label="Options">
-              {card.question.options.map((o, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  role="radio"
-                  aria-checked={picked === i}
-                  className={`qt__opt${picked === i ? ' is-picked' : ''}`}
-                  onClick={() => setPicked(picked === i ? null : i)}
-                >
-                  <kbd className="qt__key">{i + 1}</kbd>
-                  <span className="qt__optText">
-                    <span className="qt__label">{o.label}</span>
-                    {o.consequence && <span className="qt__cons">{o.consequence}</span>}
+        {card && (
+          <article key={card.id} className="qt__card">
+            <header className="qt__who">
+              <MemberFace name={card.asker} roster={members} size={34} />
+              <div className="qt__whoText">
+                <span className="qt__seat">{card.asker}</span>
+                {(ctx?.lane || ctx?.pr || ctx?.branch) && (
+                  <span className="qt__ctx">
+                    {[card.laneTitle ?? ctx?.lane, ctx?.pr ? `#${ctx.pr}` : null, ctx?.branch]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </span>
+                )}
+              </div>
+              <span className={`qt__pill${card.question.blocking ? ' is-blocking' : ''}`}>
+                {card.question.blocking ? 'blocked' : 'waiting'} · {waitedLabel(card.waitedMs)}
+              </span>
+            </header>
+
+            <h2 id="qt-question" className="qt__q">
+              {card.question.text}
+            </h2>
+            {card.question.why && <p className="qt__why">{card.question.why}</p>}
+
+            {card.question.options && card.question.options.length > 0 && (
+              <div className="qt__opts" role="radiogroup" aria-label="Options">
+                {card.question.options.map((o, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    role="radio"
+                    aria-checked={picked === i}
+                    className={`qt__opt${picked === i ? ' is-picked' : ''}`}
+                    onClick={() => setPicked(picked === i ? null : i)}
+                  >
+                    <kbd className="qt__key">{i + 1}</kbd>
+                    <span className="qt__optText">
+                      <span className="qt__label">{o.label}</span>
+                      {o.consequence && <span className="qt__cons">{o.consequence}</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <label className="qt__text">
+              <span className="lc-sr">Reply to {card.asker}</span>
+              <textarea
+                ref={box}
+                rows={2}
+                value={text}
+                placeholder={`Or tell ${card.asker} something else…`}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </label>
+
+            {card.undelivered && (
+              <p className="qt__undelivered" role="status">
+                Didn&rsquo;t reach {card.asker}
+              </p>
+            )}
+
+            {more && (
+              <ol className="qt__more" aria-label={`${card.asker}'s last steps`}>
+                {recent(card.asker).map((e) => (
+                  <li key={e.id}>
+                    <span className="qt__moreAct">{e.act.replace('_', ' ')}</span>
+                    <span className="qt__moreBody">{(e.body ?? '').split('\n')[0]}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            {/* Seats ask 2c: the quick actions, for the seat that asked (the slot 1e left empty). */}
+            <QuickActionBar cfg={cfg} seat={card.asker} compact />
+
+            <footer className="qt__foot">
+              <button type="button" className="qt__link" onClick={() => setMore((m) => !m)}>
+                {more ? 'Show less' : 'Show more'}
+              </button>
+              <span className="qt__hints" aria-hidden="true">
+                <kbd>S</kbd> skip · <kbd>↵</kbd> send · <kbd>⇧↵</kbd> new line
+              </span>
+              <button type="button" className="qt__skip" onClick={next}>
+                Skip
+              </button>
+              <button
+                type="button"
+                className="qt__send"
+                disabled={busy || (picked === null && text.trim() === '')}
+                onClick={() => void send()}
+              >
+                {busy ? 'Sending…' : 'Send'}
+              </button>
+            </footer>
+          </article>
+        )}
+        {askItem && (
+          <article key={askItem.id} className="qt__card qt__card--ask">
+            <header className="qt__who">
+              <MemberFace name={askItem.asker} roster={members} size={34} />
+              <div className="qt__whoText">
+                <span className="qt__seat">{askItem.asker}</span>
+                <span className="qt__ctx">{SPECIES_VERB_YOU[askItem.ask.species]}</span>
+              </div>
+              <span className={`qt__pill${askItem.ask.tier === 'blocking' ? ' is-blocking' : ''}`}>
+                {askItem.ask.state === 'held' ? 'holding' : 'waiting'} · {waitedLabel(askItem.waitedMs)}
+              </span>
+            </header>
+
+            {laneReview ? (
+              <h2 id="qt-question" className="qt__q">
+                Accept <q>{laneReview}</q>?
+              </h2>
+            ) : (
+              <h2 id="qt-question" className="qt__q">
+                {choices?.question || askItem.ask.env.body}
+              </h2>
+            )}
+            {hold && (
+              <p className="qt__why" title={hold.title}>
+                {hold.line}
+              </p>
+            )}
+
+            {choices ? (
+              // A choice (lane 01M511XNQC): every option in full, each its own answer.
+              <AskChoices
+                choices={choices}
+                asker={askItem.asker}
+                busy={busy}
+                onPick={(o) => void verdict('accept', choiceReply(o))}
+                onNone={() => void verdict('decline')}
+              />
+            ) : (
+              <div className="qt__verdict">
+                <button
+                  type="button"
+                  className="qt__send"
+                  disabled={busy}
+                  onClick={() => void verdict('accept')}
+                >
+                  Approve
                 </button>
-              ))}
-            </div>
-          )}
+                <button
+                  type="button"
+                  className="qt__skip qt__deny"
+                  disabled={busy}
+                  onClick={() => void verdict('decline')}
+                >
+                  Deny
+                </button>
+              </div>
+            )}
 
-          <label className="qt__text">
-            <span className="lc-sr">Reply to {card.asker}</span>
-            <textarea
-              ref={box}
-              rows={2}
-              value={text}
-              placeholder={`Or tell ${card.asker} something else…`}
-              onChange={(e) => setText(e.target.value)}
-            />
-          </label>
+            <QuickActionBar cfg={cfg} seat={askItem.asker} compact />
 
-          {card.undelivered && (
-            <p className="qt__undelivered" role="status">
-              Didn&rsquo;t reach {card.asker}
-            </p>
-          )}
-
-          {more && (
-            <ol className="qt__more" aria-label={`${card.asker}'s last steps`}>
-              {recent(card.asker).map((e) => (
-                <li key={e.id}>
-                  <span className="qt__moreAct">{e.act.replace('_', ' ')}</span>
-                  <span className="qt__moreBody">{(e.body ?? '').split('\n')[0]}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-
-          {/* Seats ask 2c: the quick actions, for the seat that asked (the slot 1e left empty). */}
-          <QuickActionBar cfg={cfg} seat={card.asker} compact />
-
-          <footer className="qt__foot">
-            <button type="button" className="qt__link" onClick={() => setMore((m) => !m)}>
-              {more ? 'Show less' : 'Show more'}
-            </button>
-            <span className="qt__hints" aria-hidden="true">
-              <kbd>S</kbd> skip · <kbd>↵</kbd> send · <kbd>⇧↵</kbd> new line
-            </span>
-            <button type="button" className="qt__skip" onClick={next}>
-              Skip
-            </button>
-            <button
-              type="button"
-              className="qt__send"
-              disabled={busy || (picked === null && text.trim() === '')}
-              onClick={() => void send()}
-            >
-              {busy ? 'Sending…' : 'Send'}
-            </button>
-          </footer>
-        </article>
-
+            <footer className="qt__foot">
+              <button
+                type="button"
+                className="qt__link"
+                disabled={busy}
+                onClick={() => void verdict('deciding')}
+                title="Tell them you are deciding — the clock stops, they check back in an hour"
+              >
+                Deciding — 1h
+              </button>
+              <span className="qt__hints" aria-hidden="true">
+                <kbd>S</kbd> skip · <kbd>esc</kbd> close
+              </span>
+              <button type="button" className="qt__skip" onClick={next}>
+                Skip
+              </button>
+            </footer>
+          </article>
+        )}
         {flash && (
           <p className={`qt__flash is-${flash.kind}`} role="status">
             {flash.text}

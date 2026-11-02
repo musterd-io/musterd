@@ -357,6 +357,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* An ask card's verdict (lane 01M6DBDSGH): Approve as the send, Deny beside it, Deciding in the foot. */
+.qt__verdict {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.qt__deny {
+  border-color: color-mix(in srgb, var(--lc-danger) 45%, transparent);
+  color: var(--lc-danger-ink);
+}
+.qt__link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .qt__foot {
   display: flex;
   align-items: center;

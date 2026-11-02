@@ -1,30 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { holdStateLine } from './holdState';
-import { askBanner, askChoicesOf, choiceReply, SETTLED_MS } from './askPhrase';
+import { askBanner, askChoicesOf, choiceReply } from './askPhrase';
 import type { Envelope, LaneBoard, MemberSummary } from '@musterd/protocol';
-import { askTierHolds, classifyAskAction } from '@musterd/protocol/wire';
+import { askTierHolds } from '@musterd/protocol/wire';
 import {
   answerableCount,
-  applyTierClock,
   askAudience,
   askIsLoud,
   byAudienceThenUrgency,
   clockFraction,
-  deriveAsks,
   deriveReviewQueue,
-  resurrectRefusedVerdicts,
   SPECIES_VERB,
   SPECIES_VERB_YOU,
   type AskView,
-  type AudienceContext,
 } from './asks';
-import { sendAct, sendActWithVerdict, type LiveConfig } from './client';
-import { asksOpenMode, stillMode } from './stillMode';
+import { answerAsk } from './answerAsk';
+import type { LiveConfig } from './client';
+import { asksOpenMode } from './stillMode';
 import { initial, memberDisc, memberColor, kindOf, hueOf } from './format';
 import { newRings, notifyBrowser, openRingsFor, ringNotice } from './doorbellNotify';
 import { scrollToMessage } from './reveal';
 import { AskChoices } from './AskChoices';
-import { useRecoveredAsks } from './useRecoveredAsks';
+import { useAskViews, type AskViews } from './useAskViews';
 import { MemberFace } from './MemberFace';
 
 /**
@@ -60,8 +57,9 @@ export function AsksStrip({
   onOpenLane,
   liveIds = NO_LIVE_IDS,
   onReveal = scrollToMessage,
+  views,
 }: {
-  /** Nothing loaded yet: a placeholder, not "no open questions", which would be untrue. */
+  /** Nothing loaded yet: a placeholder, not "no open asks", which would be untrue. */
   loading?: boolean;
   envelopes: Envelope[];
   roster: MemberSummary[];
@@ -84,10 +82,11 @@ export function AsksStrip({
   /** Show an act in the log. On /live the log is a drawer (ADR 464 lane 2), so the route opens it
    *  first; the default is the bare reveal event, which is right wherever the stream is mounted. */
   onReveal?: (id: string) => void;
+  /** The page's shared ask derivation (lane 01M6DBDSGH): when given, the asks routed to the reader
+   *  live in "Waiting on you" above, and this rail keeps the rest — the team pool, other people's
+   *  asks, the review queue. Rendered alone it derives its own and shows everything. */
+  views?: AskViews;
 }) {
-  // Answers this browser just sent: fold the POST ack into the derivation so the card settles
-  // immediately; the firehose copy that follows is deduped by id in `deriveAsks`.
-  const [localAnswers, setLocalAnswers] = useState<Envelope[]>([]);
   /* A choice just picked stays on screen for a beat (lane 01M511XNQC): the answer is already sent, but
      the card would vanish the instant it settled and take the stamp and its "sent to …" line with it.
      Kept by id, as the open view it was, so the same AskChoices instance keeps its picked state. */
@@ -104,38 +103,17 @@ export function AsksStrip({
   const [open, setOpen] = useState(asksOpenMode);
   const rootRef = useRef<HTMLElement | null>(null);
 
-  // One clock for the whole strip: it decides both what the countdowns read and, past a deadline,
-  // which side of the tier contract an unanswered ask fell on (`applyTierClock`). Those must be the
-  // same instant or a card can say "0:00 left" while still offering Approve.
-  const [now, setNow] = useState(() => Date.now());
-  // Answerable iff the connected seat is a real member (observers are hidden from the roster).
-  const canAnswer = roster.some((m) => m.name === cfg.as);
-  /**
-   * Who "you" are for audience purposes (lane 01KZ9GFHZ9): the signed-in seat, else the seat one
-   * click would make you. Routing is judged against that identity — an ask routed to an AGENT must
-   * never render under "sign in to answer" copy, which is exactly how this strip told a reader that
-   * ten agent-routed asks were nick's.
-   */
-  const ctx: AudienceContext = useMemo(
-    () => ({
-      you: canAnswer ? cfg.as : localIdentity,
-      humans: new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name)),
-    }),
-    [canAnswer, cfg.as, localIdentity, roster],
-  );
-  // Review asks older than the backfill window, fetched by date (lane 01M5G10DB2): without them a
-  // fresh load cannot re-offer a lane's ask that scrolled out before its refused verdict did.
-  const recovered = useRecoveredAsks(cfg, board, envelopes, ctx.humans, !loading);
-  const derived = useMemo(
-    () => deriveAsks([...recovered, ...envelopes, ...localAnswers]),
-    [recovered, envelopes, localAnswers],
-  );
-  // A refused human verdict must not settle its ask (lane 01M5EA60RD): the board's still-awaiting
-  // lanes re-offer review asks the timeline settled with an unsigned human verdict alone. Applied
-  // after the tier clock so a long-refused ask is not instantly lapsed back out of the rail.
+  // One derivation, one clock (`useAskViews`): the countdowns and the tier verdicts read the same
+  // instant, or a card could say "0:00 left" while still offering Approve. Rendered alone, the rail
+  // derives for itself; on /live the page derives once and hands the views to the rail and the list.
+  const own = useAskViews({ cfg, roster, board, envelopes, localIdentity, loading, enabled: views === undefined });
+  const { ctx, canAnswer, now, addLocal } = views ?? own;
+  /** With shared views, an ask routed to the reader is a row in "Waiting on you", never here too:
+   *  one place to look (spec 2026-10-30). Everything else — the team pool, other people's asks,
+   *  settled and lapsed ones for the sheet's counters — stays the rail's. */
   const asks = useMemo(
-    () => resurrectRefusedVerdicts(applyTierClock(derived, now), board?.lanes ?? [], ctx.humans),
-    [derived, board, ctx.humans, now],
+    () => (views ? views.asks.filter((a) => askAudience(a, ctx) !== 'you') : own.asks),
+    [views, own.asks, ctx],
   );
   const loud = asks.filter((a) => askIsLoud(a.state)).sort(byAudienceThenUrgency(ctx, now));
   const deferred = asks.filter((a) => a.state === 'deferred');
@@ -158,32 +136,11 @@ export function AsksStrip({
   const leadIsOurs = leadAudience === 'you' || leadAudience === 'team';
   // Is the lead a choice (lane 01M511XNQC)? Then the rail offers Choose…, never a one-click Approve.
   const leadChoices = lead ? askChoicesOf(lead.env) : null;
-  const yoursCount = answerableCount(loud, ctx);
+  // Counts both surfaces' asks — the rows above and the pool here — so the tab says what waits.
+  const yoursCount = answerableCount((views ?? own).asks.filter((a) => askIsLoud(a.state)), ctx);
 
   // The review queue (nick, 2026-08-05): every lane in acceptance and who it waits on, at a glance.
   const reviews = useMemo(() => (board ? deriveReviewQueue(board.lanes, asks) : []), [board, asks]);
-
-  // A 1s tick while any clock is running, so the countdowns are honest. Stops when nothing is loud —
-  // idle cost is paid by every viewer, forever (packages/web/AGENTS.md).
-  //
-  // Held under `?still` (ADR 285). A countdown is the purest case the flag exists for: the text
-  // "4m 12s" is a row the contrast sweep measures, and re-rendering it every second re-widens the
-  // row and moves whatever sits after it — so the page never settles, and the number the gate
-  // reports is a frame. The card keeps whatever value it had at mount, which is exactly what a
-  // reader sees at any instant; it simply stops counting down while being photographed.
-  const still = stillMode();
-  // …and keeps ticking through a settle (lane 01M511XNQC): answering the last open ask used to stop the
-  // clock BEFORE the answer's timestamp, so `askBanner` never saw it as settled and "nick approved ✓" /
-  // "nick chose C ✓" never showed. An answer newer than the clock, or one inside SETTLED_MS, keeps it on.
-  const settling = derived.some(
-    (a) => a.settledAt !== undefined && (a.settledAt > now || now - a.settledAt <= SETTLED_MS),
-  );
-  useEffect(() => {
-    if ((loud.length === 0 && !settling) || still) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [loud.length, settling, still]);
 
   // Waiting-on-YOU count in the tab title — loud even when the tab isn't front. Counts only asks
   // this browser's identity could answer (yours + team-pool): titling the tab "(10 asks)" for ten
@@ -261,84 +218,16 @@ export function AsksStrip({
       setBusy(ask.env.id);
       setError(null);
       try {
-        const to = { kind: 'member', name: ask.env.from } as const;
-        const thread = ask.env.thread ?? ask.env.id;
-        if (kind === 'deciding') {
-          const ack = await sendAct(cfg, {
-            act: 'wait',
-            to,
-            thread,
-            body: 'deciding — check back in 1h',
-            meta: { ask_ref: ask.env.id, until: '1h' },
-          });
-          setLocalAnswers((prev) => [...prev, ack]);
-          return;
-        }
-        // Lane 01M5DTPMXN: a verdict on a lane_review ask from a human seat is a
-        // high-authority act (ADR 662) — it needs the passkey proof attached, or the
-        // daemon refuses it. The ceremony runs first; a cancelled one sends nothing.
-        const laneId = (
-          ask.env.meta?.['lane_review'] as { lane?: unknown } | undefined
-        )?.lane;
-        const humanSeat = roster.find((m) => m.name === cfg.as)?.kind === 'human';
-        if (typeof laneId === 'string' && humanSeat) {
-          // Lazily loaded: a verdict is rare, and the ceremony code should not ride
-          // in every /live load (perf budget).
-          const { authorityProofForVerdict } = await import('./authorityProof');
-          const proof = await authorityProofForVerdict(cfg, laneId, kind);
-          const sent = await sendActWithVerdict(cfg, {
-            act: kind,
-            to,
-            thread,
-            ...(body ? { body } : {}),
-            meta: { in_reply_to: ask.env.id, ...(proof ? { approval: proof } : {}) },
-          });
-          if (sent.lane_authority_refused) {
-            // The reason is a code for the audit, not a sentence for the card
-            // (slippy, review of #3078).
-            setError(
-              sent.lane_authority_refused.reason === 'no_signature'
-                ? "Your verdict wasn't recorded: this needs your passkey, and none was used. The ask is still open; try again."
-                : "Your verdict wasn't recorded: the daemon refused it. The ask is still open; try again.",
-            );
-            return;
-          }
-          if (!sent.lane_verdict && !sent.lane_escalation) {
-            setError('that verdict did not move the lane — the ask is still open.');
-            return;
-          }
-          setLocalAnswers((prev) => [...prev, sent.ack]);
-          return;
-        }
-        if (humanSeat && classifyAskAction(ask.env.meta) === 'privileged') {
-          const { authorityProofForAsk } = await import('./authorityProof');
-          const proof = await authorityProofForAsk(cfg, ask.env.id, kind);
-          const ack = await sendAct(cfg, {
-            act: kind,
-            to,
-            thread,
-            ...(body ? { body } : {}),
-            meta: { in_reply_to: ask.env.id, ...(proof ? { approval: proof } : {}) },
-          });
-          setLocalAnswers((prev) => [...prev, ack]);
-          return;
-        }
-        const ack = await sendAct(cfg, {
-          act: kind,
-          to,
-          thread,
-          // A picked option rides as the body (lane 01M511XNQC), so the record says which one.
-          ...(body ? { body } : {}),
-          meta: { in_reply_to: ask.env.id },
-        });
-        setLocalAnswers((prev) => [...prev, ack]);
+        const r = await answerAsk(cfg, roster, ask, kind, body);
+        if ('error' in r) setError(r.error);
+        else addLocal(r.ack);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setBusy(null);
       }
     },
-    [cfg, roster],
+    [cfg, roster, addLocal],
   );
 
   const idx = new Map(roster.map((m) => [m.name, m]));
@@ -533,7 +422,7 @@ export function AsksStrip({
             {loading ? (
               <i className="lc-skel" style={{ width: '9em' }} aria-label="Loading" />
             ) : (
-              <span className="lc-asks__verb">no open questions</span>
+              <span className="lc-asks__verb">no open asks</span>
             )}
           </span>
         )}

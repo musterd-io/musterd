@@ -68,7 +68,7 @@ export function StreamAskBanner({
         )}
         {banner.mode === 'idle' ? (
           <span className="lc-asks__lead lc-asks__lead--quiet">
-            <span className="lc-asks__verb">no open questions</span>
+            <span className="lc-asks__verb">no open asks</span>
           </span>
         ) : (
           <>
