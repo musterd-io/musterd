@@ -2852,6 +2852,7 @@ it to remove a chunk. A re-baseline to measured + 15% would loosen.
 | Budget     | Before (ceiling) | This branch (files)   | Ceiling                          |
 | ---------- | ---------------- | --------------------- | -------------------------------- |
 | office art | 8,900,000 B      | ~9,257,984 B (182)    | RAISED 8,900,000 → 9,730,000 B   |
+| total JS   | 405,500 B        | ~405,811 B (CI, 396.3 KB) | RAISED 405,500 → 407,500 B |
 
 The shell's five layers are re-rendered with transparent panes and a rod and two drapes per window
 (~90 KB over the three day states and the two ceiling overlays), and the city arrives as twelve
@@ -2860,4 +2861,5 @@ after pngquant + WebP (`packages/web/art/office/exterior.py`). Coast and mountai
 twenty-four more of the same size, ~600 KB, inside this ceiling. A re-baseline to measured + 15%
 would loosen (ADR 183).
 
-- Falsify: `pnpm perf:check` after a build reports office art at or under 9,730,000 B with this lane in.
+- Falsify: `pnpm perf:check` after a build reports office art at or under 9,730,000 B and total JS
+  at or under 407,500 B with this lane in.
