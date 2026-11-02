@@ -171,6 +171,21 @@ describe('cloud mode — creating a team takes a console token (1C task 5, spec 
     }
   });
 
+  it("binds the creator's seat to the console account, so they can sign in as owner (lane 01M6F37KSW)", async () => {
+    const issuer = testIssuer();
+    await issuer.serve();
+    const { s, url } = await bootCloud({ MUSTERD_CONSOLE_JWKS_URL: issuer.url });
+    try {
+      expect((await create(url, issuer.token(AUD, { sub: 'acct_owner' }))).status).toBe(201);
+      expect(await s.store.all("SELECT name, account_id FROM members WHERE name = 'ada'")).toEqual([
+        { name: 'ada', account_id: 'acct_owner' },
+      ]);
+    } finally {
+      await s.close();
+      await issuer.close();
+    }
+  });
+
   it('a token for another audience is refused', async () => {
     const issuer = testIssuer();
     await issuer.serve();

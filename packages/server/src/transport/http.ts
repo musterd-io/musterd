@@ -414,6 +414,7 @@ import {
   setMemberGovernance,
   setMemberHue,
   teamHasAdmin,
+  bindMemberAccount,
 } from '../store/members.js';
 import {
   applyMemoryClear,
@@ -3253,6 +3254,10 @@ export async function handleHttp(
         kind: 'human',
         role: body.creator.role ?? '',
       });
+      // Cloud: the creator's seat is the console account that minted the token (ADR 698), so the
+      // person who created the team from the console signs in to it as its owner — without this the
+      // owner needed an invite to their own team (lane 01M6F37KSW). Write-once in the store.
+      if (consoleToken) await bindMemberAccount(ctx.db, row.id, consoleToken.sub);
       // Creator-admin default (ADR 071, P2): the creator's human seat is the team's first admin, so the
       // governance routes have an authority from birth (the ADR 070 stated default, implemented here).
       // The team is db-only at create time (no seat-file yet), so this write is uncontended by reconcile;
