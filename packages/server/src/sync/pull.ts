@@ -330,6 +330,10 @@ async function fetchPage(
 export interface PullPage {
   applied: number;
   full: boolean;
+  /** The cursor after this page, and when it was stamped — on the `sync_pulled` line so a freshness
+   *  refusal (ADR 689 d7) can be read against the pulls that preceded it (lane 01M6D9DD0R: 6.35 h of
+   *  refusals while this line logged applied rows every few seconds). */
+  cursor?: { last_hub_seq: number; updated_at: number };
 }
 
 /** One team's pull pass. Returns how many events were applied. Exported for through-DB tests. */
@@ -352,7 +356,7 @@ export async function drainTeam(
     pull?: (ctx: Ctx, team: { id: string; slug: string }) => Promise<PullPage>;
     stopped?: () => boolean;
   } = {},
-): Promise<{ pages: number; applied: number }> {
+): Promise<{ pages: number; applied: number; cursor?: PullPage['cursor'] }> {
   const pull = deps.pull ?? pullPage;
   const stopped = deps.stopped ?? (() => false);
   let pages = 0;
@@ -361,7 +365,8 @@ export async function drainTeam(
     const page = await pull(ctx, team);
     pages += 1;
     applied += page.applied;
-    if (!page.full || stopped()) return { pages, applied };
+    if (!page.full || stopped())
+      return { pages, applied, ...(page.cursor ? { cursor: page.cursor } : {}) };
     // The fold is synchronous, so without this the next page's fetch went out in the same
     // macrotask as the last COMMIT: undici reused a pooled socket the hub had already closed before
     // it could read the FIN (why #1989's retry exists — it stays as the belt). One turn of the loop
@@ -544,6 +549,7 @@ export async function pullPage(
   return {
     applied: result.applied,
     full: page.events.length === SYNC_PULL_MAX_BATCH && result.stop === null,
+    cursor: { last_hub_seq: result.last_hub_seq, updated_at: now },
   };
 }
 
@@ -595,9 +601,13 @@ export function startSyncPull(ctx: Ctx): () => void {
       for (const team of await listActiveTeams(ctx.db)) {
         if (stopped) break;
         try {
-          const { pages, applied } = await drainTeam(ctx, team, { stopped: () => stopped });
-          if (pages > 1) log.info({ msg: 'sync_drained', team: team.slug, pages, applied });
-          else if (applied > 0) log.info({ msg: 'sync_pulled', team: team.slug, applied });
+          const { pages, applied, cursor } = await drainTeam(ctx, team, {
+            stopped: () => stopped,
+          });
+          // `cursor` names the row the ADR 689 d7 freshness check reads, as this tick left it.
+          const at = cursor ? { last_hub_seq: cursor.last_hub_seq, cursor_at: cursor.updated_at } : {};
+          if (pages > 1) log.info({ msg: 'sync_drained', team: team.slug, pages, applied, ...at });
+          else if (applied > 0) log.info({ msg: 'sync_pulled', team: team.slug, applied, ...at });
         } catch (error) {
           // Offline is the expected failure for a laptop; the classified stops above already wrote
           // their own error line before this warn.
