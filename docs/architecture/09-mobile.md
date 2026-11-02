@@ -302,7 +302,9 @@ locked phone in someone else's hand can pick one of the seat's own options, but 
 text into a seat's session. What it answers is the extension's own keychain record of the
 verified delivery (`question-routes`: route, token, nonce, option count). A relay that refuses
 twice leaves the callback in `question-outbox`, re-sent on every open, and a local notification
-says so. A question whose `question_key` is absent or names another key gets no actions, and
+says so. The home screen sends both outboxes before it asks for a re-delivery: re-issuing an ask
+spends the token a kept answer was signed with, and the daemon would refuse it as consumed after
+the relay had already taken it. A question whose `question_key` is absent or names another key gets no actions, and
 says to open musterd: the relay's 202 is all an enrollment hears, so this is how the phone learns
 the daemon refused or lost it. The home screen then offers to turn it on again, for a question
 asked after the enrollment (an older one may name the previous key). `PhoneKeys.signQuestion` refuses anything that does not start with the question-answer

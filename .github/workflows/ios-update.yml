@@ -44,6 +44,10 @@ jobs:
         with:
           build: 'false'
 
+      # The bundle imports @musterd/protocol subpaths, which resolve to its gitignored dist/.
+      - name: Build @musterd/protocol
+        run: pnpm --filter @musterd/protocol build
+
       - name: Publish (eas update)
         working-directory: packages/mobile
         env:
