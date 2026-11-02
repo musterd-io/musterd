@@ -34,6 +34,9 @@ export interface ViewSpan {
   t1: number;
   u0: number;
   u1: number;
+  /** The frame's slack around the pane, as a fraction of the pane span on every side (0 = none).
+   *  A plate is the FULL camera frame, never cropped, so the pane is the rect inside this margin. */
+  margin: number;
 }
 
 export interface RenderedManifest {
@@ -62,9 +65,9 @@ function parseAsset(v: unknown, i: number): RenderedAsset {
 /** A malformed span is dropped, not fatal: the plate then never matches a window and the sky still paints. */
 function parseViewSpan(v: unknown): ViewSpan | undefined {
   if (!isRecord(v)) return undefined;
-  const { which, t0, t1, u0, u1 } = v;
+  const { which, t0, t1, u0, u1, margin } = v;
   if ((which !== 0 && which !== 1) || !isNum(t0) || !isNum(t1) || !isNum(u0) || !isNum(u1)) return undefined;
-  return { which, t0, t1, u0, u1 };
+  return { which, t0, t1, u0, u1, margin: isNum(margin) && margin >= 0 && margin < 0.5 ? margin : 0 };
 }
 
 /** Parse a manifest JSON value; throws with the offending field named. */

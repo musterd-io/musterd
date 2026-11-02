@@ -29,7 +29,7 @@ function cityPlates(): Record<string, unknown>[] {
           h: 420,
           anchor: { x: 0, y: 0 },
           scale: 3,
-          view: { which, t0: w.t0, t1: w.t1, u0: w.u0, u1: w.u1 },
+          view: { which, t0: w.t0, t1: w.t1, u0: w.u0, u1: w.u1, margin: 0.04 },
         });
   return out;
 }
@@ -91,5 +91,22 @@ describe('viewOverride', () => {
     expect(viewOverride('?view=MOUNTAIN')).toBe('mountain');
     expect(viewOverride('?view=mars')).toBeNull();
     expect(viewOverride('')).toBeNull();
+  });
+});
+
+describe('plate framing (review C1)', () => {
+  it('maps the pane rect INSIDE the plate frame onto the quad, not the whole plate', () => {
+    const { ctx, ops } = recordingCtx();
+    drawWindowViews(ctx, fit, computeLightEnv(12, true), art(cityPlates()), 'clear', 'city');
+    const draws = ops.filter((o) => o.name === 'drawImage');
+    expect(draws.length).toBeGreaterThan(0);
+    for (const d of draws) {
+      // nine-arg form: source rect is the frame minus the margin on every side
+      expect(d.args).toHaveLength(9);
+      expect(d.args[1]).toBeCloseTo(300 * 0.04, 3);
+      expect(d.args[2]).toBeCloseTo(420 * 0.04, 3);
+      expect(d.args[3]).toBeCloseTo(300 * 0.92, 3);
+      expect(d.args[4]).toBeCloseTo(420 * 0.92, 3);
+    }
   });
 });

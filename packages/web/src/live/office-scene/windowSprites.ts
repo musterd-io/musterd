@@ -1,9 +1,9 @@
 import { roll, slotAt } from './ambientSeed';
-import type { Fit } from './iso';
+import { WALL_H, type Fit } from './iso';
 import { WINDOWS } from './layout';
 import type { LightEnv } from './lighting';
 import type { Weather } from './weather';
-import { paneQuad, type ViewSetting } from './windowView';
+import { WALL_EDGES, wallPt, paneQuad, type ViewSetting } from './windowView';
 
 /**
  * Life outside the windows (window views, lane 01M6ENGW2H): clouds drifting, the sun and moon on the
@@ -94,7 +94,36 @@ export function moversMove(movers: readonly Mover[]): boolean {
   return movers.some((m) => m.kind === 'cloud' || m.kind === 'tram' || m.kind === 'plane');
 }
 
-/** Draw the movers, each clipped to its pane. Canvas primitives only; no images. */
+/**
+ * Clip to the glass: the lights between the mullions, inside the frame (review I1 — a mover drawn
+ * over the whole opening painted across the mullions and the frame strips the shell holds). Matches
+ * `scene.py` `wall()`: frame strips ±0.004 of t, 3 units top and bottom, mullions ±0.0015 of t.
+ */
+function clipGlass(ctx: CanvasRenderingContext2D, fit: Fit, which: 0 | 1, i: number): void {
+  const w = WINDOWS[i]!;
+  const edge = WALL_EDGES[which]!;
+  const inset = 3 / WALL_H;
+  const u0 = w.u0 + inset;
+  const u1 = w.u1 - inset;
+  ctx.beginPath();
+  for (let k = 0; k < w.mullions; k++) {
+    const a = (k === 0 ? w.t0 + 0.004 : w.t0 + ((w.t1 - w.t0) * k) / w.mullions + 0.0015);
+    const b = (k === w.mullions - 1 ? w.t1 - 0.004 : w.t0 + ((w.t1 - w.t0) * (k + 1)) / w.mullions - 0.0015);
+    const p0 = wallPt(edge, a, u0, fit);
+    const p1 = wallPt(edge, b, u0, fit);
+    const p2 = wallPt(edge, b, u1, fit);
+    const p3 = wallPt(edge, a, u1, fit);
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.closePath();
+  }
+  ctx.clip();
+}
+
+
+/** Draw the movers, each clipped to its pane's glass. Canvas primitives only; no images. */
 export function drawMovers(ctx: CanvasRenderingContext2D, fit: Fit, movers: readonly Mover[]): void {
   for (const m of movers) {
     const q = paneQuad(fit, m.which, m.i);
@@ -107,13 +136,7 @@ export function drawMovers(ctx: CanvasRenderingContext2D, fit: Fit, movers: read
     const p = px(m.x, m.y);
     const r = m.s * w;
     ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(q[0].x, q[0].y);
-    ctx.lineTo(q[1].x, q[1].y);
-    ctx.lineTo(q[2].x, q[2].y);
-    ctx.lineTo(q[3].x, q[3].y);
-    ctx.closePath();
-    ctx.clip();
+    clipGlass(ctx, fit, m.which, m.i);
     ctx.globalAlpha = m.alpha;
     switch (m.kind) {
       case 'cloud': {

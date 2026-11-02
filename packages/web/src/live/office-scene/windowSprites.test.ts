@@ -51,12 +51,16 @@ describe('moversAt (window views, lane 01M6ENGW2H)', () => {
     expect(moversMove([])).toBe(false);
   });
 
-  it('drawMovers clips every mover to its pane', async () => {
+  it('drawMovers clips every mover to the glass between the mullions, never the frame (review I1)', async () => {
     const { fitFloor } = await import('./iso');
     const { recordingCtx } = await import('./recording-ctx');
+    const { WINDOWS } = await import('./layout');
     const { ctx, ops } = recordingCtx();
     const ms = moversAt('city', T0, at(12), 'clear', 'revive');
     drawMovers(ctx, fitFloor(1200, 900), ms);
     expect(ops.filter((o) => o.name === 'clip').length).toBe(ms.length);
+    // one sub-rect per glass light: a window with N mullion divisions has N lights
+    const lights = ms.reduce((n, m) => n + WINDOWS[m.i]!.mullions, 0);
+    expect(ops.filter((o) => o.name === 'moveTo').length).toBe(lights);
   });
 });

@@ -70,7 +70,9 @@ describe('view plates (window views, lane 01M6ENGW2H)', () => {
 
   it('parseManifest keeps a view span and drops a malformed one', () => {
     const m = parseManifest({ ...good, assets: [plate('day'), plate('night', { t0: 'x' })] });
-    expect(m.assets[0]!.view).toEqual(span);
+    expect(m.assets[0]!.view).toEqual({ ...span, margin: 0 });
+    const withMargin = parseManifest({ ...good, assets: [plate('day', { margin: 0.04 })] });
+    expect(withMargin.assets[0]!.view!.margin).toBe(0.04);
     expect(m.assets[1]!.view).toBeUndefined();
   });
 

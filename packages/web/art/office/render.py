@@ -892,6 +892,19 @@ def main() -> None:
         )
         print(f"rendered {asset_id} -> {file} {cw // down}x{ch // down} anchor ({(ox - x0) / down:.1f}, {(oy - y0) / down:.1f}) {os.path.getsize(path)} B")
 
+    def record_frame(asset_id: str, path: str, extra: dict) -> None:
+        """A plate keeps its WHOLE frame (review C1): the pane sits inside `view.margin`, and a crop
+        to the alpha bounds would move it. No mirror either — `crop_alpha` is where that happens."""
+        img = bpy.data.images.load(path)
+        fw, fh = img.size
+        bpy.data.images.remove(img)
+        quantize(path)
+        path = to_webp(path)
+        manifest["assets"].append(
+            {"id": asset_id, "file": os.path.basename(path), "w": fw, "h": fh, "anchor": {"x": 0, "y": 0}, "scale": a["scale"], **extra}
+        )
+        print(f"rendered {asset_id} -> {os.path.basename(path)} {fw}x{fh} (full frame) {os.path.getsize(path)} B")
+
     def out_path(asset_id: str) -> str:
         return os.path.join(a["out"], "office-art-" + asset_id.replace("/", "-") + ".png")
 
@@ -947,7 +960,7 @@ def main() -> None:
                     render_alone(objs, path, export)  # hides the room; the exterior collection renders as is
                     if exterior.mirrors_on_read(which):
                         flip_h(path)
-                    record(asset_id, path, None, 1, {"view": {"which": which, "t0": t0, "t1": t1, "u0": u0, "u1": u1}})
+                    record_frame(asset_id, path, {"view": {"which": which, "t0": t0, "t1": t1, "u0": u0, "u1": u1, "margin": exterior.MARGIN}})
                 bpy.data.objects.remove(cam, do_unlink=True)
             exterior.remove_exterior()
     bpy.context.scene.camera = room_cam

@@ -131,25 +131,31 @@ function clipQuad(ctx: CanvasRenderingContext2D, q: [Pt, Pt, Pt, Pt]): void {
 }
 
 /**
- * Blit a plate onto the pane: the plate's pixel rect maps onto the quad — its x axis along the wall
- * (bottom-left → bottom-right) and its y axis up it (bottom-left → top-left) — so a wall-space render
- * lands on the wall-space parallelogram without the manifest needing an anchor.
+ * Blit a plate onto the pane. A plate is the camera's whole frame — the pane plus `margin` on every
+ * side, never cropped (review C1: a crop trimmed the sky off the top and stretched the land up to
+ * the lintel) — so the source rect is the pane inside that margin, mapped onto the quad: x along the
+ * wall (bottom-left → bottom-right), y up it (bottom-left → top-left). No anchor needed.
  */
 function blitOntoQuad(
   ctx: CanvasRenderingContext2D,
   img: CanvasImageSource,
   w: number,
   h: number,
+  margin: number,
   q: [Pt, Pt, Pt, Pt],
 ): void {
-  const ax = (q[1].x - q[0].x) / w;
-  const ay = (q[1].y - q[0].y) / w;
-  const bx = (q[3].x - q[0].x) / h;
-  const by = (q[3].y - q[0].y) / h;
+  const sx = w * margin;
+  const sy = h * margin;
+  const sw = w * (1 - 2 * margin);
+  const sh = h * (1 - 2 * margin);
+  const ax = (q[1].x - q[0].x) / sw;
+  const ay = (q[1].y - q[0].y) / sw;
+  const bx = (q[3].x - q[0].x) / sh;
+  const by = (q[3].y - q[0].y) / sh;
   // image y runs down, wall u runs up: the origin is the top-left corner, i.e. q[3].
   ctx.save();
   ctx.transform(ax, ay, -bx, -by, q[3].x, q[3].y);
-  ctx.drawImage(img, 0, 0, w, h);
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
   ctx.restore();
 }
 
@@ -188,7 +194,7 @@ export function drawWindowViews(
         ctx.globalAlpha = alpha;
         if (tint.brightness !== 1 || tint.saturate !== 1)
           ctx.filter = `brightness(${tint.brightness}) saturate(${tint.saturate})`;
-        blitOntoQuad(ctx, img, a.w, a.h, q);
+        blitOntoQuad(ctx, img, a.w, a.h, a.view?.margin ?? 0, q);
         ctx.filter = 'none';
         ctx.globalAlpha = 1;
       };

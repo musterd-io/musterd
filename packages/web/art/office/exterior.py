@@ -168,11 +168,11 @@ def remove_exterior() -> None:
 
 
 def mirrors_on_read(which: int) -> bool:
-    """`crop_alpha` mirrors every frame left-to-right (see `project_px`). Looking out of wall 0 the
-    camera's screen-right is +t, so that mirror would put t1 on the left; the plate is flipped once
-    before the crop so the stored pixels run t0 → t1 for both walls. Wall 1's screen-right is −t, and
-    the crop's mirror alone sets it right."""
-    return which == 0
+    """A plate is stored with its pixels running t0 → t1 left to right (windowView.ts maps x along
+    the wall). Looking out of wall 0 the camera's screen-right is +t already; looking out of wall 1
+    it is −t, so that frame is flipped once. (Plates skip `crop_alpha`, which is where the room's
+    frames get their mirror — see `project_px`.)"""
+    return which == 1
 
 
 __all__ = ["SETTINGS", "MARGIN", "build_exterior", "exterior_camera", "remove_exterior", "set_lit", "mirrors_on_read"]

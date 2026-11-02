@@ -94,12 +94,15 @@ too. Lit window quads glow in the `night` state only.
 ```
 
 Writes `view/<setting>/<wall>-<pane>-<day|evening|night>` (2 walls × 2 panes × 3 states = 12 plates
-per setting, each the pane's span plus a 4% margin, ~25 KB after quantize + WebP) and records each
-with a `view` span (`which`, `t0`, `t1`, `u0`, `u1`) in `manifest.json`; `viewPlates()` matches that
-span against `layout.ts` `WINDOWS` and skips a stale plate rather than stretching it. `--exterior`
-implies `--only` over the plate ids, so the room is not re-rendered. The crop mirrors every frame
-(see `project_px`); a wall-0 plate is flipped once first so the stored pixels run t0 → t1 on both
-walls (`mirrors_on_read`).
+per setting, ~25 KB after quantize + WebP) and records each with a `view` span (`which`, `t0`, `t1`,
+`u0`, `u1`, `margin`) in `manifest.json`. A plate is the camera's **whole frame** — the pane plus a
+4% margin on every side, never cropped to its alpha bounds, or the sky would be trimmed off the top
+and the land stretched up to the lintel — and `windowView.ts` blits the rect inside the margin onto
+the pane. `viewPlates()` matches the span against `layout.ts` `WINDOWS` and skips a stale plate
+rather than stretching it. `--exterior` implies `--only` over the plate ids, so the room is not
+re-rendered. Plates skip `crop_alpha` and so skip its mirror; a wall-1 plate (whose camera's
+screen-right is −t) is flipped once so the stored pixels run t0 → t1 on both walls
+(`mirrors_on_read`).
 
 ## Projection
 
