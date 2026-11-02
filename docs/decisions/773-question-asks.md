@@ -56,7 +56,9 @@ The design, approved by nick on 2026-10-30, is
      _(Amended 2026-10-30: derived on read from the lane's state, not written; see Consequences.)_
 
    An answer that arrives after a withdrawal is still recorded and delivered, with `late: true` in
-   its proof, so the seat can ignore it. The first answer wins. A second is refused with
+   its proof, so the seat can ignore it. _(Amended 2026-11-02: superseded by
+   [ADR 787](787-withdrawn-question-refuses-answers.md) — such an answer is now refused
+   `409 question_withdrawn` and recorded nowhere.)_ The first answer wins. A second is refused with
    `409 question_already_answered`, naming who answered and on which channel.
 4. **An answer is an `accept`** with `meta.in_reply_to` and `meta.answer = { choice?, text? }`.
    `choice` is a 0-based option index (0–8); `text` is 1–4,000 characters. At least one is present,

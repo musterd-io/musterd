@@ -110,15 +110,28 @@ export async function prepareQuestionAnswer(
   const stamped = opts.daemonComposed
     ? AnswerProofSchema.safeParse(env.meta['answer_proof'])
     : null;
-  const late = view.state === 'withdrawn' || view.state === 'lane_closed';
   const proof: AnswerProof = stamped?.success
-    ? { ...stamped.data, ...(late ? { late: true } : {}) }
+    ? stamped.data
     : {
         channel: directChannel(opts.surface),
         verified: sender.kind === 'human',
         by: sender.name,
-        ...(late ? { late: true } : {}),
       };
+  // ADR 787 (superseding ADR 773 §3's late answer): a withdrawn question is closed to answers. The
+  // refusal is audited — who tried, on which channel — and nothing is claimed or persisted.
+  if (view.state === 'withdrawn' || view.state === 'lane_closed') {
+    await appendAudit(db, team.id, {
+      actor: proof.by,
+      action: 'question.answered',
+      target: view.id,
+      result: 'deny',
+      detail: { answer: env.id, channel: proof.channel, reason: view.state },
+    });
+    throw new MusterdError(
+      'conflict',
+      `question_withdrawn: ${view.asker} withdrew this question (${view.state})`,
+    );
+  }
   const claimed = await claimAnswer(db, team.id, {
     questionId: view.id,
     answerId: env.id,
@@ -126,7 +139,7 @@ export async function prepareQuestionAnswer(
     by: proof.by,
     channel: proof.channel,
     verified: proof.verified,
-    late,
+    late: false,
     at: opts.now ?? Date.now(),
   });
   if (!claimed.ok) {

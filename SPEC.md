@@ -1197,8 +1197,9 @@ answer's text.
 - An answer is an `accept` with `meta.in_reply_to` naming the question and `meta.answer {choice?
   (0–8), text? (1–4000)}`, at least one present. A server MUST refuse `meta.answer` on any other
   act or target, MUST refuse an answer from anyone but the addressee when `audience` is
-  `'addressee'`, and MUST refuse a second answer with `409 question_already_answered`. An answer
-  after a withdrawal is recorded with `late: true`.
+  `'addressee'`, and MUST refuse a second answer with `409 question_already_answered`. A server
+  MUST refuse an answer to a withdrawn or `lane_closed` question with `409 question_withdrawn`
+  and record nothing (ADR 787; `late` survives only on answers recorded before it).
 - `meta.answer_proof {channel: 'live'|'app'|'slack'|'cli', verified, by, late?}` is
   server-controlled; a server MUST strip a client-supplied copy. A question answer is advisory and
   authorizes nothing.

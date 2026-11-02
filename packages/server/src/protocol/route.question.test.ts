@@ -146,32 +146,47 @@ withDrivers('route.question', (o) => {
     });
   });
 
-  it('an answer after the asker withdrew is recorded late', async () => {
-    const { db, team, nick, ryder, ctx } = await seed();
-    await routeEnvelope(
-      ctx,
-      team,
-      ryder,
-      makeEnvelope({
-        id: 'r1',
-        team: 'revive',
-        from: 'ryder',
-        to: { kind: 'team' },
-        act: 'resolve',
-        thread: 'q1',
-      }),
-    );
-    await routeEnvelope(ctx, team, nick, answer('a1', 'nick'));
-    expect(await proofOf(db, 'a1')).toEqual({
-      channel: 'cli',
-      verified: true,
-      by: 'nick',
-      late: true,
-    });
-    const v = await questionView(db, team.id, 'q1');
-    expect(v?.state).toBe('withdrawn');
-    expect(v?.answer?.late).toBe(true);
-  });
+  // ADR 787 (superseding ADR 773 §3's late answer): a withdrawn question refuses an answer.
+  it.each([
+    ['withdrawn', {}],
+    ['lane_closed', { withdrawn: 'lane_closed' }],
+  ] as const)(
+    'an answer after the question is %s is refused, audited, and writes nothing',
+    async (state, meta) => {
+      const { db, team, nick, ryder, ctx } = await seed();
+      await routeEnvelope(
+        ctx,
+        team,
+        ryder,
+        makeEnvelope({
+          id: 'r1',
+          team: 'revive',
+          from: 'ryder',
+          to: { kind: 'team' },
+          act: 'resolve',
+          thread: 'q1',
+          meta,
+        }),
+      );
+      await expect(routeEnvelope(ctx, team, nick, answer('a1', 'nick'))).rejects.toMatchObject({
+        code: 'conflict',
+        message: expect.stringContaining('question_withdrawn'),
+      });
+      expect(await proofOf(db, 'a1')).toBeUndefined();
+      const v = await questionView(db, team.id, 'q1');
+      expect(v?.state).toBe(state);
+      expect(v?.answer).toBeUndefined();
+      const refused = (await listAudit(db, team.id)).filter(
+        (r) => r.action === 'question.answered' && r.result === 'deny',
+      );
+      expect(refused).toHaveLength(1);
+      expect(refused[0]).toMatchObject({ actor: 'nick', target: 'q1' });
+      expect(JSON.parse(String(refused[0]?.detail))).toMatchObject({
+        reason: state,
+        channel: 'cli',
+      });
+    },
+  );
 
   it('a seat cannot answer a question, even a team one', async () => {
     const db = await openStore();
