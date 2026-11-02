@@ -50,11 +50,13 @@ export default function AsksScreen() {
         return;
       }
       const { loadAsks, markShown, requestRedelivery } = await import('../native/asks');
-      if (redeliver) void requestRedelivery({ pin: current });
-      // Answers a dropped relay kept from leaving go first (outbox.ts).
+      // Answers a dropped relay kept from leaving go first (outbox.ts), and before the re-delivery:
+      // re-issuing an ask spends the token a kept answer was signed with, and the daemon then
+      // refuses it as consumed after the relay already took it (seen on build 40, 2026-11-01).
       const { flushOutbox } = await import('../native/outbox');
       const stillWaiting = await flushOutbox();
       if (alive.current) setOutgoing(stillWaiting);
+      if (redeliver) void requestRedelivery({ pin: current });
       const next = await loadAsks({ pin: current });
       if (!alive.current) return;
       setView(next);
