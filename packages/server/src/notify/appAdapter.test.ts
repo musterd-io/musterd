@@ -1261,6 +1261,53 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
     ).resolves.toEqual({ ok: false, reason: 'question_already_answered' });
   });
 
+  it('ADR 787: a withdrawn question refuses the phone, and is no longer fetched or re-sent', async () => {
+    const s = await seed();
+    const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('qk-1', await enrollBody(s, qk.publicKey)),
+      NOW,
+    );
+    const d = await delivered(s, await raiseQuestion(s, 'q-1'));
+    await insertMessage(
+      s.db,
+      s.team.id,
+      s.ada.id,
+      null,
+      makeEnvelope({
+        id: 'withdraw-q-1',
+        team: s.team.slug,
+        from: 'ada',
+        to: { kind: 'team' },
+        act: 'resolve',
+        thread: 'q-1',
+        body: 'decided',
+        ts: NOW + 500,
+      }),
+    );
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q-1', await questionAnswerBody(s, d, qk.privateKey)),
+        NOW + 1_000,
+      ),
+    ).resolves.toEqual({ ok: false, reason: 'question_withdrawn' });
+    expect((await questionView(s.db, s.team.id, 'q-1'))?.answer).toBeUndefined();
+    // The phone's fetch is told it is gone (so the card drops), and a re-delivery leaves it out.
+    await expect(
+      handleAppFetch(s.ctx, s.team, { ask_ref: 'q-1', binding: s.binding.id }, NOW + 2_000),
+    ).resolves.toBeNull();
+    const before = s.sent.length;
+    const redeliver = JSON.stringify({ app: 1, kind: 'redeliver', binding: s.binding.id });
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), NOW + 3_000),
+    ).resolves.toEqual({ ok: true });
+    expect(s.sent.slice(before).filter((f) => f.type === 'app_deliver')).toHaveLength(0);
+  });
+
   it('the question key cannot answer anything that is not a question, and a question takes no decision', async () => {
     const s = await seed();
     const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });

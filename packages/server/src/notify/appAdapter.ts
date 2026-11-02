@@ -46,6 +46,7 @@ import {
 import { getLane } from '../store/lanes.js';
 import { getMemberById, listMembers } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
+import { questionView } from '../store/questions.js';
 import { humanPresent } from '../store/reachability.js';
 import { isAdvisoryReviewMeta } from '../store/review.js';
 import { resolveCapabilities, type MemberRow, type TeamRow } from '../store/rows.js';
@@ -1355,7 +1356,15 @@ async function liveAppAsks(
   for (const row of rows) {
     const ask = await loadAsk(ctx.db, team.id, row.ask_id);
     if (!ask || askDigest(ask.body, ask.meta) !== row.ask_digest) continue;
-    if (!appAskKind(parseMeta(ask.meta))) continue;
+    const meta = parseMeta(ask.meta);
+    if (!appAskKind(meta)) continue;
+    // ADR 787: a question that is no longer open (withdrawn, lane closed, answered elsewhere) is not
+    // live. Its token is spent so it stops counting against the re-send cap, and the phone's next
+    // fetch answers null — which is what drops the card.
+    if (questionOf(meta) && (await questionView(ctx.db, team.id, ask.id))?.state !== 'open') {
+      await spend(ctx, row.token_hash, now);
+      continue;
+    }
     out.push({ tokenHash: row.token_hash, ask, expiresAt: row.expires_at });
   }
   return out;

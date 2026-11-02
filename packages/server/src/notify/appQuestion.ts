@@ -274,6 +274,8 @@ export async function sendQuestionAnswer(
   } catch (err) {
     if (err instanceof MusterdError && err.message.startsWith('question_already_answered'))
       return { ok: false, reason: 'question_already_answered' };
+    if (err instanceof MusterdError && err.message.startsWith('question_withdrawn'))
+      return { ok: false, reason: 'question_withdrawn' };
     if (err instanceof MusterdError) return { ok: false, reason: 'refused' };
     throw err;
   }
