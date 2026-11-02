@@ -60,10 +60,13 @@ export function serviceAccountFrom(raw: string): KmsCredentials {
 }
 
 /**
- * Read the credential file. Refuses a file group or other users can read (mode 600).
- * An error names the variable, never the path or the contents.
+ * Read the credential: a file path, refused when group or other users can read it (mode 600), or
+ * — when the source begins with `{` — the service-account JSON itself, as a Fly secret carries it
+ * (lane 01M5E0543H). An error names the variable, never the path or the contents.
  */
-export async function loadServiceAccount(path: string): Promise<KmsCredentials> {
+export async function loadServiceAccount(source: string): Promise<KmsCredentials> {
+  if (source.trimStart().startsWith('{')) return serviceAccountFrom(source);
+  const path = source;
   let info;
   try {
     info = await stat(path);

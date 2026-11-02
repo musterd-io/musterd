@@ -106,6 +106,26 @@ describe('resolveConsoleConfig (ADR 615)', () => {
       MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE: '/tmp/kms.json',
     });
     expect(on.kms).toEqual({ keyVersion: key, credentialsFile: '/tmp/kms.json' });
+    // A Fly secret carries the credential whole (lane 01M5E0543H); file and JSON are one or the other.
+    expect(
+      resolveConsoleConfig({
+        ...base,
+        MUSTERD_CONSOLE_KMS_KEY: key,
+        MUSTERD_CONSOLE_KMS_CREDENTIALS_JSON: '{"client_email":"x","private_key":"SECRET"}',
+      }).kms,
+    ).toEqual({ keyVersion: key, credentialsFile: '{"client_email":"x","private_key":"SECRET"}' });
+    try {
+      resolveConsoleConfig({
+        ...base,
+        MUSTERD_CONSOLE_KMS_KEY: key,
+        MUSTERD_CONSOLE_KMS_CREDENTIALS_FILE: '/tmp/kms.json',
+        MUSTERD_CONSOLE_KMS_CREDENTIALS_JSON: '{"client_email":"x","private_key":"SECRET"}',
+      });
+      throw new Error('should refuse');
+    } catch (e) {
+      expect(String(e)).toContain('one or the other');
+      expect(String(e)).not.toContain('SECRET');
+    }
     try {
       resolveConsoleConfig({ ...base, MUSTERD_CONSOLE_KMS_KEY: key });
       throw new Error('should refuse');
