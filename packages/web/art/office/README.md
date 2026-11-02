@@ -78,6 +78,29 @@ would ship. Without `cwebp` the PNG stays and the runtime reads either.
 Items are rendered under the day rig; at evening and night the painted veil does to them what it
 always did, and `figureTintFor` carries the same curve to the figures of increment 3.
 
+## The outside (window views, lane 01M6ENGW2H)
+
+`exterior.py` builds one low-poly exterior per setting (`city` today; `coast` and `mountain` are
+increment 2) behind a back wall and renders it through an orthographic camera that looks out
+through one pane. The two back walls face 90° apart, so each wall gets its own view of the same
+scene. A plate is **land only** on a transparent sky — the runtime paints the sky on the continuous
+clock and the sun, moon and clouds as sprites (`windowView.ts`, `windowSprites.ts`) — and no sun or
+moon disc, lit by the shell's own `LIGHT_STATES` rig so the faces the room's sun lights are lit here
+too. Lit window quads glow in the `night` state only.
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender -b --python packages/web/art/office/render.py -- \
+  --out packages/web/src/live/office-scene/rendered/assets --scale 3 --ky 0.31 --exterior city
+```
+
+Writes `view/<setting>/<wall>-<pane>-<day|evening|night>` (2 walls × 2 panes × 3 states = 12 plates
+per setting, each the pane's span plus a 4% margin, ~25 KB after quantize + WebP) and records each
+with a `view` span (`which`, `t0`, `t1`, `u0`, `u1`) in `manifest.json`; `viewPlates()` matches that
+span against `layout.ts` `WINDOWS` and skips a stale plate rather than stretching it. `--exterior`
+implies `--only` over the plate ids, so the room is not re-rendered. The crop mirrors every frame
+(see `project_px`); a wall-0 plate is flipped once first so the stored pixels run t0 → t1 on both
+walls (`mirrors_on_read`).
+
 ## Projection
 
 `iso.ts` projects `x = (lx − ly)·KX`, `y = (lx + ly)·KY − lz` and lifts heights 1:1 (no

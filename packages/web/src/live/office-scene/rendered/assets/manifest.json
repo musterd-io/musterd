@@ -1216,6 +1216,222 @@
       "scale": 3.0
     },
     {
+      "id": "view/city/0-0-day",
+      "file": "office-art-view-city-0-0-day.webp",
+      "w": 525,
+      "h": 286,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 0,
+        "t0": 0.28,
+        "t1": 0.46,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/0-0-evening",
+      "file": "office-art-view-city-0-0-evening.webp",
+      "w": 525,
+      "h": 286,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 0,
+        "t0": 0.28,
+        "t1": 0.46,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/0-0-night",
+      "file": "office-art-view-city-0-0-night.webp",
+      "w": 525,
+      "h": 286,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 0,
+        "t0": 0.28,
+        "t1": 0.46,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/0-1-day",
+      "file": "office-art-view-city-0-1-day.webp",
+      "w": 583,
+      "h": 301,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 0,
+        "t0": 0.58,
+        "t1": 0.78,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/0-1-evening",
+      "file": "office-art-view-city-0-1-evening.webp",
+      "w": 583,
+      "h": 301,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 0,
+        "t0": 0.58,
+        "t1": 0.78,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/0-1-night",
+      "file": "office-art-view-city-0-1-night.webp",
+      "w": 583,
+      "h": 301,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 0,
+        "t0": 0.58,
+        "t1": 0.78,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/1-0-day",
+      "file": "office-art-view-city-1-0-day.webp",
+      "w": 525,
+      "h": 285,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 1,
+        "t0": 0.28,
+        "t1": 0.46,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/1-0-evening",
+      "file": "office-art-view-city-1-0-evening.webp",
+      "w": 525,
+      "h": 285,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 1,
+        "t0": 0.28,
+        "t1": 0.46,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/1-0-night",
+      "file": "office-art-view-city-1-0-night.webp",
+      "w": 525,
+      "h": 285,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 1,
+        "t0": 0.28,
+        "t1": 0.46,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/1-1-day",
+      "file": "office-art-view-city-1-1-day.webp",
+      "w": 583,
+      "h": 305,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 1,
+        "t0": 0.58,
+        "t1": 0.78,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/1-1-evening",
+      "file": "office-art-view-city-1-1-evening.webp",
+      "w": 583,
+      "h": 305,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 1,
+        "t0": 0.58,
+        "t1": 0.78,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
+      "id": "view/city/1-1-night",
+      "file": "office-art-view-city-1-1-night.webp",
+      "w": 583,
+      "h": 305,
+      "anchor": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "scale": 3.0,
+      "view": {
+        "which": 1,
+        "t0": 0.58,
+        "t1": 0.78,
+        "u0": 0.34,
+        "u1": 0.82
+      }
+    },
+    {
       "id": "wall/art-0",
       "file": "office-art-wall-art-0.webp",
       "w": 128,

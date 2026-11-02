@@ -32,12 +32,13 @@ from mathutils import Vector
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import scene  # noqa: E402  (the scene builder beside this file)
+import exterior
 
 
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False,
-           "resample_from": None, "stills": None, "warm": None, "dog": False, "layers": None}
+           "resample_from": None, "stills": None, "warm": None, "dog": False, "layers": None, "exterior": None}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -70,6 +71,10 @@ def args() -> dict:
             # layer,layer,… — render only these figure layers and merge their sheets into the
             # figure.json on disk; every other layer's sheet and cells stay as they are
             out["layers"] = argv[i + 1].split(","); i += 2
+        elif k == "--exterior":
+            # setting,setting,… — render the window-view plates for these settings (exterior.py) and keep
+            # every other manifest entry; implies --only over the plate ids
+            out["exterior"] = argv[i + 1].split(","); i += 2
         elif k == "--resample-from":
             out["resample_from"] = float(argv[i + 1]); i += 2
         else:
@@ -135,6 +140,18 @@ def difference(path_on: str, path_off: str, out_path: str, gain: float = 1.0) ->
     img.save()
     for i in (a, b, img):
         bpy.data.images.remove(i)
+
+
+def flip_h(path: str) -> None:
+    """Mirror a PNG left-to-right in place (see `exterior.mirrors_on_read`)."""
+    img = bpy.data.images.load(path)
+    w, h = img.size
+    px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)[:, ::-1]
+    img.pixels = px.ravel().tolist()
+    img.filepath_raw = path
+    img.file_format = "PNG"
+    img.save()
+    bpy.data.images.remove(img)
 
 
 # The room shell — floor and walls — is big and flat, so it ships at half the item resolution:
@@ -832,6 +849,16 @@ def main() -> None:
     # `--only id,id`: re-render those and keep every other entry of the manifest already on disk
     # (same camera and scale, or the kept entries would lie) — a desk's tweak is seconds, not minutes.
     only = a["only"]
+    zs = scene.z_scale(a["ky"])
+    plate_ids = [
+        f"view/{setting}/{which}-{i}-{state}"
+        for setting in (a["exterior"] or [])
+        for which in (0, 1)
+        for i in range(len(scene.WINDOWS))
+        for state in scene.LIGHT_STATES
+    ]
+    if plate_ids and not only:
+        only = set(plate_ids)
     manifest_path = os.path.join(a["out"], "manifest.json")
     if only:
         with open(manifest_path) as f:
@@ -843,15 +870,15 @@ def main() -> None:
     def wanted(asset_id: str) -> bool:
         return not only or asset_id in only
 
-    zs = scene.z_scale(a["ky"])
     shell = [o for o in export.objects if o.get("shell")]
 
-    def record(asset_id: str, path: str, origin: Vector, down: int) -> None:
+    def record(asset_id: str, path: str, origin: Vector | None, down: int, extra: dict | None = None) -> None:
         x0, y0, cw, ch = crop_alpha(path, down)
         quantize(path)
         path = to_webp(path)
         file = os.path.basename(path)
-        ox, oy = project_px(origin, w, h)
+        # a plate has no floor point: its span (`extra["view"]`) says where it lands (windowView.ts)
+        ox, oy = project_px(origin, w, h) if origin is not None else (x0, y0)
         manifest["assets"].append(
             {
                 "id": asset_id,
@@ -860,6 +887,7 @@ def main() -> None:
                 "h": ch // down,
                 "anchor": {"x": round((ox - x0) / down, 2), "y": round((oy - y0) / down, 2)},
                 "scale": a["scale"] / down,
+                **(extra or {}),
             }
         )
         print(f"rendered {asset_id} -> {file} {cw // down}x{ch // down} anchor ({(ox - x0) / down:.1f}, {(oy - y0) / down:.1f}) {os.path.getsize(path)} B")
@@ -898,6 +926,34 @@ def main() -> None:
         render_alone([obj], path, export)
         print(f"engine {bpy.context.scene.render.engine}; wrote {os.path.getsize(path)} bytes to {os.path.basename(path)}")
         record(asset_id, path, obj.matrix_world.translation, 1)
+    # the window-view plates (exterior.py): per setting, per wall, per pane, per day state
+    room_cam = bpy.context.scene.camera
+    room_res = (bpy.context.scene.render.resolution_x, bpy.context.scene.render.resolution_y)
+    for setting in a["exterior"] or []:
+        for which in (0, 1):
+            objs = exterior.build_exterior(setting, which, zs)
+            for i, (t0, t1, u0, u1, _m) in enumerate(scene.WINDOWS):
+                cam, fw, fh = exterior.exterior_camera(which, t0, t1, u0, u1, zs)
+                bpy.context.scene.camera = cam
+                bpy.context.scene.render.resolution_x = int(round(fw * a["scale"]))
+                bpy.context.scene.render.resolution_y = int(round(fh * a["scale"]))
+                for state in scene.LIGHT_STATES:
+                    asset_id = f"view/{setting}/{which}-{i}-{state}"
+                    if not wanted(asset_id):
+                        continue
+                    scene.lights(state, "off", zs, window_spots=False)
+                    exterior.set_lit(state)
+                    path = out_path(asset_id)
+                    render_alone(objs, path, export)  # hides the room; the exterior collection renders as is
+                    if exterior.mirrors_on_read(which):
+                        flip_h(path)
+                    record(asset_id, path, None, 1, {"view": {"which": which, "t0": t0, "t1": t1, "u0": u0, "u1": u1}})
+                bpy.data.objects.remove(cam, do_unlink=True)
+            exterior.remove_exterior()
+    bpy.context.scene.camera = room_cam
+    bpy.context.scene.render.resolution_x, bpy.context.scene.render.resolution_y = room_res
+    scene.lights("day", "off", zs)
+
     manifest["assets"].sort(key=lambda x: x["id"])
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
