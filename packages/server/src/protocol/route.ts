@@ -1000,6 +1000,7 @@ async function routeEnvelopeInner(
             env.body,
             env.meta,
             forwardedNodeId,
+            { addressee: env.to.kind === 'member' ? env.to.name : null, actId: message.id },
           );
           laneVerdict = applied.verdict;
           laneAuthorityRefused = applied.authorityRefused;
@@ -2016,6 +2017,9 @@ async function applyAcceptanceVerdict(
   body: string,
   meta?: Record<string, unknown> | null,
   forwardedNodeId?: string,
+  /** Whom the verdict act was addressed to, and its id — so a decline whose addressee is not the
+   *  lane's owner can still reach the owner (lane 01M6EWFVKM). */
+  delivery?: { addressee: string | null; actId: string },
 ): Promise<{
   verdict?: RouteResult['lane_verdict'];
   authorityRefused?: RouteResult['lane_authority_refused'];
@@ -2172,6 +2176,45 @@ async function applyAcceptanceVerdict(
         ...(note ? { note: note.length > 500 ? `${note.slice(0, 500)}…` : note } : {}),
       },
     });
+    // Lane 01M6EWFVKM: the decline act went to whoever the reviewer replied to — the ask's sender,
+    // which after a re-route (ADR 545) is the seat that re-raised the review, not the owner. The
+    // owner then saw only the team-wide state flip, and the reason sat in a deaf seat's inbox
+    // (01M6D9DD0R and alfie's 01M6EF8KCX, both 2026-11-02). So when the addressee is not the
+    // owner, the owner gets the reason directly, as the reviewer, naming the decline to answer
+    // (ADR 505 §3: the owner's reply to that id is the dispute answer). Best-effort: a failure
+    // here must not fail the verdict that already moved the lane.
+    const owner = before.owner_seat;
+    if (owner && owner !== decider.name && owner !== delivery?.addressee) {
+      try {
+        if (await getMemberByName(ctx.db, team.id, owner)) {
+          await routeEnvelope(
+            ctx,
+            team,
+            decider,
+            makeEnvelope({
+              id: ulid(),
+              team: team.slug,
+              from: decider.name,
+              to: { kind: 'member', name: owner },
+              act: 'message',
+              body: `[lane] "${lane.title}" sent back${note ? `: ${note}` : ''}${
+                delivery ? ` — answer by replying to ${delivery.actId}` : ''
+              }`,
+              meta: {
+                review_sent_back: {
+                  lane: lane.id,
+                  reviewer: decider.name,
+                  ask: repliedToId,
+                  ...(delivery ? { decline: delivery.actId } : {}),
+                },
+              },
+            }),
+          );
+        }
+      } catch (err) {
+        log.warn({ msg: 'review_sent_back_owner_notice_failed', lane: lane.id, err: String(err) });
+      }
+    }
   }
   // The board-shape change the team sees, composed by the daemon (ADR 102) exactly as the PATCH
   // path composes it — same body, same meta, so a reader of the stream cannot tell which surface

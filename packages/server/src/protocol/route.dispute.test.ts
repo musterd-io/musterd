@@ -139,6 +139,63 @@ withDrivers('route.dispute', (o) => {
     expect(page.map((m) => m.id)).toContain('rej-1');
   });
 
+  it('a decline addressed to the seat that re-raised the review still reaches the owner with its reason (lane 01M6EWFVKM)', async () => {
+    const { db, team, ctx, ada, bo, cy, lane, metaOf } = await seed();
+    // A re-route (ADR 545): cy re-raised the review, so the standing ask is FROM cy, and bo's
+    // decline — a reply — goes to cy. Before this, ada saw only "[lane] … → active" on the team.
+    await insertMessage(
+      db,
+      team.id,
+      cy.id,
+      bo.id,
+      makeEnvelope({
+        id: 'ask-2',
+        team: 'revive',
+        from: 'cy',
+        to: { kind: 'member', name: 'bo' },
+        act: 'ask',
+        body: '[lane] acceptance requested (re-routed)',
+        meta: { lane_review: { lane: lane.id }, species: 'approve', tier: 'standard' },
+      }),
+    );
+    const r = await routeEnvelope(
+      ctx,
+      team,
+      bo,
+      makeEnvelope({
+        id: 'rej-2',
+        team: 'revive',
+        from: 'bo',
+        to: { kind: 'member', name: 'cy' },
+        act: 'decline',
+        body: 'the §8.1 re-run is missing',
+        meta: { in_reply_to: 'ask-2' },
+      }),
+    );
+    expect(r.lane_verdict).toEqual({ lane: lane.id, state: 'active' });
+    const mine = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0, limit: 20 });
+    const notice = mine.find((m) => m.body.includes('sent back'));
+    expect(notice).toBeDefined();
+    expect(notice!.body).toContain('the §8.1 re-run is missing');
+    expect(notice!.body).toContain('rej-2');
+    expect(JSON.parse(notice!.meta!) as unknown).toMatchObject({
+      review_sent_back: { lane: lane.id, reviewer: 'bo', ask: 'ask-2', decline: 'rej-2' },
+    });
+    // The decline itself still carries the dispute stamp for whoever answers it.
+    expect(disputeOf(await metaOf('rej-2'))).toEqual({
+      via: 'review',
+      lane: lane.id,
+      ask: 'ask-2',
+    });
+  });
+
+  it('a decline addressed to the owner sends no second copy', async () => {
+    const { db, ada, bo, send } = await seed();
+    await send(bo, 'ada', 'decline', 'rej-1', { in_reply_to: 'ask-1' }, 'missing re-run');
+    const mine = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0, limit: 20 });
+    expect(mine.filter((m) => m.body.includes('sent back'))).toHaveLength(0);
+  });
+
   it('a client-supplied dispute stamp is stripped — only the daemon says what opened a dispute', async () => {
     const { bo, send, metaOf } = await seed();
     await send(bo, 'ada', 'decline', 'forged', {

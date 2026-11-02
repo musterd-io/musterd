@@ -256,6 +256,13 @@ a change that raises holds without the tiebreak siding with them.
   review dispute now stays pinned until `accept`/`decline` (the §3 rule, which ADR 434's shape 3
   had been overriding); a `message` reply gets a sender notice; §8's cells gain `message_only`.
   On 2026-10-15, 7 of 17 replied review rejections had been answered only by a `message`.
+- **2026-11-02 — lane 01M6EWFVKM** (fifty): §3's pin assumed the decline is addressed to the owner.
+  After a re-route (ADR 545) the standing ask is _from_ the seat that re-raised the review, so the
+  reviewer's `decline` — a reply — went there, and the owner saw only the team-wide state flip
+  (lanes 01M6D9DD0R and 01M6EF8KCX, both that day, the second seat deaf). Now a review decline whose
+  addressee is not the owner also sends the owner a directed `message` from the reviewer carrying
+  the reason and the decline's id (`meta.review_sent_back`); the owner's dispute answer still
+  replies to the decline itself. No copy when the decline already went to the owner.
 
 ## Observability & Evaluation
 
