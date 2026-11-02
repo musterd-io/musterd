@@ -96,7 +96,8 @@ export function assetById(m: RenderedManifest, id: string): RenderedAsset | unde
   return m.assets.find((a) => a.id === id);
 }
 
-export type DayState = 'day' | 'evening' | 'night';
+import type { DayState } from './roomState';
+export type { DayState };
 const DAY_STATES: readonly DayState[] = ['day', 'evening', 'night'];
 
 /**
