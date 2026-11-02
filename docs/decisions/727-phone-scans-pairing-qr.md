@@ -8,7 +8,8 @@
 
 ADR 676 decision 5 pairs the phone from a QR the daemon's own page shows. The QR text is
 `AppPairingQrSchema` JSON (ADR 690): the relay route, the team, the pairing id, a one-time code,
-and both daemon public keys. The page also prints the daemon identity fingerprint. The phone has
+and both daemon public keys. The page also prints the daemon identity fingerprint (since 2026-11-02 the fingerprint of both
+daemon keys, [ADR 788](788-pairing-fingerprint-covers-both-keys.md)). The phone has
 to read that code. `packages/mobile` had no barcode scanner. `expo-barcode-scanner` is retired;
 barcode scanning in Expo SDK 58 lives in `expo-camera`.
 
