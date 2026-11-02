@@ -53,6 +53,7 @@ import type { ReadStatus } from '../experimentReads';
 import { READ_PIN_CAP, readPins, stickySway, WALL_COLUMNS, type WallBoard } from './wallboard';
 import { DAY_ENV, deskLampOn, sunBeam, type LightEnv } from './lighting';
 import type { Weather } from './weather';
+import { drawMovers, moversAt } from './windowSprites';
 import { DEFAULT_VIEW, drawWindowViews, type ViewSetting } from './windowView';
 import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
@@ -2034,6 +2035,10 @@ export interface RenderOpts {
   units?: UnitHook | undefined;
   /** What is outside the windows (windowView.ts, lane 01M6ENGW2H). Absent → `DEFAULT_VIEW`. */
   view?: ViewSetting | undefined;
+  /** The wall clock, ms, for the movers outside (windowSprites.ts): seeded per team so every viewer
+   *  sees the same tram. Absent (or 0, under still mode) → nothing moves: the renderer is pure, and
+   *  `index.ts` passes the clock. */
+  nowMs?: number | undefined;
   /** The sky at the windows (weather.ts, lane 01M5XS6597). Absent → clear, which draws nothing. */
   weather?: Weather | undefined;
   /** When each shelf-chime bar was last struck, in scene-clock seconds (sound identity inc 4): a bar
@@ -4629,6 +4634,15 @@ export function renderScene(
     ro('rug/reception', RECEPTION.rug.lx, RECEPTION.rug.ly)(c);
     // No nook rug (office v3-2): the café's tile, painted in the shell, is the zone.
   }
+  // The movers outside the windows (window views): over the baked sky and plates, under the walls'
+  // fixtures and the weather. Seeded by the wall clock; still mode passes 0.
+  const movers = moversAt(
+    opts.view ?? DEFAULT_VIEW,
+    opts.nowMs ?? 0,
+    env,
+    opts.weather ?? 'clear',
+    teamName,
+  );
   if (cache) {
     const bg = backgroundKey(fit, env, dpr, opts.view ?? DEFAULT_VIEW, opts.weather ?? 'clear');
     run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
@@ -4640,6 +4654,7 @@ export function renderScene(
   } else {
     run(() => shell(ctx));
   }
+  run(() => drawMovers(ctx, fit, movers));
   {
     const draw = ro('meeting/table', MEETING.lx, MEETING.ly);
     items.push({
