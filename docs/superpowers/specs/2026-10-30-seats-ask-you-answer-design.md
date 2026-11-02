@@ -72,7 +72,11 @@ answer goes straight back into that seat's session.**
 ### `/live`: rest, then triage (nick chose this; the mockup is `question-card-v2`)
 
 - **At rest:** a calm **"Waiting on you · N"** list. Each row shows the seat, its question in one
-  line, what it is working on, and how long it has waited.
+  line, what it is working on, and how long it has waited. _(Amended 2026-11-02, lane
+  01M6DBDSGH4K1X9501SWTME1B5: the list is the one place to look — any other ask routed to this
+  person by name (an approval, an escalation, a lane review) is a row too, and its triage card
+  offers Approve / Deny / Deciding, or the options when it is a choice. The rail below keeps the
+  team pool and other people's asks, and its empty label reads "no open asks".)_
 - **Triage:** **Answer all** or **⌘K** opens one full decision card at a time:
   - the seat, a **waiting · 2m** pill, and its lane, PR and branch;
   - **the question** in large type;

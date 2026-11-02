@@ -16,6 +16,7 @@ import brandCss from '../brand/brand.css?url';
 import { MusterdWord } from '../brand/MusterdWord';
 import { teamContact } from '../live/teamContact';
 import { AsksStrip } from '../live/AsksStrip';
+import { useAskViews } from '../live/useAskViews';
 import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../live/MemberSignIn';
 import { OfficeScene } from '../live/OfficeScene';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
@@ -300,7 +301,7 @@ function LivePage() {
   const board = useWorkingOn(cfg, envelopes);
   const report = useReport(cfg, envelopes);
   // Nothing to show yet: a first visit before the daemon answers. Panels draw their skeletons rather
-  // than "0 working" and "no open questions", which were false while it loaded (lane 01M4RNBNFM).
+  // than "0 working" and "no open asks", which were false while it loaded (lane 01M4RNBNFM).
   const loading = !!cfg && !fresh && roster.length === 0;
   // The last snapshot is on screen and the daemon has not answered yet.
   const refreshing = !!cfg && !fresh && roster.length > 0;
@@ -652,6 +653,9 @@ function LivePage() {
     setCfg(null);
   };
 
+  // One ask derivation for the page (lane 01M6DBDSGH): "Waiting on you" takes the asks routed to
+  // the reader, the rail keeps the rest, and both read the same clock and the same local answers.
+  const askViews = useAskViews({ cfg, roster, board, envelopes, localIdentity, loading });
   const connected = cfg != null;
   // The ask banner (ADR 464 §6). Inside the office on a desk; on a phone the office is hidden, so
   // the banner sits ABOVE the team list instead — spec §2's phone order, and the answer to dolly's
@@ -659,7 +663,7 @@ function LivePage() {
   // Seats ask 1e: derives and renders inside its own lazy chunk, so the eager graph pays only the stub.
   const waitingOnYou = connected ? (
     <Suspense fallback={null}>
-      <LazyWaitingOnYou roster={roster} cfg={cfg} envelopes={envelopes} board={board} />
+      <LazyWaitingOnYou roster={roster} cfg={cfg} envelopes={envelopes} board={board} views={askViews} />
     </Suspense>
   ) : null;
   const asksStrip = connected ? (
@@ -677,6 +681,7 @@ function LivePage() {
       onOpenLane={setBoardLane}
       liveIds={liveIds}
       onReveal={onActClick}
+      views={askViews}
     />
   ) : null;
 

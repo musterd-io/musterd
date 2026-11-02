@@ -1,5 +1,6 @@
 import type { Envelope, LaneBoard } from '@musterd/protocol';
 import { isQuestion, type Question } from '@musterd/protocol/wire';
+import { askAudience, askIsLoud, type AskView, type AudienceContext } from './asks';
 
 /**
  * A seat's open question to a person (ADR 773), as /live's "Waiting on you" list reads it — derived
@@ -92,4 +93,46 @@ export function waitedLabel(ms: number): string {
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
   return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
+}
+
+/**
+ * One row of "Waiting on you" (lane 01M6DBDSGH): a seat's question (ADR 773), or any other ask
+ * routed to this person — an approval, an escalation, a lane review. Before this the questions had
+ * the list and the rest sat in the rail below it, so "Waiting on you · 1" under-counted what waited.
+ */
+export type WaitingItem =
+  | { kind: 'question'; id: string; asker: string; askedAt: number; waitedMs: number; card: QuestionCard }
+  | { kind: 'ask'; id: string; asker: string; askedAt: number; waitedMs: number; ask: AskView };
+
+/** Open asks routed to `ctx.you` by name — never the team pool, which stays takeable on the rail. */
+export function askItemsFor(asks: readonly AskView[], ctx: AudienceContext, now: number): WaitingItem[] {
+  return asks
+    .filter((a) => askIsLoud(a.state) && askAudience(a, ctx) === 'you')
+    .map((a) => ({
+      kind: 'ask' as const,
+      id: a.env.id,
+      asker: a.env.from,
+      askedAt: a.env.ts,
+      waitedMs: Math.max(0, now - a.env.ts),
+      ask: a,
+    }));
+}
+
+/** The list, oldest first: questions and asks together, whoever has waited longest at the top. */
+export function waitingItems(questions: readonly QuestionCard[], asks: WaitingItem[]): WaitingItem[] {
+  const q: WaitingItem[] = questions.map((c) => ({
+    kind: 'question' as const,
+    id: c.id,
+    asker: c.asker,
+    askedAt: c.askedAt,
+    waitedMs: c.waitedMs,
+    card: c,
+  }));
+  return [...q, ...asks].sort((a, b) => a.askedAt - b.askedAt || a.id.localeCompare(b.id));
+}
+
+/** The one line a row shows: the question, or the ask's body (a choice shows its question). */
+export function itemLine(item: WaitingItem): string {
+  if (item.kind === 'question') return item.card.question.text;
+  return (item.ask.env.body ?? '').split('\n')[0] ?? '';
 }

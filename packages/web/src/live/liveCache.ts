@@ -4,7 +4,7 @@ import type { Envelope, LaneBoard, MemberSummary } from '@musterd/protocol';
  * What /live last showed this browser for one team and seat, painted the moment the page opens and
  * replaced as soon as the daemon answers (lane 01M4RNBNFM). nick, 2026-10-12: /live took 5–10 s to
  * show anyone; measured, every read waited 3–4.4 s on a busy daemon while the panels said "0
- * working" and "no open questions". A stale picture marked as refreshing beats a false empty one.
+ * working" and "no open asks". A stale picture marked as refreshing beats a false empty one.
  *
  * Per viewer and per browser, in localStorage: it holds only what this viewer was already shown.
  * Every access is guarded — private windows and blocked storage simply start empty, as before.

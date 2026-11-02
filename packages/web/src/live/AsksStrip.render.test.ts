@@ -143,7 +143,7 @@ describe('the rail, rendered — a lapsed ask must not read as one waiting on yo
   });
 
   it('with nothing open, the banner is a quiet pill — not nothing', () => {
-    expect(render([])).toContain('no open questions');
+    expect(render([])).toContain('no open asks');
   });
 
   it('a lapsed ask is not a lead and never approved: the banner idles over a sheet that lists it', () => {
@@ -253,7 +253,7 @@ describe('a way in with nothing waiting (nick, 2026-10-10)', () => {
 
   it('offers "Sign in as nick" in the identity slot when this machine holds nick', () => {
     const html = strip({ localIdentity: 'nick' });
-    expect(html).toContain('no open questions');
+    expect(html).toContain('no open asks');
     expect(html.match(/Sign in as nick/g)?.length).toBe(1);
   });
 

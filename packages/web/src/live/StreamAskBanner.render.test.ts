@@ -32,7 +32,7 @@ describe('StreamAskBanner', () => {
   it('idle: the quiet pill', () => {
     const html = render([]);
     expect(html).toContain('lc-asks--idle');
-    expect(html).toContain('no open questions');
+    expect(html).toContain('no open asks');
   });
 
   it('open: the asker, the human, the question and the hold — and no button anywhere', () => {
