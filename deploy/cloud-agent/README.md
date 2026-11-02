@@ -143,6 +143,31 @@ delta's friction that stays (docs/perf/cloud-seat.md finding 4): the cloned team
 declared as the daemon's roster root by writing `config.rosterHome`, because `team export`
 refuses a clone; the product fix (`musterd team adopt`) is still open.
 
+## Redeploy **$**
+
+A machine's env is **per machine, not in `fly.toml`**: `fly.toml`'s `[env]` holds placeholder
+values (`revive-staging`, `cloud-1`, no `MUSTERD_HUB`), and `create.sh` writes the real ones with
+`--env` at first boot. A later `fly deploy` without those flags replaces the machine's env with the
+placeholders — the box then boots hosted-mode against staging with no joiner daemon and no
+tailnet (delta-2, 2026-11-02, lane 01M6EFFJBJ). Repeat every `--env` on every redeploy:
+
+```sh
+# from the repo root, on the commit you want on the machine
+fly deploy . --config deploy/cloud-agent/fly.toml --dockerfile deploy/cloud-agent/Dockerfile \
+  --app musterd-agent-$SEAT --ha=false \
+  --env MUSTERD_SERVER=… --env MUSTERD_TEAM=… --env MUSTERD_HOST=… --env MUSTERD_MODEL=… \
+  --env REPO_URL=… \
+  --env MUSTERD_HUB=… --env MUSTERD_HUB_PORT=… --env ROSTER_REPO=…   # hub mode only
+```
+
+Read the current values back first with `fly machine status <id> --app musterd-agent-$SEAT
+--display-config` (the `env` block). If a deploy already wiped them, the volume still knows: the
+hub and port are in `/data/home/.musterd/node.json` (`hub_url`), the team and host label in the
+last `host starting:` line of `/data/log/host.log`, `REPO_URL` in `/data/work/repo/.git/config`,
+`ROSTER_REPO` in the roster clone's `.git/config` under `/data/home/musterd/<team>`. Restore with
+`fly machine update <id> --app musterd-agent-$SEAT -y -e KEY=VALUE …` (no image change). Secrets
+are untouched by either path.
+
 ## Verify
 
 1. **Provisioned.** The provision row for the seat reads `ready` (`musterd host provisions`
