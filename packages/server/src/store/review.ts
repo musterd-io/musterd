@@ -1408,7 +1408,8 @@ export async function heldAcceptances(
   const lanes = await db.all<{ lane: string }>(
     `SELECT DISTINCT json_extract(m.meta, '$.lane_review.lane') AS lane
          FROM messages m
-         JOIN lanes l ON l.id = json_extract(m.meta, '$.lane_review.lane')
+         -- l.id || '' lets idx_messages_lane_review seek; see OWED_REVIEWS_SQL in orientation.ts.
+         JOIN lanes l ON json_extract(m.meta, '$.lane_review.lane') = l.id || ''
         WHERE m.team_id = ? AND m.act = 'ask' AND m.to_member = ?
           AND l.team_id = m.team_id AND l.state = 'awaiting_acceptance'`,
     [teamId, member.id],

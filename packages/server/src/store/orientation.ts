@@ -267,6 +267,35 @@ interface HandoffRow {
  * every close verdict, scanning handoffs, or deriving goals, which is what the brief does and what
  * nine sessions were paying for on every turn.
  */
+/**
+ * The acceptance asks a seat owes, on lanes still waiting for a verdict. Called on every per-turn
+ * orientation, so it is the daemon's hottest read (ADR 778's re-read, 2026-11-02: 611 slow runs and
+ * 374 s in four daytime hours, 0.61 s a run under load).
+ *
+ * `l.id || ''` is deliberate. Compared with the TEXT column `l.id`, `json_extract(...)` takes the
+ * column's affinity, and SQLite then will not use `idx_messages_lane_review` for the equality
+ * (docs/wiki/sqlite-expression-index-affinity.md): it walked every message
+ * addressed to the seat. The concatenation has no affinity, so the planner drives from the few
+ * lanes awaiting review and seeks each one's asks. Postgres reads the same SQL unchanged.
+ */
+export const OWED_REVIEWS_SQL = `SELECT l.id AS lane, m.ts AS ts
+         FROM messages m
+         JOIN members mt ON mt.id = m.to_member
+         JOIN lanes l ON l.team_id = m.team_id
+                     AND json_extract(m.meta, '$.lane_review.lane') = l.id || ''
+        WHERE m.team_id = ? AND m.act = 'ask' AND mt.name = ?
+          AND l.state IN ('awaiting_acceptance', 'ready_for_review')
+          AND (l.owner_seat IS NULL OR l.owner_seat != ?)
+          -- Lane 01M2TNWK0K: the same superseded-ask exclusion the brief applies, kept in SQL so
+          -- the summary stays one bounded query. Mirrors await supersededAcceptanceAsks() in review.ts.
+          AND NOT EXISTS (
+            SELECT 1 FROM audit a
+             WHERE a.team_id = m.team_id
+               AND a.action = 'lane.review_rerouted'
+               AND a.target = l.id
+               AND json_extract(a.detail, '$.superseded_ask') = m.id)
+        ORDER BY m.ts ASC, m.id ASC`;
+
 export async function deriveNextSummary(
   db: Driver,
   teamId: string,
@@ -286,26 +315,11 @@ export async function deriveNextSummary(
       [teamId],
     )
   ).map((r) => r.id);
-  const owed = await db.all<{ lane: string; ts: number }>(
-    `SELECT l.id AS lane, m.ts AS ts
-         FROM messages m
-         JOIN members mt ON mt.id = m.to_member
-         JOIN lanes l ON l.team_id = m.team_id
-                     AND l.id = json_extract(m.meta, '$.lane_review.lane')
-        WHERE m.team_id = ? AND m.act = 'ask' AND mt.name = ?
-          AND l.state IN ('awaiting_acceptance', 'ready_for_review')
-          AND (l.owner_seat IS NULL OR l.owner_seat != ?)
-          -- Lane 01M2TNWK0K: the same superseded-ask exclusion the brief applies, kept in SQL so
-          -- the summary stays one bounded query. Mirrors await supersededAcceptanceAsks() in review.ts.
-          AND NOT EXISTS (
-            SELECT 1 FROM audit a
-             WHERE a.team_id = m.team_id
-               AND a.action = 'lane.review_rerouted'
-               AND a.target = l.id
-               AND json_extract(a.detail, '$.superseded_ask') = m.id)
-        ORDER BY m.ts ASC, m.id ASC`,
-    [teamId, member, member],
-  );
+  const owed = await db.all<{ lane: string; ts: number }>(OWED_REVIEWS_SQL, [
+    teamId,
+    member,
+    member,
+  ]);
   // ADR 516: the Team's active holds ride every per-turn surface, so a seat sees the rule — with its
   // author and end — for exactly as long as it is in force, and never has to carry a copy of it.
   const holds = await listActiveHolds(db, teamId, Date.now());
