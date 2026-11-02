@@ -1,10 +1,12 @@
 import type { Envelope, MemberSummary } from '@musterd/protocol';
 import { answerLabel } from '@musterd/protocol/wire';
 import { useCallback, useState, type CSSProperties } from 'react';
-import { LiveFetchError, sendAct, type LiveConfig } from './client';
+import { sendAct, type LiveConfig } from './client';
 import { hueOf, initial, kindOf, memberDisc } from './format';
 import { waitedLabel, type QuestionCard } from './questions';
-import { alreadyAnswered, answerOf } from './triage';
+import { Refusal, refusalOf } from './Refusal';
+import { type Refusal as RefusalCopy } from './refusalCopy';
+import { answerOf } from './triage';
 
 /**
  * A seat's question (ADR 773) as a row of the asks rail's sheet (lane 01M6EP0ZR9) — the same
@@ -35,7 +37,7 @@ export function QuestionRow({
 }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<RefusalCopy | null>(null);
   const from = card.asker;
   const q = card.question;
   const options = q.options ?? [];
@@ -55,14 +57,7 @@ export function QuestionRow({
         });
         onAnswered(ack);
       } catch (e) {
-        const taken = e instanceof LiveFetchError && e.status === 409 ? alreadyAnswered(e.message) : null;
-        setNote(
-          taken
-            ? `already answered by ${taken.by} on ${taken.channel}`
-            : e instanceof Error
-              ? e.message
-              : 'could not send — try again',
-        );
+        setNote(refusalOf(e));
       } finally {
         setBusy(false);
       }
@@ -143,11 +138,7 @@ export function QuestionRow({
               {busy ? 'Sending…' : 'Send'}
             </button>
           </label>
-          {note && (
-            <p className="lc-ask__note" role="status">
-              {note}
-            </p>
-          )}
+          {note && <Refusal refusal={note} className="lc-ask__note" />}
         </div>
       )}
     </article>

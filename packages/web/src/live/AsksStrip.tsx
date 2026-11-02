@@ -25,6 +25,8 @@ import { waitedLabel } from './questions';
 import { useAskViews, type AskViews } from './useAskViews';
 import { MemberFace } from './MemberFace';
 import { QuestionRow } from './QuestionRow';
+import { Refusal, refusalOf } from './Refusal';
+import { refusalCopy, type Refusal as RefusalCopy } from './refusalCopy';
 
 /**
  * The asks & approvals rail (ADR 149) — the above-the-fold home of the to-human ask stream (ADR 147)
@@ -98,7 +100,7 @@ export function AsksStrip({
     window.setTimeout(() => setLingering((l) => l.filter((a) => a.env.id !== ask.env.id)), 1600);
   }, []);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<RefusalCopy | null>(null);
   // Closed by default; `?asks-open` starts it open so the contrast gate can measure the cards inside
   // it, which are `visibility: hidden` and therefore invisible to the sweep otherwise. Initial state
   // only — the reader closes it like any other time.
@@ -230,10 +232,10 @@ export function AsksStrip({
       setError(null);
       try {
         const r = await answerAsk(cfg, roster, ask, kind, body);
-        if ('error' in r) setError(r.error);
+        if ('error' in r) setError(refusalCopy(r.error));
         else addLocal(r.ack);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(refusalOf(e));
       } finally {
         setBusy(null);
       }
@@ -573,7 +575,7 @@ export function AsksStrip({
         )}
       </div>
 
-      {error && <div className="lc-asks__error">{error}</div>}
+      {error && <Refusal refusal={error} className="lc-asks__error" />}
 
       {/* Closed, the sheet is inert: no tab stops into a layer the reader cannot see. */}
       {(cards.length > 0 || questions.length > 0 || reviews.length > 0) && (

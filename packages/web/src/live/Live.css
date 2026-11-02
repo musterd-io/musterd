@@ -7866,6 +7866,28 @@
   font-size: 11px;
   color: var(--lc-danger-ink);
 }
+/* A refusal said to the person (lane 01M6EPXA6Z): the line, and the daemon's code and words under a
+   disclosure. The summary is a quiet link; the record is code-set and wraps. */
+.lc-refusal {
+  display: grid;
+  gap: var(--lc-1);
+}
+.lc-refusal__details summary {
+  cursor: pointer;
+  font-size: 10.5px;
+  color: var(--lc-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.lc-refusal__details code {
+  display: block;
+  margin-top: var(--lc-1);
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--lc-dim);
+  overflow-wrap: anywhere;
+}
 /* The sheet floats: absolute, so expanding costs the canvas nothing it had. Kept mounted and
    transitioned (not keyframed) so a fast open→close retargets from where it is instead of
    restarting — the rail is a thing you poke at repeatedly. */
