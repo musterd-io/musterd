@@ -265,9 +265,11 @@ export function nextStepsAfterBump(version: string): string[] {
 export function nextStepsAfterPublish(version: string): string[] {
   return [
     // The official MCP Registry holds metadata only, so it can list a version only once npm has it.
-    // The io.musterd/ namespace is verified by a DNS TXT record on musterd.io: a one-time
-    // `mcp-publisher login dns --domain musterd.io --private-key <hex>` by whoever holds the key.
-    `cd packages/mcp && mcp-publisher publish   # MCP Registry listing of @musterd/mcp ${version}`,
+    // The io.musterd/ namespace is verified by a DNS TXT record on musterd.io (`v=MCPv1; k=ed25519;
+    // p=…`, Cloudflare). Its private key is nick's macOS Keychain item `musterd:mcp-registry-key`
+    // (re-keyed 2026-11-02 for 0.7.0: the 0.6.0 key was never recorded and could not be found).
+    // Run from an up-to-date checkout: server.json's version is what gets listed.
+    `cd packages/mcp && mcp-publisher login dns --domain musterd.io --private-key "$(security find-generic-password -s musterd:mcp-registry-key -w)" && mcp-publisher publish   # MCP Registry listing of @musterd/mcp ${version}`,
     `pnpm bump-brew-formula --version ${version}   # then push SandRiseStudio/homebrew-musterd`,
     // The npm-install smoke that used to live here now runs BEFORE publishing (release/smoke.ts):
     // as a suggestion it could only ever confirm damage, and 0.4.0 is what that cost. What is left
