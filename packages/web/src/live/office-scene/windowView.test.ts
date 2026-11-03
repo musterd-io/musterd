@@ -5,7 +5,7 @@ import { computeLightEnv } from './lighting';
 import { recordingCtx } from './recording-ctx';
 import type { RenderedAssets } from './rendered/assets';
 import { parseManifest } from './rendered/manifest';
-import { drawWindowViews, paneQuad, plateTint, skyStops, viewOverride } from './windowView';
+import { drawWindowViews, hazeAlpha, isPlateOf, isViewPlate, paneQuad, plateTint, skyStops, viewOverride, viewPlateIds } from './windowView';
 
 const fit = fitFloor(1200, 900);
 const camera = { kx: 0.70710678, ky: 0.33729 };
@@ -85,6 +85,32 @@ describe('drawWindowViews', () => {
   });
 });
 
+describe('lamp reflection (window views inc 3)', () => {
+  const radials = (h: number) => {
+    const { ctx, ops } = recordingCtx();
+    drawWindowViews(ctx, fit, computeLightEnv(h, true), art(), 'clear', 'city');
+    return ops.filter((o) => o.name === 'createRadialGradient').length;
+  };
+  it('the lamp reflection appears after dusk only — two highlights per pane', () => {
+    expect(radials(12)).toBe(0);
+    expect(radials(23)).toBe(4 * 2);
+  });
+});
+
+describe('horizon haze (window views inc 3: depth)', () => {
+  it('lays one haze band per pane, between the land and the glass', () => {
+    const { ctx, ops } = recordingCtx();
+    drawWindowViews(ctx, fit, computeLightEnv(12, true), art(), 'clear', 'city');
+    // sky, haze, glass — three linear gradients a pane
+    expect(ops.filter((o) => o.name === 'createLinearGradient')).toHaveLength(4 * 3);
+  });
+  it('thickens with the weather: clear < cloudy < snow < rain', () => {
+    expect(hazeAlpha('clear')).toBeLessThan(hazeAlpha('cloudy'));
+    expect(hazeAlpha('cloudy')).toBeLessThan(hazeAlpha('snow'));
+    expect(hazeAlpha('snow')).toBeLessThan(hazeAlpha('rain'));
+  });
+});
+
 describe('viewOverride', () => {
   it('reads ?view= and ignores junk', () => {
     expect(viewOverride('?view=coast')).toBe('coast');
@@ -108,5 +134,23 @@ describe('plate framing (review C1)', () => {
       expect(d.args[3]).toBeCloseTo(300 * 0.92, 3);
       expect(d.args[4]).toBeCloseTo(420 * 0.92, 3);
     }
+  });
+});
+
+describe('plate gating by view (window views inc 3, lane 01M6ENHBPB)', () => {
+  const m = {
+    assets: [
+      { id: 'view/city/0-0-day' },
+      { id: 'view/coast/0-0-day' },
+      { id: 'view/coast/1-2-night' },
+      { id: 'room/light-day' },
+      { id: 'view/coastal/0-0-day' },
+    ],
+  };
+  it('names only the chosen view’s plates, never the room’s art or a look-alike prefix', () => {
+    expect([...viewPlateIds(m, 'coast')].sort()).toEqual(['view/coast/0-0-day', 'view/coast/1-2-night']);
+    expect(isViewPlate('room/light-day')).toBe(false);
+    expect(isViewPlate('view/city/0-0-day')).toBe(true);
+    expect(isPlateOf('view/coastal/0-0-day', 'coast')).toBe(false);
   });
 });

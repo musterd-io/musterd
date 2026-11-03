@@ -434,6 +434,8 @@ export function OfficeScene({
           fit,
           interactiveLabels: !broadcast,
           showWorkCues: workCues === 'hybrid',
+          // "Outside" (window views inc 3): /live follows the viewer's pref; a stream always shows the city.
+          followViewPref: !broadcast,
         });
         handle.update(dataRef.current);
         handle.setSuspended(collapsedRef.current); // mounted while collapsed → start parked

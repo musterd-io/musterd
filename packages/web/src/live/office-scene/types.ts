@@ -357,6 +357,9 @@ export interface OfficeHandle {
   /** Show the working-hours calendar's settings door (`/live`, a signed-in human), and flag it when
    *  something there waits for the viewer. A no-op where the scene made no hotspot. */
   setSettingsSpot: (state: { enabled: boolean; flagged: boolean }) => void;
+  /** Change what is outside the windows (window views inc 3, the /live "Outside" button). The new
+   *  view's plates load first and the panes swap when they land; a no-op under `?view=`. */
+  setView: (view: import('./windowView').ViewSetting) => void;
   /** Fire an in-place ambient gesture now on an idle desk member (a `GESTURE` kind), bypassing the
    * ambient scheduler. Returns the member it played on, or null if none was eligible.
    * A design-preview / verification affordance (see office-preview); the live office uses the scheduler. */

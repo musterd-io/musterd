@@ -1,6 +1,6 @@
 # Office window views — a world outside the windows
 
-**Date:** 2026-11-02 · **Owner:** miley (designer) · **Asked by:** nick · **Status:** design, approved in chat 2026-11-02
+**Date:** 2026-11-02 · **Owner:** miley (designer) · **Asked by:** nick · **Status:** built 2026-11-03
 
 Brainstorm mockups: `docs/design/assets/window-views/window-views.html` (three settings side by side) and
 `window-views-v2.html` (one wall, two windows, one city panorama — the reference).
@@ -132,6 +132,16 @@ window (four windows) and a few sprite draws; measured in CI's perf gate, not lo
 2. **Coast and mountain** (lane `01M6ENH3T54EPSBRM1RNZXBM9S`). Two more scenes, their plates, their signature movers.
 3. **Chooser + polish** (lane `01M6ENHBPBSTJJZNA21Y0NBJR4`). The office-menu picker, `localStorage`, broadcast default, the lamp
    reflection at night, sprite seeding review, committed mockups, spec marked built.
+
+_(Built 2026-11-03, lane 01M6ENHBPBSTJJZNA21Y0NBJR4: the three lanes above shipped as #3731, #3740 and
+increment 3's PR. Increment 3 as built: the "Outside" button beside the sound toggle (no office menu
+exists), `?view=` > the pref > city, /broadcast always the city; only the chosen view's plates load, and a
+change fetches the new plates before the panes swap; the lamp reflection after dusk; a horizon haze band
+per pane for depth, thicker in cloud, snow and rain; the night sky's cache key now steps hourly; rain and
+snow hide the moon and stars, cloud hides the stars, and clouds shade toward slate at night. Not done:
+art-side depth (a nearer foreground silhouette, stronger lit/shadow faces, a per-wall camera yaw) and
+denser lit windows on the night plates — both need a re-render inside the art budget's last ~0.1 MB, and
+nick called the windows good for now.)_
 
 ## Calls made after the builder check (miley, 2026-11-02)
 

@@ -63,7 +63,8 @@ import {
 } from './layout';
 import { computeLightEnv, deskLampOn, type LightEnv } from './lighting';
 import { fetchWeather, type Weather, type WeatherReading, weatherDue, weatherMoves, weatherOverride } from './weather';
-import { DEFAULT_VIEW, viewOverride, type ViewSetting } from './windowView';
+import { onViewPref, readViewPref } from '../viewPref';
+import { DEFAULT_VIEW, isPlateOf, isViewPlate, viewOverride, viewPlateIds, type ViewSetting } from './windowView';
 import { isWithinWorkingHours } from './workingHours';
 import { assignSeats, workingAtDesk, type Placement } from './seating';
 import {
@@ -425,6 +426,17 @@ export interface OfficeOptions {
    * Constant per mount, so every sprite key stays valid.
    */
   fit?: 'room' | 'furnished';
+  /**
+   * What is outside the windows at mount (window views inc 3): `/live` passes the viewer's "Outside"
+   * pref, `/broadcast` passes nothing and stays the city. `?view=` overrides either. Changed later
+   * through `OfficeHandle.setView`.
+   */
+  view?: ViewSetting;
+  /**
+   * `/live` only: start from the viewer's "Outside" pref (`viewPref.ts`) and follow the header button
+   * as it changes. Read here, inside the lazy chunk, so the pref module stays off /live's eager graph.
+   */
+  followViewPref?: boolean;
 }
 
 export function mountOffice(
@@ -434,6 +446,11 @@ export function mountOffice(
   options: OfficeOptions = {},
 ): OfficeHandle {
   const broadcast = options.broadcast === true;
+  // What is outside the windows (window views): `?view=` > the mount's `view` (the /live pref) > city.
+  // Only the chosen view's plates are fetched; `setView` loads the next one before it swaps.
+  const viewPinned = viewOverride(typeof window === 'undefined' ? '' : window.location.search);
+  let view: ViewSetting =
+    viewPinned ?? (options.followViewPref ? readViewPref() : null) ?? options.view ?? DEFAULT_VIEW;
   /* Read once at mount: the flag cannot change under a running room, and re-parsing per bubble would
      put a URLSearchParams allocation on the speech path. */
   const STILL = stillMode();
@@ -484,6 +501,43 @@ export function mountOffice(
       }
     });
   }
+  /* The window plates (window views inc 3): only the chosen view's are decoded. A change fetches the
+     new view's plates while the old ones stay painted, then swaps and drops the old — never a pane of
+     bare sky between. A second change mid-fetch wins: the stale fetch finds `pendingView` moved and
+     stops. The drop pass also fetches anything an earlier, overlapping fetch still held in flight. */
+  const viewInFlight = new Set<string>();
+  let pendingView: ViewSetting | null = null;
+  function setView(next: ViewSetting): void {
+    if (viewPinned !== null) return;
+    if (next === view) {
+      pendingView = null; // back to what is showing: a swap still in flight must not land
+      return;
+    }
+    const r = rendered;
+    if (!r || !roomUrl) {
+      view = next; // the art is not in yet; its first load reads `view`
+      pendingView = null;
+      return;
+    }
+    const keep = new Set([...r.images.keys()].filter((id) => isViewPlate(id)));
+    const want = viewPlateIds(r.manifest, next);
+    const target = next;
+    pendingView = target;
+    void syncImages(r, isViewPlate, new Set([...keep, ...want]), roomUrl, undefined, viewInFlight).then(() => {
+      if (disposed || r !== rendered || pendingView !== target) return;
+      view = target;
+      void syncImages(r, isViewPlate, want, roomUrl!, undefined, viewInFlight).then((arrived) => {
+        if (!disposed && arrived && r === rendered && view === target) {
+          bake();
+          if (!raf) paintResting();
+        }
+      });
+      bake();
+      if (!raf) paintResting();
+    });
+  }
+  // the header's "Outside" button writes the pref; the room swaps its panes when the plates land
+  const stopFollowingView = options.followViewPref ? onViewPref(setView) : () => {};
   function wearNow(): void {
     const fig = rendered?.figure;
     if (!fig) return;
@@ -522,7 +576,12 @@ export function mountOffice(
           roomUrl = (file) => files[`./rendered/assets/${file}`] ?? file;
           // only the room images this hour needs; `syncRoom` fetches the next light state ahead of its fade
           const now = roomImagesWanted(lightEnv);
-          return loadRenderedAssets(manifest, roomUrl, undefined, (id) => !isRoomImage(id) || now.has(id));
+          return loadRenderedAssets(
+            manifest,
+            roomUrl,
+            undefined,
+            (id) => (isRoomImage(id) ? now.has(id) : !isViewPlate(id) || isPlateOf(id, view)),
+          );
         })
         .then(async (r) => {
           /* The dog (increment 4): no dog.json, or one that will not parse, means no dog. */
@@ -890,9 +949,7 @@ export function mountOffice(
   // an hour by this browser; `?weather=` pins it. Clear until the first reading lands.
   const weatherPinned = weatherOverride(typeof window === 'undefined' ? '' : window.location.search);
   let weather: Weather = weatherPinned ?? 'clear';
-  // What is outside the windows (window views, lane 01M6ENGW2H): `?view=` picks it; the chooser is
-  // increment 3. The movers outside read the wall clock, seeded per team; still mode freezes them.
-  const view: ViewSetting = viewOverride(typeof window === 'undefined' ? '' : window.location.search) ?? DEFAULT_VIEW;
+  // The movers outside the windows read the wall clock, seeded per team; still mode freezes them.
   const outsideNow = (): number => (STILL ? 0 : Date.now());
   let weatherRead: WeatherReading | null = null;
   function pollWeather(): void {
@@ -4200,6 +4257,7 @@ export function mountOffice(
         hit: solidHit(p.lx, p.ly),
         sit: p.sit,
       })),
+    setView,
     setSettingsSpot: ({ enabled, flagged }: { enabled: boolean; flagged: boolean }) => {
       if (!hoursSpot) return;
       hoursSpot.hidden = !enabled;
@@ -4292,6 +4350,7 @@ export function mountOffice(
       return null;
     },
     dispose: () => {
+      stopFollowingView();
       disposed = true;
       if (visitTimer) clearInterval(visitTimer);
       sprites?.clear();
