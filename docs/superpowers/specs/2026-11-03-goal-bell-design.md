@@ -1,6 +1,6 @@
 # The goal bell — design
 
-**Date:** 2026-11-03 · **Owner:** miley (designer) · **Asked by:** nick · **Status:** design, not built ·
+**Date:** 2026-11-03 · **Owner:** miley (designer) · **Asked by:** nick · **Status:** approved by nick 2026-11-03, not built ·
 **Lane:** `01M6HBK1KKYRN5K66R4HJ714BN`
 
 ## Intent
@@ -39,9 +39,10 @@ room does not turn.
 - **A brass bell on a wall bracket over the work board**, where the shelf chimes hang today (nick:
   "yes, over the work board"). It replaces the chimes, which are removed: their bars, their swing,
   their notes and their layout test.
-  Only the office's chimes go: the object and the `laneDone` and `goalDone` moments they played. The
-  bar voice and the pentatonic scale stay, because the stream's accept chime and other cues use them
-  (`soundEngine.ts`).
+  The chimes go entirely (nick: "no chimes on the floor or sounds"): the object, the `laneDone` and
+  `goalDone` moments they played, and the chime sounds elsewhere, including the stream's accept chime
+  (`soundEngine.ts` `chime('accept')`, which strikes the same bar voice). Other cues keep their
+  pitches.
 - **A rope hangs from it** down beside the board, and must not cover anything that matters on the
   board: the goal tabs in the left gutter, the columns and their notes, and the read strip (nick:
   "maybe there is a string/rope hanging down from the bell (but doesnt cover anything important on
@@ -69,25 +70,27 @@ room does not turn.
   content.
 - A goal shipping: a member walks to the bell and rings it, all others watch and clap.
 - A lane done: a soft ding and a little glow at their desk.
+- **Who rings it:** the member who records the goal as done (`goal-done`'s `who`).
+- **One ceremony at a time:** goals that ship close together each get their own ceremony, played one
+  after another.
+- **No chimes anywhere:** not on the floor, and no chime sounds.
+- **The lane ding** plays at the desk of whoever finished the lane, one note.
+- **A goal's last lane** dings first, then the bell follows.
 
 ## miley's calls (nick can overrule)
 
-- **Who rings it.** The member who recorded the goal's outcome (`goal-done`'s `who`), if they have a
-  figure on the floor right now, human or agent; else nobody walks, and the bell rings by itself
-  while the room still turns to it and claps. (No "closer of the last lane" fallback: the client keeps
-  no goal-to-closer record, and building one would mean new state or new data.)
+- **A ringer not in the room.** If the member who recorded the outcome has no figure on the floor,
+  nobody walks: the bell rings by itself and the room still turns to it and claps.
 - **Where the rope hangs.** Down the board's right edge, outside the frame, in the plaster between the
   board and the wall's end; the bell sits on a bracket at the board's top-right corner.
 - **Where the ringer stands.** At the board's right end, reached from `BOARD_STAND`'s row.
 - **Who claps.** Every member present in the room except the ringer: online members and visitors on
   the floor. Members who are away (not in the room) do nothing.
-- **Goals close together.** One ceremony at a time. A goal that ships while a ceremony is playing
-  adds one more strike to it instead of a second ceremony, however many arrive. A goal that ships
-  after the ceremony ends starts a new one.
-- **Whose desk dings.** The member who closed the lane (`walk-pin`'s `who`), one note, one desk. The
-  chimes' chord (one voice per seat in the lane's chain) goes away.
-- **A goal's last lane still dings** at its closer's desk; the bell follows once the ding has played
-  (the gap the chimes keep today, about 0.4 s), and the ringer stands up after it.
+- **The ding replaces the chord.** The chimes played one voice per seat in the lane's chain; the
+  ding is one note at the closer's desk (`walk-pin`'s `who`). After a goal's last lane, the ringer
+  stands up once the ding has played (the chimes keep a 0.4 s gap there today).
+- **A long queue.** Ceremonies play in turn; if more than three are waiting, the rest ring the bell
+  without the walk and the applause, so a bulk of outcomes can't freeze the room for minutes.
 - **The ding is a smaller, higher cousin of the bell**, so the two read as one family. The desk glow
   is brief (about a second and a half) and warm, in the lamp colour.
 - **The bell's sound is a recorded take**, licensed for reuse like the office's other recorded sounds
