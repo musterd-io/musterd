@@ -27,6 +27,7 @@ import {
   ResidencyPolicyOverrideSchema,
   ResidencyPolicySchema,
   WakeGateStateSchema,
+  activeHoldFor,
   workingDayEndToday,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
@@ -41,6 +42,7 @@ import { laneMovedSinceLastWoke, MINTED_HERE } from './continuationStall.js';
 import { getCursor } from './cursors.js';
 import { openDirectedLedger } from './delivery.js';
 import { memberAvailability } from './doorbell.js';
+import { listActiveHolds } from './holds.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
 import { getLane, listLanes } from './lanes.js';
 import { getMemberById, getMemberByName } from './members.js';
@@ -2560,6 +2562,9 @@ async function deriveSeatPasses(
   const teamHours = parseWorkingHours((await getTeamById(db, teamId))?.working_hours);
   // ADR 790: sender member id → is a human Member, read once per poll.
   const humanSenders = new Map<string, boolean>();
+  // ADR 796: a `wakes_paused` hold mints no lease at all — not a human's, not a first wake, not a
+  // dream — while it stands. A lease minted before it runs to its end; the hold never cancels one.
+  if (activeHoldFor(await listActiveHolds(db, teamId, now), 'wakes_paused', now)) return [];
   for (const enrollment of enrollments) {
     const member = await getMemberById(db, enrollment.member_id);
     if (!member || member.left_at !== null) continue;

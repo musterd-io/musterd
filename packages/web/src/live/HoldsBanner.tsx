@@ -15,6 +15,7 @@ const FOR_PRESETS: { label: string; ms: number }[] = [
 const EFFECT_OPTION: Record<HoldEffect, string> = {
   autorefresh_paused: 'autorefresh paused',
   merges_paused: 'merges paused',
+  wakes_paused: 'wakes paused',
   notice: 'notice — not enforced',
 };
 

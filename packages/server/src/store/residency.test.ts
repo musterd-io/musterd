@@ -8,6 +8,7 @@ import { withDrivers } from '../db/testing.js';
 import { log } from '../log.js';
 import { readSpendCapBreach, readUnpricedWakeBreach } from '../protocol/gate.js';
 import { appendAudit, listAudit } from './audit.js';
+import { liftHold, setHold } from './holds.js';
 import { laneWarnings, openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName, haltMember, setAvailability } from './members.js';
 import { saveMemory } from './memory.js';
@@ -1802,6 +1803,43 @@ withDrivers('residency', (o, kind) => {
       expect((await getResidency(db, team.id, ada.id))?.policy).toBe('{"hourly_cap":5}');
       await enroll(db, team, ada, HOST, {}); // explicit clear
       expect((await getResidency(db, team.id, ada.id))?.policy).toBeNull();
+    });
+  });
+
+  describe('ADR 796: a wakes_paused hold', async () => {
+    it('leases nothing while it stands, not even a human steer', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await setHold(db, team.id, 'nick', {
+        effect: 'wakes_paused',
+        reason: 'hub move',
+        for_ms: 3_600_000,
+      });
+      await msg(db, team, nick, ada, 'steer', 's1', Date.now() - 1_000);
+      expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+    });
+
+    it('leaves a lease minted before it alone, and leases resume once it is lifted', async () => {
+      const { db, team, nick, ada, bob } = await seed();
+      await enroll(db, team, ada);
+      await enroll(db, team, bob);
+      await msg(db, team, nick, ada, 'steer', 's-ada', Date.now() - 2_000);
+      const first = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(first.map((o) => o.seat)).toEqual(['Ada']);
+      const hold = await setHold(db, team.id, 'nick', {
+        effect: 'wakes_paused',
+        reason: 'hub move',
+        for_ms: 3_600_000,
+      });
+      await msg(db, team, nick, bob, 'steer', 's-bob', Date.now() - 1_000);
+      expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+      const live = await db.get<{ status: string }>('SELECT status FROM wake_leases WHERE id = ?', [
+        first[0]!.lease_id,
+      ]);
+      expect(live?.status).toBe('leased');
+      await liftHold(db, team.id, 'nick', hold.id);
+      const after = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(after.map((o) => o.seat)).toEqual(['bob']);
     });
   });
 

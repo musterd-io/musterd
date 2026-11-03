@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  HOLD_EFFECTS,
   HOLD_MAX_MS,
   HoldSchema,
   SetHoldBodySchema,
@@ -201,5 +202,12 @@ describe('pushedRemote (ADR 730 §1)', () => {
       remote: 'team',
       refspecs: ['agent1'],
     });
+  });
+});
+
+describe('wakes_paused (ADR 796)', () => {
+  it('is an enforced effect with its own label', () => {
+    expect(HOLD_EFFECTS).toContain('wakes_paused');
+    expect(isHoldEnforced('wakes_paused')).toBe(true);
   });
 });

@@ -694,7 +694,7 @@ authoritative place a Team says "this is paused"; Members read it, they do not r
 ```jsonc
 {
   "id": "<ULID>",
-  "effect": "autorefresh_paused", // | "merges_paused" | "notice"
+  "effect": "autorefresh_paused", // | "merges_paused" | "wakes_paused" | "notice"
   "reason": "demo 14:00", // required, 1–280 chars; for "notice" it is the whole message
   "created_by": "nick", // the human Member who set it
   "created_at": 1791229200000,
@@ -706,8 +706,9 @@ authoritative place a Team says "this is paused"; Members read it, they do not r
 
 A hold is **active** while `lifted_at` is null and the reader's clock is before `expires_at`.
 Active is derived at read; there is no status field and no timer. `effect` is a closed set:
-`autorefresh_paused` and `merges_paused` are enforced (by the autorefresh tick and the PreToolUse
-gate respectively); `notice` is never enforced, and a renderer MUST label it as not enforced.
+`autorefresh_paused`, `merges_paused` and `wakes_paused` are enforced (by the autorefresh tick, the
+PreToolUse gate, and the wake derivation, which mints no lease while it stands, ADR 796);
+`notice` is never enforced, and a renderer MUST label it as not enforced.
 An implementation MUST NOT treat an unknown `effect` as enforced.
 
 Routes (all under `/teams/:slug`):

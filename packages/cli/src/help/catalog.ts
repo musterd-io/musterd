@@ -1353,7 +1353,7 @@ export const CATALOG: readonly CommandEntry[] = [
     summary: 'pause something team-wide, with an author and an end — every seat sees it',
     group: 'team',
     detail:
-      'ADR 516. Effects: autorefresh_paused, merges_paused, notice (shown, never enforced). Human ' +
+      'ADR 516. Effects: autorefresh_paused, merges_paused, wakes_paused (ADR 796: no new wakes), notice (shown, never enforced). Human ' +
       'admins set and lift; the daemon decides. Capped at 12h and clears itself — a longer freeze is ' +
       'a new hold. Every seat reads active holds in `musterd next` / `musterd status` / team_next. ' +
       '`propose` (any seat) sends an approve-ask; a human admin accepting it activates the hold.',
