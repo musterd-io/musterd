@@ -26,6 +26,24 @@ CITY_FAR = srgb("#9aa3b4")
 CITY_NEAR = srgb("#5a6070")
 CITY_ROOF = srgb("#8d94a3")
 CITY_LIT = srgb("#ffd27a")
+# coast: sea, sand, a headland in haze, a white lighthouse with a red band
+SEA = srgb("#3f8fa3")
+SAND = srgb("#e3d3ae")
+HEADLAND = srgb("#7d8f86")
+LIGHTHOUSE = srgb("#f2efe6")
+LIGHTHOUSE_BAND = srgb("#c8403a")
+ROCK = srgb("#5c5a55")
+# mountain: a meadow, three ridges near → far (darker → hazier), snow, a timber cabin
+MEADOW = srgb("#6f8f5a")
+RIDGE = [srgb("#4f6b4e"), srgb("#6c7f8d"), srgb("#9aa7b8")]
+SNOW = srgb("#f4f6fa")
+CABIN = srgb("#6b4a2e")
+CABIN_ROOF = srgb("#3d3a36")
+
+# The pane frames z = u0·WALL_H … u1·WALL_H (64 … 154 for both panes); the camera looks straight out,
+# so a horizontal plane is edge-on. Ground that must *show* — sea, sand, meadow — is a gentle ramp
+# rising with distance, which in this view reads as a flat expanse ending at a horizon.
+HORIZON_Z = 98.0
 
 
 def _frame(which: int):
@@ -72,8 +90,155 @@ def build_exterior(setting: str, which: int, zs: float) -> list[bpy.types.Object
     objs: list[bpy.types.Object] = []
     if setting == "city":
         objs += _city(place, which)
+    elif setting == "coast":
+        objs += _coast(place, which, zs, col)
+    elif setting == "mountain":
+        objs += _mountain(place, which, zs, col)
     else:
-        raise SystemExit(f"exterior.py: setting {setting!r} is not built yet (increment 2)")
+        raise SystemExit(f"exterior.py: unknown setting {setting!r} (one of {SETTINGS})")
+    return objs
+
+
+def _adopt(o: bpy.types.Object, col: bpy.types.Collection) -> bpy.types.Object:
+    for c in list(o.users_collection):
+        c.objects.unlink(o)
+    col.objects.link(o)
+    return o
+
+
+def _ramp(name: str, which: int, a0: float, a1: float, d0: float, d1: float, z0: float, z1: float, mat, zs: float, col) -> bpy.types.Object:
+    """A quad rising from z0 at d0 to z1 at d1 across a0…a1: ground that shows in a horizontal view."""
+    to_xy = _frame(which)
+    verts = [(*to_xy(a, d), z * zs) for a, d, z in ((a0, d0, z0), (a1, d0, z0), (a1, d1, z1), (a0, d1, z1))]
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [], [(0, 1, 2, 3)])
+    me.update()
+    o = bpy.data.objects.new(name, me)
+    o.data.materials.append(mat)
+    bpy.context.scene.collection.objects.link(o)
+    return _adopt(o, col)
+
+
+def _ridge(name: str, which: int, pts: list[tuple[float, float]], d: float, bottom: float, zig: float, mat, zs: float, col, floor: float | None = None) -> bpy.types.Object:
+    """A ridge line as a vertical strip down to `bottom`: `pts` are (a, z) peaks and valleys; every
+    other point sits `zig` further out, so the faces alternate facing ±a and the sun lights one
+    flank of each peak. With `floor` (snow caps) the line is clipped where it crosses that height,
+    the strip's bottom is the floor, and there is no zig — the caps sit flat just in front."""
+    to_xy = _frame(which)
+    if floor is not None:
+        line: list[tuple[float, float, float]] = []
+        for k in range(len(pts) - 1):
+            (a0, z0), (a1, z1) = pts[k], pts[k + 1]
+            if z0 >= floor:
+                line.append((a0, z0, d))
+            if (z0 - floor) * (z1 - floor) < 0:
+                t = (floor - z0) / (z1 - z0)
+                line.append((a0 + t * (a1 - a0), floor, d))
+        lo = floor
+    else:
+        line = [(a, z, d + (zig if k % 2 else 0.0)) for k, (a, z) in enumerate(pts)]
+        lo = bottom
+    verts = []
+    faces = []
+    for k, (a, z, dd) in enumerate(line):
+        verts.append((*to_xy(a, dd), z * zs))
+        verts.append((*to_xy(a, dd), lo * zs))
+        if k:
+            faces.append((2 * k - 2, 2 * k - 1, 2 * k + 1, 2 * k))
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [], faces)
+    me.update()
+    o = bpy.data.objects.new(name, me)
+    o.data.materials.append(mat)
+    bpy.context.scene.collection.objects.link(o)
+    return _adopt(o, col)
+
+
+def _skyline_pts(rnd, base: float, lo: float, hi: float, step: float) -> list[tuple[float, float]]:
+    """Peaks and valleys along the wall: a peak every `step`, a valley between, heights from `rnd`."""
+    pts = []
+    a = -160.0
+    while a < FLOOR + 160:
+        pts.append((a, base + lo + (hi - lo) * rnd() ** 1.2))
+        pts.append((a + step * (0.4 + 0.3 * rnd()), base + lo * (0.3 + 0.4 * rnd())))
+        a += step
+    return pts
+
+
+def _coast(place, which: int, zs: float, col) -> list[bpy.types.Object]:
+    """Sea to the horizon, a sand strip below the sill, a headland in haze to one side, and — on
+    wall 0 — a lighthouse on its rock inside the second pane (`windowSprites.ts` LIGHTHOUSE flashes
+    its beacon at that pane position at night). Wall 1 gets a buoy and a pier end instead."""
+    sea = scene.paint("view-sea", SEA, 0.35)
+    sand = scene.paint("view-sand", SAND, 0.9)
+    head = scene.paint("view-headland", HEADLAND, 0.9)
+    rock = scene.paint("view-rock", ROCK, 0.9)
+    white = scene.paint("view-lighthouse", LIGHTHOUSE, 0.6)
+    band = scene.paint("view-lighthouse-band", LIGHTHOUSE_BAND, 0.6)
+    lit = _lit("view-lit")
+    sea_z = lambda d: 65 + (HORIZON_Z - 65) * (d - 70) / (1400 - 70)  # noqa: E731 — the sea ramp's height at d
+    objs = [
+        _ramp("sand", which, -200, FLOOR + 200, 30, 70, 58, 65, sand, zs, col),
+        _ramp("sea", which, -200, FLOOR + 200, 70, 1400, 65, HORIZON_Z, sea, zs, col),
+        # a darker band under the horizon, and a few pale wave lines, so the water has depth
+        _ramp("sea-far", which, -200, FLOOR + 200, 1250, 1400, sea_z(1250) + 0.3, HORIZON_Z + 0.3, scene.paint("view-sea-far", srgb("#357f93"), 0.35), zs, col),
+    ]
+    pale = scene.paint("view-wave", srgb("#6fb0c0"), 0.4)
+    for k, (d, w) in enumerate(((150, 24), (330, 34), (580, 50), (900, 70))):
+        objs.append(_ramp(f"wave{k}", which, -200, FLOOR + 200, d, d + w, sea_z(d) + 0.4, sea_z(d + w) + 0.4, pale, zs, col))
+    # the headland: two low domes on the horizon, inside the pane the lighthouse is not in
+    ha = 0.37 * FLOOR
+    for k, (da, rx, rz) in enumerate(((0, 80, 7), (70, 50, 5))):  # ortho: a dome shows at full size however far
+        o = scene.ball(f"headland{k}", *_frame(which)(ha + da, 1200), sea_z(1200) - rz, rx, 60, rz, head, zs)  # centred at the waterline
+        objs.append(_adopt(o, col))
+    if which == 0:
+        la, ld = 0.70 * FLOOR, 220.0  # pane 1 (t 0.58…0.78) → x = 0.6
+        lx, ly = _frame(which)(la, ld)
+        objs.append(_adopt(scene.ball("rock", lx, ly, 56, 16, 12, 9, rock, zs), col))
+        objs.append(_adopt(scene.cyl("lighthouse", lx, ly, 64, 4.2, 3.2, 48, white, zs), col))
+        objs.append(_adopt(scene.cyl("lighthouse-band", lx, ly, 86, 3.9, 3.7, 8, band, zs), col))
+        objs.append(_adopt(scene.cyl("lantern", lx, ly, 112, 3.0, 3.0, 5, lit, zs), col))
+        objs.append(_adopt(scene.cyl("lantern-cap", lx, ly, 117, 3.4, 1.0, 3, band, zs), col))
+    else:
+        bx, by = _frame(which)(0.40 * FLOOR, 180)
+        objs.append(_adopt(scene.cyl("buoy", bx, by, 60, 2.0, 1.2, 5, band, zs), col))
+        objs.append(place("pier", 0.66 * FLOOR, 95, 59, 60, 6, 2.5, rock))
+        for k in range(5):
+            objs.append(place(f"pile{k}", 0.66 * FLOOR - 26 + k * 13, 95, 55, 1.6, 1.6, 4.5, rock))
+    return objs
+
+
+def _mountain(place, which: int, zs: float, col) -> list[bpy.types.Object]:
+    """A meadow rising to three ridges — near, mid, far — each paler with distance, snow above the
+    snowline on the two far ones, and on wall 0 a cabin in the first pane (`windowSprites.ts` CABIN
+    glows at that pane position at night). Deterministic: the LCG seeds the ridge lines."""
+    meadow = scene.paint("view-meadow", MEADOW, 0.9)
+    snow = scene.paint("view-snow", SNOW, 0.7)
+    cabin = scene.paint("view-cabin", CABIN, 0.85)
+    roof = scene.paint("view-cabin-roof", CABIN_ROOF, 0.9)
+    lit = _lit("view-lit")
+    rnd = _lcg(31 + which)
+    objs = [_ramp("meadow", which, -200, FLOOR + 200, 30, 470, 57, 87, meadow, zs, col)]
+    # peaks stay under z≈140 (the pane's top is 154): the sky must keep the upper third
+    ridges = (("near", 440, 82, 6, 30, 60, 30), ("mid", 800, 86, 14, 40, 80, 40), ("far", 1200, 92, 20, 48, 100, 50))
+    for k, (name, d, base, lo, hi, step, zig) in enumerate(ridges):
+        mat = scene.paint(f"view-ridge-{name}", RIDGE[k], 0.9)
+        pts = _skyline_pts(rnd, base, lo, hi, step)
+        objs.append(_ridge(f"ridge-{name}", which, pts, d, 50, zig, mat, zs, col))  # down past the sill: no sky between valleys
+        if k:
+            objs.append(_ridge(f"snow-{name}", which, pts, d - 0.5, 50, 0, snow, zs, col, floor=base + lo + (hi - lo) * 0.6))
+    if which == 0:
+        ca, cd = 0.38 * FLOOR, 300.0  # pane 0 (t 0.28…0.46) → x = 0.56; the meadow is z≈76 there
+        objs.append(place("cabin", ca, cd, 76, 16, 12, 9, cabin))
+        objs.append(place("cabin-roof", ca, cd, 85, 19, 15, 2.5, roof))
+        objs.append(place("chimney", ca + 5, cd, 87.5, 2, 2, 3.5, roof))
+        for k in (-4.5, 4.5):
+            objs.append(place(f"cabin-lit{k:+.0f}", ca + k, cd - 6.3, 78.5, 3.2, 0.4, 3.2, lit))
+    else:
+        for k in range(7):  # a stand of firs on the meadow's edge
+            fa = 0.2 * FLOOR + k * 60 + 30 * rnd()
+            fx, fy = _frame(which)(fa, 360 + 40 * rnd())
+            objs.append(_adopt(scene.cyl(f"fir{k}", fx, fy, 80, 5.5 + 2 * rnd(), 0.3, 14 + 6 * rnd(), scene.paint("view-fir", srgb("#3c5a3a"), 0.9), zs, verts=8), col))
     return objs
 
 
