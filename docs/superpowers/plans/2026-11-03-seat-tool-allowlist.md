@@ -182,7 +182,7 @@ No code. Send nick an ask (`team_send {act:'ask'}`, species approve, tier standa
 command to run:
 
 ```bash
-musterd policy set --team revive seat_tools '{
+musterd team policy --team revive --seat-tools '{
   "shared": {"claude_plugins": [
     "superpowers@claude-plugins-official", "github@claude-plugins-official",
     "chrome-devtools-mcp@claude-plugins-official", "cloudflare@claude-plugins-official",
@@ -193,8 +193,10 @@ musterd policy set --team revive seat_tools '{
 }'
 ```
 
-Check the CLI's actual `policy set` form before you send it, and change the command to match.
-Verify with `musterd policy show --team revive` that the `policy.change` row names nick.
+_(Corrected 2026-11-03: there was no `policy set` command. The `--seat-tools` flag on
+`musterd team policy` shipped for this step, lane `01M6HHSVAC3RRQ5AHBCDK0WQNV`.)_ Verify with
+`musterd team policy --team revive --json` that `seat_tools` is stored, and that the newest
+`policy.change` audit row names nick.
 
 ### Task 5: Spike: what each Claude Code flag closes (written down, not shipped)
 
