@@ -3008,77 +3008,34 @@
     transform: none;
   }
 }
-.lc-boardspot__tag {
-  /* The sign over the wall board (live-briefing spec, increment 5), in the board frame's own oak
-     (render.ts PINBOARD) so it reads as part of the room, not as chrome laid over it. Always shown:
-     the board opens, and before this only a hover said so. */
-  --lc-oak: #dcbf8e;
-  --lc-oak-lit: #f0dcb4;
-  --lc-oak-shade: #b9915f;
+.lc-signdoor {
+  /* The door over a rendered sign (lane 01M6FXKVDD): the sign is canvas art (oak, gold lettering, a
+     brass lamp), so this paints nothing until hover, when it glows like the fixture under it. Placed
+     from `signRect` by index.ts; a child of its button, so a click on the sign opens it. */
   position: absolute;
-  left: 50%;
-  /* Hung from the middle of the board's top edge, not the box's top: on the slanted wall the box's
-     top is the board's high corner (`--lc-sign-drop`, set by the scene from `boardAnchor`). */
-  bottom: calc(100% - var(--lc-sign-drop, 0px) + 0.8em);
-  /* Skewed by the board's top-edge slope (`--lc-sign-tilt`, from `boardAnchor`), so it lies in the
-     wall's plane like the board under it. skewY keeps the strings vertical, as a hung sign's are. */
-  transform: translateX(-50%) skewY(var(--lc-sign-tilt, 0deg));
-  transform-origin: 50% 100%;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.4em;
-  font-family: var(--font-display, var(--font-sans));
-  /* Scales with the room (`--lc-sign-scale` is the scene's fit scale), so the sign stays in proportion
-     to the board it names: ~9px at a laptop-width office, never under 8px or over 12px. */
-  font-size: clamp(8px, calc(var(--lc-sign-scale, 1) * 13px), 12px);
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-  color: var(--lc-text);
-  background: var(--lc-oak);
-  border-top: 1px solid var(--lc-oak-lit);
-  border-radius: 3px;
-  box-shadow: 0 2px 0 var(--lc-oak-shade);
-  padding: 0.3em 0.7em 0.4em;
   pointer-events: auto;
-  transition: background var(--lc-dur-2) var(--lc-ease-out);
+  border-radius: 3px;
+  transition: box-shadow var(--lc-dur-2) var(--lc-ease-out);
 }
-/* The two strings it hangs from. */
-.lc-boardspot__tag::before,
-.lc-boardspot__tag::after {
-  content: '';
-  position: absolute;
-  bottom: 100%;
-  width: 1px;
-  height: 0.7em;
-  background: var(--lc-oak-shade);
+.lc-boardspot:hover .lc-signdoor,
+.lc-boardspot:focus-visible .lc-signdoor,
+.lc-hoursspot:hover .lc-signdoor,
+.lc-hoursspot:focus-visible .lc-signdoor {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--lc-accent) 60%, transparent),
+    0 0 18px -4px rgba(255, 190, 110, 0.85);
 }
-.lc-boardspot__tag::before {
-  left: 1em;
-}
-.lc-boardspot__tag::after {
-  right: 1em;
-}
-.lc-boardspot__caret {
-  /* --lc-dim, not --lc-muted: on the oak under the asks sheet's dim, muted read 4.44 (CI, #2300). */
-  color: var(--lc-dim);
-}
-.lc-boardspot:hover .lc-boardspot__tag,
-.lc-boardspot:focus-visible .lc-boardspot__tag {
-  background: var(--lc-oak-lit);
-}
-/* The wiki shelf's hotspot (ADR 747): the board's build and sign, over the left-wall bookshelf. The
-   sign hangs on the wall above the shelf's back edge (`--lc-sign-drop` from `shelfAnchor`). On
-   /broadcast it is a plain span: the sign hangs as part of the room and nothing opens. */
+/* The wiki shelf's hotspot (ADR 747): the board's build, over the left-wall bookshelf, with a door on
+   its rendered sign. On /broadcast it is a plain span and nothing opens. */
 .lc-wikispot.is-static {
   pointer-events: none;
   cursor: default;
 }
-.lc-wikispot.is-static .lc-boardspot__tag {
+.lc-wikispot.is-static .lc-signdoor {
   pointer-events: none;
 }
 /* The working-hours calendar's hotspot — the settings door. It shares the board hotspot's build
-   and hover (grouped above); its own: a settings tab under its frame (below), the house 24px tap floor whatever the fit, and a red
+   and hover (grouped above); its own: the house 24px tap floor whatever the fit, and a red
    pin in the corner when a pairing waits for this viewer. */
 .lc-hoursspot {
   min-width: 24px;
@@ -3087,38 +3044,6 @@
 .lc-hoursspot[hidden],
 .lc-hoursspot:not(.is-flagged) .lc-hoursspot__dot {
   display: none;
-}
-/* The settings tab: oak, fixed flush under the calendar's frame across its middle, skewed into the
-   wall's plane like the board's sign. Sized in wall units (`--lc-tab-unit`) so it keeps its
-   proportion to the card at any fit, never under 8px type. */
-.lc-hoursspot__tab {
-  --lc-oak: #dcbf8e;
-  position: absolute;
-  left: var(--lc-tab-x, 0px);
-  top: var(--lc-tab-y, 0px);
-  width: var(--lc-tab-w, 0px);
-  transform: skewY(var(--lc-sign-tilt, 0deg));
-  transform-origin: 0 0;
-  display: grid;
-  place-items: center;
-  padding: calc(var(--lc-tab-unit, 0px) * 1.5) 0 calc(var(--lc-tab-unit, 0px) * 2);
-  white-space: nowrap;
-  font-family: var(--font-display, var(--font-sans));
-  /* Fit "settings ›" (~6 em of bold) inside the tab: the wall unit alone overran the tab at the
-     rendered office's smaller calendar (nick, 2026-10-21). */
-  font-size: max(7px, min(calc(var(--lc-tab-unit, 0px) * 10), calc(var(--lc-tab-w, 0px) / 6.6)));
-  overflow: hidden;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--lc-text);
-  background: var(--lc-oak);
-  border-radius: 0 0 3px 3px;
-  box-shadow: 0 2px 0 #b9915f;
-  transition: background var(--lc-dur-2) var(--lc-ease-out);
-}
-.lc-hoursspot:hover .lc-hoursspot__tab,
-.lc-hoursspot:focus-visible .lc-hoursspot__tab {
-  background: #f0dcb4;
 }
 .lc-hoursspot__dot {
   position: absolute;
