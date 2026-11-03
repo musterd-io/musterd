@@ -253,6 +253,7 @@ import {
   appEnrollPayload,
   confirmAppPairing,
   keyFingerprint,
+  pairingFingerprint,
   stagedAppKeys,
   startAppPairing,
 } from '../store/appPairing.js';
@@ -5092,7 +5093,7 @@ export async function handleHttp(
           return sendJson(res, 201, {
             pairing_id: pairing.id,
             qr,
-            daemon_fingerprint: keyFingerprint(keys.identityPublic),
+            daemon_fingerprint: pairingFingerprint(keys.identityPublic, keys.receivePublic),
             expires_at: pairing.expires_at,
           });
         }

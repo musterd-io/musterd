@@ -84,9 +84,30 @@ export function p256SpkiFromRaw(raw: string): string {
   return key.export({ format: 'der', type: 'spki' }).toString('base64url');
 }
 
-/** What the page shows beside the QR code so the phone's screen can be compared with it. */
+/** One key's fingerprint: the phone key a confirm enrolls, shown beside the pairing request. */
 export function keyFingerprint(raw: string): string {
   return sha256hex(Buffer.from(raw, 'base64url')).slice(0, 16).match(/.{4}/g)!.join(' ');
+}
+
+const PAIRING_FINGERPRINT_TAG = Buffer.from('musterd/pairing-fingerprint/v1', 'utf8');
+
+/**
+ * What the page and the CLI show beside the QR, and what the phone shows after scanning (ADR 788):
+ * sha256 of the v1 tag, the raw Ed25519 identity key (32 bytes) and the raw P-256 receive key
+ * (65 bytes), first 16 hex in fours. It covers both keys because the phone seals its pair request
+ * and its answers to the receive key: a QR with a swapped receive key must not match the page.
+ * The phone's `daemonFingerprint` in `packages/mobile/src/native/pairingQr.ts` is the same function.
+ */
+export function pairingFingerprint(identityRaw: string, receiveRaw: string): string {
+  const identity = Buffer.from(identityRaw, 'base64url');
+  const receive = Buffer.from(receiveRaw, 'base64url');
+  if (identity.length !== 32 || receive.length !== 65) {
+    throw new Error('pairing fingerprint: identity must be 32 bytes and receive 65');
+  }
+  return sha256hex(Buffer.concat([PAIRING_FINGERPRINT_TAG, identity, receive]))
+    .slice(0, 16)
+    .match(/.{4}/g)!
+    .join(' ');
 }
 
 /** Start an app pairing on the daemon's own page: the pairing row and the QR payload, shown once. */
