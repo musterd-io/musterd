@@ -131,9 +131,22 @@ export function floorSkillDenies(): string[] {
   return FLOOR_DENIED_SKILLS.map((name) => `Skill(${name})`);
 }
 
-/** Every deny a claude-code seat gets whatever its toolkit says: the store wall, then the skill floor. */
+/** Where a seat folder caches its last good read of its seat tool grants (ADR 794 §1c). */
+export const SEAT_TOOLS_CACHE_REL = '.musterd/seat-tools.json';
+
+/**
+ * ADR 794: the seat's own file tools may not edit its grants cache, so a seat cannot widen the set
+ * it falls back to. A courtesy wall like the store wall: the next good read overwrites the file
+ * anyway, and the launch argv is the enforcing layer. `/` is project-relative.
+ */
+export function seatToolsCacheDenies(): string[] {
+  return [`Edit(/${SEAT_TOOLS_CACHE_REL})`, `Write(/${SEAT_TOOLS_CACHE_REL})`];
+}
+
+/** Every deny a claude-code seat gets whatever its toolkit says: the store wall, the skill floor,
+ *  and the grants-cache wall. */
 export function seatFloorDenies(env: NodeJS.ProcessEnv = process.env): string[] {
-  return [...storeWall(env), ...floorSkillDenies()];
+  return [...storeWall(env), ...floorSkillDenies(), ...seatToolsCacheDenies()];
 }
 
 /** One file the wall names: `~/…` under home, else absolute. `sqlite` = it has `-wal`/`-shm` sidecars. */

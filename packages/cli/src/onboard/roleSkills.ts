@@ -66,19 +66,9 @@ export function resolveSeatRoleSkills(
   team: string | undefined,
   rosterHomes: Record<string, string> = safeRosterHomes(),
 ): SeatRoleSkills | undefined {
-  if (!team) return undefined;
-  const binding = readBindingAt(worktreeRoot);
-  const seat = binding ? bindingSeat(binding) : undefined;
-  const home = rosterHomes[team];
-  if (!seat || !home) return undefined;
-  const seatPath = join(home, '.musterd', 'seats', `${seat}.toml`);
-  if (!existsSync(seatPath)) return undefined;
-  let roles: string[];
-  try {
-    roles = seatRoles(parseSeatFile(readFileSync(seatPath, 'utf8'), seat));
-  } catch {
-    return undefined;
-  }
+  const held = seatRolesAt(worktreeRoot, team, rosterHomes);
+  if (!held) return undefined;
+  const { seat, home, roles } = held;
   const out: SeatRoleSkills = { seat, bridges: [], missing: [] };
   for (const role of roles) {
     const skill = roleSkillName(role, readRole(home, role));
@@ -93,6 +83,31 @@ export function resolveSeatRoleSkills(
     else if (!out.bridges.some((b) => b.skill === skill)) out.bridges.push({ skill, description });
   }
   return out;
+}
+
+/**
+ * The seat bound to `worktreeRoot` and the roles its seat file names, with the roster home they
+ * were read from. Undefined when any link is missing (no team, no seat binding, no roster home on
+ * this machine, no or unreadable seat file). Shared by the role-skill bridges and the seat tool
+ * grants (ADR 794), so the two can never disagree about which roles a seat holds.
+ */
+export function seatRolesAt(
+  worktreeRoot: string,
+  team: string | undefined,
+  rosterHomes: Record<string, string> = safeRosterHomes(),
+): { seat: string; home: string; roles: string[] } | undefined {
+  if (!team) return undefined;
+  const binding = readBindingAt(worktreeRoot);
+  const seat = binding ? bindingSeat(binding) : undefined;
+  const home = rosterHomes[team];
+  if (!seat || !home) return undefined;
+  const seatPath = join(home, '.musterd', 'seats', `${seat}.toml`);
+  if (!existsSync(seatPath)) return undefined;
+  try {
+    return { seat, home, roles: seatRoles(parseSeatFile(readFileSync(seatPath, 'utf8'), seat)) };
+  } catch {
+    return undefined;
+  }
 }
 
 function readRole(home: string, role: string): Pick<RoleFile, 'skill'> {

@@ -13,6 +13,7 @@ import {
 import { dirname, resolve, sep } from 'node:path';
 import { machineConfigRoot } from '../../machinePaths.js';
 import type { RoleSkillBridge } from '../roleSkills.js';
+import type { DeclaredSet } from '../seatTools/resolve.js';
 
 /**
  * The injected seams the multi-harness reconciler runs on (ADR 282). Every adapter and store
@@ -79,6 +80,9 @@ export interface HarnessContext {
   /** The skills the bound seat's roles name, found in this worktree — one bridge each on harnesses
    *  that catalog skills (ADR 586 §4). Absent: the caller resolved none, and no bridge is desired. */
   roleSkills?: RoleSkillBridge[];
+  /** The bound seat's declared tool set (ADR 794). Absent: none was resolved, and an adapter
+   *  treats the seat as `source: 'none'` — repo tools and the floor only, never wider. */
+  seatTools?: DeclaredSet;
 }
 
 /** The real filesystem seam. */
