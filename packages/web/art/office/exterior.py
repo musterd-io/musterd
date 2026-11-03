@@ -22,8 +22,10 @@ SETTINGS = ("city", "coast", "mountain")
 MARGIN = 0.04  # of the pane span, each side — slack for the crop
 
 # city palette: a far row in haze, a near row in its own colour, lit windows for the night state
-CITY_FAR = srgb("#9aa3b4")
-CITY_NEAR = srgb("#5a6070")
+CITY_FAR = srgb("#aab4c6")  # palest and bluest: the far row sits deepest in the haze
+CITY_MID = srgb("#7d8597")
+CITY_NEAR = srgb("#545a6a")
+CITY_FG = srgb("#30343f")  # the rooftop right outside — the nearest, darkest thing in the view
 CITY_ROOF = srgb("#8d94a3")
 CITY_LIT = srgb("#ffd27a")
 # coast: sea, sand, a headland in haze, a white lighthouse with a red band
@@ -33,8 +35,14 @@ HEADLAND = srgb("#7d8f86")
 LIGHTHOUSE = srgb("#f2efe6")
 LIGHTHOUSE_BAND = srgb("#c8403a")
 ROCK = srgb("#5c5a55")
+SEA_NEAR = srgb("#4f9fae")  # shallows: lighter and greener than open water
+DUNE = srgb("#cdbb8f")
+GRASS = srgb("#6b7a3f")
 # mountain: a meadow, three ridges near → far (darker → hazier), snow, a timber cabin
 MEADOW = srgb("#6f8f5a")
+MEADOW_NEAR = srgb("#5d7d4a")
+FIR = srgb("#3c5a3a")
+FIR_NEAR = srgb("#2c442b")
 RIDGE = [srgb("#4f6b4e"), srgb("#6c7f8d"), srgb("#9aa7b8")]
 SNOW = srgb("#f4f6fa")
 CABIN = srgb("#6b4a2e")
@@ -80,7 +88,7 @@ def set_lit(state: str) -> None:
     if not m:
         return
     bsdf = m.node_tree.nodes.get("Principled BSDF")
-    bsdf.inputs["Emission Strength"].default_value = 2.4 if state == "night" else 0.0
+    bsdf.inputs["Emission Strength"].default_value = 3.0 if state == "night" else 0.0
 
 
 def build_exterior(setting: str, which: int, zs: float) -> list[bpy.types.Object]:
@@ -89,7 +97,7 @@ def build_exterior(setting: str, which: int, zs: float) -> list[bpy.types.Object
     place = _place(which, zs, col)
     objs: list[bpy.types.Object] = []
     if setting == "city":
-        objs += _city(place, which)
+        objs += _city(place, which, zs, col)
     elif setting == "coast":
         objs += _coast(place, which, zs, col)
     elif setting == "mountain":
@@ -183,9 +191,27 @@ def _coast(place, which: int, zs: float, col) -> list[bpy.types.Object]:
         # a darker band under the horizon, and a few pale wave lines, so the water has depth
         _ramp("sea-far", which, -200, FLOOR + 200, 1250, 1400, sea_z(1250) + 0.3, HORIZON_Z + 0.3, scene.paint("view-sea-far", srgb("#357f93"), 0.35), zs, col),
     ]
+    # the shallows: lighter, greener water nearest the beach, so the sea darkens with distance
+    objs.append(_ramp("sea-near", which, -200, FLOOR + 200, 70, 240, sea_z(70) + 0.2, sea_z(240) + 0.2, scene.paint("view-sea-near", SEA_NEAR, 0.35), zs, col))
     pale = scene.paint("view-wave", srgb("#6fb0c0"), 0.4)
     for k, (d, w) in enumerate(((150, 24), (330, 34), (580, 50), (900, 70))):
         objs.append(_ramp(f"wave{k}", which, -200, FLOOR + 200, d, d + w, sea_z(d) + 0.4, sea_z(d + w) + 0.4, pale, zs, col))
+    # the foreground: a dune right outside the sill, marram grass on its crest, a few fence posts
+    dune = scene.paint("view-dune", DUNE, 0.95)
+    grass = scene.paint("view-grass", GRASS, 0.9)
+    rnd = _lcg(53 + which)
+    line = [(-200 + 30 * k, 63.5 + 3.5 * (0.5 + 0.5 * math.sin(k * 0.55 + which)) + 1.5 * rnd()) for k in range(45)]
+    objs.append(_ridge("dune", which, line, 16, 50, 0, dune, zs, col))
+    for k in range(16):  # marram clumps along the crest: three blades each, leaning apart
+        ca = -20 + k * (FLOOR + 40) / 16 + 20 * rnd()
+        crest = line[min(len(line) - 1, max(0, int((ca + 200) / 30)))][1]
+        for j, lean in enumerate((-2.2, 0.0, 2.2)):
+            gx, gy = _frame(which)(ca + lean, 13)
+            blade = scene.cyl(f"grass{k}-{j}", gx, gy, crest - 1, 1.1, 0.05, 5 + 4 * rnd() + (2 if j == 1 else 0), grass, zs, verts=4)
+            blade.rotation_euler = (0, math.radians(lean * 5), 0) if which == 1 else (math.radians(-lean * 5), 0, 0)
+            objs.append(_adopt(blade, col))
+    for k in range(5):
+        objs.append(place(f"post{k}", (0.08 + 0.21 * k) * FLOOR + 10 * which, 10, 58, 1.4, 1.4, 15 - 2 * (k % 2), rock))
     # the headland: two low domes on the horizon, inside the pane the lighthouse is not in
     ha = 0.37 * FLOOR
     for k, (da, rx, rz) in enumerate(((0, 80, 7), (70, 50, 5))):  # ortho: a dome shows at full size however far
@@ -218,7 +244,16 @@ def _mountain(place, which: int, zs: float, col) -> list[bpy.types.Object]:
     roof = scene.paint("view-cabin-roof", CABIN_ROOF, 0.9)
     lit = _lit("view-lit")
     rnd = _lcg(31 + which)
-    objs = [_ramp("meadow", which, -200, FLOOR + 200, 30, 470, 57, 87, meadow, zs, col)]
+    objs = [
+        _ramp("meadow", which, -200, FLOOR + 200, 30, 470, 57, 87, meadow, zs, col),
+        # the meadow nearest the window is a shade darker, in the shadow of the firs right outside
+        _ramp("meadow-near", which, -200, FLOOR + 200, 30, 90, 57.2, 61.2, scene.paint("view-meadow-near", MEADOW_NEAR, 0.9), zs, col),
+    ]
+    # the foreground: two big firs right outside, cut by the pane edges — the nearest, darkest shapes
+    fir_near = scene.paint("view-fir-near", FIR_NEAR, 0.9)
+    for k, t in enumerate((0.29, 0.765) if which == 0 else (0.44, 0.60)):
+        fx, fy = _frame(which)(t * FLOOR, 30)
+        objs.append(_adopt(scene.cyl(f"fir-near{k}", fx, fy, 58, 13, 0.5, 46, fir_near, zs, verts=8), col))
     # peaks stay under z≈140 (the pane's top is 154): the sky must keep the upper third
     ridges = (("near", 440, 82, 6, 30, 60, 30), ("mid", 800, 86, 14, 40, 80, 40), ("far", 1200, 92, 20, 48, 100, 50))
     for k, (name, d, base, lo, hi, step, zig) in enumerate(ridges):
@@ -238,53 +273,80 @@ def _mountain(place, which: int, zs: float, col) -> list[bpy.types.Object]:
         for k in range(7):  # a stand of firs on the meadow's edge
             fa = 0.2 * FLOOR + k * 60 + 30 * rnd()
             fx, fy = _frame(which)(fa, 360 + 40 * rnd())
-            objs.append(_adopt(scene.cyl(f"fir{k}", fx, fy, 80, 5.5 + 2 * rnd(), 0.3, 14 + 6 * rnd(), scene.paint("view-fir", srgb("#3c5a3a"), 0.9), zs, verts=8), col))
+            objs.append(_adopt(scene.cyl(f"fir{k}", fx, fy, 80, 5.5 + 2 * rnd(), 0.3, 14 + 6 * rnd(), scene.paint("view-fir", FIR, 0.9), zs, verts=8), col))
     return objs
 
 
-def _city(place, which: int) -> list[bpy.types.Object]:
-    """A skyline across the whole wall: a far row high and pale in haze, a near row lower and darker,
-    both dense (a pane spans ~160 units; a block is 8–24), every block turned ~28° so the sun lights
-    one face and leaves the other in shadow. Lit window quads on the near row's room-facing faces.
-    Deterministic: a tiny LCG seeds the heights, so a re-render is the same skyline."""
+def _turn(o: bpy.types.Object, cx: float, cy: float, deg: float) -> None:
+    """Turn `o` by `deg` about the vertical through (cx, cy) — a window quad turns with its block."""
+    r = math.radians(deg)
+    x, y = o.location.x - cx, o.location.y - cy
+    o.location.x = cx + x * math.cos(r) - y * math.sin(r)
+    o.location.y = cy + x * math.sin(r) + y * math.cos(r)
+    o.rotation_euler = (0, 0, r)
+
+
+def _city(place, which: int, zs: float, col) -> list[bpy.types.Object]:
+    """A skyline in four planes, near → far darker → paler (aerial perspective is the only depth an
+    ortho camera has): a far row high and pale in haze, a mid row, a near row in its own darker
+    colour, and right outside the sill a rooftop — parapet, water tower, plant boxes — as the
+    nearest silhouette. Every block is turned ~32° so the sun lights one face and leaves the other in
+    shadow; lit window quads turn with their block (on the near and mid rows), so at night most of
+    the city's windows are on. Deterministic: a tiny LCG seeds the heights."""
     far = scene.paint("view-city-far", CITY_FAR, 0.9)
+    mid = scene.paint("view-city-mid", CITY_MID, 0.88)
     near = scene.paint("view-city-near", CITY_NEAR, 0.85)
     roof = scene.paint("view-city-roof", CITY_ROOF, 0.9)
+    fg = scene.paint("view-city-fg", CITY_FG, 0.9)
     lit = _lit("view-lit")
     ground = 8.0
+    turn = 32.0
     objs = []
     rnd = _lcg(7 + which)
 
-    def row(prefix: str, d: float, depth: float, w_lo: float, w_hi: float, h_lo: float, h_hi: float, mat, gap: float, windows: bool):
+    def row(prefix: str, d: float, depth: float, w_lo: float, w_hi: float, h_lo: float, h_hi: float, mat, gap: float, every: int):
         a = -120.0
         k = 0
         while a < FLOOR + 120:
             w = w_lo + (w_hi - w_lo) * rnd()
             h = h_lo + (h_hi - h_lo) * rnd() ** 1.4
             o = place(f"{prefix}{k}", a + w / 2, d, ground, w, depth, h, mat)
-            o.rotation_euler = (0, 0, math.radians(28))
+            cx, cy = o.location.x, o.location.y
+            o.rotation_euler = (0, 0, math.radians(turn))
             objs.append(o)
-            if windows:
-                r = place(f"{prefix}{k}-roof", a + w / 2, d, ground + h, w + 1, depth + 1, 1.0, roof)
-                r.rotation_euler = (0, 0, math.radians(28))
-                objs.append(r)
+            r = place(f"{prefix}{k}-roof", a + w / 2, d, ground + h, w + 1, depth + 1, 1.0, roof)
+            r.rotation_euler = (0, 0, math.radians(turn))
+            objs.append(r)
+            if every:
                 cols = max(1, int(w // 5))
-                rows = max(1, int(h // 9))
+                rows = max(1, int(h // 8))
                 for rr in range(rows):
                     for c in range(cols):
-                        if (rr * 7 + c * 3 + k) % 3 == 0:
+                        if (rr * 7 + c * 3 + k) % every:  # most on, a scatter dark: an office tower after hours
                             wa = a + (c + 0.5) * (w / cols)
                             wz = ground + 3 + rr * (h - 5) / rows
-                            q = place(f"{prefix}{k}-lit{rr}-{c}", wa, d - depth / 2 - 0.3, wz, 2.2, 0.4, 3.2, lit)
+                            q = place(f"{prefix}{k}-lit{rr}-{c}", wa, d - depth / 2 - 0.3, wz, 2.0, 0.4, 3.0, lit)
+                            _turn(q, cx, cy, turn)
                             objs.append(q)
             a += w + gap
             k += 1
 
-    row("far", 560, 60, 9, 22, 70, 150, far, 3, False)
-    row("mid", 330, 50, 9, 20, 45, 110, far, 4, False)
-    row("near", 150, 46, 10, 24, 28, 78, near, 5, True)
+    row("far", 620, 60, 9, 22, 62, 126, far, 3, 0)
+    row("mid", 380, 50, 9, 20, 52, 108, mid, 4, 3)
+    row("near", 170, 46, 12, 26, 44, 90, near, 6, 4)
     street = scene.paint("view-city-street", srgb("#3a3d47"), 0.95)
     objs.append(place("street", FLOOR / 2, 300, ground - 6, FLOOR + 400, 700, 6, street))
+    # the rooftop right outside: a parapet just above the sill, and a few things standing on it
+    objs.append(place("parapet", FLOOR / 2, 40, 0, FLOOR + 400, 30, 70, fg))
+    for k, (t, w, h) in enumerate(((0.12, 10, 6), (0.33, 14, 5), (0.62, 8, 7), (0.86, 12, 5))):
+        objs.append(place(f"plant{k}", t * FLOOR + 6 * which, 38, 70, w, 8, h, fg))
+    ta = (0.72 if which == 0 else 0.30) * FLOOR  # a water tower: legs, tank, a cone hat
+    tx, ty = _frame(which)(ta, 46)
+    for k in (-4.0, 4.0):
+        objs.append(place(f"tower-leg{k:+.0f}", ta + k, 46, 70, 1.2, 1.2, 12, fg))
+    objs.append(_adopt(scene.cyl("tower-tank", tx, ty, 82, 7.0, 7.0, 14, fg, zs, verts=12), col))
+    objs.append(_adopt(scene.cyl("tower-hat", tx, ty, 96, 7.8, 0.6, 5, fg, zs, verts=12), col))
+    objs.append(place("antenna", ta + 30, 44, 70, 0.8, 0.8, 22, fg))
     return objs
 
 
