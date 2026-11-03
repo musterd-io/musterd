@@ -53,7 +53,18 @@ The wall colour is fine and stays (nick).
    an idle member sometimes walks over and sits there (nick: "maybe 1 new place to sit. the rest just
    furniture").
 5. **Books that look real** on every shelf (nick): different heights and thicknesses, some leaning,
-   some stacked flat, spines with bands. Likely also gaps and the odd object or bookend.
+   some stacked flat, spines with bands. Likely also gaps and the odd object or bookend. **Things on
+   top of the bookcases too** (nick: "we can also put stuff ontop of the top shelf of bookcases"): a
+   few objects per unit, like a small plant, a vase, a globe, a box or a trophy, sized so they read
+   on the unit's top.
+6. **Three signs that delight** (nick: the signs "need work … not polished enough, not magical,
+   beautiful, delightful enough"). The three are the **wiki** sign over the wiki shelf, the
+   **settings** tab under the working-hours calendar, and the **work board** sign over the lane board.
+   nick picked direction A from three mockups: **carved oak with raised gold-leaf lettering, hung on
+   short brass chains, each with a small brass picture light above it**. All three share that family.
+   The calendar card and the board frame take the same oak-and-gold finish; the hours, the days and
+   the notes on the board stay live data, set in the same gold and cream so they look engraved.
+   **The lamps glow after dark** and throw a soft warm pool on the wall; by day they are just brass.
 
 ## Non-goals
 
@@ -62,6 +73,9 @@ The wall colour is fine and stays (nick).
 - The books stand for nothing. They are not wiki pages, lanes or anything from team data.
 - No more than one new seat. The display pieces are not destinations.
 - No change to the figures.
+- **No change to what the signs do.** Wiki opens the wiki, the calendar opens settings, the board
+  opens the work board, exactly as now; /broadcast still shows them and nothing opens. Their hover
+  promise (the lift and warm glow on the hotspot) stays.
 
 ## Anti-goals (a failure even if it works)
 
@@ -83,6 +97,7 @@ The tool split, as proposed in the session and accepted by nick ("sounds good"):
 | --- | --- | --- |
 | The five paintings | An image model, once, offline; committed as images | They are flat pictures; a model gives fine-art texture no script can |
 | Frames, mats, plinths, rugs, the side table, shelves, books | Blender scripts (`scene.py`) | Structural pieces that must match the room's light; text that diffs |
+| The three signs: oak boards, gold lettering, brass chains and lamps | Blender scripts (`scene.py`), wall fixtures like the frames | The lettering is modelled, so it catches the room's light; a DOM tag cannot |
 | Sculptures, vases, the floor lamp, the nook armchair, magazine rack, coat stand | Meshy (ADR 755), finished in Blender with the room's matte materials | One-off organic shapes that are slow to model by hand |
 
 The image model used for the brainstorm samples is **Z-Image-Turbo** (`Tongyi-MAI/Z-Image-Turbo`,
@@ -119,6 +134,12 @@ art tool like Blender or Meshy; nothing generates at runtime.
   deliberate raise, logged in `docs/perf/web-live-baseline.md` (ADR 151/183).
 - **Walking paths.** No new piece may sit on a path or a seat's approach. The office already checks
   layout in `layout.test.ts`. New pieces join that check.
+- **The signs are canvas art; the doors stay DOM.** Today the wiki and work-board signs are DOM tags
+  (`.lc-boardspot__tag` in `Live.css`) and the settings tab is a DOM tab (`.lc-hoursspot__tab`),
+  laid over the canvas by `index.ts` from `boardAnchor`/`shelfAnchor`. The new signs are rendered
+  wall fixtures. The hotspot buttons stay, invisible over the rendered sign, keeping their accessible
+  names, the hover glow, the 24px tap floor, and the red pending-pairing dot. The tap-target and
+  contrast gates (`a11y:targets:check`, `a11y:check`) must stay green.
 - **The new seat** joins the existing leisure system (`LEISURE_SPOTS`, `seating.ts`), not a new one.
 - **Meshy** is used under ADR 755's rules: static props only, untextured, finished in Blender.
 
@@ -151,5 +172,5 @@ art tool like Blender or Meshy; nothing generates at runtime.
 - The book generator's parameters, as long as it gives every listed look and stays deterministic.
 - Whether the image model's use needs an ADR of its own, like ADR 755 for Meshy. Probably yes: it is a
   new source of committed art. If so, it lands before the paintings do.
-- How to cut this into increments. A natural split: (1) paintings, (2) books, (3) floor pieces and the
-  nook.
+- How to cut this into increments. A natural split: (1) paintings, (2) the signs, (3) books, (4) floor
+  pieces and the nook.
