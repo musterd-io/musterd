@@ -1253,5 +1253,9 @@ answer's text.
   (`manual` | `auto`, default `manual`) and `autonomy` (`ask` | `claim` | `free`, default `ask`).
 - `MemberSummary.shift` MAY carry `{state: on | off | ending, since, until, budget_left_usd,
   stop_reason: hours_end | budget | no_work | stopped | null}` for an agent seat; null otherwise.
+- The residency policy gains `autonomy_goals` (optional, at most 20 goal ids; ADR 793). A seat on
+  shift with nothing claimed recommends open lanes once per shift as an ADR 773 question to the
+  team at `ask`; at `claim` (a lane on a listed goal) or `free` (any lane) it claims one itself, and
+  never a lane with a risk tag. `shift_start: auto` starts its shift once a day inside working hours.
 - A seat on shift is woken for each lane it owns in `claimed` or `active`, past its hourly cap and
   cooldown. The wake order is a board work order (`derivation: work_order`, `lane_id`, no act).

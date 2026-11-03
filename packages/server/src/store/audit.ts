@@ -560,6 +560,9 @@ export type AuditAction =
   // ADR 792: a seat's shift opened and closed — who, the reason, never a body.
   | 'shift.started'
   | 'shift.stopped'
+  // ADR 793: an on-shift seat out of work recommended lanes to a person, or claimed one alone.
+  | 'shift.recommended'
+  | 'shift.claimed'
   | 'pr_event.sent'
   | 'pr_watch.unavailable'
   | 'question.notify_set'
@@ -958,6 +961,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'app.quick_action': 'actor',
   'shift.started': 'target',
   'shift.stopped': 'target',
+  'shift.recommended': 'target',
+  'shift.claimed': 'target',
   'pr_event.sent': 'none',
   'pr_watch.unavailable': 'none',
   'question.notify_set': 'actor',
