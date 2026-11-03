@@ -6,6 +6,7 @@ import { roomTone, screenPan, type LifeContext } from '../sound';
 import type { Moment } from '../soundLife';
 import { gestureFor } from '../soundVoice';
 import { DESK_GLOW_S } from './deskGlow';
+import { BELL_SWING_S, bellSwing } from './bell';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
@@ -1126,6 +1127,16 @@ export function mountOffice(
     }
     return false;
   };
+  /** When the goal bell was last struck, scene-clock seconds: it swings for `BELL_SWING_S` after. */
+  let bellRungAt = -Infinity;
+  const bellSwinging = (): boolean => clock - bellRungAt < BELL_SWING_S;
+  /** Ring the goal bell: the sound and the swing. Audio is not motion; under reduced motion the
+   *  bell still rings and only tilts a little. */
+  const ringTheBell = (): void => {
+    roomTone.moment('goalDone', boardPan());
+    bellRungAt = clock;
+    ensureLoop();
+  };
   /** Where the work board hangs, as a stereo pan: the goal bell rings from there. */
   const boardPan = (): number => screenPan(boardAnchor(fit).x + boardAnchor(fit).w / 2, width);
   let seededOwners: ReadonlyMap<string, string> | undefined; // the board map last handed to `laneOwners.seed`
@@ -1321,7 +1332,7 @@ export function mountOffice(
       recep,
       wallBoardNow(),
       teamWorkingHours,
-      { welcome: welcomeRoom.paint, rendered, weather, deskGlows, visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
+      { welcome: welcomeRoom.paint, rendered, weather, deskGlows, bellAngle: bellSwing(clock - bellRungAt, reduced ? 0.08 : 0.35), visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
     );
     heads = anchors.heads;
     // The receptionist's bubble anchor — synthetic head above her desk. syncLabels skips names
@@ -2497,7 +2508,7 @@ export function mountOffice(
       recep,
       f.board,
       teamWorkingHours,
-      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, deskGlows, visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
+      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, deskGlows, bellAngle: bellSwing(clock - bellRungAt, reduced ? 0.08 : 0.35), visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
     );
     if (units) units.run(() => drawCues(c));
     else drawCues(c);
@@ -2917,7 +2928,7 @@ export function mountOffice(
 
   /** Is anything actually happening right now? One home — two doors used to spell this out separately. */
   const alive = () =>
-    living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active()) || desksGlowing();
+    living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active()) || desksGlowing() || bellSwinging();
   /*
    * Coming back to a room that stopped being watched. There are two doors — the tab becoming visible
    * again and the panel re-expanding — and they ask the SAME question: the loop if the room is alive,
@@ -3677,9 +3688,8 @@ export function mountOffice(
     if (ev.kind === 'goal-done' && !replaying) {
       // A goal's last lane dings first; the bell waits out the gap rather than landing on it.
       const wait = Math.max(0, 420 - (Date.now() - lastLaneDoneAt));
-      const ring = () => roomTone.moment('goalDone', boardPan());
-      if (wait === 0) ring();
-      else setTimeout(ring, wait);
+      if (wait === 0) ringTheBell();
+      else setTimeout(ringTheBell, wait);
     }
     if (ev.kind === 'walk-handoff') {
       // Passing hands (§2.3): one note at the sender's desk, the answer a third up at the receiver's.

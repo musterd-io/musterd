@@ -372,6 +372,14 @@ at runtime (`render.ts` `drawInteriorLight`); the DOM doors over the signs are i
 (`index.ts` `signDoor`, `.lc-signdoor`). The board's frame (`board-oak`) and the calendar card share
 the signs' stain.
 
+## The goal bell (lane 01M6HHH5EH)
+
+`scene.py` `wall_bell` builds the brass bell over the work board's top-left corner from `BELL` (a copy
+of `bell.ts` `BELL`; `bell.test.ts` holds them equal) as two assets: `wall/bell-bracket` (the wall
+plate, the arm and the yoke) and `wall/bell` (crown, waist, lip and clapper), which the runtime turns
+about its pivot in the wall's plane (`bell.ts` `wallTurn`) while it rings. The rope is painted live
+so it follows the swing. Render with `--only wall/bell-bracket,wall/bell`.
+
 ## The paintings (ADR 789, lane 01M6FXB2CA)
 
 The five frames hold original paintings made with an image model (Z-Image-Turbo, Apache-2.0), one source

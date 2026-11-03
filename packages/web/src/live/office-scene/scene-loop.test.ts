@@ -435,8 +435,11 @@ describe('the musterd voice at its objects (sound identity spec §2.2–2.3, lan
   });
   it('rings the goal bell for a goal shipped, waiting out the gate behind its last lane', () => {
     expect(emitBody).toContain("ev.kind === 'goal-done' && !replaying");
-    expect(emitBody).toContain("roomTone.moment('goalDone', boardPan())");
+    expect(emitBody).toContain('setTimeout(ringTheBell, wait)');
     expect(emitBody).toContain('420 - (Date.now() - lastLaneDoneAt)');
+    const ring = index.slice(index.indexOf('const ringTheBell ='), index.indexOf('};', index.indexOf('const ringTheBell =')));
+    expect(ring).toContain("roomTone.moment('goalDone', boardPan())");
+    expect(ring).toContain('bellRungAt = clock');
   });
   it('a question and a redirect ring the bell at the desk they are aimed at, above the motion gate', () => {
     expect(emitBody).toContain("gesture === 'question' || gesture === 'redirect'");
@@ -457,8 +460,8 @@ describe('the musterd voice at its objects (sound identity spec §2.2–2.3, lan
 
 describe('a lane done glows the closer\'s desk (goal bell spec)', () => {
   it('keeps the loop alive while a desk glows and hands the glows to both paints', () => {
-    expect(index).toContain('|| desksGlowing()');
-    expect((index.match(/weather, deskGlows, visitor/g) ?? []).length).toBe(2);
+    expect(index).toContain('|| desksGlowing() || bellSwinging()');
+    expect((index.match(/weather, deskGlows, bellAngle: bellSwing\(clock - bellRungAt, reduced \? 0\.08 : 0\.35\), visitor/g) ?? []).length).toBe(2);
     expect(index).not.toContain('chime');
   });
 });

@@ -73,6 +73,7 @@ import { formatWorkingHours } from './workingHours';
 import { drawPainting, paintingQuad, PRINT_DROP, printDepth, printOpening } from './paintings';
 import { SIGN_NAMES, SIGNS } from './signs';
 import { deskGlowAlpha, drawDeskGlow } from './deskGlow';
+import { BELL, bellPivot, ROPE, wallTurn } from './bell';
 
 /**
  * Canvas-2D drawing for the office. Everything is painter-ordered by logical depth (lx+ly) so seated
@@ -1067,6 +1068,49 @@ function fitTextSize(
 }
 
 /**
+ * The goal bell (lane 01M6HHH5EH): the bracket, then the bell turned `angle` about its pivot in the
+ * wall's plane, then its hemp rope from the clapper to hand height, the bottom trailing the swing.
+ */
+function goalBell(ctx: CanvasRenderingContext2D, fit: Fit, art: RenderedAssets, angle: number): void {
+  const edge = WALL_EDGES[BELL.wall]!;
+  const [fx, fy] = edge(BELL.tc);
+  blitIf(ctx, fit, art, 'wall/bell-bracket', fx, fy);
+  const pivot = bellPivot(fit);
+  const m = wallTurn(fit, pivot, angle);
+  ctx.save();
+  ctx.transform(m.a!, m.b!, m.c!, m.d!, m.e!, m.f!);
+  blitIf(ctx, fit, art, 'wall/bell', fx, fy);
+  ctx.restore();
+  // the rope, in the bell's plane: its top rides the clapper, its bottom lags half the swing
+  const off = { x: pivot.x - wallPt(edge, BELL.tc, BELL.pivotU, fit).x, y: pivot.y - wallPt(edge, BELL.tc, BELL.pivotU, fit).y };
+  const at = (t: number, u: number): Pt => {
+    const p = wallPt(edge, t, u, fit);
+    return { x: p.x + off.x, y: p.y + off.y };
+  };
+  const t0 = at(BELL.tc, ROPE.uTop);
+  const top = { x: m.a! * t0.x + m.c! * t0.y + m.e!, y: m.b! * t0.x + m.d! * t0.y + m.f! };
+  const len = (ROPE.uTop - ROPE.uBottom) * WALL_H;
+  const bottom = at(BELL.tc + (Math.sin(angle * 0.5) * len) / FLOOR, ROPE.uBottom);
+  const mid = at(BELL.tc + (Math.sin(angle * 0.8) * len * 0.5) / FLOOR, (ROPE.uTop + ROPE.uBottom) / 2);
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const [w, c] of [[1.5, '#7d6748'], [0.9, '#c4ab80']] as const) {
+    ctx.lineWidth = w * fit.scale;
+    ctx.strokeStyle = c;
+    ctx.beginPath();
+    ctx.moveTo(top.x, top.y);
+    ctx.quadraticCurveTo(mid.x, mid.y, bottom.x, bottom.y);
+    ctx.stroke();
+  }
+  // the tassel
+  ctx.fillStyle = '#a8411f';
+  ctx.beginPath();
+  ctx.ellipse(bottom.x, bottom.y + 2.2 * fit.scale, 1.2 * fit.scale, 2.6 * fit.scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
  * What paints on the rendered walls (lane 01M5D8EJ40). The faces, windows, frames, mats, the planter, the
  * clock's dial and the board's cork are in the room render and `wall/*` assets; this draws what is live or
  * printed over them: the prints on their mats, the clock's hands (it reads the office hour), the
@@ -1092,6 +1136,8 @@ export function drawWalls(
   art: RenderedAssets,
   /** The sky at the windows (lane 01M5XS6597): clear draws nothing, the rest paint over the panes. */
   weather: Weather = 'clear',
+  /** The goal bell's angle off plumb, radians (RenderOpts.bellAngle). */
+  bellAngle = 0,
 ): void {
   /**
    * What each wall carries. The right wall gets the clock (it is the only one whose `+t` runs screen-right,
@@ -1130,6 +1176,9 @@ export function drawWalls(
       run(() => {
         if (blitIf(ctx, fit, art, 'wall/board', bx, by)) wallLaneBoard(ctx, fit, edge, wallBoard);
       });
+      // The goal bell over the board's top-left corner (lane 01M6HHH5EH): its own unit, so a swing
+      // damages the bell and not the board beside it.
+      run(() => goalBell(ctx, fit, art, bellAngle));
       return;
     }
     const [hx, hy] = edge(0.52);
@@ -1872,6 +1921,8 @@ export interface RenderOpts {
   /** When each member last closed a lane, in scene-clock seconds (goal bell spec): their desk glows
    *  for `DESK_GLOW_S` after it. Absent → no desk glows. */
   deskGlows?: ReadonlyMap<string, number> | undefined;
+  /** The goal bell's angle off plumb, radians (`bell.ts` `bellSwing`). Absent → it hangs still. */
+  bellAngle?: number | undefined;
   /**
    * The pre-rendered art (office realism, plan Task 2 onward): every static item, the room's light
    * states, the figure sheets and the dog. An asset that failed to load is simply not drawn.
@@ -4462,7 +4513,7 @@ export function renderScene(
       blitIf(c, fit, rendered, `room/ceiling-${ceiling}`, 0, 0, 1 - 0.8 * env.daylight);
       c.restore();
     }
-    if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, undefined, rendered, opts.weather);
+    if (!cache) drawWalls(c, fit, env, teamWorkingHours, wallBoard, t, undefined, rendered, opts.weather, opts.bellAngle);
     if (!cache) rugs(c);
   };
   /* Flat floor paint, drawn with the floor (before every solid and every actor) so a member standing
@@ -4487,7 +4538,7 @@ export function renderScene(
     run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
     // On the stage, in their existing order: the live fixtures over the blitted walls, then the
     // additive bulb strands (see `drawWalls`).
-    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather);
+    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather, opts.bellAngle);
     // Source-over floor paint, so it caches cleanly on top of the shell.
     run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));
   } else {
