@@ -124,6 +124,12 @@ where a plausible shortcut becomes a takeover path.
   submission lands on, so `'self'` alone aborted the 303 from `/auth/github/start` to github.com in
   the browser (`net::ERR_ABORTED`) — the second thing the first real sign-in found, after the
   referrer policy above. The list is derived from the pinned endpoints, one home.
+- _2026-11-03 (fifty, lane 01M3Z44MTV):_ the pinned GitHub issuer is
+  `https://github.com/login/oauth`, not the bare origin. GitHub's callback carries an RFC 9207
+  `iss` parameter with that value and `openid-client` refuses a callback whose `iss` differs from
+  the pinned issuer, so every real sign-in answered 400 (`signin_exchange_failed`, `ClientError`)
+  — the third thing the first real sign-in found. An `oauth.test.ts` case pins the string and
+  checks a foreign `iss` is still refused.
 
 ## Observability & Evaluation
 

@@ -33,7 +33,10 @@ export const PINNED: Record<ProviderId, ProviderEndpoints> = {
     jwks_uri: 'https://www.googleapis.com/oauth2/v3/certs',
   },
   github: {
-    issuer: 'https://github.com',
+    // GitHub's callback carries `iss=https://github.com/login/oauth` (RFC 9207), and
+    // `openid-client` refuses a callback whose `iss` differs from this string. Observed live on
+    // 2026-11-02 (lane 01M3Z44MTV); `https://github.com` made every real sign-in fail.
+    issuer: 'https://github.com/login/oauth',
     authorization_endpoint: 'https://github.com/login/oauth/authorize',
     token_endpoint: 'https://github.com/login/oauth/access_token',
     user_endpoint: 'https://api.github.com/user',
