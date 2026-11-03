@@ -92,6 +92,15 @@ The phone cannot send a quick action, and it cannot show the seats it would send
   - **a host can wake it:** Start, plus Resume and Check PR with a lane;
   - **nothing can wake it:** no buttons.
   Each seat is one compact row, with icon buttons. The line under the name says what a press did.
+- 2026-11-03 (lane `01M6HXB3MK`, nick on build 45): **Start** "didn't send". The relay was fixed
+  by then. The press failed on the phone: `PhoneKeys.signQuestion` signs only messages that carry
+  the question-answer domain tag (ADR 774), and decision 3 of this ADR, signing quick actions with
+  that key, never reached the Swift allowlist. The question key now also signs
+  `musterd-app-quick-action/v1`, and nothing else. A question key that refuses still falls back to
+  Face ID instead of failing the press. **Check inbox** and **Resume** now show on every seat,
+  because a sleeping seat reads them when it wakes. Start shows only on a sleeping seat a host can
+  wake, Stop only on a live seat, and Check PR only with a lane. Every button is a small chip with
+  a label.
 
 ## Observability & Evaluation
 

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { appQuickActionSigningBytes } from '@musterd/protocol/app-channel';
 import { describe, expect, it } from 'vitest';
 import {
   ACTION_QUESTION_CHOICE_PREFIX,
@@ -35,6 +36,18 @@ describe('the Swift extension matches the TypeScript sentences', () => {
     expect(notice).toContain('reached \\(seat).');
     expect(notice).toContain('is offline. \\(label) waits in its inbox.');
     expect(keys).toContain('"quick_action":');
+    // The silent question key signs a quick action (nick, build 45: Start didn't send without it).
+    const bytes = appQuickActionSigningBytes({
+      team: 't',
+      binding: 'b',
+      seat: 's',
+      action: 'start',
+      nonce: 'n',
+      ts: 1,
+    });
+    const tag = bytes.slice(0, bytes.indexOf('\n') + 1).replace('\n', '\\n');
+    expect(keys).toContain(`quickActionTag = "${tag}"`);
+    expect(keys).toContain('message.hasPrefix(quickActionTag)');
   });
 
   it('pins the lock-screen copy and the action identifiers', () => {

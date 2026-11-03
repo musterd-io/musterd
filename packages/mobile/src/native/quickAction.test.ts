@@ -107,6 +107,22 @@ describe('sendQuickAction', () => {
     );
   });
 
+  it('falls back to Face ID when the question key will not sign', async () => {
+    vi.mocked(phoneKeys.questionEnrollment).mockReturnValue({
+      binding: 'bind-1',
+      key: KEY,
+      expires_at: NOW,
+    });
+    vi.mocked(phoneKeys.signQuestion).mockRejectedValueOnce(
+      Object.assign(new Error('no'), { code: 'unavailable' }),
+    );
+    expect(
+      await sendQuickAction({ pin, seat: 'fifty', action: 'start', now: NOW, fetchImpl: posted() }),
+    ).toBe('sent');
+    expect(phoneKeys.sign).toHaveBeenCalledOnce();
+    expect(JSON.parse(vi.mocked(phoneKeys.seal).mock.calls[0]![0].plaintext).key).toBe('signing');
+  });
+
   it('uses the Face ID key before the question key is enrolled for this binding', async () => {
     vi.mocked(phoneKeys.questionEnrollment).mockReturnValue({
       binding: 'other-binding',
@@ -241,18 +257,16 @@ describe('quick action copy', () => {
       'resume',
       'stop',
     ]);
-    expect(seatActions({ online: true, wakeable: false, lane: null })).toEqual([
-      'check_inbox',
-      'resume',
-      'stop',
-    ]);
     expect(seatActions({ online: false, wakeable: true, lane })).toEqual([
       'start',
-      'resume',
+      'check_inbox',
       'check_pr',
+      'resume',
     ]);
-    expect(seatActions({ online: false, wakeable: true, lane: null })).toEqual(['start']);
-    // Nothing can wake it, so no button: a steer would only wait. Never Stop on an offline seat.
-    expect(seatActions({ online: false, wakeable: false, lane })).toEqual([]);
+    // Never Stop on an offline seat, never Start on a live one or one nothing can wake.
+    expect(seatActions({ online: false, wakeable: false, lane: null })).toEqual([
+      'check_inbox',
+      'resume',
+    ]);
   });
 });

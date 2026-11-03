@@ -26,7 +26,7 @@ const SETTLE_MS = 4_000;
  * A seat's quick actions (ADR 779/791/792), only those that fit the seat (`seatActions`). One tap,
  * no Face ID once the question key is on (nick, 2026-11-03). A press says Sending…, then Sent or
  * Couldn't send for a few seconds; `onOutcome` lets the screen say more. What the seat did comes
- * back as a quiet notification. `compact`: icon-only, for a seat row.
+ * back as a quiet notification. `compact`: smaller chips, for a seat row.
  */
 export function QuickActions({
   pin,
@@ -91,15 +91,16 @@ export function QuickActions({
             accessibilityLabel={`${label} ${seat}`}
             accessibilityState={{ busy: at === 'sending' }}
             {...(at && at !== 'sending' ? { accessibilityValue: { text: shown } } : {})}
-            hitSlop={compact ? 4 : 0}
+            hitSlop={compact ? 6 : 0}
             onPress={() => void press(action)}
             style={[
-              compact ? styles.dot : styles.chip,
+              styles.chip,
+              compact && styles.small,
               { backgroundColor: sent ? p.tint : p.raised },
             ]}
           >
-            <Icon name={icon} color={fg} size={compact ? 15 : 13} />
-            {compact ? null : <Text style={[styles.text, { color: fg }]}>{shown}</Text>}
+            <Icon name={icon} color={fg} size={compact ? 12 : 13} />
+            <Text style={[styles.text, compact && styles.smallText, { color: fg }]}>{shown}</Text>
           </Squish>
         );
       })}
@@ -109,7 +110,7 @@ export function QuickActions({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  compactRow: { flexWrap: 'nowrap', gap: 6 },
+  compactRow: { gap: 6 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -118,12 +119,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
   },
-  dot: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  small: { minHeight: 32, paddingHorizontal: space.sm + 2, gap: 5 },
   text: { fontFamily: font.semibold, fontSize: 14 },
+  smallText: { fontSize: 13 },
 });

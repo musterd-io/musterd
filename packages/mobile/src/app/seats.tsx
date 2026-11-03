@@ -132,43 +132,49 @@ function SeatCard({ pin, seat }: { pin: PairingPin; seat: RosterSeat }) {
     setSaid(
       outcome === 'sent'
         ? { text: `${label} sent`, bad: false }
-        : { text: `${label} didn’t send. Check your connection.`, bad: true },
+        : { text: `${label} didn’t send. Try again.`, bad: true },
     );
     clearTimeout(clear.current);
     clear.current = setTimeout(() => setSaid(null), 6_000);
   };
   const state = seat.online ? 'online' : seat.wakeable ? 'asleep' : 'offline';
   const line =
-    said?.text ?? seat.lane?.title ?? (actions.length === 0 ? 'Can’t be woken from here' : null);
+    said?.text ??
+    seat.lane?.title ??
+    (seat.online || seat.wakeable
+      ? null
+      : 'Can’t be woken from here: it sees these when it’s back');
   return (
     <Glass style={styles.card}>
-      <View>
-        <Seat name={seat.seat} agent size={32} />
-        <View
-          style={[
-            styles.dot,
-            { backgroundColor: seat.online ? p.success : p.placeholder, borderColor: p.surface },
-          ]}
-        />
-      </View>
-      <View style={styles.who}>
-        <Text numberOfLines={1} style={[styles.name, { color: p.text }]}>
-          {seat.seat}
-          <Text style={[styles.meta, { color: p.muted }]}>{`  ${state}`}</Text>
-        </Text>
-        {line ? (
-          <Text
-            numberOfLines={1}
-            accessibilityLabel={said || !seat.lane ? line : `Their lane: ${line}`}
-            style={[styles.meta, { color: said?.bad ? p.danger : said ? p.accentText : p.muted }]}
-          >
-            {line}
+      <View style={styles.top}>
+        <View>
+          <Seat name={seat.seat} agent size={32} />
+          <View
+            style={[
+              styles.dot,
+              { backgroundColor: seat.online ? p.success : p.placeholder, borderColor: p.surface },
+            ]}
+          />
+        </View>
+        <View style={styles.who}>
+          <Text numberOfLines={1} style={[styles.name, { color: p.text }]}>
+            {seat.seat}
+            <Text style={[styles.meta, { color: p.muted }]}>{`  ${state}`}</Text>
           </Text>
-        ) : null}
+          {line ? (
+            <Text
+              numberOfLines={1}
+              accessibilityLabel={said || !seat.lane ? line : `Their lane: ${line}`}
+              style={[styles.meta, { color: said?.bad ? p.danger : said ? p.accentText : p.muted }]}
+            >
+              {line}
+            </Text>
+          ) : null}
+        </View>
       </View>
-      {actions.length > 0 ? (
+      <View style={styles.actions}>
         <QuickActions pin={pin} seat={seat.seat} actions={actions} compact onOutcome={onOutcome} />
-      ) : null}
+      </View>
     </Glass>
   );
 }
@@ -181,13 +187,10 @@ const styles = StyleSheet.create({
   banner: { borderRadius: radius.md, padding: space.lg },
   bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
   empty: { fontFamily: font.regular, fontSize: 15, textAlign: 'center', marginTop: space.xl },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingVertical: space.sm + 2,
-    paddingHorizontal: space.md,
-  },
+  card: { paddingVertical: space.sm + 2, paddingHorizontal: space.md, gap: space.sm },
+  top: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  // Under the name, not under the avatar: the row reads as one seat.
+  actions: { paddingLeft: 32 + space.md },
   who: { flex: 1, gap: 1 },
   name: { fontFamily: font.semibold, fontSize: 15 },
   dot: {

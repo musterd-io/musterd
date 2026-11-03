@@ -76,9 +76,10 @@ export const QUICK_ACTION_ORDER = Object.keys(QUICK_ACTION_LABELS) as QuickActio
 
 /**
  * The actions that make sense for a seat as the roster shows it (nick, build 44: "shouldn't all
- * the buttons be contextual?"). A live seat can be checked, resumed or stopped; Start would only
- * re-orient it. A seat a host can wake gets Start, which reads the inbox first. Check PR and a
- * sleeping seat's Resume need a lane. A seat nothing can wake gets none: its steer would only wait.
+ * the buttons be contextual?"; build 45: "what happened to the check inbox and other actions?").
+ * Check inbox and Resume are always there: a sleeping seat reads them when it wakes or comes back.
+ * Start only for a seat that is not live, Stop only for one that is, Check PR only with a lane.
+ * Start on a seat nothing can wake would do nothing now, so it is left off.
  */
 export function seatActions(seat: {
   online: boolean;
@@ -86,10 +87,13 @@ export function seatActions(seat: {
   lane: unknown;
 }): QuickAction[] {
   const lane = seat.lane !== null;
-  if (seat.online)
-    return ['check_inbox', ...(lane ? (['check_pr'] as const) : []), 'resume', 'stop'];
-  if (seat.wakeable) return ['start', ...(lane ? (['resume', 'check_pr'] as const) : [])];
-  return [];
+  return [
+    ...(!seat.online && seat.wakeable ? (['start'] as const) : []),
+    'check_inbox',
+    ...(lane ? (['check_pr'] as const) : []),
+    'resume',
+    ...(seat.online ? (['stop'] as const) : []),
+  ];
 }
 
 export const ROSTER_TEXT = 'Seats updated.';

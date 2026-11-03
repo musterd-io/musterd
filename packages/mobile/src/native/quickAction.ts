@@ -99,7 +99,7 @@ export async function sendQuickAction(input: {
   let body: AppQuickAction;
   try {
     const nonce = await phoneKeys.randomNonce();
-    const key = (await silentKey(pin)) ? 'question' : 'signing';
+    let key: 'question' | 'signing' = (await silentKey(pin)) ? 'question' : 'signing';
     const bytes = appQuickActionSigningBytes({
       team: pin.team,
       binding: pin.binding,
@@ -108,8 +108,17 @@ export async function sendQuickAction(input: {
       nonce,
       ts: now,
     });
-    const signature =
-      key === 'question' ? await phoneKeys.signQuestion(bytes) : await phoneKeys.sign(bytes);
+    let signature: string;
+    try {
+      signature =
+        key === 'question' ? await phoneKeys.signQuestion(bytes) : await phoneKeys.sign(bytes);
+    } catch (error) {
+      // A question key that will not sign this (an older native build, or a key the enclave lost)
+      // falls back to Face ID rather than failing the press.
+      if (key !== 'question') throw error;
+      key = 'signing';
+      signature = await phoneKeys.sign(bytes);
+    }
     const parsed = AppQuickActionSchema.safeParse({
       v: 1,
       seat,
