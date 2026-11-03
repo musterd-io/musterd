@@ -160,6 +160,18 @@ export const ResidencyPolicySchema = z.object({
   dream_nightly_wakes: z.number().int().min(1).max(3).default(1),
   /** Optional ceiling on a seat's reported dream cost per night. Stops the next lease, never kills. */
   dream_budget_usd: z.number().positive().max(100).optional(),
+  /**
+   * ADR 792: a seat on shift spends at most this much (USD) in the team's calendar day; reached,
+   * the shift stops with reason `budget`. Never unset: $10 unless a team or seat says otherwise
+   * (nick, 2026-11-03). An unpriced wake counts as the seat's 7-day median priced wake, else $0.50.
+   */
+  shift_budget_usd: z.number().positive().max(100).default(10),
+  /** ADR 792: `manual` — on shift only on a person's Start; `auto` — on shift when hours open
+   *  (increment 3; stored now, not yet acted on). */
+  shift_start: z.enum(['manual', 'auto']).default('manual'),
+  /** ADR 792: what an on-shift seat may take on alone when its claimed work runs out. `ask`
+   *  recommends and waits; `claim` and `free` are increment 3 (stored now, not yet acted on). */
+  autonomy: z.enum(['ask', 'claim', 'free']).default('ask'),
 });
 export type ResidencyPolicy = z.infer<typeof ResidencyPolicySchema>;
 

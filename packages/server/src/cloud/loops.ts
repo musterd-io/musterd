@@ -19,6 +19,8 @@ export const LOOPS = [
   'away_relay',
   'lane_watch',
   'pr_watch',
+  // ADR 792: stops shifts on their guardrails and says so.
+  'shift_watch',
 ] as const;
 export type LoopName = (typeof LOOPS)[number];
 

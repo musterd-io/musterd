@@ -15,13 +15,18 @@ export const QUICK_ACTION_LABEL: Record<QuickAction, string> = {
   check_inbox: 'Check inbox',
   check_pr: 'Check PR',
   resume: 'Resume',
+  stop: 'Stop',
 };
+
+/** The four always on the bar; Stop joins them while the seat is on shift (ADR 792). */
+const BAR_ACTIONS = QUICK_ACTIONS.filter((a) => a !== 'stop');
 
 const QUICK_ACTION_HINT: Record<QuickAction, string> = {
   start: 'Wake it to orient and answer what waits',
   check_inbox: 'Wake it to read its inbox and act',
   check_pr: "musterd checks its lane's PR and tells it",
   resume: 'Wake it on its last lane, branch and memory',
+  stop: 'End its shift; a running wake finishes first',
 };
 
 export function sendQuickAction(cfg: LiveConfig, seat: string, action: QuickAction) {
@@ -37,7 +42,11 @@ export type StartResult = 'started' | 'offline';
 export type StartAllReply = { seats: { seat: string; result: StartResult }[] };
 
 export function startEveryone(cfg: LiveConfig): Promise<StartAllReply> {
-  return apiPost<StartAllReply>(cfg, `/teams/${encodeURIComponent(cfg.team)}/quick-actions/start-all`, {});
+  return apiPost<StartAllReply>(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/quick-actions/start-all`,
+    {},
+  );
 }
 
 /** "Started 3 · 2 offline" — the counts that are not zero, in that order. A Start passes the wake
@@ -53,8 +62,18 @@ export function startAllSummary(seats: StartAllReply['seats']): string {
 
 type Sent = { action: QuickAction; ok: boolean; text: string } | null;
 
-/** One seat's four buttons, with what just happened said beside them in plain words. */
-export function QuickActionBar({ cfg, seat, compact = false }: { cfg: LiveConfig; seat: string; compact?: boolean }) {
+/** One seat's four buttons (and Stop while it is on shift), with what just happened said beside them in plain words. */
+export function QuickActionBar({
+  cfg,
+  seat,
+  compact = false,
+  onShift = false,
+}: {
+  cfg: LiveConfig;
+  seat: string;
+  compact?: boolean;
+  onShift?: boolean;
+}) {
   const [busy, setBusy] = useState<QuickAction | null>(null);
   const [sent, setSent] = useState<Sent>(null);
   const run = async (action: QuickAction) => {
@@ -69,9 +88,13 @@ export function QuickActionBar({ cfg, seat, compact = false }: { cfg: LiveConfig
     }
   };
   return (
-    <div className={`qa${compact ? ' qa--compact' : ''}`} role="group" aria-label={`Quick actions for ${seat}`}>
+    <div
+      className={`qa${compact ? ' qa--compact' : ''}`}
+      role="group"
+      aria-label={`Quick actions for ${seat}`}
+    >
       <div className="qa__row">
-        {QUICK_ACTIONS.map((a) => (
+        {(onShift ? QUICK_ACTIONS : BAR_ACTIONS).map((a) => (
           <button
             key={a}
             type="button"

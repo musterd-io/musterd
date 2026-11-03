@@ -78,6 +78,16 @@ describe('MemberSummary.residence (ADR 503 Decision 5)', () => {
 
   it('is nullish — null is "enrolled, no node bound"; absent is an older daemon', () => {
     expect(MemberSummarySchema.parse({ ...summary, residence: null }).residence).toBeNull();
+    // ADR 792: the shift rides the same summary; null for a human or no shift today.
+    expect(MemberSummarySchema.parse({ ...summary, shift: null }).shift).toBeNull();
+    const shift = {
+      state: 'ending',
+      since: 5,
+      until: null,
+      budget_left_usd: 0,
+      stop_reason: 'budget',
+    };
+    expect(MemberSummarySchema.parse({ ...summary, shift }).shift).toEqual(shift);
     expect(MemberSummarySchema.parse(summary).residence).toBeUndefined();
   });
 

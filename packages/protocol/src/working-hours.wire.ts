@@ -142,3 +142,17 @@ export function nightKey(hours: WorkingHours, at: number): string | null {
   const ended = lastWorkingDayEnd(hours, at);
   return ended === null ? null : localDate(hours.timezone, ended);
 }
+
+/** ADR 792: the instant the local calendar day containing `at` began, in `timezone`. A shift's
+ *  budget day starts here. */
+export function localDayStart(timezone: string, at: number): number {
+  return zonedInstant(timezone, localDate(timezone, at), 0);
+}
+
+/** ADR 792: the instant today's working window ends, in the schedule's timezone — the `until` of a
+ *  shift started inside it. Null on a day the schedule does not work. */
+export function workingDayEndToday(hours: WorkingHours, at: number): number | null {
+  const today = localDate(hours.timezone, at);
+  if (!hours.days.includes(weekdayOf(today))) return null;
+  return zonedInstant(hours.timezone, today, clockMinutes(hours.end));
+}

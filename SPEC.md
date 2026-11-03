@@ -1242,3 +1242,14 @@ answer's text.
   started | offline}`.
 - A server sends the binding a sealed `roster {ts, seats: [{seat, online, wakeable, lane}]}` after
   pairing and on each `redeliver`; at most 64 seats, `lane` the seat's one live lane or null.
+
+## A.34 Seats on shift (unreleased — ADR 792)
+
+- `quick_action` gains `stop`. A person's `start` to an agent seat opens that seat's shift for the
+  day; `stop` closes it. A `stop` steer is delivered but MUST NOT be a wake reason.
+- The residency policy gains `shift_budget_usd` (default 10, 0 < x ≤ 100), `shift_start`
+  (`manual` | `auto`, default `manual`) and `autonomy` (`ask` | `claim` | `free`, default `ask`).
+- `MemberSummary.shift` MAY carry `{state: on | off | ending, since, until, budget_left_usd,
+  stop_reason: hours_end | budget | no_work | stopped | null}` for an agent seat; null otherwise.
+- A seat on shift is woken for each lane it owns in `claimed` or `active`, past its hourly cap and
+  cooldown. The wake order is a board work order (`derivation: work_order`, `lane_id`, no act).

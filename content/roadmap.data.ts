@@ -801,7 +801,7 @@ const RAW: RawItem[] = [
     plan: 'reserved',
     category: 'platform',
     blurb:
-      'availability and lifecycle: until are stored today but not enforced. Later: honor windows for routing and auto-expire members.',
+      'availability and lifecycle: until are stored today but not enforced; working hours are enforced for one use, a seat on shift (ADR 792). Later: honor windows for routing and auto-expire members.',
     detail:
       'The one governance-completion piece that did not ship with the Wave 2 rock (v0.3 P2): availability windows and lifecycle: until are stored but not yet enforced for routing/expiry. Moved out of the now-complete Wave 2 to later — a follow-on to the shipped P2 enforcement with no near-term pull.',
     dependsOn: ['v03-p2-enforcement'],

@@ -14,6 +14,7 @@ import type {
   WakeGateState,
   WakeLane,
   WakeOrder,
+  WorkingHours,
   Residence,
 } from '@musterd/protocol';
 import {
@@ -26,6 +27,7 @@ import {
   ResidencyPolicyOverrideSchema,
   ResidencyPolicySchema,
   WakeGateStateSchema,
+  workingDayEndToday,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
@@ -51,9 +53,17 @@ import {
   rowToEnvelope,
 } from './messages.js';
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
-import { answerLineFor } from './questions.js';
+import { answerLineFor, waitingSeats } from './questions.js';
 import { lastActionBySubject } from './quiescence.js';
 import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
+import {
+  getShift,
+  shiftDay,
+  shiftDayStart,
+  shiftHours,
+  shiftSpentUsd,
+  shiftStopDue,
+} from './shift.js';
 import { getPolicy, getTeamById, spendApprovalUsd } from './teams.js';
 import { deriveContext } from './wakeContextBody.js';
 
@@ -917,7 +927,11 @@ export async function listWakeableMemberIds(db: Driver, teamId: string): Promise
 }
 
 /** A seat's live (unexpired, unreported) lease, if any — the mutual-exclusion read. */
-async function liveLease(db: Driver, memberId: string, now: number): Promise<WakeLeaseRow | null> {
+export async function liveLease(
+  db: Driver,
+  memberId: string,
+  now: number,
+): Promise<WakeLeaseRow | null> {
   return (
     (await db.get<WakeLeaseRow>(
       "SELECT * FROM wake_leases WHERE member_id = ? AND status = 'leased' AND expires_at > ? LIMIT 1",
@@ -1262,6 +1276,100 @@ interface WakeCandidate {
   act_ts?: number;
   /** ADR 790: set when a human sender is the only reason this candidate passed the rate gates. */
   human_pass?: true;
+  /** ADR 792: a shift wake for an owned lane — passes the rate gates, carries its own line. */
+  shift?: { line: string };
+}
+
+/**
+ * ADR 792: the shift wake's line. `until` is formatted in the schedule's timezone; a shift with no
+ * clock end (started outside hours) says only its budget. The lane by id only (ADR 179: a lane
+ * title is seat-written text and never rides a spawn prompt); the seat reads it in its context.
+ */
+export function shiftLineFor(
+  seat: string,
+  teamSlug: string,
+  shift: { until: number | null; leftUsd: number; timezone: string },
+  lane: { id: string },
+): string {
+  const until =
+    shift.until === null
+      ? ''
+      : ` until ${new Intl.DateTimeFormat('en-GB', { timeZone: shift.timezone, hour: '2-digit', minute: '2-digit' }).format(shift.until)}`;
+  return (
+    `${wakePrefix(teamSlug)} you are seat "${seat}": you are on shift${until} ` +
+    `(budget $${shift.leftUsd.toFixed(2)} left). Your lane ${lane.id} is claimed and not done — ` +
+    `continue it. Check your inbox first (${POINTER}), then team_wake_context {lane_id: "${lane.id}"}.`
+  );
+}
+
+/**
+ * ADR 792: is this seat on shift right now with room to work? Null when no shift is on today, a
+ * stop is due (the shift watch writes it), or the seat waits on its own open question (the answer
+ * is a person's act and wakes it anyway).
+ */
+async function onShiftNow(
+  db: Driver,
+  teamId: string,
+  member: MemberRow,
+  hours: WorkingHours | null,
+  budgetUsd: number,
+  now: number,
+): Promise<{ until: number | null; leftUsd: number; timezone: string } | null> {
+  const row = await getShift(db, teamId, member.id, shiftDay(hours, now));
+  if (row?.state !== 'on') return null;
+  const spent = await shiftSpentUsd(db, teamId, member.name, shiftDayStart(hours, now), now);
+  if (shiftStopDue(row, hours, spent, budgetUsd, now) !== null) return null;
+  if ((await waitingSeats(db, teamId)).has(member.name)) return null;
+  return {
+    until: row.inside_hours === 1 && hours !== null ? workingDayEndToday(hours, now) : null,
+    leftUsd: Math.max(0, budgetUsd - spent),
+    timezone: hours?.timezone ?? 'UTC',
+  };
+}
+
+/**
+ * ADR 792: one shift candidate per lane the seat owns in `claimed` or `active`. Shaped as an ADR 199
+ * dispatch continuation, so the ADR 306/628 guards (lane moved since the last wake, the success cap,
+ * the edge breaker, owner engaged) bind it, and an older host runs it as the work order it knows.
+ */
+async function dueShiftWorkCandidates(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  member: MemberRow,
+  shift: { until: number | null; leftUsd: number; timezone: string },
+): Promise<WakeCandidate[]> {
+  const out: WakeCandidate[] = [];
+  for (const lane of await listLanes(db, teamId, teamSlug, { owner: member.name })) {
+    if (lane.state !== 'claimed' && lane.state !== 'active') continue;
+    out.push({
+      lane: 'batched',
+      derivation: 'work_order',
+      lane_id: lane.id,
+      work_order_kind: 'dispatch',
+      shift: { line: shiftLineFor(member.name, teamSlug, shift, lane) },
+    });
+  }
+  return out;
+}
+
+/** ADR 792: a person's Stop is delivered but never wakes the seat it stops. */
+async function isStopSteer(
+  db: Driver,
+  teamId: string,
+  actId: string | undefined,
+): Promise<boolean> {
+  if (actId === undefined) return false;
+  const row = await db.get<{ meta: string | null }>(
+    "SELECT meta FROM messages WHERE team_id = ? AND id = ? AND act = 'steer'",
+    [teamId, actId],
+  );
+  if (!row?.meta) return false;
+  try {
+    return (JSON.parse(row.meta) as { quick_action?: unknown }).quick_action === 'stop';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -2546,18 +2654,41 @@ async function deriveSeatPasses(
     if (reviewLoopOn && policy.flow === 'auto' && cooled) {
       candidates.unshift(...(await dueReviewWorkOrders(db, teamId, teamSlug, member)));
     }
+    // ADR 792: on shift, each owned lane that is claimed and not done is due — after the inbox, so
+    // a directed act still leads. It replaces the dispatch continuation for the same lane.
+    const shift =
+      member.kind === 'agent'
+        ? await onShiftNow(
+            db,
+            teamId,
+            member,
+            shiftHours(member, teamHours),
+            policy.shift_budget_usd,
+            now,
+          )
+        : null;
+    if (shift) {
+      const work = await dueShiftWorkCandidates(db, teamId, teamSlug, member, shift);
+      const lanes = new Set(work.map((w) => w.lane_id));
+      candidates = candidates.filter(
+        (c) => !(loopEdgeOf(c) === 'dispatch_continuation' && lanes.has(c.lane_id)),
+      );
+      candidates.push(...work);
+    }
     // ADR 790: an immediate candidate passes the cooldown (ADR 131 §4, as before); a human-sent
     // one passes the cooldown and the cap. Everything after this still binds every candidate.
     const kept: WakeCandidate[] = [];
     for (const c of candidates) {
-      const rateOk = !capped && (cooled || c.lane === 'immediate');
+      if (c.act === 'steer' && (await isStopSteer(db, teamId, c.act_id))) continue;
+      // ADR 792: a shift candidate is claimed work a person put the seat on shift for.
+      const rateOk = c.shift !== undefined || (!capped && (cooled || c.lane === 'immediate'));
       if (rateOk) kept.push(c);
       else if (await humanSent(db, teamId, c, humanSenders)) kept.push({ ...c, human_pass: true });
     }
     candidates = kept;
     // ADR 753's gate keeps its meaning for every other sender; a human pass records `passed`.
     gate(
-      candidates.some((c) => c.human_pass)
+      candidates.some((c) => c.human_pass || c.shift)
         ? 'passed'
         : capped
           ? 'hourly_cap'
@@ -2734,7 +2865,13 @@ async function deriveSeatPasses(
       // ADR 628: the owner is on it — suppress the duplicate, nudge at most once per window.
       // Runs only where a lease would otherwise mint (after every skip above): a suppression is
       // a decision about this candidate, not a verdict on the seat.
-      if (edge === 'dispatch_continuation' && candidate.lane_id !== undefined) {
+      // ADR 792: not for a shift wake — on shift the "recent act" is the seat's own last wake, and a
+      // live session in the seat is already the `present` gate (or the deferral snooze) above.
+      if (
+        edge === 'dispatch_continuation' &&
+        candidate.lane_id !== undefined &&
+        candidate.shift === undefined
+      ) {
         const engagement = await ownerEngaged(db, teamId, member, presenceTimeoutMs, now);
         if (engagement.engaged) {
           // ADR 646: one row per episode — the first suppression inside a window writes the row
@@ -2795,6 +2932,7 @@ async function deriveSeatPasses(
       pass.suppressed.length === 0 &&
       !pass.claimsHeld &&
       policy.dream_enabled &&
+      shift === null &&
       cooled &&
       !capped
     ) {
@@ -2998,6 +3136,7 @@ async function writeSeatPass(
           ...(c.lane_id !== undefined ? { lane_id: c.lane_id } : {}),
           ...(edge !== null ? { edge } : {}),
           ...(c.human_pass ? { human_pass: true } : {}),
+          ...(c.shift ? { shift: true } : {}),
         },
       });
       const isWorkOrder = c.derivation === 'work_order';
@@ -3028,11 +3167,19 @@ async function writeSeatPass(
         ...(c.sender !== undefined ? { sender: c.sender } : {}),
         ...(c.act_ts !== undefined ? { act_ts: c.act_ts } : {}),
         lane: c.lane,
-        composed_line: isWorkOrder
-          ? composeWorkOrderLine(member.name, teamSlug, c.lane_id!, kind, c.act_id)
-          : (answered?.line ??
-            quickLine ??
-            composeWakeLine(member.name, teamSlug, c.act ?? 'message', c.sender ?? '?', c.act_id)),
+        composed_line: c.shift
+          ? c.shift.line
+          : isWorkOrder
+            ? composeWorkOrderLine(member.name, teamSlug, c.lane_id!, kind, c.act_id)
+            : (answered?.line ??
+              quickLine ??
+              composeWakeLine(
+                member.name,
+                teamSlug,
+                c.act ?? 'message',
+                c.sender ?? '?',
+                c.act_id,
+              )),
         ...(answered?.recap ? { composed_recap_line: answered.recap } : {}),
         expires_at: lease.expires_at,
         tool_policy: isWorkOrder ? 'seat-policy' : policy.tool_policy,

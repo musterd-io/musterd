@@ -19,12 +19,21 @@ describe('Start everyone results (seats ask 2c)', () => {
 
 describe('QuickActionBar (seats ask 2c)', () => {
   it('offers the four actions for the seat, in order', () => {
-    const html = renderToStaticMarkup(createElement(QuickActionBar, { cfg: {} as LiveConfig, seat: 'ryder' }));
+    const html = renderToStaticMarkup(
+      createElement(QuickActionBar, { cfg: {} as LiveConfig, seat: 'ryder' }),
+    );
     expect(html).toContain('aria-label="Quick actions for ryder"');
     const labels = [...html.matchAll(/class="qa__btn"[^>]*>([^<]+)</g)].map((m) => m[1]);
     expect(labels).toEqual(['Start', 'Check inbox', 'Check PR', 'Resume']);
   });
-  it('says each seat\'s result in words, and no string says capped', () => {
+  it('offers Stop only while the seat is on shift (ADR 792)', () => {
+    const on = renderToStaticMarkup(
+      createElement(QuickActionBar, { cfg: {} as LiveConfig, seat: 'ryder', onShift: true }),
+    );
+    const labels = [...on.matchAll(/class="qa__btn"[^>]*>([^<]+)</g)].map((m) => m[1]);
+    expect(labels).toEqual(['Start', 'Check inbox', 'Check PR', 'Resume', 'Stop']);
+  });
+  it("says each seat's result in words, and no string says capped", () => {
     const html = renderToStaticMarkup(
       createElement(StartAllResults, {
         seats: [

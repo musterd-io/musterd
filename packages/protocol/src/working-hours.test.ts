@@ -5,7 +5,9 @@ import {
   isWithinWorkingHours,
   lastWorkingDayEnd,
   localDate,
+  localDayStart,
   nightKey,
+  workingDayEndToday,
   workingDayStart,
 } from './working-hours.js';
 
@@ -87,5 +89,22 @@ describe('working-hours clock (ADR 494)', () => {
     expect(workingDayStart(everyDay, morning)).toBe(at('2026-10-02T15:00:00Z'));
     expect(localDate('America/Los_Angeles', morning)).toBe('2026-10-02');
     expect(workingDayStart(everyDay, at('2026-10-02T10:00:00Z'))).toBeNull();
+  });
+});
+
+describe('shift day helpers (ADR 792)', () => {
+  // 2026-11-03 is a Tuesday; Pacific is UTC-8 (PST) that day.
+  const at = (iso: string) => Date.parse(iso);
+  it('the day starts at local midnight: 23:50 and 00:10 Pacific are different days', () => {
+    const late = at('2026-11-04T07:50:00Z'); // 23:50 Pacific, Tue
+    const early = at('2026-11-04T08:10:00Z'); // 00:10 Pacific, Wed — same UTC day
+    expect(localDayStart('America/Los_Angeles', late)).toBe(at('2026-11-03T08:00:00Z'));
+    expect(localDayStart('America/Los_Angeles', early)).toBe(at('2026-11-04T08:00:00Z'));
+  });
+  it("today's hours end, or null on a day off", () => {
+    expect(workingDayEndToday(reviveHours as never, at('2026-11-03T20:00:00Z'))).toBe(
+      at('2026-11-03T23:00:00Z'),
+    );
+    expect(workingDayEndToday(reviveHours as never, at('2026-11-08T20:00:00Z'))).toBeNull(); // Sun
   });
 });

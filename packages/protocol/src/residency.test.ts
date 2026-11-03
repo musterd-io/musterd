@@ -24,6 +24,18 @@ import {
   dreamBlocker,
   isDreamDue,
 } from './residency.js';
+import { ShiftStateSchema } from './shift.js';
+
+describe('ShiftStateSchema (ADR 792)', () => {
+  it('round-trips an on shift and refuses an unknown stop reason', () => {
+    const on = { state: 'on', since: 1, until: 2, budget_left_usd: 4.1, stop_reason: null };
+    expect(ShiftStateSchema.parse(on)).toEqual(on);
+    expect(ShiftStateSchema.safeParse({ ...on, state: 'off', stop_reason: 'bored' }).success).toBe(
+      false,
+    );
+    expect(ShiftStateSchema.safeParse({ ...on, budget_left_usd: -1 }).success).toBe(false);
+  });
+});
 
 describe('ResidencyPolicySchema (ADR 735) — the act lane and the wider hourly cap', () => {
   it('accepts lane: act and an hourly cap up to 60, and refuses past it', () => {
@@ -63,7 +75,18 @@ describe('ResidencyPolicySchema (ADR 131 inc 5) — the knobs, defaults in ONE p
       work_timeout_ms: 30 * 60_000,
       dream_enabled: false,
       dream_nightly_wakes: 1,
+      // ADR 792: a shift is never unbudgeted, starts by hand, and asks before taking on work.
+      shift_budget_usd: 10,
+      shift_start: 'manual',
+      autonomy: 'ask',
     });
+  });
+
+  it('ADR 792: the shift budget is positive and at most $100', () => {
+    expect(ResidencyPolicySchema.safeParse({ shift_budget_usd: 0 }).success).toBe(false);
+    expect(ResidencyPolicySchema.safeParse({ shift_budget_usd: 101 }).success).toBe(false);
+    expect(ResidencyPolicySchema.parse({ shift_budget_usd: 25 }).shift_budget_usd).toBe(25);
+    expect(ResidencyPolicySchema.safeParse({ autonomy: 'yolo' }).success).toBe(false);
   });
 
   it('ships huddle convening OFF until the cross-machine run settles it (ADR 386)', () => {

@@ -1,4 +1,5 @@
 import type { MemberSummary } from '@musterd/protocol';
+import { shiftLabel } from '@musterd/protocol/wire';
 import { QuickActionBar } from './quickActions';
 import { lazy, Suspense, useState } from 'react';
 import {
@@ -284,6 +285,14 @@ export function SeatDetail({
             {wokenBadge().label}
           </span>
         )}
+        {m.kind === 'agent' && m.shift && (
+          <span
+            className={`lc-stat lc-stat--${m.shift.state === 'on' ? 'woken' : 'quiet'}`}
+            title="Its shift today (ADR 792): Start puts it on shift; hours, the day's budget or no work end it"
+          >
+            {shiftLabel(m.shift, m.working_hours?.timezone)}
+          </span>
+        )}
         {online && m.presences?.[0]?.hearing === 'deaf' && (
           <span
             className="lc-stat lc-stat--quiet"
@@ -383,7 +392,9 @@ export function SeatDetail({
         the route never selects content — and empty when this viewer may not read the seat. */}
       {cfg && <SeatTraceToggle cfg={cfg} seat={m.name} />}
       {/* Seats ask 2c: Start / Check inbox / Check PR / Resume, for a person, on an agent seat. */}
-      {cfg && canAct && m.kind === 'agent' && <QuickActionBar cfg={cfg} seat={m.name} compact />}
+      {cfg && canAct && m.kind === 'agent' && (
+        <QuickActionBar cfg={cfg} seat={m.name} compact onShift={m.shift?.state === 'on'} />
+      )}
       {/* ADR 501 Decision 5: the halt button renders from the daemon's `can_halt` ALONE — never from
           the viewer's role in this client — and only for a signed-in viewer. */}
       {cfg && m.can_halt === true && (

@@ -94,6 +94,18 @@ describe('formatRoster (the agent-facing roster)', () => {
     expect(formatMember(long)).not.toContain('…');
   });
 
+  it("names an agent seat's shift today, and nothing when it has none (ADR 792)", () => {
+    const shift = {
+      state: 'off' as const,
+      since: 1,
+      until: null,
+      budget_left_usd: 0,
+      stop_reason: 'budget' as const,
+    };
+    expect(formatMember({ ...out, shift })).toContain('off shift (budget spent)');
+    expect(formatMember(out)).not.toContain('shift');
+  });
+
   it("says when a working label came from the seat's lane, not a status (ADR 726)", () => {
     const fromLane = { ...working, state: 'lane watch build', state_source: 'lane' as const };
     expect(formatMember(fromLane)).toContain('— on lane: lane watch build');

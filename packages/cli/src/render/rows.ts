@@ -4,6 +4,7 @@ import {
   envelopePosition,
   huddleTopics,
   MODEL_UNKNOWN,
+  shiftLabel,
   type Activity,
   type Envelope,
   type MemberKind,
@@ -468,6 +469,8 @@ function memberFacets(
     if (m.resumable_at != null && Date.now() - m.resumable_at < 30 * 24 * 60 * 60 * 1000)
       parts.push('resumable');
   }
+  // ADR 792: the seat's shift today, the same words `/live` and `team_status` print.
+  if (m.kind === 'agent' && m.shift) parts.push(shiftLabel(m.shift, m.working_hours?.timezone));
   if (group === 'away') parts.push(availabilityLabel(m) ?? 'away');
   return parts.join(` ${sym.dot} `);
 }

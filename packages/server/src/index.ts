@@ -32,6 +32,7 @@ import { startRosterWatcher } from './projection/watcher.js';
 import { startLaneWatch, sweepLaneWatches } from './protocol/laneWatch.js';
 import { startPrWatch } from './protocol/prWatch.js';
 import { routeEnvelope } from './protocol/route.js';
+import { startShiftWatch } from './protocol/shiftWatch.js';
 import { startSeedsIngest } from './seeds/ingest.js';
 import { appendAudit } from './store/audit.js';
 import { countDiversityFlagsByTeam } from './store/mast.js';
@@ -408,6 +409,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let stopAwayRelay: (() => void) | null = null;
   let stopLaneWatch: (() => void) | null = null;
   let stopPrWatch: (() => void) | null = null;
+  let stopShiftWatch: (() => void) | null = null;
   let stopDigest: (() => void) | null = null;
   let stopSync: (() => void) | null = null;
   let stopPull: (() => void) | null = null;
@@ -518,6 +520,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           if (loops.has('lane_watch')) stopLaneWatch = startLaneWatch(opCtx);
           // ADR 779 §4: tell a lane's owner when its PR merges, goes red, or goes green again.
           if (loops.has('pr_watch')) stopPrWatch = startPrWatch(opCtx);
+          // ADR 792: a shift stops on hours, budget or no work, and the board says so.
+          if (loops.has('shift_watch')) stopShiftWatch = startShiftWatch(opCtx);
           // ADR 494 §5: the morning digest, posted at each team's working-hours start.
           if (loops.has('digest')) stopDigest = startDigestSchedule(opCtx);
           if (loops.has('sync_push')) stopSync = startSyncPush(opCtx);
@@ -694,6 +698,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopAwayRelay?.();
         stopLaneWatch?.();
         stopPrWatch?.();
+        stopShiftWatch?.();
         pulses.dispose();
         stopDigest?.();
         stopSync?.();

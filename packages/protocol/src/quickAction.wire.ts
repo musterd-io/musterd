@@ -4,7 +4,9 @@
  * phone read the vocabulary without a validator. `quickAction.ts` builds the schemas.
  */
 
-export const QUICK_ACTIONS = ['start', 'check_inbox', 'check_pr', 'resume'] as const;
+/** ADR 792 adds `stop`: end the seat's shift. It is delivered like the others but never wakes a
+ *  seat — a running session reads it at its next tool boundary and wraps up. */
+export const QUICK_ACTIONS = ['start', 'check_inbox', 'check_pr', 'resume', 'stop'] as const;
 export type QuickAction = (typeof QUICK_ACTIONS)[number];
 
 export const PR_EVENT_STATES = ['merged', 'ci_red', 'ci_green'] as const;
@@ -70,6 +72,8 @@ export function composeQuickActionLine(p: {
         return lane
           ? `pick up lane ${lane}${branch ? ` on branch ${branch}` : ''} where you left off; read your seat memory first (team_memory_read).`
           : 'pick up where you left off: read your seat memory (team_memory_read), then team_next.';
+      case 'stop':
+        return 'your shift is over: finish the step you are on, save where you left off (team_memory_save), and end your turn.';
     }
   })();
   return `${head}${ask} (act ${p.actId})`;
