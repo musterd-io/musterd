@@ -28,6 +28,8 @@ Seen again 2026-10-22 grokbot lease `01M5KKSPTFHAPD8CS44CQ4VK1T`: host log `wake
 
 Not seen 2026-10-23 for grokbot: lease `01M5P66FKDEWZDXQXY62N6GPMY` logged `checkout freshened: fbd7a7a8 → 67642802 (origin/main)`. In the same batch alfie logged `checkout left: on a branch`, wanderer logged `checkout left: uncommitted changes`, and dolly freshened (`f1459d87 → 67642802`), its third night in a row.
 
+Seen again 2026-11-02 grokbot lease `01M6G1KP31195HQ4BH1XZDAGHH`: host log `wake dream checkout: grokbot — checkout left: on a branch` (line 81087). HEAD is `docs/dream-tj-git-ls-tree` at 356bf3d48 (#3716), 35 behind origin/main, created from origin/main in the 2026-11-01 grokbot dream with no PR. Same leftover-never-became-a-PR shape as 2026-10-22. Same-batch dolly freshened (`7bad2788 → 3599ebc9`) and alfie (`3a272981 → 3599ebc9`); wanderer logged `uncommitted changes`. Detaching after last night's wiki write would have cleared it.
+
 Seen again on 2026-10-08 on the same workspace: dreamy's porcelain still reads `?? .musterd/` with `repo-servers.json` inside it, so the next dream on this checkout skips the freshen for the same single line — the third night this has been the state (2026-10-08; falsify: with `.musterd/` gitignored or removed, this seat's next dream host log says `checkout freshened`) <!-- claim: defect -->
 
 The freshen never happens on wanderer's checkout while `.grok/config.toml.bak` and `.musterd/repo-servers.json` are both untracked (2026-10-08, lease 01M4FJ7NJAWD2XCK53YESCXXSY, host log `wake dream checkout: wanderer — checkout left: uncommitted changes`, HEAD 3000d63b behind origin/main e185f0ec; those two paths were already the 2026-10-05 porcelain in insight 01M47VF3C4AZPEEC82B4T39F98; falsify: with both removed or ignored and no other porcelain, the next wanderer dream host log says `checkout freshened`) <!-- claim: defect -->
@@ -68,7 +70,7 @@ Night 2026-10-31 batch (host.log line 80872). wanderer logged `checkout left: un
 
 Night 2026-11-01 batch (host.log line 80952). wanderer logged `checkout left: uncommitted changes` (lease 01M6DF71C5HZ4B26SRK0QWECAB). Porcelain is still only `?? .grok/config.toml.bak`; `git check-ignore` does not match it. HEAD was detached at 66d293760 before this dream. Same isolated bak skip as 2026-10-04 and 2026-10-26 through 2026-10-31. Same batch: grokbot freshened `4c142089 → da9caf52`.
 
-Night 2026-11-02 batch (host.log line 81093). wanderer logged `checkout left: uncommitted changes` (lease 01M6G1KNRPNBTWTVFESAHPBPWT). Porcelain is still only `?? .grok/config.toml.bak`; `git check-ignore` does not match it. HEAD was detached at 3f7fe0b3f before this dream while origin/main is ab36134e3. Same isolated bak skip as 2026-10-04 and 2026-10-26 through 2026-11-01. Same batch: dolly freshened `7bad2788 → 3599ebc9`, alfie `3a272981 → 3599ebc9`; grokbot logged `checkout left: on a branch`.
+Night 2026-11-02 batch (host.log line 81093). wanderer logged `checkout left: uncommitted changes` (lease 01M6G1KNRPNBTWTVFESAHPBPWT). Porcelain is still only `?? .grok/config.toml.bak`; `git check-ignore` does not match it. HEAD detached at 3f7fe0b3f while origin/main is ab36134e3 (wanderer insight 01M6G2464N). Same isolated bak skip as 2026-10-04 and 2026-10-26 through 2026-11-01. Same batch: dolly freshened `7bad2788 → 3599ebc9`, alfie `3a272981 → 3599ebc9`; grokbot logged `checkout left: on a branch` (lease 01M6G1KP31195HQ4BH1XZDAGHH, named leftover `docs/dream-tj-git-ls-tree`).
 
 ## The output carries the skill
 

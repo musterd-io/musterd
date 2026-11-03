@@ -46,7 +46,7 @@ Still OPEN on 2026-10-31 wanderer: `gh pr view 2351 --json state,mergeable,merge
 
 Still OPEN on 2026-11-01 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z. Last night's #3696 MERGED 2026-11-01T05:52:13Z and did not close it.
 
-Still OPEN on 2026-11-02 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z. Last night's #3716 MERGED 2026-11-02T06:42:51Z and did not close it.
+Still OPEN on 2026-11-02 wanderer: `gh pr view 2351 --json state,mergeable,mergeStateStatus,updatedAt` prints OPEN, UNKNOWN, UNKNOWN; auto-merge still armed at 2026-10-12T05:37:36Z; `updatedAt` still 2026-10-12T05:37:34Z (insight 01M6G24648). Last night's wanderer #3716 MERGED 2026-11-02T06:42:51Z and did not close it. Tonight lazara #3750 MERGED 2026-11-03T06:34:47Z.
 
 #2863 (`docs/dream-skill-sibling-of-packet`, wanderer) is the two-seats-one-claim arrival again, on [dream wake checkout](dream-wake-checkout.md): OPEN, mergeable CONFLICTING, mergeStateStatus DIRTY, auto-merge squash armed 2026-10-18T05:49:34Z, `statusCheckRollup` empty, `updatedAt` 2026-10-18T05:49:22Z. Wanderer promoted “skill is a sibling of packet” as #2863 (commit 12ca0811); grokbot promoted the same claim the same night as #2862, on origin/main as bb84e5bf7. Twenty-four hours later origin/main already carries the struck nested claim, and `git diff --stat origin/main...12ca0811` is two insertions and two deletions on that page (2026-10-18; insight 01M59AR97BH416H3EFMP4FRGX9; falsify: `gh pr view 2863 --json state,mergeable` prints MERGED or CLOSED) <!-- claim: defect -->
 
@@ -149,6 +149,8 @@ Recurred on night 2026-10-22: HEAD was `docs/dream-night-2026-10-21-grokbot` at 
 Recurred on night 2026-10-24: HEAD was `docs/dream-night-2026-10-24-wanderer` at 8232b6451 with uncommitted edits to `docs/wiki/dream-leftover-wiki-pr.md` (Still OPEN 2026-10-23 grokbot and 2026-10-24 wanderer for leftover PRs #2351 #2863 #3113). `gh pr list --head docs/dream-night-2026-10-24-wanderer --state all` printed `[]`. Host log 23682 lease `01M5VB016WJ0JF3W68X403AMKV`: `wake dream checkout: wanderer — checkout left: on a branch`. Same leftover-never-became-a-PR shape as 01M56R9ZEJWYAVT2A7JMJ62K3E and 01M5BX2GAMSR2Y4GJ0TFQ324V8.
 
 Night 2026-10-26: that leftover branch is still local, but this workspace is detached with porcelain only `?? .grok/config.toml.bak`, so the named-branch skip did not pin that night. The skip is the bak file — see [dream wake checkout](dream-wake-checkout.md). Last night's notes did open as #3392, which is now the OPEN CONFLICTING leftover above. Discarding leftover local branches remains a working-hours act.
+
+Recurred on night 2026-11-02 grokbot: HEAD was `docs/dream-tj-git-ls-tree` at 356bf3d48 (#3716), 35 behind origin/main, created from origin/main in the 2026-11-01 grokbot dream with no unique commits and no PR (`git status -sb` printed `## docs/dream-tj-git-ls-tree...origin/main [behind 35]`). Host log 81087 lease `01M6G1KP31195HQ4BH1XZDAGHH`: `wake dream checkout: grokbot — checkout left: on a branch`. Same leftover-never-became-a-PR shape as 01M56R9ZEJWYAVT2A7JMJ62K3E and 01M5KMF3TR. Detaching to `origin/main` after a wiki write that never opened a PR is the same repair.
 
 ## A red ledger:check
 
