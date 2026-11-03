@@ -1244,6 +1244,25 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
     sqlite: (db) => db.exec(INTERRUPT_WINDOW_INDEX_SQL),
     postgres: async () => {},
   },
+  {
+    // v140 — ADR 792 (lane 01M6H8BPVD): a seat's shift, one row per seat per day — `day` is the
+    // calendar date in the seat's working-hours timezone. `ending` is a stop while a wake still
+    // runs. The budget is not stored here: it is summed live from `residency.wake_cost` rows, so a
+    // cost reported after the lease settled still counts. Team-owned.
+    version: 140,
+    sql: `CREATE TABLE IF NOT EXISTS shifts (
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  member_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('on', 'off', 'ending')),
+  started_at BIGINT NOT NULL,
+  started_by TEXT NOT NULL,
+  inside_hours INTEGER NOT NULL,
+  stopped_at BIGINT,
+  stop_reason TEXT CHECK (stop_reason IN ('hours_end', 'budget', 'no_work', 'stopped')),
+  PRIMARY KEY (team_id, member_id, day)
+)`,
+  },
 ];
 
 /** The interrupt window's text guard (interruptCandidates.ts): a necessary condition for a row to
