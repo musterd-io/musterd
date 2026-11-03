@@ -244,3 +244,22 @@ export async function shiftStateOf(
     stop_reason: row.stop_reason,
   };
 }
+
+/**
+ * ADR 795: what a person added to this seat's budget for `day`, on a Start after a `budget` stop.
+ * The day's budget is the policy's plus this; it never carries to another day.
+ */
+export async function budgetRaisedUsd(
+  db: Driver,
+  teamId: string,
+  seat: string,
+  day: string,
+): Promise<number> {
+  const rows = await db.all<{ usd: number | null }>(
+    `SELECT json_extract(detail, '$.usd') AS usd FROM audit
+       WHERE team_id = ? AND action = 'shift.budget_raised' AND target = ?
+         AND json_extract(detail, '$.day') = ?`,
+    [teamId, seat, day],
+  );
+  return rows.reduce((sum, r) => sum + (typeof r.usd === 'number' ? r.usd : 0), 0);
+}

@@ -57,6 +57,7 @@ import { answerLineFor, waitingSeats } from './questions.js';
 import { lastActionBySubject } from './quiescence.js';
 import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
 import {
+  budgetRaisedUsd,
   getShift,
   shiftDay,
   shiftDayStart,
@@ -1318,6 +1319,8 @@ async function onShiftNow(
   const row = await getShift(db, teamId, member.id, shiftDay(hours, now));
   if (row?.state !== 'on') return null;
   const spent = await shiftSpentUsd(db, teamId, member.name, shiftDayStart(hours, now), now);
+  // ADR 795: plus what a person added to today's budget after a `budget` stop.
+  budgetUsd += await budgetRaisedUsd(db, teamId, member.name, row.day);
   if (shiftStopDue(row, hours, spent, budgetUsd, now) !== null) return null;
   if ((await waitingSeats(db, teamId)).has(member.name)) return null;
   return {

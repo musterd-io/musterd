@@ -95,6 +95,7 @@ nothing bounds a run by the clock or by money, because no such run exists.
   `shift_start: auto`) and lane `01M6H8C6QGRZ7Z3D65AD33SZRE` (the `/live` settings and the seat
   reading its own bounds over MCP).
 - 2026-11-03 ([ADR 793](793-shift-recommend-claim-auto-start.md), lane `01M6H8C17E`): `autonomy` and `shift_start` are now acted on. Out of work, a seat recommends (at `ask`) or claims (at `claim`/`free`) before it stops `no_work`, and `auto` starts its shift once a day.
+- 2026-11-03 ([ADR 795](795-shift-surfaces-and-budget-raise.md), lane `01M6H8C6QG`): the two deferred items landed as `musterd shift start|stop <seat>` (not bare `start|stop`, which reads as the daemon) and the budget-raise question on a Start after a `budget` stop.
 
 ## Observability & Evaluation
 

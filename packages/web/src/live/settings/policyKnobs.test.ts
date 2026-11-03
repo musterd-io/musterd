@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { TeamPolicyRead } from '../client';
-import { POLICY_GROUPS, fromInput, knobIsSet, knobValue, toInput, withKnob, type Knob } from './policyKnobs';
+import {
+  POLICY_GROUPS,
+  fromInput,
+  knobIsSet,
+  knobValue,
+  toInput,
+  withKnob,
+  type Knob,
+} from './policyKnobs';
 
 const knob = (path: string): Knob => {
   const found = POLICY_GROUPS.flatMap((g) => g.knobs).find((k) => k.path.join('.') === path);
@@ -25,7 +33,9 @@ describe('withKnob', () => {
   it('undefined drops the key, and an emptied block goes whole (ADR 185: stored as never set)', () => {
     const stored = { residency: { hourly_cap: 4 }, spend_cap_usd: 50 };
     expect(withKnob(stored, ['residency', 'hourly_cap'], undefined)).toEqual({ spend_cap_usd: 50 });
-    expect(withKnob(stored, ['spend_cap_usd'], undefined)).toEqual({ residency: { hourly_cap: 4 } });
+    expect(withKnob(stored, ['spend_cap_usd'], undefined)).toEqual({
+      residency: { hourly_cap: 4 },
+    });
   });
 
   it('never mutates what it was given', () => {
@@ -58,7 +68,10 @@ describe('fromInput / toInput', () => {
 
   it('a blank optional knob clears; a blank required one is refused', () => {
     expect(fromInput(knob('spend_cap_usd'), ' ')).toEqual({ ok: true, value: undefined });
-    expect(fromInput(knob('residency.hourly_cap'), '')).toEqual({ ok: false, error: 'needs a value' });
+    expect(fromInput(knob('residency.hourly_cap'), '')).toEqual({
+      ok: false,
+      error: 'needs a value',
+    });
   });
 
   it('holds the schema bounds the daemon will hold', () => {
@@ -72,6 +85,20 @@ describe('fromInput / toInput', () => {
 describe('the table', () => {
   it('offers no secret — the overlay must never render a token or URL', () => {
     const paths = POLICY_GROUPS.flatMap((g) => g.knobs.map((k) => k.path.join('.')));
-    for (const p of paths) expect(p).not.toMatch(/(^|[._])(token|url|webhook)([._]|$)|_token|_url$/);
+    for (const p of paths)
+      expect(p).not.toMatch(/(^|[._])(token|url|webhook)([._]|$)|_token|_url$/);
+  });
+});
+
+describe('shift knobs (ADR 792/793)', () => {
+  it('offers the day budget, how a shift starts, and what a seat takes on alone', () => {
+    expect(knob('residency.shift_budget_usd').kind).toEqual({ type: 'usd', max: 100 });
+    expect(knob('residency.shift_start').kind).toMatchObject({ type: 'enum' });
+    const autonomy = knob('residency.autonomy').kind;
+    expect(autonomy.type === 'enum' && autonomy.options.map((o) => o.value)).toEqual([
+      'ask',
+      'claim',
+      'free',
+    ]);
   });
 });

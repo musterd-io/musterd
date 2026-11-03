@@ -563,6 +563,10 @@ export type AuditAction =
   // ADR 793: an on-shift seat out of work recommended lanes to a person, or claimed one alone.
   | 'shift.recommended'
   | 'shift.claimed'
+  // ADR 795: a Start after a budget stop asks a person to add to the day's budget.
+  | 'shift.budget_asked'
+  | 'shift.budget_raised'
+  | 'shift.budget_declined'
   | 'pr_event.sent'
   | 'pr_watch.unavailable'
   | 'question.notify_set'
@@ -963,6 +967,9 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'shift.stopped': 'target',
   'shift.recommended': 'target',
   'shift.claimed': 'target',
+  'shift.budget_asked': 'target',
+  'shift.budget_raised': 'target',
+  'shift.budget_declined': 'target',
   'pr_event.sent': 'none',
   'pr_watch.unavailable': 'none',
   'question.notify_set': 'actor',

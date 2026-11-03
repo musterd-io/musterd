@@ -143,6 +143,44 @@ export const POLICY_GROUPS: KnobGroup[] = [
     ],
   },
   {
+    id: 'shifts',
+    title: 'Shifts',
+    lede: 'A seat you Start works its claimed lanes until hours end, its day budget is spent, or the work runs out.',
+    knobs: [
+      {
+        path: ['residency', 'shift_budget_usd'],
+        label: 'Day budget per seat',
+        hint: 'What one seat on shift may spend in a day. Reaching it ends the shift.',
+        kind: { type: 'usd', max: 100 },
+      },
+      {
+        path: ['residency', 'shift_start'],
+        label: 'Start a shift',
+        hint: 'By hand: only when someone presses Start. With hours: once a day when working hours open.',
+        kind: {
+          type: 'enum',
+          options: [
+            { value: 'manual', label: 'by hand' },
+            { value: 'auto', label: 'with hours' },
+          ],
+        },
+      },
+      {
+        path: ['residency', 'autonomy'],
+        label: 'When its lanes run out',
+        hint: 'Ask: suggest open lanes and wait. Claim: take a lane on its listed goals. Free: take any. A risky lane always waits for you.',
+        kind: {
+          type: 'enum',
+          options: [
+            { value: 'ask', label: 'ask first' },
+            { value: 'claim', label: 'claim on its goals' },
+            { value: 'free', label: 'claim any lane' },
+          ],
+        },
+      },
+    ],
+  },
+  {
     id: 'acceptance',
     title: 'Acceptance & asks',
     lede: 'How long landed work waits for a verdict, and where unanswered asks go.',

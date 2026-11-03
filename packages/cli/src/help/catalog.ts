@@ -1167,6 +1167,18 @@ export const CATALOG: readonly CommandEntry[] = [
     examples: ['musterd requests --pending', 'musterd requests decide r7 --approve --standing'],
   },
   {
+    name: 'shift',
+    signature: 'start <seat> | stop <seat>',
+    summary: 'put an agent seat on shift, or take it off (ADR 792)',
+    group: 'ops',
+    detail:
+      "The same quick action as Start and Stop on /live and the phone: a person's steer the daemon " +
+      'composes a line for. On shift, a seat works its claimed lanes without the wake caps until ' +
+      'working hours end, its day budget (`residency policy --shift-budget`) is spent, or the work ' +
+      'runs out; then the board says why it stopped. Stop lets a wake already running finish. ' +
+      'Under `shift`, not bare `start|stop`: `musterd service start|stop` is the daemon.',
+  },
+  {
     name: 'residency',
     signature:
       'on [--harness <class>] [--host <name>] [knobs] | off | status | policy [knobs]  [--seat <name>] [--json]',

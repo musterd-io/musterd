@@ -1,11 +1,11 @@
-import { makeEnvelope } from '@musterd/protocol';
+import { GENERALIST_CAPABILITIES, makeEnvelope } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { appendAudit, listAuditByAction } from '../store/audit.js';
 import { getLane, openLane, updateLane } from '../store/lanes.js';
-import { addMember } from '../store/members.js';
+import { addMember, getMemberByName, setMemberGovernance } from '../store/members.js';
 import { claimWakeLeases, enrollResidency } from '../store/residency.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import { getShift, shiftDay, startShift } from '../store/shift.js';
@@ -14,6 +14,7 @@ import { routeEnvelope } from './route.js';
 import {
   autoStartShifts,
   rosterShifts,
+  settleBudgetAsks,
   SHIFT_NO_WORK_GRACE_MS,
   shiftStopLine,
   sweepShifts,
@@ -374,6 +375,126 @@ withDrivers('the shift watch (ADR 792)', (o) => {
       });
       expect(await autoStartShifts(ctx, at('2026-11-03T18:00:00Z'))).toBe(0); // already today
       expect(await autoStartShifts(ctx, at('2026-11-08T18:00:00Z'))).toBe(0); // Sunday
+    });
+  });
+
+  describe('a Start after a budget stop (ADR 795)', () => {
+    /** Only an admin or the seat's sponsor may raise its spend. */
+    async function asAdmin(db: Driver, team: TeamRow) {
+      const nick = (await getMemberByName(db, team.id, 'nick'))!;
+      await setMemberGovernance(
+        db,
+        nick.id,
+        null,
+        JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
+      );
+      return (await getMemberByName(db, team.id, 'nick'))!;
+    }
+
+    async function spendTen(db: Driver, team: TeamRow) {
+      for (const [action, detail] of [
+        ['residency.wake_leased', { lease_id: 'L1' }],
+        ['residency.wake_cost', { lease_id: 'L1', cost_usd: 10 }],
+      ] as const)
+        await appendAudit(db, team.id, {
+          actor: null,
+          action,
+          target: 'ryder',
+          result: 'allow',
+          detail,
+        });
+    }
+
+    async function budgetQuestion(db: Driver, teamId: string) {
+      const [row] = await listAuditByAction(db, teamId, 'shift.budget_asked', 5);
+      return (JSON.parse(String(row!.detail)) as { question: string }).question;
+    }
+
+    it('asks the admin who pressed Start; yes adds a day for today and puts it back on shift', async () => {
+      const { db, team, ryder, ctx } = await seed();
+      const nick = await asAdmin(db, team);
+      await openLane(db, team.id, team.slug, 'ryder', { title: 'Fix it', claim: true });
+      const now = Date.now();
+      await startShift(db, team.id, ryder, 'nick', null, now);
+      await spendTen(db, team);
+      expect(await sweepShifts(ctx, now + 1)).toBe(1); // budget stop
+      await routeEnvelope(ctx, team, nick, quick('s1', 'start', now + 2));
+      const day = shiftDay(null, now);
+      expect((await getShift(db, team.id, ryder.id, day))?.state).toBe('off');
+      const q = await budgetQuestion(db, team.id);
+      const ask = await db.get<{ to_member: string; body: string }>(
+        'SELECT to_member, body FROM messages WHERE id = ?',
+        [q],
+      );
+      expect(ask).toMatchObject({ to_member: nick.id });
+      expect(ask!.body).toContain('Add $10.00 for today');
+      // A second Start does not ask twice while the first question is open.
+      await routeEnvelope(ctx, team, nick, quick('s2', 'start', now + 3));
+      expect(await listAuditByAction(db, team.id, 'shift.budget_asked', 5)).toHaveLength(1);
+
+      await routeEnvelope(
+        ctx,
+        team,
+        nick,
+        makeEnvelope({
+          id: 'a-budget',
+          team: team.slug,
+          from: 'nick',
+          to: { kind: 'member', name: 'ryder' },
+          act: 'accept',
+          body: '',
+          thread: q,
+          meta: { in_reply_to: q, answer: { choice: 0 } },
+        }),
+      );
+      expect(await settleBudgetAsks(ctx, Date.now())).toBe(1);
+      expect((await getShift(db, team.id, ryder.id, day))?.state).toBe('on');
+      const [shift] = [...(await rosterShifts(ctx, team.id, Date.now())).values()];
+      expect(shift?.budget_left_usd).toBe(10);
+      // Settled once.
+      expect(await settleBudgetAsks(ctx, Date.now())).toBe(0);
+    });
+
+    it('a person who may not change the seat is not asked', async () => {
+      const { db, team, nick, ryder, ctx } = await seed();
+      const now = Date.now();
+      await startShift(db, team.id, ryder, 'nick', null, now);
+      await spendTen(db, team);
+      await sweepShifts(ctx, now + 1);
+      await routeEnvelope(ctx, team, nick, quick('s1', 'start', now + 2));
+      expect(await listAuditByAction(db, team.id, 'shift.budget_asked', 5)).toHaveLength(0);
+      const [denied] = await listAuditByAction(db, team.id, 'shift.budget_declined', 5);
+      expect(JSON.parse(String(denied!.detail))).toMatchObject({ reason: 'not_authorized' });
+      expect((await getShift(db, team.id, ryder.id, shiftDay(null, now)))?.state).toBe('off');
+    });
+
+    it('no leaves it off shift', async () => {
+      const { db, team, ryder, ctx } = await seed();
+      const nick = await asAdmin(db, team);
+      const now = Date.now();
+      await startShift(db, team.id, ryder, 'nick', null, now);
+      await spendTen(db, team);
+      await sweepShifts(ctx, now + 1);
+      await routeEnvelope(ctx, team, nick, quick('s1', 'start', now + 2));
+      const q = await budgetQuestion(db, team.id);
+      await routeEnvelope(
+        ctx,
+        team,
+        nick,
+        makeEnvelope({
+          id: 'a-no',
+          team: team.slug,
+          from: 'nick',
+          to: { kind: 'member', name: 'ryder' },
+          act: 'accept',
+          body: '',
+          thread: q,
+          meta: { in_reply_to: q, answer: { choice: 1 } },
+        }),
+      );
+      expect(await settleBudgetAsks(ctx, Date.now())).toBe(0);
+      expect(await listAuditByAction(db, team.id, 'shift.budget_declined', 5)).toHaveLength(1);
+      expect((await getShift(db, team.id, ryder.id, shiftDay(null, now)))?.state).toBe('off');
     });
   });
 });

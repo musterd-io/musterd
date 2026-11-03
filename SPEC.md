@@ -1257,5 +1257,8 @@ answer's text.
   shift with nothing claimed recommends open lanes once per shift as an ADR 773 question to the
   team at `ask`; at `claim` (a lane on a listed goal) or `free` (any lane) it claims one itself, and
   never a lane with a risk tag. `shift_start: auto` starts its shift once a day inside working hours.
+- A `start` to a seat whose shift stopped on `budget` that day does not start it: the seat asks the
+  person, as an ADR 773 question, to add one day's policy budget for that day (ADR 795); yes raises
+  that day's budget and starts the shift.
 - A seat on shift is woken for each lane it owns in `claimed` or `active`, past its hourly cap and
   cooldown. The wake order is a board work order (`derivation: work_order`, `lane_id`, no act).
