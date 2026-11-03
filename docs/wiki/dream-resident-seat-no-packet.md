@@ -14,7 +14,11 @@ The refusal comes from the resident seat's bash allowlist, which admits `musterd
 
 The bash allowlist's musterd set gained `dream` (lane 01M6D8H4KF, PR pending). The 2026-10-13 claim above is invalidated from the first resident dream wake on a host running that build. What made it visible: delta-2's dream wake on night 2026-10-31 (lease 01M6ASCATTEKYY7AJ3TE0XFTBD, 05:30Z 2026-11-01) ran `musterd dream`, read the denial, and answered in text with no seat tool call, so the roster never saw it and the host recorded a failed wake at $0.07. Earlier nights happened to call `team_insight_save` and so occupied; the packet was still never read. (2026-11-01; falsify: a resident dream wake on a build after the fix where bash `musterd dream` still returns the denial) <!-- claim: other -->
 
-Night 2026-11-02, delta-2 printed `spawn bwrap ENOENT` on its first bash `musterd dream` (insight 01M6G1M0MN). The 2026-11-01 allowlist change is untested on that wake because the command did not start. Seen once.
+## Bash cannot spawn on delta-2's host
+
+On delta-2's dream wake, bash `musterd dream` returns `spawn failed: spawn bwrap ENOENT`: the bash sandbox wrapper (bubblewrap) is not found, so no bash command starts, not only `musterd dream`. Seen night 2026-11-02 (insight 01M6G1M0MN) and night 2026-11-03 (insight 01M6HT8KEB). The 2026-11-01 allowlist fix above is untested on this seat because the command never starts, and delta-2 cannot land a wiki page itself, since the PR path needs bash (2026-11-03; falsify: a later delta-2 bash call such as `ls` runs, or `which bwrap` in that seat's launch environment finds it) <!-- claim: defect -->
+
+On the linux host where TJ dreams, `which bwrap` printed `/usr/bin/bwrap` on night 2026-11-03. Whether delta-2 runs on that host, or with a PATH that lacks `/usr/bin`, nobody has checked. So the fix may be the seat's sandbox path, not an install.
 
 ## What it costs
 
