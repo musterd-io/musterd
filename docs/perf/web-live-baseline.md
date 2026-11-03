@@ -2913,3 +2913,16 @@ roster's existing chunk, so initial JS does not move; the total grows ~0.1 KB ov
 "lets make my avatar (nick) look more like me"). A few hundred bytes gzip; CI read 401.4 KB over the
 401.4 KB ceiling (`static` job, run 41738751558). Raised by 1 KB; nothing else in the total moved.
 
+## 2026-11-03 — goal bell poses; Office art RAISED 9,730,000 → 10,560,000 B (lane 01M6HHH7Z4VKCWY97HCZA9BDNM)
+
+The goal bell's ceremony needs three new figure clips: the rope pull (`g-ring`, 10 frames) and the
+room's applause seated and standing (`g-clap`, `g-clapUp`, 8 each), rendered east and north and
+mirrored. Each frame is a cell in every figure layer's sheet, so the 52 frames cost **+532 KB**
+across 59 sheets (`render.py --append-clips`, which re-quantizes the sheets it grows).
+
+- Measured (local `perf:check`, 2026-11-03): office art 9,818.0 KB (10,053,632 B) across 216 files,
+  against the 9,502 KB ceiling.
+- New ceiling: measured + 5% = 10,560,000 B, the rule the window-views raise used.
+- Cumulative since the office decor refresh began (2026-11-03, ~9.62 MB): about +430 KB, inside the
+  +1 MB the decor spec allows before asking nick.
+

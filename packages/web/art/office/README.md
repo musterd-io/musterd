@@ -276,6 +276,14 @@ into the `figure.json` on disk, leaving every other layer's sheet and cells as t
 folder was 100 (23 min). It refuses when the `figure.json` on disk was packed against another frame,
 anchor or clip table; a change to an existing layer still renders the whole figure.
 
+`--append-clips g-ring,g-clap,g-clapUp` (lane 01M6HHH7Z4) renders only clips added at the **end** of
+`figure.CLIPS` and packs their frames below each layer's sheet on disk, appending their cells to
+`figure.json`; every earlier cell keeps its rect. A whole-figure run fuses every frame of every clip
+(~35 s a frame here, ~9 h for the figure in November 2026) even when the store has its calls, so for
+new clips this is the difference between half an hour and a night. It refuses unless the clips before
+the new ones match the `figure.json` on disk exactly. The old sheets are decoded and re-quantized
+with the new rows, so their bytes change slightly; their pixels do not move.
+
 ### Figure v2 (lane 01M5JHEEGT)
 
 The v2 body (spec `docs/superpowers/specs/2026-10-22-office-figure-v2-design.md`) changes the rig, not
