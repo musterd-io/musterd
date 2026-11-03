@@ -259,6 +259,27 @@ withDrivers('delivery', (o) => {
       expect(seat('bob')).toMatchObject({ interrupt_raises: 1 });
     });
 
+    it('tallies only raises written after the oldest open act (lane 01M6FYX9KT)', async () => {
+      // The tally read was grouped over the team's whole raise history; it now seeks the window
+      // that can hold a raise for an open act. A row stamped far before every open act is outside.
+      const { db, team, nick, ada } = await seed();
+      await msg(db, team, nick, ada, 'handoff', 'h1', 1_000);
+      for (const id of ['in', 'out'])
+        await appendAudit(db, team.id, {
+          actor: 'nick',
+          action: 'interrupt.raised',
+          target: 'Ada',
+          result: 'allow',
+          detail: { act: 'h1', act_kind: 'handoff', tier: 'urgent', count: 1, probe: id },
+        });
+      await db.run(
+        `UPDATE audit SET ts = ? WHERE action = 'interrupt.raised' AND json_extract(detail, '$.probe') = 'out'`,
+        [1_000 - 11 * 60_000],
+      );
+      const h1 = (await openDirectedLedger(db, team.id, 10_000)).find((d) => d.id === 'h1')!;
+      expect(h1.recipients.find((r) => r.seat === 'Ada')).toMatchObject({ interrupt_raises: 1 });
+    });
+
     it('includes urgent directed acts of any act type, but not ordinary chatter', async () => {
       const { db, team, nick, ada } = await seed();
       await msg(db, team, nick, ada, 'message', 'm1', 1_000, {

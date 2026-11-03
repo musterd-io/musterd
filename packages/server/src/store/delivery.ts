@@ -438,15 +438,27 @@ interface AuditTallies {
 
 const raiseKey = (recipientName: string, actId: string): string => `${recipientName}\0${actId}`;
 
-async function auditTallies(db: Driver, teamId: string): Promise<AuditTallies> {
+/** Lane 01M6FYX9KT: slack under the oldest open act's receipt for the tally window. A raise or a
+ *  nudge for an act is written after the act lands, so nothing older can count toward it; the
+ *  margin only absorbs a mirrored row stamped by another node's clock. */
+const TALLY_SKEW_MS = 10 * 60_000;
+
+/**
+ * Lane 01M6FYX9KT: `sinceTs` bounds both reads to rows written after the oldest open act. The
+ * tallies were grouped over the team's whole `interrupt.raised` history — every raise ever made —
+ * and with the history growing that read was 668 slow runs, 187 s of main-thread stall in a 5 h
+ * window on the revive hub (2026-11-03). The ledger only asks about acts that are still open, and
+ * `idx_audit_team_action_ts` seeks the window.
+ */
+async function auditTallies(db: Driver, teamId: string, sinceTs: number): Promise<AuditTallies> {
   const raises = new Map<string, { total: number; idle: number }>();
   for (const r of await db.all<{ target: string; act: string | null; total: number; idle: number }>(
     `SELECT target, json_extract(detail, '$.act') AS act, COUNT(*) AS total,
               COALESCE(SUM(CASE WHEN json_extract(detail, '$.seam') = 'idle' THEN 1 ELSE 0 END), 0) AS idle
          FROM audit
-        WHERE team_id = ? AND action = 'interrupt.raised'
+        WHERE team_id = ? AND action = 'interrupt.raised' AND ts >= ?
         GROUP BY target, json_extract(detail, '$.act')`,
-    [teamId],
+    [teamId, sinceTs],
   )) {
     if (r.act !== null) {
       raises.set(raiseKey(r.target, String(r.act)), {
@@ -460,9 +472,9 @@ async function auditTallies(db: Driver, teamId: string): Promise<AuditTallies> {
     `SELECT json_extract(detail, '$.nudge_ref') AS ref, COUNT(*) AS total,
               COALESCE(SUM(CASE WHEN json_extract(detail, '$.verbatim') = 1 THEN 1 ELSE 0 END), 0) AS verbatim
          FROM audit
-        WHERE team_id = ? AND action = 'actor.session_message'
+        WHERE team_id = ? AND action = 'actor.session_message' AND ts >= ?
         GROUP BY json_extract(detail, '$.nudge_ref')`,
-    [teamId],
+    [teamId, sinceTs],
   )) {
     if (r.ref !== null) {
       nudges.set(String(r.ref), { total: Number(r.total), verbatim: Number(r.verbatim) });
@@ -621,7 +633,8 @@ export async function openDirectedLedger(
   const rows = hit && hit.key === key ? hit.rows : await scanOpenDirectedRows(db, teamId);
   if (!hit || hit.key !== key) byTeam.set(teamId, { key, rows });
   if (rows.length === 0) return [];
-  const tallies = await auditTallies(db, teamId);
+  const oldest = Math.min(...rows.map((m) => Math.min(m.created_at, m.ts)));
+  const tallies = await auditTallies(db, teamId, oldest - TALLY_SKEW_MS);
   const memo = ledgerMemo(db);
   return Promise.all(rows.map((m) => actDeliveryOf(db, m, now, memo, tallies)));
 }
