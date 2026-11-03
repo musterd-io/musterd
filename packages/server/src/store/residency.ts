@@ -1251,9 +1251,12 @@ interface WakeCandidate {
 }
 
 /**
- * ADR 790: does a person stand behind this candidate? True when its sender names a Member of
- * `kind = 'human'` on this team. A work order or a dream has no sender, so it is never human-sent.
- * `cache` is per poll: one seat's candidates often share a sender.
+ * ADR 790: does a person stand behind this candidate? True when its act was sent by a Member of
+ * `kind = 'human'` on this team, from a session a person drives. Read from the act's own row — the
+ * sender by member id, never by name — and an act sent from a wake or a dream session is never
+ * human-sent, whoever's seat it is (a human seat can be enrolled for wakes too), so a machine chain
+ * cannot borrow the pass. A work order or a dream has no act, so it is never human-sent. `cache` is
+ * per poll: one seat's candidates often share a sender.
  */
 async function humanSent(
   db: Driver,
@@ -1261,13 +1264,23 @@ async function humanSent(
   candidate: WakeCandidate,
   cache: Map<string, boolean>,
 ): Promise<boolean> {
-  const sender = candidate.sender;
-  if (sender === undefined || candidate.derivation === 'work_order') return false;
-  const known = cache.get(sender);
+  if (candidate.act_id === undefined || candidate.derivation === 'work_order') return false;
+  const act = await db.get<{ from_member: string | null; from_provenance: string | null }>(
+    'SELECT from_member, from_provenance FROM messages WHERE team_id = ? AND id = ?',
+    [teamId, candidate.act_id],
+  );
+  if (!act?.from_member) return false;
+  if (act.from_provenance === 'wake' || act.from_provenance === 'dream') return false;
+  const known = cache.get(act.from_member);
   if (known !== undefined) return known;
-  const row = await getMemberByName(db, teamId, sender);
-  const human = row !== null && row !== undefined && row.left_at === null && row.kind === 'human';
-  cache.set(sender, human);
+  const row = await getMemberById(db, act.from_member);
+  const human =
+    row !== null &&
+    row !== undefined &&
+    row.team_id === teamId &&
+    row.left_at === null &&
+    row.kind === 'human';
+  cache.set(act.from_member, human);
   return human;
 }
 
@@ -2420,7 +2433,7 @@ async function deriveSeatPasses(
   const wakeOnIncidentResolve = teamPolicy.incident?.wake_on_resolve === true;
   // ADR 494 §2: the Team's schedule, read once; a Member's own schedule replaces it (ADR 206).
   const teamHours = parseWorkingHours((await getTeamById(db, teamId))?.working_hours);
-  // ADR 790: sender name → is a human Member, read once per poll.
+  // ADR 790: sender member id → is a human Member, read once per poll.
   const humanSenders = new Map<string, boolean>();
   for (const enrollment of enrollments) {
     const member = await getMemberById(db, enrollment.member_id);

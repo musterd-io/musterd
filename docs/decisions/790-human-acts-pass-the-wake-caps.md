@@ -34,9 +34,12 @@ quick action or a steer can wait up to an hour behind wakes that agents caused.
    whether or not the seat is at `hourly_cap` or inside `cooldown_ms`. Then it drops each candidate
    that the gates hold.
 2. **A human-sent candidate passes both rate gates.** A candidate passes `hourly_cap` and
-   `cooldown_ms` when its sending Member has `kind = 'human'` on this team. This includes a verified
-   answer (ADR 774), a quick action (ADR 779), and a steer, ask, request_help, handoff or message
-   that a person sent.
+   `cooldown_ms` when its act's sending Member (read by member id from the act's row, never by
+   name) has `kind = 'human'` on this team. This includes a verified answer (ADR 774), a quick
+   action (ADR 779), and a steer, ask, request_help, handoff or message that a person sent. An act
+   sent from a wake or dream session (`from_provenance` `wake` or `dream`) never passes, whoever's
+   seat it is: a human seat can be enrolled for wakes, and a machine chain must not borrow the
+   pass.
 3. **All other gates still bind a human-sent candidate.** These are the halt (ADR 501), live
    presence, a live lease, the deferral snooze, `attempt_cap`, ADR 434's spent-act rule, and the
    spend gates (ADR 611, ADR 636, ADR 641). A human act to a halted seat does not wake it. A human
@@ -68,7 +71,8 @@ quick action or a steer can wait up to an hour behind wakes that agents caused.
   refused. The ADR 753 gate row records the gate that held the seat after the filter.
 - **Eval:** `residency.test.ts` pins that a verified answer and a human steer pass the cap and the
   cooldown, that an agent message does not, that a halted seat and a seat over the spend cap stay
-  held, and that the lease row carries `human_pass`. `quickActions.test.ts` pins that Start everyone
+  held, that an act sent from a wake or dream session gets no pass, and that the lease row carries
+  `human_pass`. `quickActions.test.ts` pins that Start everyone
   returns `started` for a seat at its cap.
 - **Experiment:** count `wake_leased` rows with `human_pass` per seat per day for a week, beside the
   ADR 779 wake count by cause. **Falsify:** a seat that gets more than 10 `human_pass` leases in a

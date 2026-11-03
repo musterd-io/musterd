@@ -1855,6 +1855,20 @@ withDrivers('residency', (o, kind) => {
       expect(orders.map((o) => o.act_id)).toEqual(['h-nick']);
     });
 
+    it("a human seat's act sent from a wake or dream session gets no pass", async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada, HOST, { hourly_cap: 1 });
+      await atCap(db, team);
+      for (const [id, provenance] of [
+        ['s-wake', 'wake'],
+        ['s-dream', 'dream'],
+      ] as const) {
+        await msg(db, team, nick, ada, 'steer', id, Date.now() - 1_000);
+        await db.run('UPDATE messages SET from_provenance = ? WHERE id = ?', [provenance, id]);
+      }
+      expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+    });
+
     it('a human act to a halted seat does not wake it', async () => {
       const { db, team, nick, ada } = await seed();
       await enroll(db, team, ada, HOST, { hourly_cap: 1 });
