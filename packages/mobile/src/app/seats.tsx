@@ -1,8 +1,9 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { QUICK_ACTION_LABELS, seatActions } from '../native/notice';
 import type { PairingPin } from '../native/pairingPin';
-import type { Roster, RosterSeat } from '../native/quickAction';
+import type { QuickAction, QuickOutcome, Roster, RosterSeat } from '../native/quickAction';
 import { Backdrop, Glass } from '../ui/glass';
 import { Rise } from '../ui/motion';
 import { QuickActions } from '../ui/quickActions';
@@ -83,7 +84,7 @@ export default function SeatsScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Rise>
-              <Text accessibilityRole="header" style={[styles.headline, { color: p.text }]}>
+              <Text accessibilityRole="header" style={[styles.headline, { color: p.muted }]}>
                 {roster ? `${online} of ${seats.length} online` : 'Seats'}
               </Text>
             </Rise>
@@ -120,46 +121,83 @@ export default function SeatsScreen() {
 
 function SeatCard({ pin, seat }: { pin: PairingPin; seat: RosterSeat }) {
   const p = usePalette();
-  const state = seat.online ? 'online' : seat.wakeable ? 'offline, can wake' : 'offline';
+  const actions = seatActions(seat);
+  // After a press, the line under the name says what happened, then goes back to the lane.
+  const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null);
+  const clear = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(clear.current), []);
+  const onOutcome = (action: QuickAction, outcome: QuickOutcome) => {
+    if (outcome === 'cancelled') return;
+    const label = QUICK_ACTION_LABELS[action];
+    setSaid(
+      outcome === 'sent'
+        ? { text: `${label} sent`, bad: false }
+        : { text: `${label} didn’t send. Check your connection.`, bad: true },
+    );
+    clearTimeout(clear.current);
+    clear.current = setTimeout(() => setSaid(null), 6_000);
+  };
+  const state = seat.online ? 'online' : seat.wakeable ? 'asleep' : 'offline';
+  const line =
+    said?.text ?? seat.lane?.title ?? (actions.length === 0 ? 'Can’t be woken from here' : null);
   return (
     <Glass style={styles.card}>
-      <View style={styles.top}>
-        <Seat name={seat.seat} agent />
-        <View style={styles.who}>
-          <Text style={[styles.name, { color: p.text }]}>{seat.seat}</Text>
-          <View style={styles.stateRow}>
-            <View
-              style={[styles.dot, { backgroundColor: seat.online ? p.success : p.placeholder }]}
-            />
-            <Text style={[styles.meta, { color: p.muted }]}>{state}</Text>
-          </View>
-        </View>
+      <View>
+        <Seat name={seat.seat} agent size={32} />
+        <View
+          style={[
+            styles.dot,
+            { backgroundColor: seat.online ? p.success : p.placeholder, borderColor: p.surface },
+          ]}
+        />
       </View>
-      {seat.lane ? (
-        <Text numberOfLines={2} style={[styles.lane, { color: p.muted }]}>
-          <Text style={{ fontFamily: font.semibold }}>Their lane: </Text>
-          {seat.lane.title}
+      <View style={styles.who}>
+        <Text numberOfLines={1} style={[styles.name, { color: p.text }]}>
+          {seat.seat}
+          <Text style={[styles.meta, { color: p.muted }]}>{`  ${state}`}</Text>
         </Text>
+        {line ? (
+          <Text
+            numberOfLines={1}
+            accessibilityLabel={said || !seat.lane ? line : `Their lane: ${line}`}
+            style={[styles.meta, { color: said?.bad ? p.danger : said ? p.accentText : p.muted }]}
+          >
+            {line}
+          </Text>
+        ) : null}
+      </View>
+      {actions.length > 0 ? (
+        <QuickActions pin={pin} seat={seat.seat} actions={actions} compact onOutcome={onOutcome} />
       ) : null}
-      <QuickActions pin={pin} seat={seat.seat} />
     </Glass>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  list: { padding: space.lg, paddingTop: space.md, gap: space.md, paddingBottom: space.xl * 2 },
+  list: { padding: space.lg, paddingTop: space.md, gap: space.sm, paddingBottom: space.xl * 2 },
   header: { gap: space.md, marginBottom: space.sm },
-  headline: { fontFamily: font.display, fontSize: 28, lineHeight: 34, letterSpacing: -0.6 },
+  headline: { fontFamily: font.semibold, fontSize: 13, letterSpacing: 0.2 },
   banner: { borderRadius: radius.md, padding: space.lg },
   bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
   empty: { fontFamily: font.regular, fontSize: 15, textAlign: 'center', marginTop: space.xl },
-  card: { padding: space.lg, gap: space.md },
-  top: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  who: { flex: 1, gap: 2 },
-  name: { fontFamily: font.semibold, fontSize: 16 },
-  stateRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 7, height: 7, borderRadius: radius.pill },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.sm + 2,
+    paddingHorizontal: space.md,
+  },
+  who: { flex: 1, gap: 1 },
+  name: { fontFamily: font.semibold, fontSize: 15 },
+  dot: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 11,
+    height: 11,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+  },
   meta: { fontFamily: font.regular, fontSize: 13 },
-  lane: { fontFamily: font.regular, fontSize: 14, lineHeight: 20 },
 });

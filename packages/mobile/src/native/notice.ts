@@ -74,6 +74,24 @@ export const QUICK_ACTION_LABELS: Record<QuickAction, string> = {
 /** The order the buttons show in: Stop last. */
 export const QUICK_ACTION_ORDER = Object.keys(QUICK_ACTION_LABELS) as QuickAction[];
 
+/**
+ * The actions that make sense for a seat as the roster shows it (nick, build 44: "shouldn't all
+ * the buttons be contextual?"). A live seat can be checked, resumed or stopped; Start would only
+ * re-orient it. A seat a host can wake gets Start, which reads the inbox first. Check PR and a
+ * sleeping seat's Resume need a lane. A seat nothing can wake gets none: its steer would only wait.
+ */
+export function seatActions(seat: {
+  online: boolean;
+  wakeable: boolean;
+  lane: unknown;
+}): QuickAction[] {
+  const lane = seat.lane !== null;
+  if (seat.online)
+    return ['check_inbox', ...(lane ? (['check_pr'] as const) : []), 'resume', 'stop'];
+  if (seat.wakeable) return ['start', ...(lane ? (['resume', 'check_pr'] as const) : [])];
+  return [];
+}
+
 export const ROSTER_TEXT = 'Seats updated.';
 
 /** What a quick action did (ADR 791): `offline` means the steer waits in the seat's inbox. */

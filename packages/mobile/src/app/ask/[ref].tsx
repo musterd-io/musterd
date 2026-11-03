@@ -276,7 +276,11 @@ export default function AskScreen() {
           // ADR 791: the asking seat's quick actions, so a question can be followed up from here.
           <Rise index={3} style={styles.quick}>
             <Text style={[styles.muted, { color: p.muted }]}>Nudge {ask.from}</Text>
-            <QuickActions pin={pin} seat={ask.from} />
+            <QuickActions
+              pin={pin}
+              seat={ask.from}
+              actions={['check_inbox', 'check_pr', 'resume']}
+            />
           </Rise>
         ) : null}
       </ScrollView>

@@ -83,6 +83,15 @@ The phone cannot send a quick action, and it cannot show the seats it would send
   (`src/ui/quickActions.tsx`, `src/native/quickAction.ts`). The notification extension renders
   `quick_action_result` quietly and accepts a stray `roster`, and `PhoneKeys.swift` knows the
   `quick_action` seal purpose. All of it reaches the phone in the next TestFlight build.
+- 2026-11-03 (lane `01M6HS32ZE`, nick on build 44): **Check inbox** for tj and stanley showed
+  **Try again**. Nothing had been sent. The relay's `appCallbackRef` only lets known callback kinds
+  through, so it answered `quick_action` with a 400, the same gap `question_key` had before #3686.
+  The relay now accepts it, but the change takes effect only after a Worker deploy. On the phone,
+  a seat shows only the actions that fit its state (`seatActions`):
+  - **live:** Check inbox, Check PR (with a lane), Resume, Stop;
+  - **a host can wake it:** Start, plus Resume and Check PR with a lane;
+  - **nothing can wake it:** no buttons.
+  Each seat is one compact row, with icon buttons. The line under the name says what a press did.
 
 ## Observability & Evaluation
 

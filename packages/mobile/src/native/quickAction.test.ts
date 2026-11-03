@@ -11,7 +11,7 @@ import {
 } from '@musterd/protocol/app-channel';
 import { canonicalJson } from '@musterd/protocol/approval';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { QUICK_ACTION_ORDER, quickResultText } from './notice';
+import { QUICK_ACTION_ORDER, quickResultText, seatActions } from './notice';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys } from './phoneKeys';
 import { fetchRoster, ROSTER_SKEW_MS, sendQuickAction } from './quickAction';
@@ -231,5 +231,28 @@ describe('quick action copy', () => {
     expect(quickResultText('fifty', 'stop', 'offline')).toBe(
       'fifty is offline. Stop waits in its inbox.',
     );
+  });
+
+  it('offers only what fits the seat', () => {
+    const lane = { id: 'L1', title: 'phone' };
+    expect(seatActions({ online: true, wakeable: true, lane })).toEqual([
+      'check_inbox',
+      'check_pr',
+      'resume',
+      'stop',
+    ]);
+    expect(seatActions({ online: true, wakeable: false, lane: null })).toEqual([
+      'check_inbox',
+      'resume',
+      'stop',
+    ]);
+    expect(seatActions({ online: false, wakeable: true, lane })).toEqual([
+      'start',
+      'resume',
+      'check_pr',
+    ]);
+    expect(seatActions({ online: false, wakeable: true, lane: null })).toEqual(['start']);
+    // Nothing can wake it, so no button: a steer would only wait. Never Stop on an offline seat.
+    expect(seatActions({ online: false, wakeable: false, lane })).toEqual([]);
   });
 });

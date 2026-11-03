@@ -1,7 +1,7 @@
 import type { SFSymbol } from 'expo-symbols';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { QUICK_ACTION_LABELS, QUICK_ACTION_ORDER } from '../native/notice';
+import { QUICK_ACTION_LABELS } from '../native/notice';
 import type { PairingPin } from '../native/pairingPin';
 import type { QuickAction, QuickOutcome } from '../native/quickAction';
 import { success, warning } from './haptics';
@@ -19,17 +19,36 @@ const ICONS: Record<QuickAction, SFSymbol> = {
 
 type State = 'sending' | QuickOutcome;
 
+/** How long a chip shows Sent or Couldn't send before it is a button again. */
+const SETTLE_MS = 4_000;
+
 /**
- * A seat's quick actions (ADR 779/791/792): Start, Check inbox, Check PR, Resume and Stop, each one
- * tap. No Face ID once the question key is on (nick, 2026-11-03). The chip says it was sent; what
- * the seat did comes back as a quiet notification.
+ * A seat's quick actions (ADR 779/791/792), only those that fit the seat (`seatActions`). One tap,
+ * no Face ID once the question key is on (nick, 2026-11-03). A press says Sending…, then Sent or
+ * Couldn't send for a few seconds; `onOutcome` lets the screen say more. What the seat did comes
+ * back as a quiet notification. `compact`: icon-only, for a seat row.
  */
-export function QuickActions({ pin, seat }: { pin: PairingPin; seat: string }) {
+export function QuickActions({
+  pin,
+  seat,
+  actions,
+  compact = false,
+  onOutcome,
+}: {
+  pin: PairingPin;
+  seat: string;
+  actions: readonly QuickAction[];
+  compact?: boolean;
+  onOutcome?: (action: QuickAction, outcome: QuickOutcome) => void;
+}) {
   const p = usePalette();
   const [state, setState] = useState<Partial<Record<QuickAction, State>>>({});
+  const timers = useRef(new Map<QuickAction, ReturnType<typeof setTimeout>>());
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const press = async (action: QuickAction) => {
     if (state[action] === 'sending') return;
+    clearTimeout(timers.current.get(action));
     setState((s) => ({ ...s, [action]: 'sending' }));
     let outcome: QuickOutcome;
     try {
@@ -40,43 +59,47 @@ export function QuickActions({ pin, seat }: { pin: PairingPin; seat: string }) {
     }
     if (outcome === 'sent') success();
     else if (outcome === 'failed') warning();
+    onOutcome?.(action, outcome);
     setState((s) => ({ ...s, [action]: outcome === 'cancelled' ? undefined : outcome }));
+    timers.current.set(
+      action,
+      setTimeout(() => setState((s) => ({ ...s, [action]: undefined })), SETTLE_MS),
+    );
   };
 
   return (
-    <View style={styles.row}>
-      {QUICK_ACTION_ORDER.map((action) => {
+    <View style={[styles.row, compact && styles.compactRow]}>
+      {actions.map((action) => {
         const label = QUICK_ACTION_LABELS[action];
         const at = state[action];
+        const sent = at === 'sent';
+        const failed = at === 'failed' || at === 'unpaired';
+        const fg = sent ? p.accentText : failed || action === 'stop' ? p.danger : p.text;
+        const icon: SFSymbol = sent
+          ? 'checkmark'
+          : failed
+            ? 'exclamationmark.triangle'
+            : at === 'sending'
+              ? 'ellipsis'
+              : ICONS[action];
         const shown =
-          at === 'sending'
-            ? 'Sending…'
-            : at === 'sent'
-              ? 'Sent'
-              : at === 'failed'
-                ? 'Try again'
-                : label;
-        const stop = action === 'stop';
-        const fg = at === 'failed' || stop ? p.danger : p.text;
+          at === 'sending' ? 'Sending…' : sent ? 'Sent' : failed ? 'Couldn’t send' : label;
         return (
           <Squish
             key={action}
             accessibilityRole="button"
             accessibilityLabel={`${label} ${seat}`}
             accessibilityState={{ busy: at === 'sending' }}
-            {...(at === 'sent' ? { accessibilityValue: { text: 'sent' } } : {})}
+            {...(at && at !== 'sending' ? { accessibilityValue: { text: shown } } : {})}
+            hitSlop={compact ? 4 : 0}
             onPress={() => void press(action)}
             style={[
-              styles.chip,
-              { backgroundColor: at === 'sent' ? p.tint : p.raised, borderColor: p.border },
+              compact ? styles.dot : styles.chip,
+              { backgroundColor: sent ? p.tint : p.raised },
             ]}
           >
-            <Icon
-              name={at === 'sent' ? 'checkmark' : ICONS[action]}
-              color={at === 'sent' ? p.accentText : fg}
-              size={13}
-            />
-            <Text style={[styles.text, { color: at === 'sent' ? p.accentText : fg }]}>{shown}</Text>
+            <Icon name={icon} color={fg} size={compact ? 15 : 13} />
+            {compact ? null : <Text style={[styles.text, { color: fg }]}>{shown}</Text>}
           </Squish>
         );
       })}
@@ -86,14 +109,21 @@ export function QuickActions({ pin, seat }: { pin: PairingPin; seat: string }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  compactRow: { flexWrap: 'nowrap', gap: 6 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    minHeight: 44,
+    minHeight: 40,
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+  },
+  dot: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   text: { fontFamily: font.semibold, fontSize: 14 },
 });
