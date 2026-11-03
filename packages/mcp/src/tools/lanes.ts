@@ -896,8 +896,8 @@ export function registerLanes(
         const landed = await reconcile(brief.in_flight, { cwd: process.cwd() });
         // ADR 792: a seat on shift reads its own bounds first. Best-effort: a roster read that
         // fails leaves the brief as it was.
-        const me = await client
-          .roster()
+        const me = await Promise.resolve()
+          .then(() => client.roster())
           .then((r) => r.members.find((m) => m.name === brief.member) ?? null)
           .catch(() => null);
         return textResult(withShiftLine(fmtNext(brief, landed), me));
