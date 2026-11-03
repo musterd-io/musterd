@@ -293,3 +293,18 @@ Context; the write-up must say **inbox path**, not dispatch.
 Evidence and corrections 1–5 are dolly's, produced by the free check it ran instead of
 spending the approved budget, and verified independently against the ledger before this
 amendment landed.
+
+## Note, 2026-11-02 — the W39–W40 rise holds (watch verdict)
+
+The watch [2026-09-29-adr-250-weekly-reads](../watches/2026-09-29-adr-250-weekly-reads.md)
+asked whether the W39–W40 rise in asks per merged PR was transient. It was not. On
+2026-11-02, `pnpm adr250:asks-per-pr` read W41 0.19, W42 0.76, W43 0.54 and W44 0.91 asks/PR.
+All four weeks are above the 0.06–0.11 band, and each had at least 124 merged PRs. This ADR
+predicted the ratio would fall, and it rose. Backlog items 2 (merge loop) and 4 (acceptance
+absorption) had not landed in the window, so the prediction about their effect is still
+untested. The cause of the rise is not established. The script counts every directed `ask`
+to a human, so routing more acts to nick as asks would move the number as much as more real
+judgment load would. Separating the two needs the asks split by kind, and nobody has done
+that. Beside it: capability-miss inert share rose from 6% at the watch's open to 53%
+all-time, and DEFERRED repeat wakes are 98% repeats. The repeats are dominated by `seat not
+in this machine's host registry`. Both still wait on items 3 and 1.

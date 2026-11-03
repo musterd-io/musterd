@@ -12,7 +12,8 @@ cadence:    "weekly, Monday. The reader is dolly. Each read posts one `status_up
 opened:     2026-09-29
 opened_by:  dolly
 revisit_by: 2026-11-02
-status:     open
+status:     resolved
+resolution: "THE RISE HOLDS. Read 2026-11-02 by dolly. `pnpm adr250:asks-per-pr`: W41 0.19 (24 asks / 124 PRs), W42 0.76 (149/195), W43 0.54 (70/130), W44 0.91 (126/138). All four weeks are above 0.11, against a bar of three at or below it. Every week is over the 20-PR floor. No `void_if` fired: `scripts/research/adr-250-asks-per-pr.ts` has no commit inside the window, and no commit in the window names the merge loop or acceptance absorption (backlog items 2 and 4). All but one of the window's asks went to nick (510 of 511, all-time window). Cause not established: the script counts every directed `ask` to a human, so a change in which acts are routed to nick as asks would raise the ratio without any extra judgment load. Capability-miss (no pass bar, item 3 unlanded): 5457 landings, 2877 inert (53%, up from 6% at open), 26 repeated triples. The largest are dreamy 702× and ghost 586× `dispatch_continuation`. Repeat wakes (no pass bar, item 1 unlanded): DEFERRED 18028 outcomes, 98% repeats, led by `seat not in this machine's host registry`. FAILED 736 outcomes, 68% repeats. The weekly Monday status_updates the cadence promised were not posted; this read is the only one. No successor opened."
 ---
 
 Opened to close the second half of lane 01M1MMMDCRYFA0G9RVZQ7H7WX9. PR #1286 built the two missing
