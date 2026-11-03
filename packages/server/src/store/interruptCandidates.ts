@@ -1,5 +1,6 @@
 import { isAwaitingAcceptance } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { INTERRUPT_TEXT_GUARD } from '../db/ladder.js';
 import { isHuddleTurnAct, listRenderedActs } from './audit.js';
 import { handoffNamedLaneOutOfPlay } from './delivery.js';
 import type { MessageRow } from './rows.js';
@@ -38,9 +39,10 @@ export const INTERRUPT_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
  * accept/decline is a DM to the asker, so neither filter would keep the row that discharges a
  * self-answered obligation. The huddle path already fetches "mine" for the same reason.
  *
- * The `meta` predicates are `json_extract` and therefore unindexed: this still SCANS the window, it
- * just stops carrying it back. That is the whole win, and it is why the cost is now a function of the
- * window's size in SQLite rather than of its size in V8.
+ * The `meta` predicates are `json_extract` and therefore unindexed. On SQLite the text guard is not:
+ * v139's partial index holds only the rows that pass it, so the read walks those rows of the window
+ * and never fetches the rest (lane 01M6EV84VH, after ADR 778). On Postgres it still scans the
+ * window; it just stops carrying it back.
  *
  * THE TEXT GUARD IN FRONT. On Postgres each `json_extract` is a `meta::jsonb` parse, per row, per
  * predicate — a seat whose cursor never moves re-parsed the team's whole history at every tool
@@ -52,7 +54,8 @@ export const INTERRUPT_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
  * OR, Postgres turned the EXISTS into a hashed subplan over every tenant's messages.
  *
  * Keep this in step with `pendingInterrupts`, in BOTH blocks — a new meta key goes in the text guard
- * as well as the exact predicates. A new shape admitted there and forgotten here would
+ * (`INTERRUPT_TEXT_GUARD` in db/ladder.ts, which a new migration must then re-index) as well as the
+ * exact predicates. A new shape admitted there and forgotten here would
  * narrow the fold's input below what it reads, and the answer would silently change.
  */
 export async function listInterruptCandidates(
@@ -87,21 +90,31 @@ export async function listInterruptCandidates(
     opts.cursorTs ?? 0,
     now - (opts.maxLookbackMs ?? INTERRUPT_LOOKBACK_MS),
   );
+  // Two branches, so the first can use idx_messages_interrupt_window (v139). SQLite uses a partial
+  // index only when the query carries the index's WHERE term unchanged, so branch one ANDs in
+  // `INTERRUPT_TEXT_GUARD` alone, with nothing added to that term. The ADR 558 directed shapes
+  // carry no guard key, so on the idle seam a second branch reads them by idx_messages_to_member:
+  // the directed rows the guard does not pass. Branch one's exact block still admits the directed
+  // rows the guard does pass, as before. `IS NOT TRUE` keeps a row whose guard is NULL (meta NULL,
+  // no other shape). Each row of the old single read comes back once.
+  const directedBranch = opts.directed
+    ? `
+      UNION ALL
+      SELECT * FROM messages
+        WHERE team_id = ?
+          AND to_member = ?
+          AND act IN ('ask','request_help','handoff')
+          AND from_member != ?
+          AND created_at > ?
+          AND ${INTERRUPT_TEXT_GUARD} IS NOT TRUE`
+    : '';
   const windowRows = await db.all<MessageRow>(
     `SELECT * FROM messages
         WHERE team_id = ?
           AND (to_member = ? OR to_kind IN ('team','broadcast'))
           AND from_member != ?
           AND created_at > ?
-          AND (
-            act IN ('steer','resolve','accept','decline')
-            OR thread_id IS NOT NULL
-            OR meta LIKE '%"urgent"%'
-            OR meta LIKE '%"lane_review"%'
-            OR meta LIKE '%"eligible"%'
-            OR meta LIKE '%"huddle"%'
-            OR meta LIKE '%"incident"%'${directed}
-          )
+          AND ${INTERRUPT_TEXT_GUARD}
           AND (
             act IN ('steer','resolve','accept','decline')
             OR json_extract(meta, '$.urgent') = 1
@@ -120,10 +133,13 @@ export async function listInterruptCandidates(
                    AND json_extract(root.meta, '$.huddle') IS NOT NULL
               )
             )
-          )
+          )${directedBranch}
         ORDER BY created_at ASC, id ASC`,
     opts.directed
-      ? [member.team_id, member.id, member.id, lookbackFloor, member.id, member.id, member.team_id]
+      ? [
+          ...[member.team_id, member.id, member.id, lookbackFloor, member.id, member.team_id],
+          ...[member.team_id, member.id, member.id, lookbackFloor],
+        ]
       : [member.team_id, member.id, member.id, lookbackFloor, member.team_id],
   );
 

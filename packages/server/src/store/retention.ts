@@ -390,9 +390,7 @@ async function syncLogBytes(db: Driver, out: StoreSizes): Promise<void> {
     const r =
       db.dialect === 'postgres'
         ? await db.get<{ b: number | null }>("SELECT pg_total_relation_size('sync_log') AS b")
-        : await db.get<{ b: number | null }>(
-            "SELECT SUM(pgsize) AS b FROM dbstat WHERE name = 'sync_log' OR name LIKE 'idx_sync_log_%'",
-          );
+        : await sqliteSyncLogBytes(db);
     if (r && r.b !== null) {
       const v = Number(r.b);
       out.sync_log_bytes = v;
@@ -401,6 +399,24 @@ async function syncLogBytes(db: Driver, out: StoreSizes): Promise<void> {
   } catch {
     // a build without dbstat: omit, do not guess
   }
+}
+
+/** dbstat walks only the b-tree a `name = ?` constraint names; under an OR or a LIKE it gets no
+ *  constraint and walks every page of the file (ADR 778 follow-up, lane 01M6EV84VH: 56 → 5 ms on a
+ *  test file where sync_log is a tenth of it). So: one walk per sync_log b-tree. */
+async function sqliteSyncLogBytes(db: Driver): Promise<{ b: number | null }> {
+  const names = await db.all<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE name = 'sync_log' OR (type = 'index' AND tbl_name = 'sync_log')",
+  );
+  let b: number | null = null;
+  for (const { name } of names) {
+    const r = await db.get<{ b: number | null }>(
+      'SELECT SUM(pgsize) AS b FROM dbstat WHERE name = ?',
+      [name],
+    );
+    if (r && r.b !== null) b = (b ?? 0) + Number(r.b);
+  }
+  return { b };
 }
 
 /** How many churn rows a pass would take right now — `musterd store prune --dry-run`. */

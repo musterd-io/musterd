@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
 import { WAKE_AUDIT_SQL, WAKE_LEASED_SQL } from './insights.js';
+import { listInterruptCandidates } from './interruptCandidates.js';
 import { OWED_REVIEWS_SQL } from './orientation.js';
 
 /**
@@ -121,4 +122,68 @@ withDrivers('owed reviews plan', (open, kind) => {
     ]);
     expect(plan.map((r) => r.detail).join(' | ')).toContain('idx_messages_lane_review');
   });
+});
+
+withDrivers('interrupt window plan', (open, kind) => {
+  // After #3729 the interrupt window read was the hub's top slow statement (875 runs, 359 s in four
+  // hours, lane 01M6EV84VH): a stale cursor widens the window to INTERRUPT_LOOKBACK_MS and the read
+  // fetched every row in it to test the text guard. v139's partial index holds only the rows that
+  // pass the guard, both seams must keep using it, and the idle seam's directed branch must seek
+  // too. The SQL is built inside the function, so a driver wrapper records it and the test explains
+  // what was actually sent.
+  for (const directed of [false, true])
+    it.skipIf(kind !== 'sqlite')(
+      `the ${directed ? 'idle' : 'boundary'} seam reads the interrupt-window index`,
+      async () => {
+        const db = await open();
+        await db.run('PRAGMA foreign_keys = OFF');
+        for (const id of ['m0', 'm1'])
+          await db.run(
+            "INSERT INTO members (id, team_id, name, kind, created_at, updated_at) VALUES (?, 't', ?, 'agent', 0, 0)",
+            [id, id],
+          );
+        // Shaped like a hub: most rows are team-wide lane chatter the guard drops.
+        for (let i = 0; i < 2000; i++) {
+          const guard = i % 10 === 0;
+          await db.run(
+            "INSERT INTO messages (id, team_id, from_member, to_member, to_kind, act, body, meta, ts, created_at) VALUES (?, 't', 'm1', ?, ?, ?, 'b', ?, ?, ?)",
+            [
+              `M${String(i).padStart(5, '0')}`,
+              guard ? 'm0' : null,
+              guard ? 'member' : 'team',
+              guard ? 'steer' : 'message',
+              JSON.stringify({ lane: `L${i}` }),
+              i,
+              i,
+            ],
+          );
+        }
+        await db.run('ANALYZE');
+        const sent: { sql: string; params: unknown[] }[] = [];
+        const spy = new Proxy(db, {
+          get(target, prop, receiver) {
+            if (prop === 'all')
+              return (sql: string, params: unknown[] = []) => {
+                sent.push({ sql, params });
+                return target.all(sql, params);
+              };
+            return Reflect.get(target, prop, receiver) as unknown;
+          },
+        });
+        await listInterruptCandidates(
+          spy,
+          { id: 'm0', team_id: 't', name: 'm0' },
+          { directed, now: 0 },
+        );
+        const window = sent.find((s) => s.sql.includes("to_kind IN ('team','broadcast')"));
+        expect(window).toBeDefined();
+        const plan = await db.all<{ detail: string }>(
+          `EXPLAIN QUERY PLAN ${window!.sql}`,
+          window!.params,
+        );
+        const detail = plan.map((r) => r.detail).join(' | ');
+        expect(detail).toContain('idx_messages_interrupt_window');
+        expect(detail).not.toMatch(/SCAN messages/);
+      },
+    );
 });
