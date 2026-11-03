@@ -18,6 +18,9 @@ export interface LoadDeclaredSetArgs {
   /** The roles the bound seat holds. */
   roles: readonly string[];
   now: number;
+  /** How long the daemon read may take before it counts as failed (default 3s): a session start
+   *  waits on it, and a hung daemon must cost a stale set, not a stuck launch. */
+  timeoutMs?: number;
 }
 
 /**
@@ -29,10 +32,22 @@ export interface LoadDeclaredSetArgs {
 export async function loadDeclaredSet(args: LoadDeclaredSetArgs): Promise<DeclaredSet> {
   const path = join(args.worktreeRoot, SEAT_TOOLS_CACHE_REL);
   let policy: SeatToolsPolicy | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    policy = await args.fetch();
+    policy = await Promise.race([
+      args.fetch(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('seat tools read timed out')),
+          args.timeoutMs ?? 3_000,
+        );
+        timer.unref?.();
+      }),
+    ]);
   } catch {
     policy = undefined;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
   if (policy) {
     const set: DeclaredSet = {

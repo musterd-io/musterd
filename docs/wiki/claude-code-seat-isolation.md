@@ -53,8 +53,8 @@ prefix, while the other connectors were present. This is the complement's shape 
 - claude.ai-synced plugins: one directory per plugin under `~/.claude/plugins/synced/<bucket>/`.
   A `~g2` suffix on the directory name is not part of the plugin id: `langfuse~g2` is
   `langfuse@synced`.
-- Personal skills: directory names under `~/.claude/skills/`. Synced skills are under
-  `~/.claude/skills/synced/<bucket>/`.
+- Personal skills: directory names under `~/.claude/skills/`, invoked by that name. Synced skills
+  are directories under `~/.claude/skills/synced/<bucket>/`, invoked as `anthropic-skills:<name>`.
 - claude.ai connectors: `claudeAiMcpEverConnected` in `~/.claude.json`, as display names
   (`claude.ai Gmail`). The tool prefix replaces spaces and dots with `_`: `mcp__claude_ai_Gmail`.
   The list holds every connector ever connected, not only the current ones; denying an extra one

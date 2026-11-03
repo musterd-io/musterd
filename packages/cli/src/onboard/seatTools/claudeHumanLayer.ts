@@ -10,7 +10,8 @@ import type { FsSeam } from '../reconcile/context.js';
 export interface HumanLayer {
   /** Enabled plugins (`PLUGIN@MARKETPLACE`), plus claude.ai-synced ones as `<name>@synced`. */
   plugins: string[];
-  /** Skill directory names under `~/.claude/skills/`, synced buckets included. */
+  /** Skill names: directory names under `~/.claude/skills/`, and synced ones as
+   *  `anthropic-skills:<name>`. */
   skills: string[];
   /** MCP tool prefixes: user-config servers by key, claude.ai connectors as `claude_ai_<Name>`. */
   mcpServers: string[];
@@ -18,6 +19,9 @@ export interface HumanLayer {
    *  layer may add entries but never removes one. */
   complete: boolean;
 }
+
+/** The namespace a claude.ai-synced skill is listed and invoked under. */
+export const SYNCED_SKILL_NAMESPACE = 'anthropic-skills';
 
 /** A claude.ai connector's display name as its tool prefix: `claude.ai Gmail` → `claude_ai_Gmail`. */
 export function connectorPrefix(displayName: string): string {
@@ -65,7 +69,9 @@ export function readClaudeHumanLayer(fs: FsSeam, env: NodeJS.ProcessEnv): HumanL
       continue;
     }
     for (const bucket of fs.listDirs?.(join(skillsRoot, 'synced')) ?? []) {
-      for (const name of fs.listDirs?.(join(skillsRoot, 'synced', bucket)) ?? []) skills.add(name);
+      // A claude.ai-synced skill is invoked as `anthropic-skills:<name>` (the 2026-11-03 listing).
+      for (const name of fs.listDirs?.(join(skillsRoot, 'synced', bucket)) ?? [])
+        skills.add(`${SYNCED_SKILL_NAMESPACE}:${name}`);
     }
   }
 

@@ -3,8 +3,9 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { FEATURE_EPOCH, SESSION_REACH_TOOLS } from '@musterd/protocol';
+import { bindingSeat, FEATURE_EPOCH, SESSION_REACH_TOOLS } from '@musterd/protocol';
 import { hasRunnable as has, resolveClaudeBin } from '../../claudeBin.js';
+import { readBindingAt } from '../../config.js';
 import { readModelFromTranscript } from '../../session/transcript-model.js';
 import { writeJsonAtomic } from '../atomicWrite.js';
 import { isDeclined } from '../declined.js';
@@ -25,13 +26,18 @@ import {
   RETIRED_SURFACE_ENV,
 } from '../mcpEntry.js';
 import { canonicalRuleForm, seatFloorDenies, STANDARD_FLOOR } from '../permissions.js';
+import { claudeComplement, type ClaudeSeatToolsPayload } from '../seatTools/claudeComplement.js';
+import { readClaudeHumanLayer } from '../seatTools/claudeHumanLayer.js';
+import { withSeatTools } from '../seatTools/context.js';
 import { nodeExec, type ExecSeam, type FsSeam, type HarnessContext } from '../reconcile/context.js';
 import {
   canonicalFingerprint,
   folderResourceKey,
   machineResourceKey,
   repoSharedResourceKey,
+  type FragmentIntent,
   type HarnessAdapter,
+  type ObservedFragment,
 } from '../reconcile/fragments.js';
 import {
   applyRoleSkill,
@@ -62,6 +68,8 @@ interface ClaudeSettings {
   hooks?: Record<string, ClaudeHookMatcher[]>;
   /** The seat chip's slot (see {@link installMusterdStatusline}) — one per settings file. */
   statusLine?: { type?: string; command?: string };
+  /** Plugin on/off switches; the ADR 794 `seatTools` fragment owns the keys it writes. */
+  enabledPlugins?: Record<string, boolean>;
 }
 function settingsLocalPath(dir: string = process.cwd()): string {
   return join(dir, '.claude', 'settings.local.json');
@@ -1397,10 +1405,99 @@ async function claudeBinFor(exec: ExecSeam): Promise<string> {
   return (await resolveClaudeBin()) ?? 'claude';
 }
 
+/**
+ * ADR 794 §2: the folder-side complement, for an agent seat only. A human's own folder keeps every
+ * tool, so the fragment is desired only when the caller resolved a seat's set or the folder is
+ * bound to an agent seat. An empty complement (nothing declared, nothing in the human's layer) is
+ * no fragment at all, so it never observes as missing.
+ */
+async function seatToolsFragments(
+  ctx: HarnessContext,
+  containerKey: string,
+): Promise<FragmentIntent[]> {
+  let declared = ctx.seatTools;
+  if (!declared) {
+    const binding = readBindingAt(ctx.worktreeRoot);
+    if (!binding || !bindingSeat(binding)) return [];
+    declared = (await withSeatTools(ctx)).seatTools;
+  }
+  if (!declared) return [];
+  const payload = claudeComplement(declared, readClaudeHumanLayer(ctx.fs, ctx.env));
+  if (Object.keys(payload.enabledPlugins).length === 0 && payload.deny.length === 0) return [];
+  return [
+    {
+      harness: 'claude-code',
+      resourceKey: folderResourceKey(ctx.worktreeRoot, 'claude-code', 'seatTools'),
+      containerKey,
+      fragmentKey: 'seatTools',
+      scope: 'folder',
+      fingerprint: canonicalFingerprint(payload),
+      payload,
+    },
+  ];
+}
+
+function observeSeatTools(ctx: HarnessContext, intent: FragmentIntent): ObservedFragment {
+  const settings = readSettingsSeam(ctx.fs, join(ctx.worktreeRoot, localSettingsRel()));
+  if (settings === null) {
+    return {
+      state: 'invalid-container',
+      issues: [{ path: '<settings>', message: 'not valid JSON' }],
+    };
+  }
+  const desired = intent.payload as ClaudeSeatToolsPayload;
+  const enabled: Record<string, unknown> = settings.enabledPlugins ?? {};
+  const deny = new Set(settings.permissions?.deny ?? []);
+  const plugins = Object.entries(desired.enabledPlugins).filter(([id, on]) => enabled[id] === on);
+  const denied = desired.deny.filter((e) => deny.has(e));
+  const lingering = desired.undeny.filter((e) => deny.has(e));
+  if (plugins.length === 0 && denied.length === 0) return { state: 'absent' };
+  const complete =
+    plugins.length === Object.keys(desired.enabledPlugins).length &&
+    denied.length === desired.deny.length &&
+    lingering.length === 0;
+  return {
+    state: 'present',
+    fingerprint: complete
+      ? intent.fingerprint
+      : canonicalFingerprint({ plugins, denied, lingering }),
+  };
+}
+
+/** Write owns every `enabledPlugins` key in the payload (a hand-set value is overwritten), adds
+ *  the denies, and takes back out the denies the seat now declares. Every other key survives. */
+function applySeatTools(
+  ctx: HarnessContext,
+  intent: FragmentIntent,
+  kind: 'write' | 'remove',
+): void {
+  const path = join(ctx.worktreeRoot, localSettingsRel());
+  const settings = readSettingsSeam(ctx.fs, path);
+  if (settings === null) throw new Error('settings container invalid at apply time');
+  const desired = intent.payload as ClaudeSeatToolsPayload;
+  const enabled = { ...(settings.enabledPlugins ?? {}) };
+  const deny = new Set(settings.permissions?.deny ?? []);
+  if (kind === 'remove') {
+    for (const id of Object.keys(desired.enabledPlugins)) delete enabled[id];
+    for (const e of desired.deny) deny.delete(e);
+  } else {
+    Object.assign(enabled, desired.enabledPlugins);
+    for (const e of desired.deny) deny.add(e);
+    for (const e of desired.undeny) deny.delete(e);
+  }
+  const next: ClaudeSettings = { ...settings, permissions: { ...(settings.permissions ?? {}) } };
+  if (Object.keys(enabled).length > 0) next.enabledPlugins = enabled;
+  else delete next.enabledPlugins;
+  if (deny.size > 0) next.permissions!.deny = [...deny];
+  else delete next.permissions!.deny;
+  if (Object.keys(next.permissions!).length === 0) delete next.permissions;
+  writeSettingsSeam(ctx.fs, path, next);
+}
+
 export const claudeCodeAdapter: HarnessAdapter = {
   id: 'claude-code',
   surface: 'claude-code',
-  adapterVersion: 2,
+  adapterVersion: 3,
   interactive: {
     resolveBin: () => resolveClaudeBin(),
     installHint: 'npm install -g @anthropic-ai/claude-code',
@@ -1507,6 +1604,7 @@ export const claudeCodeAdapter: HarnessAdapter = {
         CLAUDE_BRIDGE,
         `folder ${ctx.worktreeRoot} claude-code-role-skills`,
       ),
+      ...(await seatToolsFragments(ctx, localContainer)),
     ];
   },
 
@@ -1584,6 +1682,8 @@ export const claudeCodeAdapter: HarnessAdapter = {
           fingerprint: complete ? intent.fingerprint : canonicalFingerprint(present),
         };
       }
+      case 'seatTools':
+        return observeSeatTools(ctx, intent);
       case 'guidance':
         return observeFileMap(
           ctx.fs,
@@ -1688,6 +1788,9 @@ export const claudeCodeAdapter: HarnessAdapter = {
         writeSettingsSeam(ctx.fs, path, next);
         return;
       }
+      case 'seatTools':
+        applySeatTools(ctx, intent, mutation.kind === 'remove' ? 'remove' : 'write');
+        return;
       case 'guidance':
         applyFileMap(
           ctx.fs,

@@ -40,7 +40,7 @@ describe('readClaudeHumanLayer (ADR 794)', () => {
 
   it('lists personal and synced skills by directory name', () => {
     expect(readClaudeHumanLayer(fixture(), env).skills).toEqual([
-      'caveman',
+      'anthropic-skills:caveman',
       'impeccable',
       'wrangler',
     ]);
