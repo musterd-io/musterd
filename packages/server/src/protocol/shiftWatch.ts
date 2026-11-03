@@ -21,7 +21,12 @@ import {
   liveLease,
   seatWakeDefaults,
 } from '../store/residency.js';
-import { parseWorkingHours, type MemberRow, type TeamRow } from '../store/rows.js';
+import {
+  parseWorkingHours,
+  resolveCapabilities,
+  type MemberRow,
+  type TeamRow,
+} from '../store/rows.js';
 import {
   budgetRaisedUsd,
   getShift,
@@ -225,6 +230,18 @@ export async function applyShiftQuickAction(
   }
 }
 
+/** ADR 795: how many times a seat's budget may be raised in one day. */
+export const MAX_BUDGET_RAISES_PER_DAY = 2;
+
+/** May this person raise this seat's spend? An admin, or the seat's sponsor (ADR 501's halt rule). */
+function mayRaiseBudget(person: MemberRow, seat: MemberRow): boolean {
+  return (
+    person.kind === 'human' &&
+    person.left_at === null &&
+    (resolveCapabilities(person).is_admin || seat.sponsored_by === person.id)
+  );
+}
+
 /**
  * ADR 795: today's budget is spent and a person pressed Start. The seat asks them, once a day, to
  * add one more day's budget for today; the answer is settled by {@link settleBudgetAsks}.
@@ -238,6 +255,34 @@ async function askBudgetRaise(
   addUsd: number,
   now: number,
 ): Promise<void> {
+  // From the commit security review: raising spend is a policy change, so only a person who may
+  // change this seat's policy — an admin, or the seat's sponsor — is asked; and at most
+  // MAX_BUDGET_RAISES_PER_DAY times a day.
+  if (!mayRaiseBudget(person, seat)) {
+    await appendAudit(ctx.db, team.id, {
+      actor: person.name,
+      action: 'shift.budget_declined',
+      target: seat.name,
+      result: 'deny',
+      detail: { day, reason: 'not_authorized' },
+    });
+    return;
+  }
+  const raisedToday = await ctx.db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM audit WHERE team_id = ? AND action = 'shift.budget_raised'
+       AND target = ? AND json_extract(detail, '$.day') = ?`,
+    [team.id, seat.name, day],
+  );
+  if ((raisedToday?.n ?? 0) >= MAX_BUDGET_RAISES_PER_DAY) {
+    await appendAudit(ctx.db, team.id, {
+      actor: person.name,
+      action: 'shift.budget_declined',
+      target: seat.name,
+      result: 'deny',
+      detail: { day, reason: 'raise_cap' },
+    });
+    return;
+  }
   const open = await ctx.db.get<{ id: string }>(
     `SELECT id FROM audit WHERE team_id = ? AND action = 'shift.budget_asked' AND target = ?
        AND json_extract(detail, '$.day') = ? AND json_extract(detail, '$.settled') IS NULL
@@ -312,7 +357,15 @@ export async function settleBudgetAsks(ctx: Ctx, now: number): Promise<number> {
     const team = await getTeamById(ctx.db, ask.team_id);
     const person = await getMemberById(ctx.db, answer.from_member);
     const seat = team ? await getMemberByName(ctx.db, team.id, ask.target) : undefined;
-    if (!team || !seat || person?.kind !== 'human' || choice !== 0) {
+    // The answerer's authority is checked again here, not only the asker's at ask time.
+    if (
+      !team ||
+      !seat ||
+      !person ||
+      person.kind !== 'human' ||
+      !mayRaiseBudget(person, seat) ||
+      choice !== 0
+    ) {
       await appendAudit(ctx.db, ask.team_id, {
         actor: person?.name ?? null,
         action: 'shift.budget_declined',
