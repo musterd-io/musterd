@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { FLOOR, project, WALL_H } from './iso';
 import {
   ART,
+  DRAPE_REACH,
   CHECK_IN_MARKS,
   FRONT_DESK,
   RECEPTIONIST,
@@ -274,6 +275,32 @@ describe('the walls are not a matched set', () => {
           false,
         );
       }
+    }
+  });
+
+  it('never hangs a picture on a window treatment', () => {
+    // Every window wears a rod and two tied-back drapes that reach DRAPE_REACH past its frame (nick,
+    // 2026-11-03: "none of the art should be on top of any window treatments"). Two pieces sat on a
+    // drape's edge until then.
+    for (const a of ART) {
+      const half = a.w / 2 / FLOOR;
+      for (const w of WINDOWS) {
+        const overlaps = a.tc + half > w.t0 - DRAPE_REACH && a.tc - half < w.t1 + DRAPE_REACH;
+        expect(overlaps, `art (${a.painting} on wall ${a.wall} at t=${a.tc}) overlaps a drape`).toBe(false);
+      }
+    }
+  });
+
+  it('never hangs a picture behind the front door', () => {
+    // The door stands ~47 units off the back-left wall at ly 815, so from the camera it covers the wall
+    // along t 0.79–0.96 up to ~110 units (measured on the render). The hills piece hung at a 75-unit
+    // bottom edge there and showed not at all.
+    const DOOR_BAND = [0.79, 0.96] as const;
+    const DOOR_HEAD = 110;
+    for (const a of ART.filter((p) => p.wall === 0)) {
+      const half = a.w / 2 / FLOOR;
+      if (a.tc + half < DOOR_BAND[0] || a.tc - half > DOOR_BAND[1]) continue;
+      expect(a.uc * WALL_H - a.h / 2, `art (${a.painting}) hangs behind the door`).toBeGreaterThan(DOOR_HEAD);
     }
   });
 

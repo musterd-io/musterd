@@ -55,8 +55,12 @@ copying any actual art so we dont get in trouble legally".
   A re-render of the frames that moves them must re-measure.
 - The mirror on the back-left wall applies to images too (`paintingQuad`'s `mirror`): a picture
   drawn through `wallPt` there would read backwards.
-- The fifth frame (slot 3, `tc 0.87, uc 0.46`) hangs behind the front door's frame and does not show.
-  It did not show before this change either. Whether to move or drop it is nick's call in the review.
+- nick approved the set on 2026-11-03 ("ship them and move the hills piece … none of the art should
+  be on top of any window treatments"). The hills piece (slot 3) had hung behind the front door's
+  frame, out of sight; the wildflowers and the colour field each overlapped a drape. The three small
+  pieces now hang in a row above the door, and the colour field in the right wall's corner.
+  `layout.test.ts` holds the new rules: no picture inside a window's drape reach (`DRAPE_REACH`), none
+  behind the door.
 - If the image model's licence or availability changes, the committed sources and sidecars still
   stand; a new picture would need a model that passes the same licence check.
 

@@ -788,23 +788,31 @@ export interface ArtPiece {
 }
 
 export const ART: readonly ArtPiece[] = [
-  // back-left wall: a large landscape near the corner, then the salon cluster of three past the
-  // far window. Both walls are mostly glass, so the only places a picture can hang are the corner
-  // stretch (t < 0.28), the gap between the windows (0.46–0.58) and the far end (t > 0.78) —
-  // `layout.test.ts` holds this, because the first cut hung three of these ON a window.
-  { wall: 0, tc: 0.14, uc: 0.56, w: 54, h: 42, painting: 'river', frame: 'thick' },
-  { wall: 0, tc: 0.83, uc: 0.68, w: 26, h: 26, painting: 'wildflowers', frame: 'none' },
-  { wall: 0, tc: 0.92, uc: 0.66, w: 22, h: 30, painting: 'still-life', frame: 'thin' },
-  { wall: 0, tc: 0.87, uc: 0.46, w: 30, h: 22, painting: 'hills', frame: 'thin' },
-  // back-right wall: the big one. The former small square under the clock is now the calendar fixture.
+  // back-left wall: a large landscape near the corner, then the salon cluster of three over the front
+  // door. Both walls are mostly glass and every window wears drapes that reach `DRAPE_REACH` past its
+  // frame, so the only places a picture can hang are the corner stretch (t < 0.225) and the far end
+  // (t > 0.835) — `layout.test.ts` holds both, because the first cut hung three of these ON a window
+  // and the next hung two on a drape (nick, 2026-11-03: "none of the art should be on top of any
+  // window treatments").
   //
-  // It used to hang at tc 0.15, directly over the corner bookshelf — which was fine when that unit
-  // was 66 tall and is not now that the tall-narrow archetype took it to 88 plus a plant on top. The
-  // shelf ate the picture's bottom third (nick, 2026-07-30: "a piece of art hidden behind a
-  // bookcase"). Moved along the wall into the clear stretch between that shelf and the near window
-  // rather than raised, because the wall crops at the top near this corner.
-  { wall: 1, tc: 0.23, uc: 0.58, w: 60, h: 44, painting: 'colour-field', frame: 'thick' },
+  // The cluster sits above the door's lintel in a row. The hills piece used to hang low beside the
+  // door, where the door's frame hid all of it (ADR 789).
+  { wall: 0, tc: 0.14, uc: 0.56, w: 54, h: 42, painting: 'river', frame: 'thick' },
+  { wall: 0, tc: 0.8755, uc: 0.75, w: 26, h: 26, painting: 'wildflowers', frame: 'none' },
+  { wall: 0, tc: 0.913, uc: 0.77, w: 22, h: 30, painting: 'still-life', frame: 'thin' },
+  { wall: 0, tc: 0.953, uc: 0.74, w: 30, h: 22, painting: 'hills', frame: 'thin' },
+  // back-right wall: the big one, in the corner left of the tall bookshelf. It hung at tc 0.15 over
+  // that shelf until the shelf grew to 88 and ate its bottom third (nick, 2026-07-30: "a piece of art
+  // hidden behind a bookcase"), then at 0.23, where the near window's left drape covered its edge.
+  { wall: 1, tc: 0.07, uc: 0.58, w: 60, h: 44, painting: 'colour-field', frame: 'thick' },
 ];
+
+/**
+ * How far a window's drapes reach past its frame along the wall, as a fraction of it: the rod runs
+ * `t0 − 0.055 … t1 + 0.055` and each tied-back panel hangs inside that (`scene.py` `wall`: `dw` 0.045
+ * plus the rod's 0.01 overhang). Nothing hangs on the wall inside that band.
+ */
+export const DRAPE_REACH = 0.055;
 
 /**
  * The Team-schedule calendar, directly beneath the right-wall clock — the clock's companion, and read
