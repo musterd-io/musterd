@@ -2906,3 +2906,10 @@ formatter) and a Stop button on the quick-action bar while the seat is on shift.
 roster's existing chunk, so initial JS does not move; the total grows ~0.1 KB over the ceiling.
 
 - Falsify: `pnpm perf:check` after a build reports total JS at or under 411,000 B with this lane in.
+
+## 2026-11-03 — nick's avatar: total JS RAISED 411,000 → 412,000 B (lane 01M6HVFN15WE72C2FDS419B0EH)
+
+`appearance.ts` gains `LOOKS_BY_NAME`, a hand-picked look for a named human over the name hash (nick:
+"lets make my avatar (nick) look more like me"). A few hundred bytes gzip; CI read 401.4 KB over the
+401.4 KB ceiling (`static` job, run 41738751558). Raised by 1 KB; nothing else in the total moved.
+
