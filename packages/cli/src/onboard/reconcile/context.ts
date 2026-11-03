@@ -4,6 +4,7 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -13,6 +14,7 @@ import {
 import { dirname, resolve, sep } from 'node:path';
 import { machineConfigRoot } from '../../machinePaths.js';
 import type { RoleSkillBridge } from '../roleSkills.js';
+import type { DeclaredSet } from '../seatTools/resolve.js';
 
 /**
  * The injected seams the multi-harness reconciler runs on (ADR 282). Every adapter and store
@@ -30,6 +32,9 @@ export interface FsSeam {
   fsyncDir(dir: string): void;
   rename(from: string, to: string): void;
   rm(path: string): void;
+  /** The names of a directory's subdirectories; null when it can't be read. Optional so a
+   *  hand-built test seam need not carry it — a reader treats a missing method as unreadable. */
+  listDirs?(dir: string): string[] | null;
 }
 
 /** Process seam — enough identity to distinguish PID reuse (ADR 282 lease reclamation). */
@@ -79,6 +84,9 @@ export interface HarnessContext {
   /** The skills the bound seat's roles name, found in this worktree — one bridge each on harnesses
    *  that catalog skills (ADR 586 §4). Absent: the caller resolved none, and no bridge is desired. */
   roleSkills?: RoleSkillBridge[];
+  /** The bound seat's declared tool set (ADR 794). Absent: none was resolved, and an adapter
+   *  treats the seat as `source: 'none'` — repo tools and the floor only, never wider. */
+  seatTools?: DeclaredSet;
 }
 
 /** The real filesystem seam. */
@@ -121,6 +129,16 @@ export const nodeFs: FsSeam = {
   },
   rm(path) {
     rmSync(path, { force: true });
+  },
+  listDirs(dir) {
+    try {
+      return readdirSync(dir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name)
+        .sort();
+    } catch {
+      return null;
+    }
   },
 };
 
@@ -283,6 +301,18 @@ export function memoryFs(initial?: Record<string, string>): MemoryFs {
     rm(path) {
       maybeFail({ op: 'rm', path });
       files.delete(path);
+    },
+    listDirs(dir) {
+      // Directories exist here only as the parents of files: a name with a deeper path below it.
+      const prefix = dir.endsWith('/') ? dir : `${dir}/`;
+      const names = new Set<string>();
+      for (const path of files.keys()) {
+        if (!path.startsWith(prefix)) continue;
+        const rest = path.slice(prefix.length);
+        const slash = rest.indexOf('/');
+        if (slash > 0) names.add(rest.slice(0, slash));
+      }
+      return names.size > 0 ? [...names].sort() : null;
     },
   };
 }

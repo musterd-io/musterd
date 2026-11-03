@@ -46,7 +46,7 @@ import { SESSION_REACH_WALL as OPENCODE_SESSION_REACH_WALL } from './harnesses/o
 import { loadProvisioning, readProvisionManifest } from './manifest.js';
 import { inspectSeatPermissions } from './permissions.js';
 import { classifyPrimerTarget } from './primer.js';
-import { defaultHarnessContext } from './reconcile/context.js';
+import { defaultHarnessContext, nodeFs } from './reconcile/context.js';
 import { inspectHarnesses, type FragmentInspection } from './reconcile/engine.js';
 import { describeMirror, mirrorRepoServers, type MirrorResult } from './repoServers.js';
 import {
@@ -56,6 +56,7 @@ import {
   roleSkillWireSentence,
   withRoleSkills,
 } from './roleSkills.js';
+import { narrowNewHumanTools } from './seatTools/narrow.js';
 import {
   defaultSelfHealDeps,
   selfHealWorkspace,
@@ -1462,6 +1463,8 @@ export async function runSessionProbe(deps?: {
   postRepair?: (body: WorkspaceRepairBody) => Promise<void>;
   /** The drift-cache write (ADR 408 inc 4); injectable so its ORDER against the repair is testable. */
   refreshDrift?: (cwd: string, daemonBuild: string | undefined, opts?: { force?: boolean }) => void;
+  /** ADR 794: close tools the human added since the last reconcile; returns what it closed. */
+  narrowSeatTools?: (cwd: string) => string[];
 }): Promise<number> {
   const ref = deps?.cliRef !== undefined ? deps.cliRef : cliBuild();
   // Learned once and used twice: it decides build skew below, and it keys the drift cache after the
@@ -1511,6 +1514,17 @@ export async function runSessionProbe(deps?: {
     // (ADR 408: no reconciler, no lease). The same absence status prints as `→ needs wire`.
     const bridge = roleSkillWireLine(cwd);
     if (bridge) process.stdout.write(`${bridge}\n`);
+    // ADR 794 §2: a tool the human enabled since this seat's last reconcile is closed off here,
+    // narrow-only (never enables), and the session is told once — never silently allowed.
+    const closed = (
+      deps?.narrowSeatTools ?? ((c: string) => narrowNewHumanTools(c, nodeFs, process.env))
+    )(cwd);
+    if (closed.length > 0)
+      process.stdout.write(
+        `musterd: closed ${String(closed.length)} tool(s) your setup added that this seat does not declare ` +
+          `(${closed.slice(0, 4).join(', ')}${closed.length > 4 ? ', …' : ''}). A human grants one with ` +
+          '`musterd team policy --seat-tools` (ADR 794).\n',
+      );
   } catch {
     // A health probe never fails a session start, and never invents drift from a folder it cannot read.
   } finally {

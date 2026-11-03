@@ -1624,6 +1624,30 @@ describe('build skew (ADR 135) — warn-only freshness, never drift', () => {
     }
   });
 
+  it('runSessionProbe names the tools it closed for this seat, once (ADR 794)', async () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((c: string) => {
+      lines.push(String(c));
+      return true;
+    }) as never);
+    const bare = mkdtempSync(join(tmpdir(), 'musterd-narrow-'));
+    try {
+      expect(
+        await runSessionProbe({
+          cliRef: undefined,
+          cwd: bare,
+          narrowSeatTools: () => ['posthog@claude-plugins-official'],
+        }),
+      ).toBe(0);
+      const out = lines.join('');
+      expect(out).toContain('closed 1 tool(s)');
+      expect(out).toContain('posthog@claude-plugins-official');
+      expect(out).toContain('--seat-tools');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   // Measured on the live arm 2026-09-16, not predicted: written BEFORE the repair, the cache
   // recorded `guidance: 1` on a workspace the very next line had just healed. `init --check` read
   // coherent while every inbox check for the next ten minutes would have warned about drift that no

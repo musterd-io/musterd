@@ -265,3 +265,166 @@ describe('claudeCodeAdapter — managed fragments', () => {
     if (observed.state === 'present') expect(observed.fingerprint).not.toBe(guidance.fingerprint);
   });
 });
+
+describe('the ADR 794 seatTools fragment', () => {
+  const ROOT = '/w/s';
+  const SETTINGS = `${ROOT}/.claude/settings.local.json`;
+  const humanFiles = {
+    '/h/.claude/settings.json': JSON.stringify({
+      enabledPlugins: {
+        'posthog@claude-plugins-official': true,
+        'figma@claude-plugins-official': true,
+        'superpowers@claude-plugins-official': true,
+      },
+    }),
+    '/h/.claude/skills/impeccable/SKILL.md': 'x',
+    '/h/.claude.json': JSON.stringify({ claudeAiMcpEverConnected: ['claude.ai Gmail'] }),
+  };
+  const declared = (claude_plugins: string[], skills: string[] = []) => ({
+    claude_plugins,
+    codex_plugins: [],
+    skills,
+    mcp_servers: [],
+    deniedSkills: [
+      'superpowers:subagent-driven-development',
+      'superpowers:dispatching-parallel-agents',
+    ],
+    source: 'server' as const,
+    readAt: 1,
+  });
+  function ctx(
+    fs: ReturnType<typeof memoryFs>,
+    seatTools?: ReturnType<typeof declared>,
+  ): HarnessContext {
+    return {
+      worktreeRoot: ROOT,
+      machineConfigRoot: '/machine/.musterd',
+      env: { HOME: '/h' },
+      fs,
+      proc: { pid: 1, startedAt: () => 's1', liveness: () => false },
+      clock: { now: () => 1 },
+      exec: { run: () => Promise.resolve({ ok: false, out: '' }) },
+      team: 'dawn',
+      ...(seatTools ? { seatTools } : {}),
+    };
+  }
+  async function seatToolsIntent(c: HarnessContext) {
+    const intents = await claudeCodeAdapter.desiredFragments(c, await claudeCodeAdapter.target(c));
+    return intents.find((i) => i.fragmentKey === 'seatTools');
+  }
+
+  it('a folder bound to no agent seat gets no seatTools fragment (a human keeps every tool)', async () => {
+    expect(await seatToolsIntent(ctx(memoryFs(humanFiles)))).toBeUndefined();
+  });
+
+  it('enables the declared plugins and disables the rest of the human layer', async () => {
+    const c = ctx(memoryFs(humanFiles), declared(['superpowers@claude-plugins-official']));
+    const intent = (await seatToolsIntent(c))!;
+    expect(intent.payload).toEqual({
+      enabledPlugins: {
+        'figma@claude-plugins-official': false,
+        'posthog@claude-plugins-official': false,
+        'superpowers@claude-plugins-official': true,
+      },
+      deny: ['Skill(impeccable)', 'mcp__claude_ai_Gmail'],
+      undeny: [],
+    });
+  });
+
+  it('owned enabledPlugins entries are overwritten, unowned keys survive', async () => {
+    const fs = memoryFs({
+      ...humanFiles,
+      [SETTINGS]: JSON.stringify({
+        enabledPlugins: { 'figma@claude-plugins-official': true, 'mine@local': true },
+        statusLine: { type: 'command', command: 'theirs.sh' },
+        permissions: { deny: ['Dangerous'] },
+      }),
+    });
+    const c = ctx(fs, declared(['superpowers@claude-plugins-official']));
+    const intent = (await seatToolsIntent(c))!;
+    await claudeCodeAdapter.apply(c, { kind: 'write', intent });
+    const s = JSON.parse(fs.readFile(SETTINGS)!);
+    expect(s.enabledPlugins['figma@claude-plugins-official']).toBe(false);
+    expect(s.enabledPlugins['mine@local']).toBe(true);
+    expect(s.statusLine.command).toBe('theirs.sh');
+    expect(s.permissions.deny).toContain('Dangerous');
+    expect(s.permissions.deny).toContain('mcp__claude_ai_Gmail');
+    expect(await claudeCodeAdapter.observe(c, intent)).toEqual({
+      state: 'present',
+      fingerprint: intent.fingerprint,
+    });
+  });
+
+  it('a newly granted skill comes back out of the deny list', async () => {
+    const fs = memoryFs({
+      ...humanFiles,
+      [SETTINGS]: JSON.stringify({ permissions: { deny: ['Skill(impeccable)'] } }),
+    });
+    const c = ctx(fs, declared(['superpowers@claude-plugins-official'], ['impeccable']));
+    const intent = (await seatToolsIntent(c))!;
+    await claudeCodeAdapter.apply(c, { kind: 'write', intent });
+    expect(JSON.parse(fs.readFile(SETTINGS)!).permissions.deny).not.toContain('Skill(impeccable)');
+  });
+
+  it('first apply adopts the stopgap keys without duplicating them', async () => {
+    const stopgap = {
+      enabledPlugins: {
+        'posthog@claude-plugins-official': false,
+        'figma@claude-plugins-official': false,
+      },
+      permissions: {
+        deny: [
+          'Skill(superpowers:subagent-driven-development)',
+          'Skill(superpowers:dispatching-parallel-agents)',
+          'mcp__claude_ai_Gmail',
+        ],
+      },
+    };
+    const fs = memoryFs({ ...humanFiles, [SETTINGS]: JSON.stringify(stopgap) });
+    const c = ctx(fs, declared(['superpowers@claude-plugins-official']));
+    const intent = (await seatToolsIntent(c))!;
+    await claudeCodeAdapter.apply(c, { kind: 'write', intent });
+    const s = JSON.parse(fs.readFile(SETTINGS)!);
+    const deny = s.permissions.deny as string[];
+    expect(deny.filter((e) => e === 'mcp__claude_ai_Gmail')).toHaveLength(1);
+    expect(deny.filter((e) => e.startsWith('Skill(superpowers:'))).toHaveLength(2);
+    expect(s.enabledPlugins).toEqual({
+      'figma@claude-plugins-official': false,
+      'posthog@claude-plugins-official': false,
+      'superpowers@claude-plugins-official': true,
+    });
+  });
+
+  it('remove takes back only what it enabled; its false and deny entries stay (fail closed)', async () => {
+    const fs = memoryFs({ ...humanFiles, [SETTINGS]: '{}' });
+    const c = ctx(fs, declared(['superpowers@claude-plugins-official']));
+    const intent = (await seatToolsIntent(c))!;
+    await claudeCodeAdapter.apply(c, { kind: 'write', intent });
+    await claudeCodeAdapter.apply(c, { kind: 'remove', intent });
+    const s = JSON.parse(fs.readFile(SETTINGS)!);
+    expect(s.enabledPlugins).toEqual({
+      'figma@claude-plugins-official': false,
+      'posthog@claude-plugins-official': false,
+    });
+    expect(s.permissions.deny).toEqual(
+      expect.arrayContaining(['Skill(impeccable)', 'mcp__claude_ai_Gmail']),
+    );
+  });
+
+  it('never un-denies an entry the permissions fragment owns (the floor skills)', async () => {
+    const floorSkill = 'superpowers:dispatching-parallel-agents';
+    const fs = memoryFs({
+      ...humanFiles,
+      [SETTINGS]: JSON.stringify({ permissions: { deny: [`Skill(${floorSkill})`] } }),
+    });
+    const set = {
+      ...declared(['superpowers@claude-plugins-official'], [floorSkill]),
+      deniedSkills: [],
+    };
+    const c = ctx(fs, set);
+    const intent = (await seatToolsIntent(c))!;
+    expect((intent.payload as { undeny: string[] }).undeny).not.toContain(`Skill(${floorSkill})`);
+    await claudeCodeAdapter.apply(c, { kind: 'write', intent });
+    expect(JSON.parse(fs.readFile(SETTINGS)!).permissions.deny).toContain(`Skill(${floorSkill})`);
+  });
+});

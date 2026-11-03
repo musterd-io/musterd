@@ -37,6 +37,11 @@ So an *empty* wake life under today's argv is already 1.5× the hygiene bound, a
 - Woken sessions lose user-level permission grants. The project-local floor (85 entries here, `mcp__musterd` among them) governs, which is what ADR 261 always intended for a seat.
 - The claude.ai connector servers (account-level, eleven here) survive the flag; they are not a settings layer. Dropping them needs `--strict-mcp-config` with an `--mcp-config` file that carries musterd's entry, a further increment for this lane if the residual measurement says they matter.
 - Codex and OpenCode backends are unchanged; their argv has no equivalent and their lives were not measured here.
+- _2026-11-03 (ADR 794, lane `01M6HHSVAC3RRQ5AHBCDK0WQNV`):_ the line that woken sessions lose
+  user-level plugins is superseded for seats. A seat's folder settings now enable exactly the
+  plugins its team and roles declare (`superpowers` by default), so a woken seat loads those and
+  nothing else from the user layer. The boot cost measured above rises by whatever the declared
+  plugins carry; that is the price of a seat having the same tools on every start path.
 
 ## Observability & Evaluation
 

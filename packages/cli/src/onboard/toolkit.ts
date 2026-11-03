@@ -1,5 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { BINDING_DIR, PluginIdSchema } from '@musterd/protocol';
 import { z } from 'zod';
 import { BUILTIN_TOOLKIT_TEMPLATES } from './toolkits/builtins.js';
@@ -127,7 +128,24 @@ export function toolkitHomes(dir: string): string[] {
  * Load a toolkit by name for `dir`. A user file wins over a built-in of the same name
  * (customization). Throws a friendly Error if the file is missing or invalid.
  */
-export function loadToolkit(dir: string, name: string): Toolkit {
+/** Is `path` tracked by the git repo it sits in? False outside a repo or on any git failure. */
+export function isTrackedByGit(path: string): boolean {
+  try {
+    execFileSync('git', ['ls-files', '--error-unmatch', basename(path)], {
+      cwd: dirname(path),
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadToolkit(
+  dir: string,
+  name: string,
+  tracked: (path: string) => boolean = isTrackedByGit,
+): Toolkit {
   for (const home of toolkitHomes(dir)) {
     const path = join(home, `${name}.json`);
     if (!existsSync(path)) continue;
@@ -137,11 +155,23 @@ export function loadToolkit(dir: string, name: string): Toolkit {
     } catch (err) {
       throw new Error(`could not read toolkit ${name} (${path}): ${(err as Error).message}`);
     }
+    let toolkit: Toolkit;
     try {
-      return parseToolkit(raw);
+      toolkit = parseToolkit(raw);
     } catch (err) {
       throw new Error(`toolkit ${name} (${path}) is invalid: ${zodMessage(err)}`);
     }
+    // ADR 794 §1a: a toolkit file git does not track is local and unaudited, and the seat it
+    // governs can edit it, so it may not add an MCP server. A committed one landed through review.
+    if (toolkit.tools.mcp_servers.length > 0 && !tracked(path)) {
+      process.stderr.write(
+        `musterd: ignoring ${String(toolkit.tools.mcp_servers.length)} MCP server(s) in ${path} — ` +
+          'the file is not committed, and an untracked toolkit cannot add a server (ADR 794). ' +
+          'Commit it, or ask an admin to grant the server with `musterd team policy --seat-tools`.\n',
+      );
+      toolkit = { ...toolkit, tools: { ...toolkit.tools, mcp_servers: [] } };
+    }
+    return toolkit;
   }
   const builtin = BUILTIN_TOOLKITS[name];
   if (builtin) return builtin;

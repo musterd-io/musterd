@@ -215,9 +215,10 @@ Record each answer as a dated claim:
    listed? This is how the complement enumerates them.
 6. Does `permissions.deny: ["mcp__claude_ai_Gmail"]` block a connector's tools?
 
-- [ ] **Step 1: Run the six probes and write the page.**
-- [ ] **Step 2: Correct Tasks 8–10 here, in this plan,** where a probe answer changes them. Commit
-  the page and the plan edit on the increment 3 branch, `feat/seat-tools-claude-code`.
+- [x] **Step 1: Run the six probes and write the page.** Done 2026-11-03: 1 yes, 2 yes (personal
+  and synced skills are excluded), 3 yes (plugin servers drop too), 4 yes, 6 yes; 5 is the
+  page's on-disk section.
+- [x] **Step 2: Correct Tasks 8–11 here, in this plan,** where a probe answer changes them.
 
 ### Task 6: Resolve a seat's declared set
 
@@ -298,9 +299,14 @@ Record each answer as a dated claim:
   }
   export function readClaudeHumanLayer(fs: FsSeam, env: NodeJS.ProcessEnv): HumanLayer;
   ```
-  Read the files, never shell out. Use the spike's answer (Task 5, probe 5) for where the synced
-  plugins and connector names are listed. An unreadable source sets `complete: false`; it does not
-  throw.
+  Read the files, never shell out. The sources, from the Task 5 page
+  (`docs/wiki/claude-code-seat-isolation.md`): `enabledPlugins` true entries in
+  `~/.claude/settings.json`; one directory per synced plugin under `~/.claude/plugins/synced/<bucket>/`
+  (strip a `~g2` suffix, id `<name>@synced`); skill directory names under `~/.claude/skills/` and
+  `~/.claude/skills/synced/<bucket>/`; connector display names in `claudeAiMcpEverConnected` in
+  `~/.claude.json`, mapped to the `claude_ai_<Name>` prefix (spaces and dots become `_`); and
+  top-level `mcpServers` keys in `~/.claude.json`. An unreadable source sets `complete: false`; it
+  does not throw.
 
 - [ ] **Step 1: Write the failing tests** with `memoryFs` fixtures:
   - `lists enabled plugins only, not ones set false`;
@@ -366,41 +372,27 @@ Record each answer as a dated claim:
 - [ ] **Step 4: Run them and see them pass.**
 - [ ] **Step 5: Commit.**
 
-### Task 11: Strict launch argv on wakes and in the interactive launcher
+### Task 11: The launch argv, and untracked toolkit servers
+
+_(Revised 2026-11-03 from the Task 5 page: no `--strict-mcp-config` and no `--setting-sources` on
+the interactive launcher. Strict mode drops plugin MCP servers; the user-layer flag drops musterd's
+own orient hooks. A deny per undeclared server, from Task 9, closes connectors on every path. ADR
+794 carries the amendment.)_
 
 **Files:**
-- Create: `packages/cli/src/onboard/seatTools/claudeMcpConfig.ts`
-- Modify: `packages/cli/src/host/backends/claudeCode.ts` (`argTail`, line 110)
-- Modify: `packages/cli/src/onboard/harnesses/claudeCode.ts` (`interactive.fresh`/`resume`, line 1404)
 - Modify: `packages/cli/src/onboard/toolkit.ts` (an untracked user toolkit file's `mcp_servers` are ignored, with a warning)
-- Modify: `docs/decisions/426-*.md` (dated Consequences note pointing at the new ADR)
-- Test: `packages/cli/src/host/backends/claudeCode.test.ts`, `packages/cli/src/onboard/harnesses/interactive.test.ts`, `packages/cli/src/onboard/toolkit.test.ts`
+- Modify: `docs/decisions/426-*.md` (dated Consequences note: a woken seat now loads its declared plugins)
+- Test: `packages/cli/src/onboard/toolkit.test.ts`
 
-**Interfaces:**
-- Consumes: `DeclaredSet`; the musterd MCP entry (`resolveMcpLaunch`, `launchEntryEnv`).
-- Produces:
-  - `export const SEAT_MCP_CONFIG_REL = '.musterd/claude-mcp.json'`;
-  - a folder fragment `mcp.strict` writing that file: the musterd server, the repo's committed
-    `.mcp.json` servers, and the toolkit's servers;
-  - `export function claudeIsolationArgv(): string[]`, which returns
-    `['--setting-sources', 'project,local', '--strict-mcp-config', '--mcp-config', SEAT_MCP_CONFIG_REL]`.
-    `argTail`, `fresh()` and `resume()` all use it. The launcher spawns with `cwd` at the
-    workspace, so the relative path resolves.
-
-- [ ] **Step 1: Write the failing tests:**
-  - `wake argv carries the isolation flags once` (no duplicate `--setting-sources`);
-  - `fresh and resume argv carry the isolation flags` (`resume('abc')` gives `[...isolation, '--resume', 'abc']`);
-  - `the strict MCP config always contains the musterd server`;
-  - `an untracked user toolkit's mcp_servers are ignored with a warning; a tracked one's load`
-    (use the `ExecSeam` to fake `git ls-files --error-unmatch`).
-- [ ] **Step 2: Run them and see them fail.**
-- [ ] **Step 3: Implement.** If spike probe 3 showed plugin MCP servers drop under
-  `--strict-mcp-config`, write the declared plugins' servers into the same file.
-- [ ] **Step 4: Run them and see them pass.**
-- [ ] **Step 5: Gates, PR, auto-merge.** Body opens with ``Lane `01M6HHSVAC3RRQ5AHBCDK0WQNV`.``
-  After it lands and the refresher bounces the daemon, check one live seat:
-  `claude -p` in `agents/alfie`, ask it to list its skills, and confirm no posthog, brightdata,
-  hookify or Gmail tool shows up. Then close `01M6HB9156`.
+- [ ] **Step 1: Write the failing test** `an untracked user toolkit's mcp_servers are ignored with a
+  warning; a tracked one's load`.
+- [ ] **Step 2: Run it and see it fail.**
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run it and see it pass.**
+- [ ] **Step 5: Gates, PR, auto-merge** once nick has stored revive's set (Task 4). Body opens with
+  ``Lane `01M6HHSVAC3RRQ5AHBCDK0WQNV`.`` After it lands, check one seat: in `agents/alfie`, read
+  the init record (wiki page) and confirm no posthog, brightdata or hookify plugin and no Gmail
+  tool. Then close `01M6HB9156`.
 
 ### Task 12: Each adapter declares its strength
 

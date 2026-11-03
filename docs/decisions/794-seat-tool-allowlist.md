@@ -59,7 +59,9 @@ a field to declare tools, a seat could grant itself an outside-account integrati
 8. **Two isolation layers per harness.** Every musterd-launched session excludes the human's layer
    at launch: for Claude Code, ADR 426's `--setting-sources project,local` extends from wakes to
    the interactive launcher, and both gain `--strict-mcp-config` with a musterd-written MCP
-   config. For a harness started bare in the folder, provisioning also writes an explicit "off"
+   config. _(Amended 2026-11-03: neither change ships. `--strict-mcp-config`
+   also drops plugin MCP servers, and `--setting-sources` on the interactive launcher drops the
+   SessionStart/UserPromptSubmit hooks musterd writes to the user layer. See Consequences.)_ For a harness started bare in the folder, provisioning also writes an explicit "off"
    for everything the human's layer would load that is not declared, recomputed on every
    reconcile and at session start.
 9. **Each adapter declares its strength per tool kind**: `excluded`, `denied` or `open`. An `open`
@@ -81,6 +83,14 @@ are now its declared set on every start path.
 - Outside integrations stay daemon-side (Slack is ADR 668). A seat-side one arrives as a grant.
 - The stopgap in lane `01M6HB9156` (13 `enabledPlugins: false` keys and the two `Skill` denies, in
   16 local settings files) is taken over by the increment 3 reconcile, not duplicated.
+
+- _2026-11-03, increment 3 (lane `01M6HHSVAC3RRQ5AHBCDK0WQNV`):_ measured on
+  `docs/wiki/claude-code-seat-isolation.md`. `--strict-mcp-config` drops plugin MCP servers as well
+  as connectors, so it would cost a seat its declared plugins' tools; a `permissions.deny` entry
+  per undeclared server removes that server's tools on every start path instead. The interactive
+  launcher keeps its argv, because `--setting-sources project,local` would drop musterd's own
+  orient hooks, which live in the user layer. Wakes keep `--setting-sources` (ADR 426). So the
+  isolation is: wakes exclude the user layer at launch; every path gets the folder complement.
 
 ## Observability & Evaluation
 
