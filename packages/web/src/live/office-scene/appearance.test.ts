@@ -219,3 +219,15 @@ describe('style, grooming and the spots (office figure v2-5a — presents retire
     }
   });
 });
+
+describe('a hand-picked look (nick, 2026-11-03)', () => {
+  it('dresses nick as he asked, and leaves his identity colour to the hash', () => {
+    const a = appearanceOf({ name: 'nick', kind: 'human' });
+    expect([a.hair, a.facialHair, a.eyes, a.cut, a.wrist]).toEqual(['buzz', 'beard', 'glasses-square', 'tee', 'watch']);
+    expect(a.bareArms).toBe(true);
+    expect(a.accessory).toBe('glasses');
+  });
+  it('never applies to an agent seat that shares the name', () => {
+    expect(appearanceOf({ name: 'nick', kind: 'agent' }).eyes).toBe('none');
+  });
+});
