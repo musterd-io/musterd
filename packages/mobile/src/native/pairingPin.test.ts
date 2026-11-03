@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { httpsOrigin, loadPairingPin, readPairingPin, savePairingPin } from './pairingPin';
+import {
+  forgetPairing,
+  httpsOrigin,
+  loadPairingPin,
+  readPairingPin,
+  savePairingPin,
+} from './pairingPin';
 import { phoneKeys } from './phoneKeys';
 
 vi.mock('./phoneKeys', () => ({
@@ -55,5 +61,35 @@ describe('readPairingPin', () => {
     expect(readPairingPin(waiting)).toEqual(waiting);
     expect(readPairingPin({ ...pin, binding: '' })).toBeNull();
     expect(readPairingPin({ ...pin, binding: true })).toBeNull();
+  });
+});
+
+describe('forgetPairing (lane 01M6FJFW66)', () => {
+  it('forgets the native store and clears the kept answers', async () => {
+    const forgetNative = vi.fn(() => true);
+    const clearOutbox = vi.fn(async () => {});
+    expect(await forgetPairing({ forgetNative, clearOutbox })).toBe(true);
+    expect(forgetNative).toHaveBeenCalledOnce();
+    expect(clearOutbox).toHaveBeenCalledOnce();
+  });
+
+  it('reports a partial forget, and still clears the outbox', async () => {
+    const clearOutbox = vi.fn(async () => {});
+    expect(await forgetPairing({ forgetNative: () => false, clearOutbox })).toBe(false);
+    expect(clearOutbox).toHaveBeenCalledOnce();
+  });
+
+  it('reports a native throw as not forgotten', async () => {
+    const forgetNative = () => {
+      throw new Error('unavailable');
+    };
+    expect(await forgetPairing({ forgetNative, clearOutbox: async () => {} })).toBe(false);
+  });
+
+  it('is not undone by an outbox that fails to clear', async () => {
+    const clearOutbox = async () => {
+      throw new Error('keychain');
+    };
+    expect(await forgetPairing({ forgetNative: () => true, clearOutbox })).toBe(true);
   });
 });

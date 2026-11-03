@@ -160,6 +160,14 @@ export interface PhoneKeys {
   loadPairingPin(): Promise<string | null>;
 
   /**
+   * Forget this phone's pairing (lane 01M6FJFW66): the pin, the asks and questions it kept, the
+   * question enrollment, and the three enclave keys. The push token stays. True when all of it
+   * is gone. iOS keeps Keychain items after the app is deleted, so this is the only way back to
+   * the scan screen.
+   */
+  forgetPairing(): boolean;
+
+  /**
    * The notification action that opened the app, once. `userInfo` is the payload JSON, still
    * carrying `musterd`, so the answer can open the same seal the extension displayed.
    */

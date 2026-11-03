@@ -108,6 +108,12 @@ export async function flushOutbox(
   return still.length + (opts.storage ? 0 : await flushNative());
 }
 
+/** Drop every kept answer: they were signed by keys "Pair again" destroys (lane 01M6FJFW66). */
+export async function clearOutbox(storage?: OutboxStorage): Promise<void> {
+  const store = storage ?? (await secureStore());
+  await store.set('[]');
+}
+
 /** Lock-screen question answers keep their own outbox, in the native module (QuestionAnswer.swift). */
 async function flushNative(): Promise<number> {
   try {

@@ -486,6 +486,12 @@ enum PhoneKeys {
     }
   }
 
+  /// Delete the three enclave key references (lane 01M6FJFW66). A Secure Enclave key exists only
+  /// through its reference, so this destroys the keys; the next pairing creates new ones.
+  static func forgetKeys() -> Bool {
+    SharedStore.forget(accounts: [signingAccount, receiveAccount, questionAccount])
+  }
+
   // MARK: - Keychain reference items
 
   private static func loadReference(account: String) -> Data? {

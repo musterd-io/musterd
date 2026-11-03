@@ -63,6 +63,13 @@ small change.
   approves its own key. The screen stays on "Waiting for approval" until the extension has stored
   the binding from the signed `paired` delivery. A phone with no push token pairs, and stays on
   that screen, because nothing else can deliver the binding.
+- **Pair again.** iOS keeps Keychain items after the app is deleted, so a reinstall opens paired.
+  Home's footer has **Pair again** while a pin is stored. After a confirm, `forgetPairing`
+  (`pairingPin.ts` → the module's `forgetPairing`) deletes the pin first, then the ask routes,
+  questions, question enrollment and outbox, the seen nonces and refusals, then the three enclave
+  key references. That destroys the keys, and the JS answer outbox is cleared. The push token
+  stays. Home then shows Scan. Unpairing on `/live` does not reach the phone, so the person does
+  both (lane 01M6FJFW66).
 - **Reconcile.** On open the app asks the daemon, through the relay, to re-deliver what is pending
   (ADR 659): the daemon is the source of truth and the relay stores no sealed body. It asks at most
   once a minute, because each request re-pushes every pending ask. While the app is in front, a
@@ -116,7 +123,7 @@ small change.
 
 | Route | What it is |
 | --- | --- |
-| `/` | Home. One header in every state: a greeting, one headline ("2 asks need you", "All clear", "Pair this phone") and a status pill (paired with the team, waiting for approval, not paired). Below it, every open ask that reached this phone, newest first, with who asked, the app's own wording for a listed act, a Face ID chip, and "N more waiting"; or, with none, the mark and one line; or, unpaired, three pairing steps and Scan. A held summary shows as a banner while its hour lasts. Pull to refresh re-delivers. An advisory notification action is answered from here, and the screen says so only when the answer did not leave. |
+| `/` | Home. One header in every state: a greeting, one headline ("2 asks need you", "All clear", "Pair this phone") and a status pill (paired with the team, waiting for approval, not paired). Below it, every open ask that reached this phone, newest first, with who asked, the app's own wording for a listed act, a Face ID chip, and "N more waiting"; or, with none, the mark and one line; or, unpaired, three pairing steps and Scan. With a pin stored, a footer **Pair again** forgets it behind a confirm. A held summary shows as a banner while its hour lasts. Pull to refresh re-delivers. An advisory notification action is answered from here, and the screen says so only when the answer did not leave. |
 | `/ask/[ref]` | One ask. A listed act is the descriptor screen (spec §7): the act in fixed wording, who asked, target, authority, requested at, expires in, and only below a rule, labelled as theirs, the asker's words and the lane title. Approve, Decline, and "Decline — I did not expect this". A sent answer says it is sent, not approved: only the daemon's receipt decides. |
 | `/pair` | Scan the daemon page's QR (or paste it), compare the fingerprint, send the sealed pair request, and wait. The phone does not approve itself. |
 

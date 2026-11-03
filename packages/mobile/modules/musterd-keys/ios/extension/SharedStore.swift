@@ -31,6 +31,28 @@ enum SharedStore {
   static let questionKeyAccount = "question-key-enrolled"
   static let questionOutboxAccount = "question-outbox"
 
+  /// What a pairing leaves on the phone (lane 01M6FJFW66), the pin first. The push token is
+  /// not in it: it belongs to the device, and the next pairing sends it again.
+  static let pairingAccounts = [
+    pinAccount, askRoutesAccount, questionsAccount, questionKeyAccount, questionOutboxAccount,
+    seenAccount, refusalsAccount,
+  ]
+
+  /// Delete these items. True when each is gone, including one that was never there.
+  static func forget(accounts: [String]) -> Bool {
+    var ok = true
+    for account in accounts {
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account,
+      ]
+      let status = SecItemDelete(query as CFDictionary)
+      if status != errSecSuccess && status != errSecItemNotFound { ok = false }
+    }
+    return ok
+  }
+
   struct PushToken {
     var token: String
     var environment: String
