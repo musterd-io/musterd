@@ -102,6 +102,12 @@ Wall 0 carries the lighthouse (coast, pane 1) and the cabin (mountain, pane 0); 
 `LIGHTHOUSE` and `CABIN` are their pane positions, where the beacon flashes and the windows glow
 after dark. Wall 1 gets the pier and the firs, and the boat and the hawk at runtime.
 
+Depth comes from planes, not perspective (the camera is orthographic): every scene has a near
+foreground right outside the sill — the city's rooftop (parapet, plant boxes, a water tower), the
+coast's dune with marram grass and fence posts, the mountain's two big firs — and its rows darken
+from far to near. A city block turns 32° so the sun lights one face; its lit window quads turn with it
+(`_turn`), or they sit inside the turned block and never show (lane 01M6FKGTRH, 2026-11-03).
+
 Writes `view/<setting>/<wall>-<pane>-<day|evening|night>` (2 walls × 2 panes × 3 states = 12 plates
 per setting, ~25 KB after quantize + WebP) and records each with a `view` span (`which`, `t0`, `t1`,
 `u0`, `u1`, `margin`) in `manifest.json`. A plate is the camera's **whole frame** — the pane plus a

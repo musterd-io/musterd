@@ -17,6 +17,7 @@
 | 1. Shell cut + city | `01M6ENGW2H25MYV40Z2TPWBNJB` | 1–8 |
 | 2. Coast and mountain | `01M6ENH3T54EPSBRM1RNZXBM9S` | 9–10 |
 | 3. Chooser + polish | `01M6ENHBPBSTJJZNA21Y0NBJR4` | 11–13 |
+| 4. Art-side depth (follow-up) | `01M6FKGTRH7SMW8CSXFB05T88T` | — |
 
 ## Global Constraints
 

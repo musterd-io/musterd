@@ -143,6 +143,16 @@ art-side depth (a nearer foreground silhouette, stronger lit/shadow faces, a per
 denser lit windows on the night plates — both need a re-render inside the art budget's last ~0.1 MB, and
 nick called the windows good for now.)_
 
+_(Built 2026-11-03, lane 01M6FKGTRH7SMW8CSXFB05T88T: the art-side depth above, on nick's go. Each scene now
+has a near foreground — a rooftop with a parapet, plant boxes and a water tower outside the city panes, a
+dune with marram grass and fence posts on the coast, two big firs on the mountain meadow — and its rows
+darken from far to near (the city gained a mid row with its own tone, the coast lighter shallows). The city's
+lit window quads now turn with their blocks: before, most sat inside the turned block and never showed,
+which is why the night city looked nearly dark. The 36 plates got smaller, not larger (642,552 → 598,488 B).
+Not done, by choice: the per-wall camera yaw. The camera is orthographic, so a yaw adds no perspective; it
+only shows the edges of the coast and mountain strips, which face the camera, and the city blocks already
+turn 32° to show a lit and a shadowed face.)_
+
 ## Calls made after the builder check (miley, 2026-11-02)
 
 _(Corrected 2026-11-02 while planning, lane 01M6ENGW2H25MYV40Z2TPWBNJB: `?office=painted` was deleted on
