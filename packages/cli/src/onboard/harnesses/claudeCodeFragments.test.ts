@@ -394,4 +394,37 @@ describe('the ADR 794 seatTools fragment', () => {
       'superpowers@claude-plugins-official': true,
     });
   });
+
+  it('remove takes back only what it enabled; its false and deny entries stay (fail closed)', async () => {
+    const fs = memoryFs({ ...humanFiles, [SETTINGS]: '{}' });
+    const c = ctx(fs, declared(['superpowers@claude-plugins-official']));
+    const intent = (await seatToolsIntent(c))!;
+    await claudeCodeAdapter.apply(c, { kind: 'write', intent });
+    await claudeCodeAdapter.apply(c, { kind: 'remove', intent });
+    const s = JSON.parse(fs.readFile(SETTINGS)!);
+    expect(s.enabledPlugins).toEqual({
+      'figma@claude-plugins-official': false,
+      'posthog@claude-plugins-official': false,
+    });
+    expect(s.permissions.deny).toEqual(
+      expect.arrayContaining(['Skill(impeccable)', 'mcp__claude_ai_Gmail']),
+    );
+  });
+
+  it('never un-denies an entry the permissions fragment owns (the floor skills)', async () => {
+    const floorSkill = 'superpowers:dispatching-parallel-agents';
+    const fs = memoryFs({
+      ...humanFiles,
+      [SETTINGS]: JSON.stringify({ permissions: { deny: [`Skill(${floorSkill})`] } }),
+    });
+    const set = {
+      ...declared(['superpowers@claude-plugins-official'], [floorSkill]),
+      deniedSkills: [],
+    };
+    const c = ctx(fs, set);
+    const intent = (await seatToolsIntent(c))!;
+    expect((intent.payload as { undeny: string[] }).undeny).not.toContain(`Skill(${floorSkill})`);
+    await claudeCodeAdapter.apply(c, { kind: 'write', intent });
+    expect(JSON.parse(fs.readFile(SETTINGS)!).permissions.deny).toContain(`Skill(${floorSkill})`);
+  });
 });

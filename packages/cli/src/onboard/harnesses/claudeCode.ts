@@ -1422,7 +1422,13 @@ async function seatToolsFragments(
     declared = (await withSeatTools(ctx)).seatTools;
   }
   if (!declared) return [];
-  const payload = claudeComplement(declared, readClaudeHumanLayer(ctx.fs, ctx.env));
+  const complement = claudeComplement(declared, readClaudeHumanLayer(ctx.fs, ctx.env));
+  // Never take back a deny another fragment owns: the floor, the store wall, a toolkit's ceiling.
+  const owned = new Set(permissionsPayload(ctx).deny.map(canonicalRuleForm));
+  const payload: ClaudeSeatToolsPayload = {
+    ...complement,
+    undeny: complement.undeny.filter((e) => !owned.has(canonicalRuleForm(e))),
+  };
   if (Object.keys(payload.enabledPlugins).length === 0 && payload.deny.length === 0) return [];
   return [
     {
@@ -1465,7 +1471,8 @@ function observeSeatTools(ctx: HarnessContext, intent: FragmentIntent): Observed
 }
 
 /** Write owns every `enabledPlugins` key in the payload (a hand-set value is overwritten), adds
- *  the denies, and takes back out the denies the seat now declares. Every other key survives. */
+ *  the denies, and takes back out the denies the seat now declares (never one another fragment
+ *  owns). Remove only un-enables. Every other key survives. */
 function applySeatTools(
   ctx: HarnessContext,
   intent: FragmentIntent,
@@ -1478,8 +1485,10 @@ function applySeatTools(
   const enabled = { ...(settings.enabledPlugins ?? {}) };
   const deny = new Set(settings.permissions?.deny ?? []);
   if (kind === 'remove') {
-    for (const id of Object.keys(desired.enabledPlugins)) delete enabled[id];
-    for (const e of desired.deny) deny.delete(e);
+    // Fail closed: a removal takes back only what this fragment ENABLED. Its `false` and deny
+    // entries stay — they only narrow, and a fragment that vanished because the human's layer
+    // could not be read must not reopen what it had closed.
+    for (const [id, on] of Object.entries(desired.enabledPlugins)) if (on) delete enabled[id];
   } else {
     Object.assign(enabled, desired.enabledPlugins);
     for (const e of desired.deny) deny.add(e);
