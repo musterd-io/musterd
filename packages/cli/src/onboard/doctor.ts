@@ -46,7 +46,8 @@ import { SESSION_REACH_WALL as OPENCODE_SESSION_REACH_WALL } from './harnesses/o
 import { loadProvisioning, readProvisionManifest } from './manifest.js';
 import { inspectSeatPermissions } from './permissions.js';
 import { classifyPrimerTarget } from './primer.js';
-import { defaultHarnessContext } from './reconcile/context.js';
+import { defaultHarnessContext, nodeFs } from './reconcile/context.js';
+import { narrowNewHumanTools } from './seatTools/narrow.js';
 import { inspectHarnesses, type FragmentInspection } from './reconcile/engine.js';
 import { describeMirror, mirrorRepoServers, type MirrorResult } from './repoServers.js';
 import {
@@ -1511,6 +1512,17 @@ export async function runSessionProbe(deps?: {
     // (ADR 408: no reconciler, no lease). The same absence status prints as `→ needs wire`.
     const bridge = roleSkillWireLine(cwd);
     if (bridge) process.stdout.write(`${bridge}\n`);
+    // ADR 794 §2: a tool the human enabled since this seat's last reconcile is closed off here,
+    // narrow-only (never enables), and the session is told once — never silently allowed.
+    const closed = (
+      deps?.narrowSeatTools ?? ((c: string) => narrowNewHumanTools(c, nodeFs, process.env))
+    )(cwd);
+    if (closed.length > 0)
+      process.stdout.write(
+        `musterd: closed ${String(closed.length)} tool(s) your setup added that this seat does not declare ` +
+          `(${closed.slice(0, 4).join(', ')}${closed.length > 4 ? ', …' : ''}). A human grants one with ` +
+          '`musterd team policy --seat-tools` (ADR 794).\n',
+      );
   } catch {
     // A health probe never fails a session start, and never invents drift from a folder it cannot read.
   } finally {
