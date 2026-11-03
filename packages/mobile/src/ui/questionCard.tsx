@@ -59,8 +59,8 @@ export function QuestionCard({
           <View style={[styles.cardEdge, { backgroundColor: p.teal }]} />
           <View style={styles.chips}>
             <View style={[styles.chip, { backgroundColor: p.raised }]}>
-              <Icon name="questionmark.bubble" color={p.text} size={12} />
-              <Text style={[styles.chipText, { color: p.text }]}>Question</Text>
+              <Icon name="questionmark.bubble.fill" color={p.muted} size={11} />
+              <Text style={[styles.chipText, { color: p.muted }]}>Question</Text>
             </View>
             {question.blocking ? (
               <View style={[styles.chip, { backgroundColor: p.tint }]}>
@@ -70,9 +70,11 @@ export function QuestionCard({
           </View>
           <AskText text={question.text} large foldable />
           {question.why ? (
-            <View style={styles.why}>
-              <Text style={[styles.label, { color: p.muted }]}>Why it asks</Text>
-              <Text style={[styles.body, { color: p.text }]}>{plain(question.why)}</Text>
+            <View style={[styles.why, { backgroundColor: p.raised }]}>
+              <Icon name="lightbulb.fill" color={p.accentText} size={12} />
+              <Text style={[styles.body, styles.grow, { color: p.text }]}>
+                {plain(question.why)}
+              </Text>
             </View>
           ) : null}
           {context.length > 0 ? (
@@ -95,6 +97,11 @@ export function QuestionCard({
               }}
               style={[styles.option, { backgroundColor: p.surface, borderColor: p.border }]}
             >
+              <View style={[styles.letter, { backgroundColor: i === 0 ? p.tint : p.raised }]}>
+                <Text style={[styles.letterText, { color: i === 0 ? p.accentText : p.muted }]}>
+                  {String.fromCharCode(65 + i)}
+                </Text>
+              </View>
               <View style={styles.optionText}>
                 <Text style={[styles.optionLabel, { color: p.text }]}>{option.label}</Text>
                 {option.consequence ? (
@@ -137,27 +144,29 @@ export function QuestionCard({
 }
 
 const styles = StyleSheet.create({
-  card: { padding: space.lg, paddingTop: space.lg + 4, gap: space.md },
-  cardEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
-  chips: { flexDirection: 'row', gap: space.sm },
+  card: { padding: space.lg, paddingTop: space.lg + 3, gap: space.md },
+  cardEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
+  chips: { flexDirection: 'row', gap: 6 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderRadius: radius.pill,
-    paddingHorizontal: space.sm + 2,
+    paddingHorizontal: space.sm,
     paddingVertical: 3,
   },
-  chipText: { fontSize: 12, fontFamily: font.bold },
-  why: { gap: 2 },
-  label: {
-    fontSize: 12,
-    fontFamily: font.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  chipText: { fontSize: 11, fontFamily: font.semibold },
+  why: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space.sm,
+    borderRadius: radius.sm,
+    padding: space.sm + 2,
   },
-  body: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
-  muted: { fontFamily: font.regular, fontSize: 13, lineHeight: 18 },
+  grow: { flex: 1 },
+  label: { fontSize: 12, fontFamily: font.semibold, paddingHorizontal: space.xs },
+  body: { fontFamily: font.regular, fontSize: 14, lineHeight: 20 },
+  muted: { fontFamily: font.regular, fontSize: 12, lineHeight: 17 },
   options: { gap: space.sm },
   option: {
     flexDirection: 'row',
@@ -166,20 +175,28 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm + 2,
   },
-  optionText: { flex: 1, gap: 2 },
-  optionLabel: { fontFamily: font.semibold, fontSize: 17, lineHeight: 22 },
+  letter: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  letterText: { fontFamily: font.bold, fontSize: 12 },
+  optionText: { flex: 1, gap: 1 },
+  optionLabel: { fontFamily: font.semibold, fontSize: 15, lineHeight: 20 },
   reply: { gap: space.sm },
   input: {
-    minHeight: 88,
+    minHeight: 76,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     padding: space.md,
     fontFamily: font.regular,
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 21,
     textAlignVertical: 'top',
   },
 });

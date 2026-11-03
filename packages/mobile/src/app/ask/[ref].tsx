@@ -14,6 +14,7 @@ import { success, warning } from '../../ui/haptics';
 import { Icon } from '../../ui/icon';
 import { Moment } from '../../ui/moment';
 import { Rise, Squish } from '../../ui/motion';
+import { Notice, SectionLabel } from '../../ui/notice';
 import { QuestionCard } from '../../ui/questionCard';
 import { QuickActions } from '../../ui/quickActions';
 import { ago, Seat } from '../../ui/seat';
@@ -258,24 +259,24 @@ export default function AskScreen() {
       >
         <Backdrop />
         <Rise style={styles.who}>
-          <Seat name={ask.from} agent={agent} size={44} />
+          <Seat name={ask.from} agent={agent} size={34} />
           <View style={styles.whoText}>
             <Text style={[styles.from, { color: p.text }]}>{ask.from}</Text>
             <Text style={[styles.muted, { color: p.muted }]}>
-              {agent ? 'agent seat' : 'person'} · asked {ago(ask.ts, now)}
+              {agent ? 'Agent seat' : 'Person'} · asked {ago(ask.ts, now)}
             </Text>
           </View>
         </Rise>
         {note ? (
-          <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
-            <Text style={[styles.bannerText, { color: p.text }]}>{note}</Text>
+          <Rise>
+            <Notice icon="info.circle.fill" title={note} />
           </Rise>
         ) : null}
         <QuestionCard entry={entry} pin={pin} onOutcome={(o) => void answered(o)} />
         {agent ? (
           // ADR 791: the asking seat's quick actions, so a question can be followed up from here.
           <Rise index={3} style={styles.quick}>
-            <Text style={[styles.muted, { color: p.muted }]}>Nudge {ask.from}</Text>
+            <SectionLabel label={`Nudge ${ask.from}`} />
             <QuickActions
               pin={pin}
               seat={ask.from}
@@ -293,11 +294,11 @@ export default function AskScreen() {
     <ScrollView style={{ backgroundColor: p.bg }} contentContainerStyle={styles.page}>
       <Backdrop />
       <Rise style={styles.who}>
-        <Seat name={ask.from} agent={agent} size={44} />
+        <Seat name={ask.from} agent={agent} size={34} />
         <View style={styles.whoText}>
           <Text style={[styles.from, { color: p.text }]}>{ask.from}</Text>
           <Text style={[styles.muted, { color: p.muted }]}>
-            {agent ? 'agent seat' : 'person'} · asked {ago(ask.ts, now)}
+            {agent ? 'Agent seat' : 'Person'} · asked {ago(ask.ts, now)}
           </Text>
         </View>
       </Rise>
@@ -331,27 +332,33 @@ export default function AskScreen() {
         </Rise>
       ) : null}
 
-      <Rise index={2} style={styles.theirs}>
-        {offers ? (
-          <>
-            <View style={[styles.rule, { backgroundColor: p.border }]} />
-            <Text style={[styles.label, { color: p.muted }]}>{theirs}</Text>
-          </>
-        ) : null}
-        <View style={[styles.quote, { borderColor: offers ? p.border : p.accent }]}>
-          <AskText text={ask.body} large={!offers} foldable={!offers} />
-        </View>
-        {entry.delivery.lane ? (
-          <Text numberOfLines={2} style={[styles.muted, { color: p.muted }]}>
-            Lane, as its seat named it: {plain(entry.delivery.lane.title)}
-          </Text>
-        ) : null}
-        {waiting ? <Text style={[styles.muted, { color: p.muted }]}>{waiting}</Text> : null}
+      <Rise index={2}>
+        <Glass style={styles.theirs}>
+          <View style={styles.saysRow}>
+            <Icon name="text.bubble.fill" color={p.muted} size={12} />
+            <Text style={[styles.says, { color: p.muted }]}>{theirs}</Text>
+          </View>
+          <AskText text={ask.body} large={false} foldable={!offers} />
+          {entry.delivery.lane ? (
+            <View style={[styles.lane, { backgroundColor: p.raised }]}>
+              <Icon name="flag.fill" color={p.muted} size={10} />
+              <Text numberOfLines={2} style={[styles.laneText, { color: p.muted }]}>
+                {plain(entry.delivery.lane.title)}
+              </Text>
+            </View>
+          ) : null}
+          {waiting ? (
+            <View style={styles.saysRow}>
+              <View style={[styles.waitDot, { backgroundColor: p.accent }]} />
+              <Text style={[styles.muted, { color: p.muted }]}>{waiting}</Text>
+            </View>
+          ) : null}
+        </Glass>
       </Rise>
 
       {note ? (
-        <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
-          <Text style={[styles.bannerText, { color: p.text }]}>{note}</Text>
+        <Rise>
+          <Notice icon="info.circle.fill" title={note} />
         </Rise>
       ) : null}
 
@@ -387,7 +394,7 @@ export default function AskScreen() {
 function Field({ label, value }: { label: string; value: string }) {
   const p = usePalette();
   return (
-    <View style={styles.field}>
+    <View style={[styles.field, { borderTopColor: p.border }]}>
       <Text style={[styles.label, { color: p.muted }]}>{label}</Text>
       <Text style={[styles.value, { color: p.text }]}>{value}</Text>
     </View>
@@ -395,46 +402,60 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: space.lg, gap: space.lg, paddingBottom: space.xl * 2 },
-  who: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  quick: { gap: space.sm, marginTop: space.md },
-  whoText: { flex: 1, gap: 2 },
-  from: { fontSize: 17, fontFamily: font.semibold },
-  card: { padding: space.lg, paddingTop: space.lg + 4, gap: space.md },
-  cardEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
+  page: { padding: space.lg, paddingTop: space.md, gap: space.md, paddingBottom: space.xl * 2 },
+  who: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm + 2,
+    paddingHorizontal: space.xs,
+  },
+  quick: { gap: space.sm, marginTop: space.sm },
+  whoText: { flex: 1, gap: 1 },
+  from: { fontSize: 15, fontFamily: font.semibold },
+  card: { padding: space.lg, paddingTop: space.lg + 3, gap: space.md },
+  cardEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     alignSelf: 'flex-start',
     borderRadius: radius.pill,
-    paddingHorizontal: space.sm + 2,
+    paddingHorizontal: space.sm,
     paddingVertical: 3,
   },
-  chipText: { fontSize: 12, fontFamily: font.bold },
-  headline: { fontSize: 22, lineHeight: 28, fontFamily: font.bold, letterSpacing: -0.3 },
-  fields: { gap: space.md },
-  field: { gap: 2 },
-  label: {
-    fontSize: 12,
-    fontFamily: font.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  chipText: { fontSize: 11, fontFamily: font.semibold },
+  headline: { fontSize: 17, lineHeight: 23, fontFamily: font.semibold },
+  fields: { gap: 0 },
+  field: {
+    flexDirection: 'row',
+    gap: space.md,
+    paddingVertical: space.sm + 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  value: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
-  rule: { height: StyleSheet.hairlineWidth, marginBottom: space.xs },
-  theirs: { gap: space.sm },
-  quote: { borderLeftWidth: 3, paddingLeft: space.md },
-  muted: { fontFamily: font.regular, fontSize: 13, lineHeight: 18 },
-  banner: { borderRadius: radius.md, padding: space.lg },
-  bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
-  actions: { gap: space.sm, marginTop: space.sm },
+  label: { width: 96, fontSize: 13, lineHeight: 19, fontFamily: font.medium },
+  value: { flex: 1, fontFamily: font.regular, fontSize: 14, lineHeight: 19 },
+  theirs: { padding: space.md, gap: space.sm },
+  saysRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  says: { fontFamily: font.semibold, fontSize: 12 },
+  lane: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: 4,
+  },
+  laneText: { fontFamily: font.medium, fontSize: 12, flexShrink: 1 },
+  waitDot: { width: 6, height: 6, borderRadius: radius.pill },
+  muted: { fontFamily: font.regular, fontSize: 12, lineHeight: 17 },
+  actions: { gap: space.sm, marginTop: space.xs },
   link: {
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    paddingTop: space.sm,
+    paddingTop: space.xs,
   },
-  linkText: { fontSize: 15, fontFamily: font.semibold },
+  linkText: { fontSize: 14, fontFamily: font.semibold },
 });

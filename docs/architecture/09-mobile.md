@@ -91,8 +91,8 @@ small change.
 - **A page at a time** (2026-11-03, lane `01M6H8H9G2`). Every fetch re-issues a token, so the list
   fetches only what is about to be shown: the newest 8 refs on open (newest notification first, a
   ref known only from `ask-routes` after them), at most 3 in flight. The rest are fetched when the
-  list scrolls near its end, or on **Show more**; while some are unfetched the headline says
-  "8+ asks need you". A 404 is final: it is not retried, and the ask is cleared at once.
+  list scrolls near its end, or on **Show more**; while some are unfetched the count beside
+  **Needs you** reads "8+". A 404 is final: it is not retried, and the ask is cleared at once.
 - **Quick actions** (2026-11-03, lane `01M67E5DM8`, ADR 791). **Seats** on the home screen lists
   the team's agent seats: online or not, whether a host can wake it, and its one lane, labelled
   "Their lane" because the title is the seat's own text. Each seat has five buttons: Start, Check
@@ -145,7 +145,7 @@ small change.
 
 | Route | What it is |
 | --- | --- |
-| `/` | Home. One header in every state: a greeting, one headline ("2 asks need you", "All clear", "Pair this phone") and a status pill (paired with the team, waiting for approval, not paired). Below it, every open ask that reached this phone, newest first, with who asked, the app's own wording for a listed act, a Face ID chip, and "N more waiting"; or, with none, the mark and one line; or, unpaired, three pairing steps and Scan. With a pin stored, a footer **Pair again** forgets it behind a confirm. A held summary shows as a banner while its hour lasts. Pull to refresh re-delivers. An advisory notification action is answered from here, and the screen says so only when the answer did not leave. |
+| `/` | Home. No headline (nick, 2026-11-03: "No big text, heros, headers"): the wordmark heads it, a row of pills says where the phone stands (the team, waiting for approval, not paired) with **Seats** beside it, notes are compact cards (`Notice`), and a small **Needs you** label carries the count. Below it, every open ask that reached this phone, newest first, with who asked, the app's own wording for a listed act, a Face ID chip, and "N more waiting"; or, with none, an **All clear** card with **Check**; or, unpaired, three pairing steps and Scan. With a pin stored, a footer **Pair again** forgets it behind a confirm. A held summary shows as a banner while its hour lasts. Pull to refresh re-delivers. An advisory notification action is answered from here, and the screen says so only when the answer did not leave. |
 | `/ask/[ref]` | One ask. A listed act is the descriptor screen (spec §7): the act in fixed wording, who asked, target, authority, requested at, expires in, and only below a rule, labelled as theirs, the asker's words and the lane title. Approve, Decline, and "Decline — I did not expect this". A sent answer says it is sent, not approved: only the daemon's receipt decides. |
 | `/pair` | Scan the daemon page's QR (or paste it), compare the fingerprint, send the sealed pair request, and wait. The phone does not approve itself. |
 
@@ -411,9 +411,10 @@ src/ui/askText.tsx    // the asker's words on the ask screen: light formatting, 
 src/ui/button.tsx     // the three buttons: one mustard primary, a grey secondary, a quiet text way out
 src/ui/glass.tsx      // Glass (Liquid Glass card, solid fallback) and the warm Backdrop (ADR 764)
 src/ui/icon.tsx       // an SF Symbol in the text's colour, with a text fallback (ADR 764)
-src/ui/moment.tsx     // a whole screen for one moment — on its way, done, or stopped
+src/ui/moment.tsx     // one moment — on its way, done, or stopped — as a compact card near the top
 src/ui/questionCard.tsx // a question: its text, why, options to tap, and a typed answer
 src/ui/quickActions.tsx // one seat's five quick-action buttons, each saying Sending…, Sent or Try again
 src/ui/motion.tsx     // Rise, Squish, Breathe, Pop, Halo — RN Animated, off under Reduce Motion
+src/ui/notice.tsx     // Notice (a short note: symbol tile, title, a line) and SectionLabel (a label with a count)
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```

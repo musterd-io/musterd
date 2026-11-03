@@ -83,13 +83,13 @@ function fold(all: Block[]): Block[] {
 
 const styles = StyleSheet.create({
   wrap: { gap: space.sm },
-  body: { fontFamily: font.regular, fontSize: 16, lineHeight: 23 },
-  large: { fontFamily: font.medium, fontSize: 19, lineHeight: 27 },
+  body: { fontFamily: font.regular, fontSize: 15, lineHeight: 22 },
+  large: { fontFamily: font.medium, fontSize: 17, lineHeight: 24 },
   flex: { flexShrink: 1 },
   bullet: { flexDirection: 'row', gap: space.sm, paddingLeft: space.xs },
   dot: { fontFamily: font.bold },
   bold: { fontFamily: font.bold },
   code: { fontFamily: font.medium, borderRadius: radius.sm, fontVariant: ['tabular-nums'] },
   more: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  moreText: { fontFamily: font.semibold, fontSize: 15 },
+  moreText: { fontFamily: font.semibold, fontSize: 14 },
 });
