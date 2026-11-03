@@ -97,6 +97,19 @@ const LOCAL_SESSION_DEFER_REASONS: readonly string[] = [
 ];
 /** How many recent deferrals the streak read looks at — enough for the window to reach the cap. */
 const DEFER_STREAK_SCAN = 16;
+/** The streak length past which the window no longer grows: base × 2^(n − 1) reaches the cap. */
+const DEFER_STREAK_SATURATES =
+  Math.ceil(Math.log2(WAKE_DEFER_SNOOZE_CAP_MS / WAKE_DEFER_SNOOZE_MS)) + 1;
+/**
+ * Lane 01M6FYX9KT: how far back the deferral read looks. A snooze ends at most a cap after the
+ * newest deferral, and a streak link is at most cap + base older than the one after it, so no row
+ * older than this can move `now < snoozeUntil`. Unbounded, the read walked the seat's whole
+ * deferral history whenever recent rows were filtered out — 1,365 slow runs, 385 s of main-thread
+ * stall in a 5 h window on the revive hub (2026-11-03), the top statement on the slow list.
+ */
+const DEFER_LOOKBACK_MS =
+  WAKE_DEFER_SNOOZE_CAP_MS +
+  (DEFER_STREAK_SATURATES - 1) * (WAKE_DEFER_SNOOZE_CAP_MS + WAKE_DEFER_SNOOZE_MS);
 /** Lane 01M3QRYZM2: the deferral an actuator sends for an order it was stopped before starting
  *  (`launchctl kickstart -k` mid-poll). It says nothing about the seat — a fresh actuator is up
  *  within seconds — so it is the one deferral reason that does NOT snooze lease derivation. */
@@ -942,14 +955,15 @@ async function deferralSnoozeUntil(
   db: Driver,
   teamId: string,
   seatName: string,
+  now: number,
 ): Promise<number | null> {
   const rows = await db.all<{ ts: number; reason: string }>(
     `SELECT ts, COALESCE(json_extract(detail, '$.reason'), '') AS reason FROM audit
         WHERE team_id = ? AND action = 'residency.wake_deferred'
-          AND target = ? ${MINTED_HERE}
+          AND target = ? AND ts > ? ${MINTED_HERE}
           AND COALESCE(json_extract(detail, '$.reason'), '') <> ?
         ORDER BY ts DESC LIMIT ?`,
-    [teamId, seatName, WAKE_DEFER_ACTUATOR_RESTART, DEFER_STREAK_SCAN],
+    [teamId, seatName, now - DEFER_LOOKBACK_MS, WAKE_DEFER_ACTUATOR_RESTART, DEFER_STREAK_SCAN],
   );
   const newest = rows[0];
   if (!newest) return null;
@@ -2422,7 +2436,7 @@ async function deriveSeatPasses(
     // Local-session guard snooze (increment 4): the host reported a live local session in this
     // seat's workspace — don't re-derive a lease every tick while someone is plainly working there.
     // ADR 485: a repeated local-session deferral backs off instead of re-deriving every 5 min.
-    const snoozeUntil = await deferralSnoozeUntil(db, teamId, member.name);
+    const snoozeUntil = await deferralSnoozeUntil(db, teamId, member.name, now);
     if (snoozeUntil !== null && now < snoozeUntil) {
       gate('snoozed');
       continue;
