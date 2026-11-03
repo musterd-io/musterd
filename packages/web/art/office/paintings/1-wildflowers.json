@@ -1,0 +1,21 @@
+{
+  "prompt": "An original small expressive oil sketch of wildflowers in a plain glass jar, loose confident palette-knife strokes, coral, cobalt and buttery yellow on a warm grey ground, museum quality fine art, fills the whole frame, no frame, no text, no signature",
+  "seed": 348467,
+  "resolution": "1024x1024",
+  "model": "Tongyi-MAI/Z-Image-Turbo (Apache-2.0), via the mcp-tools/Z-Image-Turbo Space",
+  "steps": 8,
+  "shift": 3,
+  "date": "2026-11-03",
+  "art_slot": 1,
+  "source": "1-wildflowers.webp",
+  "check": {
+    "by": "miley",
+    "date": "2026-11-03",
+    "notes": "No signature, lettering or watermark. Generic flower-jar sketch."
+  },
+  "approved_by": {
+    "by": "nick",
+    "date": "2026-11-03",
+    "via": "musterd question 01M6FYZXKF: ship them, move the hills piece"
+  }
+}

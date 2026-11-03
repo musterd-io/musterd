@@ -1,0 +1,21 @@
+{
+  "prompt": "An original mid-century modernist painting, abstracted coastal hills and a single tree in flat interlocking shapes, muted olive, rust and cream palette, gouache texture, museum quality fine art, fills the whole frame, no frame, no text",
+  "seed": 190166,
+  "resolution": "1152x864",
+  "model": "Tongyi-MAI/Z-Image-Turbo (Apache-2.0), via the mcp-tools/Z-Image-Turbo Space",
+  "steps": 8,
+  "shift": 3,
+  "date": "2026-11-03",
+  "art_slot": 3,
+  "source": "3-hills.webp",
+  "check": {
+    "by": "miley",
+    "date": "2026-11-03",
+    "notes": "Has a painted edge line and a fake signature bottom right: the crop to the frame's aspect (plus the 2% edge inset) removes both. Check the shipped crop."
+  },
+  "approved_by": {
+    "by": "nick",
+    "date": "2026-11-03",
+    "via": "musterd question 01M6FYZXKF: ship them, move the hills piece"
+  }
+}

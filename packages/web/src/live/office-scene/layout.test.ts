@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { FLOOR, project, WALL_H } from './iso';
 import {
   ART,
+  DRAPE_REACH,
   CHECK_IN_MARKS,
   FRONT_DESK,
   RECEPTIONIST,
@@ -251,8 +252,8 @@ describe('the walls are not a matched set', () => {
     expect(ART.some((a) => a.w === a.h)).toBe(true); // square
   });
 
-  it('varies motif and frame treatment, including one unframed', () => {
-    expect(new Set(ART.map((a) => a.motif)).size).toBeGreaterThan(2);
+  it('hangs five different paintings and varies the frames, including one unframed', () => {
+    expect(new Set(ART.map((a) => a.painting)).size).toBe(ART.length);
     expect(new Set(ART.map((a) => a.frame)).size).toBeGreaterThan(1);
     expect(ART.some((a) => a.frame === 'none')).toBe(true);
   });
@@ -270,10 +271,36 @@ describe('the walls are not a matched set', () => {
       const half = a.w / 2 / FLOOR;
       for (const w of WINDOWS) {
         const overlaps = a.tc + half > w.t0 && a.tc - half < w.t1;
-        expect(overlaps, `art (${a.motif} on wall ${a.wall} at t=${a.tc}) overlaps a window`).toBe(
+        expect(overlaps, `art (${a.painting} on wall ${a.wall} at t=${a.tc}) overlaps a window`).toBe(
           false,
         );
       }
+    }
+  });
+
+  it('never hangs a picture on a window treatment', () => {
+    // Every window wears a rod and two tied-back drapes that reach DRAPE_REACH past its frame (nick,
+    // 2026-11-03: "none of the art should be on top of any window treatments"). Two pieces sat on a
+    // drape's edge until then.
+    for (const a of ART) {
+      const half = a.w / 2 / FLOOR;
+      for (const w of WINDOWS) {
+        const overlaps = a.tc + half > w.t0 - DRAPE_REACH && a.tc - half < w.t1 + DRAPE_REACH;
+        expect(overlaps, `art (${a.painting} on wall ${a.wall} at t=${a.tc}) overlaps a drape`).toBe(false);
+      }
+    }
+  });
+
+  it('never hangs a picture behind the front door', () => {
+    // The door stands ~47 units off the back-left wall at ly 815, so from the camera it covers the wall
+    // along t 0.79–0.96 up to ~110 units (measured on the render). The hills piece hung at a 75-unit
+    // bottom edge there and showed not at all.
+    const DOOR_BAND = [0.79, 0.96] as const;
+    const DOOR_HEAD = 110;
+    for (const a of ART.filter((p) => p.wall === 0)) {
+      const half = a.w / 2 / FLOOR;
+      if (a.tc + half < DOOR_BAND[0] || a.tc - half > DOOR_BAND[1]) continue;
+      expect(a.uc * WALL_H - a.h / 2, `art (${a.painting}) hangs behind the door`).toBeGreaterThan(DOOR_HEAD);
     }
   });
 
@@ -294,7 +321,7 @@ describe('the walls are not a matched set', () => {
         if (a.tc + halfT < st - halfS || a.tc - halfT > st + halfS) continue;
         expect(
           bottom,
-          `art (${a.motif} at t=${a.tc}) hangs behind the ${s.high}-tall shelf at t=${st.toFixed(2)}`,
+          `art (${a.painting} at t=${a.tc}) hangs behind the ${s.high}-tall shelf at t=${st.toFixed(2)}`,
         ).toBeGreaterThan(s.high + DECOR_UP);
       }
     }
@@ -336,7 +363,7 @@ describe('the walls are not a matched set', () => {
     expect(t0 > CLOCK.tc + CLOCK.r || t1 < CLOCK.tc - CLOCK.r).toBe(true);
     for (const a of ART.filter((p) => p.wall === WALL_BOARD.wall)) {
       const ah = a.w / 2 / FLOOR;
-      expect(t1 <= a.tc - ah || t0 >= a.tc + ah, `board overlaps the ${a.motif} print`).toBe(true);
+      expect(t1 <= a.tc - ah || t0 >= a.tc + ah, `board overlaps the ${a.painting} print`).toBe(true);
     }
     // Vertically: on the wall (u ∈ [0,1]), above the bookshelf line the art also respects.
     expect(WALL_BOARD.uc * WALL_H - WALL_BOARD.h / 2).toBeGreaterThan(0);
@@ -384,7 +411,7 @@ describe('the walls are not a matched set', () => {
       const artU1 = art.uc * WALL_H + art.h / 2;
       expect(
         t1 < artT0 || t0 > artT1 || u1 < artU0 || u0 > artU1,
-        `calendar overlaps ${art.motif}`,
+        `calendar overlaps ${art.painting}`,
       ).toBe(true);
     }
   });

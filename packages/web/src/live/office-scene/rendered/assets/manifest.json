@@ -985,6 +985,61 @@
       "scale": 3.0
     },
     {
+      "id": "painting/0",
+      "file": "office-art-painting-0.webp",
+      "w": 262,
+      "h": 190,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
+    },
+    {
+      "id": "painting/1",
+      "file": "office-art-painting-1.webp",
+      "w": 156,
+      "h": 156,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
+    },
+    {
+      "id": "painting/2",
+      "file": "office-art-painting-2.webp",
+      "w": 102,
+      "h": 150,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
+    },
+    {
+      "id": "painting/3",
+      "file": "office-art-painting-3.webp",
+      "w": 147,
+      "h": 99,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
+    },
+    {
+      "id": "painting/4",
+      "file": "office-art-painting-4.webp",
+      "w": 293,
+      "h": 197,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
+    },
+    {
       "id": "plant/fiddle",
       "file": "office-art-plant-fiddle.webp",
       "w": 152,
@@ -1916,41 +1971,41 @@
       "w": 67,
       "h": 111,
       "anchor": {
-        "x": 30.53,
-        "y": 429.2
+        "x": 30.67,
+        "y": 467.63
       },
       "scale": 3.0
     },
     {
       "id": "wall/art-2",
       "file": "office-art-wall-art-2.webp",
-      "w": 58,
+      "w": 57,
       "h": 119,
       "anchor": {
-        "x": 26.72,
-        "y": 422.16
+        "x": 26.08,
+        "y": 482.78
       },
       "scale": 3.0
     },
     {
       "id": "wall/art-3",
       "file": "office-art-wall-art-3.webp",
-      "w": 75,
-      "h": 104,
+      "w": 74,
+      "h": 103,
       "anchor": {
-        "x": 35.17,
-        "y": 304.63
+        "x": 34.72,
+        "y": 458.2
       },
       "scale": 3.0
     },
     {
       "id": "wall/art-4",
       "file": "office-art-wall-art-4.webp",
-      "w": 141,
-      "h": 199,
+      "w": 140,
+      "h": 200,
       "anchor": {
-        "x": 74.07,
-        "y": 417.85
+        "x": 73.63,
+        "y": 418.16
       },
       "scale": 3.0
     },

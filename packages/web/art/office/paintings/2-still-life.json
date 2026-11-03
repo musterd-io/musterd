@@ -1,0 +1,21 @@
+{
+  "prompt": "An original classical still life oil painting, a ceramic jug, lemons and a folded linen cloth on a wooden table, dark warm background, chiaroscuro lighting, fine brushwork, museum quality fine art, fills the whole frame, no frame, no text",
+  "seed": 301698,
+  "resolution": "864x1152",
+  "model": "Tongyi-MAI/Z-Image-Turbo (Apache-2.0), via the mcp-tools/Z-Image-Turbo Space",
+  "steps": 8,
+  "shift": 3,
+  "date": "2026-11-03",
+  "art_slot": 2,
+  "source": "2-still-life.webp",
+  "check": {
+    "by": "miley",
+    "date": "2026-11-03",
+    "notes": "No signature, lettering or watermark. A generic jug-and-lemons still life; no recognisable composition."
+  },
+  "approved_by": {
+    "by": "nick",
+    "date": "2026-11-03",
+    "via": "musterd question 01M6FYZXKF: ship them, move the hills piece"
+  }
+}

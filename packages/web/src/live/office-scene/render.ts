@@ -48,6 +48,7 @@ import {
   WORKING_HOURS_CALENDAR,
   WINDOWS,
   type DeskSlot,
+  type ArtPiece,
 } from './layout';
 import type { ReadStatus } from '../experimentReads';
 import { READ_PIN_CAP, readPins, stickySway, WALL_COLUMNS, type WallBoard } from './wallboard';
@@ -70,6 +71,7 @@ import type { Dir8 } from './rendered/figureSheet';
 import type { CarryKind, Dir, OfficeNode, Pose, WelcomePaint } from './types';
 import { TOSS_S } from './welcomeRoom';
 import { formatWorkingHours } from './workingHours';
+import { drawPainting, paintingQuad, PRINT_DROP, printDepth, printOpening } from './paintings';
 
 /**
  * Canvas-2D drawing for the office. Everything is painter-ordered by logical depth (lx+ly) so seated
@@ -458,127 +460,33 @@ function wallDisc(
 }
 
 /**
- * The prints' ink. Deliberately few colours, and all of them the room's own: each frame occupies only
- * ~30–45px on screen, where a motif reads as a silhouette plus two or three flats and any further
- * shade is just mud.
+ * A framed painting: the frame and mat are rendered art (`wall/art-N`, lane 01M5D8EJ40); the picture is
+ * `painting/N` (ADR 789), filling the opening up to a thin mat, lying in the wall's plane and dimmed by
+ * the room's light. `w`/`h` in logical units.
  */
-const INK = {
-  // A dusk sand, not the near-mat cream it wants to be: against #f2e7d5 the sky has to hold its own or
-  // the print reads as shapes floating on the mat with no paper under them.
-  sky: '#e8cfa8',
-  paper: '#efe2c8',
-  terracotta: '#c2694a',
-  sage: '#5d7f6d',
-  sageDeep: '#3f5747',
-  ochre: '#d2a24c',
-  teal: '#4e7d8c',
-  plum: '#8a5a6d',
-  line: '#4b3524',
-} as const;
-
-/**
- * The surface one print is painted on: `a` runs across the mat opening and `b` up it, both in logical
- * units out from its centre. It is the wall-space convention `wallDisc`/`wallClock` already use, which is
- * what keeps a motif's disc a real circle *on the wall* rather than a screen-space egg pasted over it.
- */
-interface ArtSurface {
-  rect: (a0: number, b0: number, a1: number, b1: number, fill: string) => void;
-  disc: (a: number, b: number, r: number, fill: string) => void;
-}
-
-/** A print's composition, painted into an opening of half-width `hw` and half-height `hh`. */
-type Motif = (g: ArtSurface, hw: number, hh: number) => void;
-
-/**
- * The four prints. Every one of them survives being mirrored, and not by luck: the back-left wall runs
- * `+t` screen-*left*, which is the same quirk that forced the clock onto the right wall. Abstract
- * compositions are the answer — a mirrored cairn is still a cairn, where a mirrored clock lies.
- */
-const MOTIFS = {
-  /** A sun going down behind two bands of hill. Wants a landscape frame — the horizon is the whole idea. */
-  sunrise: (g, hw, hh) => {
-    g.rect(-hw, -hh, hw, hh, INK.sky);
-    g.disc(hw * 0.08, -hh * 0.12, hh * 0.48, INK.terracotta); // the sun sits *in* the hills, not over them
-    g.rect(-hw, -hh, hw, -hh * 0.3, INK.sage);
-    g.rect(-hw, -hh, hw, -hh * 0.62, INK.sageDeep);
-  },
-  /** A cairn of three balanced stones: the one motif whose silhouette alone carries it, so it takes the
-   * small portrait frame where nothing else would survive the size. */
-  cairn: (g, hw, hh) => {
-    g.rect(-hw, -hh, hw, hh, INK.paper);
-    g.rect(-hw, -hh, hw, -hh * 0.72, INK.line);
-    g.disc(0, -hh * 0.42, hh * 0.3, INK.terracotta);
-    g.disc(hw * 0.1, hh * 0.02, hh * 0.24, INK.teal);
-    g.disc(-hw * 0.06, hh * 0.4, hh * 0.17, INK.ochre);
-  },
-  /** Two arches, overlapping, on a ground line. */
-  arches: (g, hw, hh) => {
-    g.rect(-hw, -hh, hw, hh, INK.paper);
-    const arch = (a0: number, a1: number, top: number, fill: string): void => {
-      g.rect(a0, -hh, a1, top, fill);
-      g.disc((a0 + a1) / 2, top, (a1 - a0) / 2, fill); // the dome — its radius is half the pier's width
-    };
-    arch(hw * 0.14, hw * 0.78, -hh * 0.12, INK.teal);
-    arch(-hw * 0.72, -hw * 0.04, hh * 0.1, INK.terracotta);
-    g.rect(-hw, -hh, hw, -hh * 0.8, INK.line);
-  },
-  /** Bauhaus-ish: a cornered quarter-disc, a bar, a floating dot, a rule. The quirky one. */
-  bauhaus: (g, hw, hh) => {
-    g.rect(-hw, -hh, hw, hh, INK.paper);
-    g.disc(-hw, -hh, hh * 1.15, INK.plum); // the clip is what makes this a quarter, not a circle
-    g.rect(hw * 0.04, -hh, hw * 0.44, hh * 0.5, INK.ochre);
-    g.disc(hw * 0.62, hh * 0.34, hh * 0.32, INK.terracotta);
-    g.rect(-hw, hh * 0.7, hw, hh * 0.78, INK.line);
-  },
-} satisfies Record<string, Motif>;
-
-type MotifName = keyof typeof MOTIFS;
-
-/** A framed print: frame, mat, and a motif in the opening. `w`/`h` in logical units. */
 function wallArt(
   ctx: CanvasRenderingContext2D,
   fit: Fit,
   edge: (t: number) => [number, number],
-  tc: number,
-  uc: number,
-  w: number,
-  h: number,
-  motif: MotifName,
+  piece: ArtPiece,
+  index: number,
+  art: RenderedAssets,
+  env: LightEnv,
 ): void {
-  // The frame and mat are rendered art (`wall/art-N`, lane 01M5D8EJ40): only the print paints, on the mat.
-  const hw = (w / 2) * 0.68; // the mat opening — a composition needs the area a lone colour block didn't
-  const hh = (h / 2) * 0.68;
-  const p = (a: number, b: number): Pt => wallPt(edge, tc + a / FLOOR, uc + b / WALL_H, fit);
-  const g: ArtSurface = {
-    rect: (a0, b0, a1, b1, fill) => quad(ctx, [p(a0, b0), p(a1, b0), p(a1, b1), p(a0, b1)], fill),
-    disc: (a, b, r, fill) => {
-      const pts: Pt[] = [];
-      for (let i = 0; i < 20; i++) {
-        const th = (i / 20) * Math.PI * 2;
-        pts.push(p(a + Math.sin(th) * r, b + Math.cos(th) * r));
-      }
-      quad(ctx, pts, fill);
-    },
+  const { hw, hh } = printOpening(piece.w, piece.h, piece.frame);
+  // On the mat's face, not the plaster: the rendered mat stands `printDepth` out of the wall, and a
+  // picture drawn on the plaster sits visibly off its opening.
+  const o = edge === WALL_EDGES[0] ? project(printDepth(piece.frame), 0, fit) : project(0, printDepth(piece.frame), fit);
+  const z = project(0, 0, fit);
+  const drop = piece.frame === 'none' ? 0 : PRINT_DROP * fit.scale;
+  const p = (a: number, b: number): Pt => {
+    const q = wallPt(edge, piece.tc + a / FLOOR, piece.uc + b / WALL_H, fit);
+    return { x: q.x + o.x - z.x, y: q.y + o.y - z.y + drop };
   };
-  // Clip to the opening, so a motif can run a shape straight off the edge — a sun half-under a horizon,
-  // a disc cornered into a quarter — instead of every motif having to solve that intersection itself.
-  ctx.save();
-  ctx.beginPath();
-  const corners: Array<[number, number]> = [
-    [-hw, -hh],
-    [hw, -hh],
-    [hw, hh],
-    [-hw, hh],
-  ];
-  corners.forEach(([a, b], i) => {
-    const q = p(a, b);
-    if (i === 0) ctx.moveTo(q.x, q.y);
-    else ctx.lineTo(q.x, q.y);
-  });
-  ctx.closePath();
-  ctx.clip();
-  MOTIFS[motif](g, hw, hh);
-  ctx.restore();
+  const id = `painting/${index}`;
+  const asset = art.manifest.assets.find((x) => x.id === id);
+  const quadPts = paintingQuad(p, hw, hh, edge === WALL_EDGES[0]);
+  drawPainting(ctx, art.images.get(id), quadPts, asset?.w ?? 1, asset?.h ?? 1, figureTintFor(env));
 }
 
 /**
@@ -1198,8 +1106,7 @@ export function drawWalls(
       if (a.wall !== wallIndex) return;
       // the frame and mat blit at the print's floor point, and the print paints on the mat
       const [fx, fy] = edge(a.tc);
-      if (blitIf(ctx, fit, art, `wall/art-${i}`, fx, fy))
-        wallArt(ctx, fit, edge, a.tc, a.uc, a.w, a.h, a.motif);
+      if (blitIf(ctx, fit, art, `wall/art-${i}`, fx, fy)) wallArt(ctx, fit, edge, a, i, art, env);
     });
     if (wallIndex === 1) {
       const [cx, cy] = edge(0.52);

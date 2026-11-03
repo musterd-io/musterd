@@ -1156,10 +1156,10 @@ def desk_monitor(asset_id: str, setup: str, facing: str, zs: float, col) -> bpy.
 # painter's (`ART`, `WALL_BOARD` in layout.ts; the clock at t 0.52, u 0.62; the planter at t 0.52, u 0.76).
 ART_PIECES = [  # layout.ts ART: wall, tc, uc, w, h, frame
     (0, 0.14, 0.56, 54, 42, "thick"),
-    (0, 0.83, 0.68, 26, 26, "none"),
-    (0, 0.92, 0.66, 22, 30, "thin"),
-    (0, 0.87, 0.46, 30, 22, "thin"),
-    (1, 0.23, 0.58, 60, 44, "thick"),
+    (0, 0.8755, 0.75, 26, 26, "none"),
+    (0, 0.913, 0.77, 22, 30, "thin"),
+    (0, 0.953, 0.74, 30, 22, "thin"),
+    (1, 0.07, 0.58, 60, 44, "thick"),
 ]
 CLOCK = (1, 0.52, 0.62, 25.0)  # wall, tc, uc, R
 HANGER = (0, 0.52, 0.76)  # wall, tc, uTop
