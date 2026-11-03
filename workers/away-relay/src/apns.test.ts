@@ -231,6 +231,22 @@ describe('app frames and payload (ADR 676 §2)', () => {
     expect(
       appCallbackRef(JSON.stringify({ app: 1, kind: 'question_key', binding: 'b1', ref: 'qk-1' })),
     ).toBeNull();
+    // ADR 791: a phone quick action, ref = its nonce.
+    expect(
+      appCallbackRef(
+        JSON.stringify({
+          app: 1,
+          kind: 'quick_action',
+          binding: 'b1',
+          ref: 'r'.repeat(32),
+          expires_at: 1,
+          sealed,
+        }),
+      ),
+    ).toBe('r'.repeat(32));
+    expect(
+      appCallbackRef(JSON.stringify({ app: 1, kind: 'quick_action', binding: 'b1', ref: 'r' })),
+    ).toBeNull();
     expect(
       appCallbackRef(JSON.stringify({ app: 1, kind: 'answer', binding: 'b1', ref: 'a' })),
     ).toBeNull();
