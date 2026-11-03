@@ -53,7 +53,7 @@ where a plausible shortcut becomes a takeover path.
    stored hashed, live about 15 minutes, are scoped to address and transaction, and are used once.
    Responses never reveal whether an address has an account. The link URL is built from the pinned
    issuer, never from the request Host. Redemption pages carry no third-party content, `no-referrer`
-   and `no-store`, and query tokens are excluded from every log.
+   _(Amended 2026-11-03: `same-origin` — see Consequences)_ and `no-store`, and query tokens are excluded from every log.
 7. **Sessions** (nick, 2026-10-15, against NIST SP 800-63B-4 and comparable products):
    - **14 days idle, 30 days absolute.** The console's sign-in is AAL1 — it cannot see a
      provider's MFA, and an email link is one factor — and AAL1's overall ceiling is 30 days.
@@ -113,6 +113,12 @@ where a plausible shortcut becomes a takeover path.
   one). That is a separate decision.
 - The screens and their words come from slippy and sloane; this record governs what the screens are
   allowed to do, not how they look.
+- _2026-11-03 (fifty, lane 01M3Z44MTV):_ the console's `Referrer-Policy` is `same-origin`, not
+  `no-referrer`. Under `no-referrer` a browser sends `Origin: null` even on a same-origin form POST
+  (Fetch, "append a request Origin header"), so the first real GitHub sign-in at app.musterd.io
+  answered 403 `forbidden` from the decision 8 Origin check; every test had passed because tests
+  set the header by hand. `same-origin` still sends no referrer to any other site, and the
+  redemption pages' `no-store` is unchanged.
 
 ## Observability & Evaluation
 

@@ -108,6 +108,8 @@ describe('console HTTP boundary (ADR 615)', () => {
     const r = await call('/nope');
     expect(r.headers['strict-transport-security']).toMatch(/max-age=/);
     expect(r.headers['x-content-type-options']).toBe('nosniff');
+    // Not `no-referrer`: that makes browsers send `Origin: null` on same-origin POSTs (2026-11-03).
+    expect(r.headers['referrer-policy']).toBe('same-origin');
     expect(r.headers['content-security-policy']).toContain("default-src 'none'");
     expect(r.headers['cache-control']).toBe('no-store');
     expect(String(r.headers['x-request-id'])).toMatch(/^[A-Za-z0-9._-]{8,64}$/);

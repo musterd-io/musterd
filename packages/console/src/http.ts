@@ -72,7 +72,11 @@ const REQUEST_ID = /^[A-Za-z0-9._-]{8,64}$/;
 const SECURITY_HEADERS: Record<string, string> = {
   'strict-transport-security': 'max-age=63072000; includeSubDomains',
   'x-content-type-options': 'nosniff',
-  'referrer-policy': 'no-referrer',
+  // `same-origin`, not `no-referrer`: under `no-referrer` a browser sends `Origin: null` even on a
+  // same-origin form POST (Fetch §4.1, "append a request Origin header"), so every sign-in and
+  // logout submission failed the Origin check with 403 (2026-11-03, the first real GitHub sign-in).
+  // `same-origin` still sends no referrer cross-site; it keeps the Origin the CSRF check needs.
+  'referrer-policy': 'same-origin',
   'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
   'x-frame-options': 'DENY',
   'cross-origin-opener-policy': 'same-origin',
