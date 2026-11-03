@@ -41,11 +41,24 @@ itself still loaded. So the strict config file musterd writes has to carry:
 - the repo's committed `.mcp.json` servers;
 - the MCP servers of each declared plugin.
 
-## A `permissions.deny` entry hides a connector's tools (2026-11-03; falsify: a session with `"deny": ["mcp__claude_ai_Gmail"]` that lists a `mcp__claude_ai_Gmail__` tool) <!-- claim: other -->
+## A `permissions.deny` entry removes every tool of a connector (2026-11-03; falsify: an init record of a session with `"deny": ["mcp__claude_ai_Gmail"]` whose `tools` contain an `mcp__claude_ai_Gmail__` name) <!-- claim: other -->
 
-With `mcp__claude_ai_Gmail` in the local deny list, the session's tools had no `claude_ai_Gmail`
-prefix, while the other connectors were present. This is the complement's shape for a bare
-`claude` started in the folder, where `--strict-mcp-config` is not on the argv.
+With `mcp__claude_ai_Gmail` and `mcp__claude_ai_Supabase` in the local deny list and no launch
+flag, the init record listed **0** tools for either, while `mcp__claude_ai_Slack` kept its 20. The
+two servers still showed `connected`: the deny removes the tools, not the connection. This works on
+every start path, bare `claude` included, so it is how a seat closes off connectors and user MCP
+servers. musterd does not use `--strict-mcp-config` for seats (ADR 794, amended 2026-11-03): it
+would also drop each plugin's own MCP servers and the musterd server, which a seat needs.
+
+## `--setting-sources` is wake-only, because musterd's orient hooks live in the user layer (2026-11-03; falsify: `globalHooksPayload` in `harnesses/claudeCode.ts` no longer writing SessionStart and UserPromptSubmit to `~/.claude/settings.json`) <!-- claim: other -->
+
+musterd's SessionStart (orientation, self-heal, the seat-tools narrowing) and UserPromptSubmit
+(orient nudge) hooks are written to the human's `~/.claude/settings.json`. `--setting-sources
+project,local` excludes that file, so adding it to `musterd <member>` would lose them. An
+interactive seat is therefore closed off by its folder settings alone: `enabledPlugins: false`
+keeps an undeclared plugin from loading at all, and `Skill(...)` / `mcp__...` denies block the
+rest. A personal skill stays in the listing there (its invocation is denied); on a wake it is not
+loaded.
 
 ## Where the human's layer is listed on disk (2026-11-03; falsify: the paths below missing on a machine that has synced plugins or connectors) <!-- claim: other -->
 

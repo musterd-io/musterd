@@ -1,11 +1,11 @@
-import { SeatToolsPolicySchema } from '@musterd/protocol';
-import { describe, expect, it } from 'vitest';
-import { memoryFs } from '../reconcile/context.js';
-import { FLOOR_DENIED_SKILLS, installSeatPermissions } from '../permissions.js';
-import { loadDeclaredSet, SEAT_TOOLS_CACHE_REL, seatToolsCacheDenies } from './cache.js';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { SeatToolsPolicySchema } from '@musterd/protocol';
+import { describe, expect, it } from 'vitest';
+import { FLOOR_DENIED_SKILLS, installSeatPermissions } from '../permissions.js';
+import { memoryFs } from '../reconcile/context.js';
+import { loadDeclaredSet, SEAT_TOOLS_CACHE_REL, seatToolsCacheDenies } from './cache.js';
 
 const root = '/w/seat';
 const cachePath = `${root}/${SEAT_TOOLS_CACHE_REL}`;

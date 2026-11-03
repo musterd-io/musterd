@@ -47,7 +47,6 @@ import { loadProvisioning, readProvisionManifest } from './manifest.js';
 import { inspectSeatPermissions } from './permissions.js';
 import { classifyPrimerTarget } from './primer.js';
 import { defaultHarnessContext, nodeFs } from './reconcile/context.js';
-import { narrowNewHumanTools } from './seatTools/narrow.js';
 import { inspectHarnesses, type FragmentInspection } from './reconcile/engine.js';
 import { describeMirror, mirrorRepoServers, type MirrorResult } from './repoServers.js';
 import {
@@ -57,6 +56,7 @@ import {
   roleSkillWireSentence,
   withRoleSkills,
 } from './roleSkills.js';
+import { narrowNewHumanTools } from './seatTools/narrow.js';
 import {
   defaultSelfHealDeps,
   selfHealWorkspace,
@@ -1463,6 +1463,8 @@ export async function runSessionProbe(deps?: {
   postRepair?: (body: WorkspaceRepairBody) => Promise<void>;
   /** The drift-cache write (ADR 408 inc 4); injectable so its ORDER against the repair is testable. */
   refreshDrift?: (cwd: string, daemonBuild: string | undefined, opts?: { force?: boolean }) => void;
+  /** ADR 794: close tools the human added since the last reconcile; returns what it closed. */
+  narrowSeatTools?: (cwd: string) => string[];
 }): Promise<number> {
   const ref = deps?.cliRef !== undefined ? deps.cliRef : cliBuild();
   // Learned once and used twice: it decides build skew below, and it keys the drift cache after the

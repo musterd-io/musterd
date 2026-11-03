@@ -26,9 +26,6 @@ import {
   RETIRED_SURFACE_ENV,
 } from '../mcpEntry.js';
 import { canonicalRuleForm, seatFloorDenies, STANDARD_FLOOR } from '../permissions.js';
-import { claudeComplement, type ClaudeSeatToolsPayload } from '../seatTools/claudeComplement.js';
-import { readClaudeHumanLayer } from '../seatTools/claudeHumanLayer.js';
-import { withSeatTools } from '../seatTools/context.js';
 import { nodeExec, type ExecSeam, type FsSeam, type HarnessContext } from '../reconcile/context.js';
 import {
   canonicalFingerprint,
@@ -46,6 +43,9 @@ import {
   observeRoleSkill,
   roleSkillFragments,
 } from '../roleSkills.js';
+import { claudeComplement, type ClaudeSeatToolsPayload } from '../seatTools/claudeComplement.js';
+import { readClaudeHumanLayer } from '../seatTools/claudeHumanLayer.js';
+import { withSeatTools } from '../seatTools/context.js';
 import { BUILTIN_TOOLKITS, parseToolkit, toolkitHomes, type Toolkit } from '../toolkit.js';
 
 const exec = promisify(execFile);

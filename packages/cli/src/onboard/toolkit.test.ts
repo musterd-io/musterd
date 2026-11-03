@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readProvisionManifest, writeProvisionManifest } from './manifest.js';
 import { installSeatPermissions, seatFloorDenies } from './permissions.js';
 import {
@@ -338,5 +338,36 @@ describe('manifest back-compat', () => {
       }),
     );
     expect(readProvisionManifest(dir)?.profile).toBe('backend');
+  });
+});
+
+describe('an untracked toolkit cannot add an MCP server (ADR 794 §1a)', () => {
+  it("an untracked user toolkit's mcp_servers are ignored with a warning; a tracked one's load", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'musterd-untracked-'));
+    try {
+      mkdirSync(join(dir, '.musterd', 'toolkits'), { recursive: true });
+      writeFileSync(
+        join(dir, '.musterd', 'toolkits', 'data.json'),
+        JSON.stringify({
+          toolkit: 'data',
+          charter: 'own the warehouse',
+          tools: { mcp_servers: [{ name: 'gmail', command: 'npx' }] },
+        }),
+      );
+      const errs: string[] = [];
+      const spy = vi.spyOn(process.stderr, 'write').mockImplementation(((c: string) => {
+        errs.push(String(c));
+        return true;
+      }) as never);
+      try {
+        expect(loadToolkit(dir, 'data', () => false).tools.mcp_servers).toEqual([]);
+        expect(errs.join('')).toContain('ADR 794');
+        expect(loadToolkit(dir, 'data', () => true).tools.mcp_servers).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

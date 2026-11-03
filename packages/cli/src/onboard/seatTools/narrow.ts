@@ -1,11 +1,11 @@
 import { join } from 'node:path';
+import { SeatToolSetSchema } from '@musterd/protocol';
+import { FLOOR_DENIED_SKILLS } from '../permissions.js';
 import type { FsSeam } from '../reconcile/context.js';
 import { SEAT_TOOLS_CACHE_REL } from './cache.js';
 import { claudeComplement } from './claudeComplement.js';
 import { readClaudeHumanLayer } from './claudeHumanLayer.js';
 import { emptyDeclaredSet } from './resolve.js';
-import { SeatToolSetSchema } from '@musterd/protocol';
-import { FLOOR_DENIED_SKILLS } from '../permissions.js';
 
 /**
  * The SessionStart half of ADR 794 §2: close off, in a seat folder, any tool the human added to

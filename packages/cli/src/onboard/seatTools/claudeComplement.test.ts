@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { HumanLayer } from './claudeHumanLayer.js';
 import { claudeComplement } from './claudeComplement.js';
+import type { HumanLayer } from './claudeHumanLayer.js';
 import { emptyDeclaredSet, type DeclaredSet } from './resolve.js';
 
 const human: HumanLayer = {
