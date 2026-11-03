@@ -60,6 +60,15 @@ import {
   sendQuestionAnswer,
   verifyQuestionAnswer,
 } from './appQuestion.js';
+import {
+  APP_QUICK_DELIVERY_TTL_MS,
+  buildAppRoster,
+  fetchRoster,
+  quickResultRef,
+  rosterRef,
+  runAppQuickAction,
+  verifyAppQuickAction,
+} from './appQuickAction.js';
 import { loadAppChannelKeys, openFromPhone, sealToPhone } from './appSeal.js';
 import { relayChecks, relayLinkFor, type RelayLink } from './relay.js';
 
@@ -792,7 +801,7 @@ export async function sendAppPaired(
   const link = relayLinkFor(ctx, team.slug);
   const keys = await appBindingKeys(ctx.db, team.id, input.binding.id);
   if (!link || !keys) return false;
-  return sendSealed(ctx, team, link, {
+  const paired = await sendSealed(ctx, team, link, {
     binding: input.binding,
     keys,
     ref: input.pairingId,
@@ -807,6 +816,67 @@ export async function sendAppPaired(
       device_key_id: input.deviceKeyId,
     },
   });
+  // ADR 791: the phone's seat list, so its quick actions have seats to name from the first open.
+  if (paired) await sendRoster(ctx, team, link, input.binding, keys, Date.now());
+  return paired;
+}
+
+/** ADR 791: send this binding the team's seat roster. */
+async function sendRoster(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  link: RelayLink,
+  binding: ChannelBinding,
+  keys: AppKeys,
+  now: number,
+): Promise<boolean> {
+  return sendSealed(ctx, team, link, {
+    binding,
+    keys,
+    ref: rosterRef(now),
+    expiresAt: now + APP_QUICK_DELIVERY_TTL_MS,
+    dedupeId: `roster:${binding.id}:${now}`,
+    delivery: await buildAppRoster(ctx, team, binding, now),
+  });
+}
+
+/**
+ * ADR 791: a quick action from the phone. Verified and spent first; then sent as the binding's
+ * person; then the result goes back sealed, keyed by the request's nonce. A result the relay
+ * could not take is not a failed action — the steer was sent, and the next roster shows it.
+ */
+async function handleQuickAction(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  binding: ChannelBinding,
+  keys: AppKeys,
+  cb: Extract<AppCallback, { kind: 'quick_action' }>,
+  now: number,
+): Promise<{ ok: boolean; reason?: string }> {
+  const verified = await verifyAppQuickAction(ctx, team, binding, keys, cb, now);
+  if (!verified.ok) return verified;
+  const ran = await runAppQuickAction(ctx, team, binding, verified.action, now);
+  if (!ran.ok) return ran;
+  const link = relayLinkFor(ctx, team.slug);
+  if (link)
+    await sendSealed(ctx, team, link, {
+      binding,
+      keys,
+      ref: quickResultRef(cb.ref),
+      expiresAt: now + APP_QUICK_DELIVERY_TTL_MS,
+      dedupeId: `${cb.ref}:result`,
+      delivery: {
+        v: 1,
+        kind: 'quick_action_result',
+        team: team.slug,
+        binding: binding.id,
+        nonce: verified.action.nonce,
+        action: verified.action.action,
+        seat: verified.action.seat,
+        result: ran.result,
+      },
+    });
+  return { ok: true };
 }
 
 export type AppCallbackRefusal =
@@ -849,6 +919,8 @@ export async function handleAppCallback(
   if (!binding || !keys) return { ok: false, reason: 'binding_stale' };
 
   if (cb.kind === 'redeliver') return redeliver(ctx, team, binding, keys, now);
+
+  if (cb.kind === 'quick_action') return handleQuickAction(ctx, team, binding, keys, cb, now);
 
   if (cb.kind === 'question_key') {
     let enrollBody: Uint8Array;
@@ -1311,6 +1383,8 @@ async function redeliver(
   }
   // The phone opened: if no verdict is live on it (expired, or decided elsewhere), the queue moves.
   if (human?.kind === 'human') await tickVerdictQueue(ctx, team, human, now);
+  // ADR 791: and its seat list is refreshed — who is online, wakeable, on which lane.
+  await sendRoster(ctx, team, link, binding, keys, now);
   return { ok: true };
 }
 
@@ -1397,6 +1471,20 @@ export async function handleAppFetch(
   );
   const keys = binding ? await appBindingKeys(ctx.db, team.id, binding.id) : null;
   if (!binding || !keys) return null;
+  // ADR 791: a roster too big to push.
+  const quick = await fetchRoster(ctx, team, binding, frame.ask_ref, now);
+  if (quick) {
+    const input = {
+      binding,
+      keys,
+      ref: frame.ask_ref,
+      expiresAt: quick.expiresAt,
+      delivery: quick.delivery,
+    };
+    const sealed = await sealDelivery(team, input);
+    await auditSealed(ctx, team, input, sealed, 'fetched');
+    return { sealed, expires_at: quick.expiresAt };
+  }
   const [live] = await liveAppAsks(ctx, team, binding, now, frame.ask_ref);
   if (!live) return null;
   await spend(ctx, live.tokenHash, now);

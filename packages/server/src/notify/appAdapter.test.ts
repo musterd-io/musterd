@@ -2,6 +2,7 @@ import { createHash, generateKeyPairSync, sign as cryptoSign, type KeyObject } f
 import {
   appAnswerSigningBytes,
   appQuestionAnswerSigningBytes,
+  appQuickActionSigningBytes,
   questionKeyEnrollBytes,
   AppDeliverySchema,
   approvalWording,
@@ -34,8 +35,10 @@ import { buildDescriptor, enrollDeviceKey, revokeDeviceKey } from '../store/auth
 import type { ChannelBinding } from '../store/channelBindings.js';
 import { listChannelSettings, setChannelSettings } from '../store/channelSettings.js';
 import { getLane, openLane, updateLane } from '../store/lanes.js';
-import { addMember } from '../store/members.js';
+import { addMember, haltMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
+import { attach } from '../store/presence.js';
+import { enrollResidency } from '../store/residency.js';
 import { setQuestionNotify } from '../store/questionNotify.js';
 import { questionView } from '../store/questions.js';
 import { createTeam } from '../store/teams.js';
@@ -341,8 +344,12 @@ function phoneSigns(
 const callback = (askRef: string, body: string) =>
   ({ protocol: 1, type: 'callback', ask_ref: askRef, body }) as const;
 
+/** ADR 791: a redeliver and a pairing also send the seat roster; the ask tests read past it. */
+const isRoster = (f: RelayDaemonFrame) =>
+  f.type === 'app_deliver' && f.ask_ref.startsWith('roster-');
+
 function lastAppFrame(sent: RelayDaemonFrame[]): RelayAppDeliverFrame {
-  const f = [...sent].reverse().find((x) => x.type === 'app_deliver');
+  const f = [...sent].reverse().find((x) => x.type === 'app_deliver' && !isRoster(x));
   if (!f || f.type !== 'app_deliver') throw new Error('no app_deliver frame');
   return f;
 }
@@ -918,7 +925,7 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
 
     describe('the fatigue ceiling (ADR 676 §8)', () => {
       const appFrames = (st: Awaited<ReturnType<typeof seed>>) =>
-        st.sent.filter((f): f is RelayAppDeliverFrame => f.type === 'app_deliver');
+        st.sent.filter((f): f is RelayAppDeliverFrame => f.type === 'app_deliver' && !isRoster(f));
 
       /** Accept whatever verdict is live on the phone, at `at`. */
       async function acceptLive(st: Awaited<ReturnType<typeof seed>>, at: number) {
@@ -1305,7 +1312,9 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
     await expect(
       handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), NOW + 3_000),
     ).resolves.toEqual({ ok: true });
-    expect(s.sent.slice(before).filter((f) => f.type === 'app_deliver')).toHaveLength(0);
+    expect(
+      s.sent.slice(before).filter((f) => f.type === 'app_deliver' && !isRoster(f)),
+    ).toHaveLength(0);
   });
 
   it('the question key cannot answer anything that is not a question, and a question takes no decision', async () => {
@@ -1521,5 +1530,310 @@ withDrivers('app channel questions (ADR 773/774)', (o) => {
         NOW,
       ),
     ).resolves.toBe('replayed');
+  });
+});
+
+/** The phone's quick action callback (ADR 791), signed silently by `signer` (its question key). */
+async function quickActionBody(
+  s: Awaited<ReturnType<typeof seed>>,
+  signer: KeyObject,
+  over: {
+    seat?: string;
+    action?: 'start' | 'check_inbox' | 'check_pr' | 'resume';
+    nonce?: string;
+    ref?: string;
+    key?: 'question' | 'signing';
+    expiresAt?: number;
+  } = {},
+) {
+  const action = over.action ?? 'start';
+  const nonce = over.nonce ?? 'q'.repeat(22);
+  const seat = over.seat ?? 'ada';
+  const ts = NOW;
+  const signature = cryptoSign(
+    'sha256',
+    Buffer.from(
+      appQuickActionSigningBytes({
+        team: s.team.slug,
+        binding: s.binding.id,
+        seat,
+        action,
+        nonce,
+        ts,
+      }),
+      'utf8',
+    ),
+    signer,
+  ).toString('base64url');
+  const route = {
+    team: s.team.slug,
+    binding: s.binding.id,
+    ref: over.ref ?? nonce,
+    expires_at: over.expiresAt ?? NOW + 60_000,
+  };
+  const sealed = await sealToDaemon({
+    daemonReceivePublic: s.daemon.receivePublic,
+    route,
+    payload: new TextEncoder().encode(
+      JSON.stringify({
+        v: 1,
+        seat,
+        action,
+        nonce,
+        ts,
+        key: over.key ?? 'question',
+        signature,
+      }),
+    ),
+    purpose: 'quick_action',
+  });
+  return JSON.stringify({ app: 1, kind: 'quick_action', ...route, sealed });
+}
+
+withDrivers('app channel quick actions and roster (ADR 791)', (o) => {
+  beforeEach(() => {
+    openStore = o;
+  });
+  afterEach(() => __setAppChannelKeysForTest(null));
+
+  /** Pair, then enroll a question key; returns the key the phone signs quick actions with. */
+  async function withQuestionKey() {
+    const s = await seed();
+    const qk = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const enrolled = await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('qk-1', await enrollBody(s, qk.publicKey)),
+      NOW,
+    );
+    if (!enrolled.ok) throw new Error(String(enrolled.reason));
+    return { s, qk };
+  }
+
+  async function steers(s: Awaited<ReturnType<typeof seed>>) {
+    return s.db.all<{ to_member: string; from_member: string; meta: string }>(
+      "SELECT to_member, from_member, meta FROM messages WHERE team_id = ? AND act = 'steer'",
+      [s.team.id],
+    );
+  }
+
+  async function lastOfKind<K extends AppDelivery['kind']>(
+    s: Awaited<ReturnType<typeof seed>>,
+    kind: K,
+  ): Promise<Extract<AppDelivery, { kind: K }>> {
+    for (const f of [...s.sent].reverse()) {
+      if (f.type !== 'app_deliver') continue;
+      const d = await receive(s, f);
+      if (d.kind === kind) return d as Extract<AppDelivery, { kind: K }>;
+    }
+    throw new Error(`no ${kind} delivery`);
+  }
+
+  it("a question-key quick action is sent as nick's steer, and the result names each seat", async () => {
+    const { s, qk } = await withQuestionKey();
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q', await quickActionBody(s, qk.privateKey, { action: 'check_pr' })),
+        NOW,
+      ),
+    ).resolves.toEqual({ ok: true });
+    const sent = await steers(s);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to_member: s.ada.id, from_member: s.nick.id });
+    expect(JSON.parse(sent[0]!.meta)).toEqual({ quick_action: 'check_pr' });
+    // ada is neither live nor enrolled: the steer waits in her inbox, and the phone is told so.
+    expect(await lastOfKind(s, 'quick_action_result')).toMatchObject({
+      nonce: 'q'.repeat(22),
+      action: 'check_pr',
+      seat: 'ada',
+      result: 'offline',
+    });
+    const audit = await listAuditByAction(s.db, s.team.id, 'app.quick_action', 5);
+    expect(audit).toHaveLength(1);
+    expect(JSON.parse(String(audit[0]!.detail))).toMatchObject({
+      action: 'check_pr',
+      key: 'question',
+      result: 'offline',
+    });
+  });
+
+  it('a seat a host can wake is started', async () => {
+    const { s, qk } = await withQuestionKey();
+    const bo = (await addMember(s.db, s.team, { name: 'bo', kind: 'agent', role: '' })).row;
+    await enrollResidency(s.db, s.team.id, {
+      member_id: bo.id,
+      harness: 'claude-code',
+      host: 'laptop.local',
+      grant_id: 'g1',
+      authorized_by: 'nick',
+    });
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('q', await quickActionBody(s, qk.privateKey, { seat: 'bo' })),
+        NOW,
+      ),
+    ).resolves.toEqual({ ok: true });
+    expect(await lastOfKind(s, 'quick_action_result')).toMatchObject({
+      seat: 'bo',
+      result: 'started',
+    });
+    expect((await steers(s)).map((r) => r.to_member)).toEqual([bo.id]);
+  });
+
+  it('a replay, a stale seal, a stranger, a mismatched nonce and an unknown seat are refused', async () => {
+    const { s, qk } = await withQuestionKey();
+    const body = await quickActionBody(s, qk.privateKey);
+    await expect(handleRelayCallback(s.ctx, s.team, callback('q', body), NOW)).resolves.toEqual({
+      ok: true,
+    });
+    await expect(handleRelayCallback(s.ctx, s.team, callback('q', body), NOW)).resolves.toEqual({
+      ok: false,
+      reason: 'replayed',
+    });
+    const refused = async (b: string) =>
+      (await handleRelayCallback(s.ctx, s.team, callback('q', b), NOW)).reason;
+    expect(
+      await refused(
+        await quickActionBody(s, qk.privateKey, {
+          nonce: 'a'.repeat(22),
+          expiresAt: NOW + 11 * 60_000,
+        }),
+      ),
+    ).toBe('expired');
+    expect(
+      await refused(
+        await quickActionBody(s, qk.privateKey, { nonce: 'b'.repeat(22), expiresAt: NOW }),
+      ),
+    ).toBe('expired');
+    const stranger = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    expect(
+      await refused(await quickActionBody(s, stranger.privateKey, { nonce: 'c'.repeat(22) })),
+    ).toBe('bad_signature');
+    expect(
+      await refused(
+        await quickActionBody(s, qk.privateKey, { nonce: 'd'.repeat(22), ref: 'e'.repeat(22) }),
+      ),
+    ).toBe('nonce_mismatch');
+    expect(
+      await refused(
+        await quickActionBody(s, qk.privateKey, { nonce: 'f'.repeat(22), seat: 'nick' }),
+      ),
+    ).toBe('unknown_seat');
+    // Only the first request sent anything.
+    expect(await steers(s)).toHaveLength(1);
+  });
+
+  it('the Face ID key may sign one; with no question key enrolled, the question key cannot', async () => {
+    const s = await seed();
+    const ghost = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    expect(
+      (
+        await handleRelayCallback(
+          s.ctx,
+          s.team,
+          callback('q', await quickActionBody(s, ghost.privateKey)),
+          NOW,
+        )
+      ).reason,
+    ).toBe('key_revoked');
+    await expect(
+      handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback(
+          'q',
+          await quickActionBody(s, s.phone.signing, { nonce: 'h'.repeat(22), key: 'signing' }),
+        ),
+        NOW,
+      ),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it('redeliver and pairing send a roster: online, wakeable and the one live lane', async () => {
+    const s = await seed();
+    const bo = (await addMember(s.db, s.team, { name: 'bo', kind: 'agent', role: '' })).row;
+    const cy = (await addMember(s.db, s.team, { name: 'cy', kind: 'agent', role: '' })).row;
+    await enrollResidency(s.db, s.team.id, {
+      member_id: bo.id,
+      harness: 'claude-code',
+      host: 'laptop.local',
+      grant_id: 'g1',
+      authorized_by: 'nick',
+    });
+    await enrollResidency(s.db, s.team.id, {
+      member_id: cy.id,
+      harness: 'claude-code',
+      host: 'laptop.local',
+      grant_id: 'g1',
+      authorized_by: 'nick',
+    });
+    await haltMember(s.db, cy.id, s.nick.id, 'hold');
+    await attach(s.db, s.ada.id, 'claude-code', 'conn-ada');
+    const lane = await openLane(s.db, s.team.id, s.team.slug, 'bo', {
+      title: 'Fix the flake',
+      claim: true,
+    });
+    const redeliver = JSON.stringify({ app: 1, kind: 'redeliver', binding: s.binding.id });
+    await expect(
+      handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), Date.now()),
+    ).resolves.toEqual({ ok: true });
+    const roster = await lastOfKind(s, 'roster');
+    expect(roster.seats).toEqual([
+      { seat: 'ada', online: true, wakeable: false, lane: null },
+      { seat: 'bo', online: false, wakeable: true, lane: { id: lane.id, title: 'Fix the flake' } },
+      { seat: 'cy', online: false, wakeable: false, lane: null },
+    ]);
+
+    const before = s.sent.length;
+    await sendAppPaired(s.ctx, s.team, {
+      binding: s.binding as ChannelBinding,
+      member: 'nick',
+      deviceKeyId: s.deviceKeyId,
+      pairingId: s.pairingId,
+    });
+    expect(s.sent.slice(before).filter(isRoster)).toHaveLength(1);
+  });
+
+  it('a roster too big to push is fetched by its ref; anything else is not', async () => {
+    const { s, qk } = await withQuestionKey();
+    const t = Date.now();
+    const redeliver = JSON.stringify({ app: 1, kind: 'redeliver', binding: s.binding.id });
+    await handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), t);
+    const rosterFrame = [...s.sent].reverse().find(isRoster) as RelayAppDeliverFrame;
+    const fetched = await handleAppFetch(
+      s.ctx,
+      s.team,
+      { ask_ref: rosterFrame.ask_ref, binding: s.binding.id },
+      t + 1_000,
+    );
+    expect(fetched?.expires_at).toBe(rosterFrame.expires_at);
+    await expect(
+      handleAppFetch(
+        s.ctx,
+        s.team,
+        { ask_ref: rosterFrame.ask_ref, binding: s.binding.id },
+        t + 11 * 60_000,
+      ),
+    ).resolves.toBeNull();
+
+    // A result is always pushed whole, so its ref is never served.
+    await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('q', await quickActionBody(s, qk.privateKey)),
+      NOW,
+    );
+    await expect(
+      handleAppFetch(
+        s.ctx,
+        s.team,
+        { ask_ref: `qa-${'q'.repeat(22)}`, binding: s.binding.id },
+        NOW,
+      ),
+    ).resolves.toBeNull();
   });
 });

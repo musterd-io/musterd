@@ -57,6 +57,9 @@ export interface AppKeys {
   question_key_nonces?: string[];
   /** The sealed `expires_at` of the last accepted enrollment — enrollments are accepted in order. */
   question_key_expires_at?: number;
+  /** ADR 791: the quick-action nonces already used on this binding (newest last, bounded). With the
+   *  ten-minute seal window this makes a replayed quick action a no-op. */
+  quick_action_nonces?: string[];
 }
 
 export type AppPairingRefusal =
@@ -423,6 +426,43 @@ export async function setAppQuestionKey(
     };
     // Compare-and-swap on the value just read: Postgres's READ COMMITTED lets two enrollments read
     // the same keys, and only the first write may land. The loser saw a stale order — `replayed`.
+    const swapped = await t.run(
+      'UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ? AND app_keys = ?',
+      [JSON.stringify(next), bindingId, teamId, row.app_keys],
+    );
+    return swapped.changes === 1 ? 'ok' : 'replayed';
+  });
+}
+
+/** How many used quick-action nonces a binding remembers — far more than ten minutes of presses. */
+export const QUICK_ACTION_NONCES_KEPT = 128;
+
+/**
+ * Spend a quick action's nonce on this binding (ADR 791): `replayed` when it was spent before.
+ * Compare-and-swap on the value just read, like {@link setAppQuestionKey}, so two deliveries of one
+ * sealed request cannot both pass.
+ */
+export async function spendAppQuickActionNonce(
+  db: Driver,
+  teamId: string,
+  bindingId: string,
+  nonce: string,
+): Promise<'ok' | 'binding_stale' | 'replayed'> {
+  return db.tx(async (t) => {
+    const row = await t.get<{ app_keys: string | null; channel: string; status: string }>(
+      'SELECT app_keys, channel, status FROM channel_bindings WHERE id = ? AND team_id = ?',
+      [bindingId, teamId],
+    );
+    if (!row || row.channel !== APP_CHANNEL || row.status !== 'active' || !row.app_keys)
+      return 'binding_stale';
+    const keys = JSON.parse(row.app_keys) as AppKeys;
+    if ((keys.quick_action_nonces ?? []).includes(nonce)) return 'replayed';
+    const next: AppKeys = {
+      ...keys,
+      quick_action_nonces: [...(keys.quick_action_nonces ?? []), nonce].slice(
+        -QUICK_ACTION_NONCES_KEPT,
+      ),
+    };
     const swapped = await t.run(
       'UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ? AND app_keys = ?',
       [JSON.stringify(next), bindingId, teamId, row.app_keys],

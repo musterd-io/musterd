@@ -555,6 +555,8 @@ export type AuditAction =
   // ADR 779: quick actions — the action and seat, never a body.
   | 'quick_action.sent'
   | 'quick_action.start_all'
+  // ADR 791: a quick action from the phone — action, seat, key kind and counts, never a body.
+  | 'app.quick_action'
   | 'pr_event.sent'
   | 'pr_watch.unavailable'
   | 'question.notify_set'
@@ -950,6 +952,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'app.question_key_enrolled': 'none',
   'quick_action.sent': 'actor',
   'quick_action.start_all': 'actor',
+  'app.quick_action': 'actor',
   'pr_event.sent': 'none',
   'pr_watch.unavailable': 'none',
   'question.notify_set': 'actor',

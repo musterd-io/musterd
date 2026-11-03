@@ -2,6 +2,7 @@ import {
   composeQuickActionLine,
   makeEnvelope,
   QuickActionSchema,
+  type QuickAction,
   type QuickActionPr,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
@@ -103,6 +104,55 @@ export async function quickActionLineFor(
 }
 
 export type StartAllResult = 'started' | 'offline';
+
+/**
+ * One seat's quick action sent as `person` (ADR 791, the phone): the same `steer` `/live` posts,
+ * through the ordinary route. `started` when the seat can hear it — live, or enrolled with a host
+ * that can wake it; `offline` otherwise, and the steer still waits in its inbox. Null when `seat`
+ * is not a standing agent seat on this team.
+ */
+export async function sendSeatQuickAction(
+  ctx: Ctx,
+  team: TeamRow,
+  person: MemberRow,
+  seat: string,
+  action: QuickAction,
+  now: number = Date.now(),
+): Promise<'started' | 'offline' | null> {
+  if (person.kind !== 'human')
+    throw new MusterdError('forbidden', "a quick action is a person's (ADR 779)");
+  const agent = (await listMembers(ctx.db, team.id)).find(
+    (m) => m.name === seat && m.kind === 'agent' && m.left_at === null && m.observer === 0,
+  );
+  if (!agent) return null;
+  const live = await hasLivePresence(ctx.db, agent.id, ctx.config.presenceTimeoutMs);
+  const enrolled = (await getResidency(ctx.db, team.id, agent.id)) !== null;
+  await routeEnvelope(
+    ctx,
+    team,
+    person,
+    makeEnvelope({
+      id: ulid(),
+      team: team.slug,
+      from: person.name,
+      to: { kind: 'member', name: agent.name },
+      act: 'steer',
+      body: QUICK_ACTION_BODY[action],
+      meta: { quick_action: action },
+      ts: now,
+    }),
+  );
+  return live || enrolled ? 'started' : 'offline';
+}
+
+/** The steer's body for each action — never read by the seat (its line is composed), but kept
+ *  the same words `/live` sends, so the timeline reads the same from either surface. */
+const QUICK_ACTION_BODY: Record<QuickAction, string> = {
+  start: 'Start',
+  check_inbox: 'Check inbox',
+  check_pr: 'Check PR',
+  resume: 'Resume',
+};
 
 /**
  * "Start everyone" (ADR 779 §3): one `start` steer per agent seat that can hear it — live, or enrolled

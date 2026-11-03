@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ApprovalDescriptorSchema } from './approval.js';
 import { AnswerSchema, QuestionSchema, type Answer } from './question.js';
+import { QUICK_ACTIONS, type QuickAction } from './quickAction.wire.js';
 
 /**
  * The musterd app's channel (ADR 676): what the pairing QR carries and what the phone sends back,
@@ -92,6 +93,8 @@ export function sealedPushBytes(sealed: { enc: string; ct: string }): number {
  * - `answer`: an answer, `ref` = the ask id, `expires_at` = the delivery's expiry.
  * - `redeliver`: on open, re-send this binding's pending asks (no body — the daemon is the source
  *   of truth, and a re-send reaches only the paired phone).
+ * - `quick_action` (ADR 791): a person's quick action for one seat, `ref` = the body's nonce,
+ *   sealed with purpose `quick_action`; the body is an {@link AppQuickActionSchema}.
  */
 export const AppCallbackSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -122,6 +125,14 @@ export const AppCallbackSchema = z.discriminatedUnion('kind', [
     kind: z.literal('question_key'),
     binding: z.string().min(1).max(64),
     ref: z.string().min(1).max(64),
+    expires_at: z.number().int().nonnegative(),
+    sealed: SealedBodySchema,
+  }),
+  z.object({
+    app: z.literal(1),
+    kind: z.literal('quick_action'),
+    binding: z.string().min(1).max(64),
+    ref: z.string().min(16).max(64),
     expires_at: z.number().int().nonnegative(),
     sealed: SealedBodySchema,
   }),
@@ -158,6 +169,14 @@ export type AppApproval = z.infer<typeof AppApprovalSchema>;
  */
 export const APP_LISTED_ACT_OPEN_MAX = 1;
 export const APP_LISTED_ACT_HOURLY_MAX = 6;
+
+/** ADR 791: a quick action's result for one seat. */
+export const QUICK_ACTION_RESULTS = ['started', 'offline'] as const;
+export type QuickActionResult = (typeof QUICK_ACTION_RESULTS)[number];
+/** The most seats one roster carries. */
+export const APP_ROSTER_MAX = 64;
+/** A quick action's seal must expire within this window of the daemon's clock (replay bound). */
+export const APP_QUICK_ACTION_WINDOW_MS = 10 * 60_000;
 
 /**
  * What the daemon signs and seals to the phone. `nonce` is unique per token (the phone's seen-nonce
@@ -226,6 +245,44 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
     binding: z.string(),
     member: z.string(),
     device_key_id: z.string(),
+  }),
+  /**
+   * ADR 791: what a phone quick action did. `nonce` is the request's, so the phone matches the
+   * result to the button it pressed. `offline`: the seat is neither live nor enrolled for wakes —
+   * the steer still waits in its inbox.
+   */
+  z.object({
+    v: z.literal(1),
+    kind: z.literal('quick_action_result'),
+    team: z.string(),
+    binding: z.string(),
+    nonce: z.string(),
+    action: z.enum(QUICK_ACTIONS),
+    seat: z.string(),
+    result: z.enum(QUICK_ACTION_RESULTS),
+  }),
+  /**
+   * ADR 791: the team's agent seats as the phone shows them — online (a live session) or not,
+   * whether a host can wake it, and its one claimed lane, if it has exactly one. `lane.title` is
+   * the seat's own text: the phone labels it as theirs. Sent after pairing and on every
+   * `redeliver`; `ts` orders two rosters, and the phone keeps the newest.
+   */
+  z.object({
+    v: z.literal(1),
+    kind: z.literal('roster'),
+    team: z.string(),
+    binding: z.string(),
+    ts: z.number().int(),
+    seats: z
+      .array(
+        z.object({
+          seat: z.string(),
+          online: z.boolean(),
+          wakeable: z.boolean(),
+          lane: z.object({ id: z.string(), title: z.string() }).nullable(),
+        }),
+      )
+      .max(APP_ROSTER_MAX),
   }),
 ]);
 export type AppDelivery = z.infer<typeof AppDeliverySchema>;
@@ -348,5 +405,44 @@ export function appAnswerSigningBytes(input: {
     input.decision,
     input.nonce,
     input.reported ? 'reported' : '-',
+  ].join('\n');
+}
+
+/**
+ * A person's quick action from the phone (ADR 791), opened from a body sealed with purpose
+ * `quick_action`: one seat, one action. Signed by the silent question key (nick, 2026-11-03: no
+ * Face ID for a quick action) or by the Face ID signing key, over {@link appQuickActionSigningBytes}.
+ * There is no Start everyone from the phone (nick, 2026-11-03: not one he would use).
+ */
+export const AppQuickActionSchema = z.object({
+  v: z.literal(1),
+  seat: z.string().min(1).max(64),
+  action: z.enum(QUICK_ACTIONS),
+  nonce: z.string().min(16).max(64),
+  /** The phone's clock when the button was pressed, ms. */
+  ts: z.number().int().nonnegative(),
+  key: z.enum(['question', 'signing']),
+  signature: b64url.max(256),
+});
+export type AppQuickAction = z.infer<typeof AppQuickActionSchema>;
+
+/** The exact bytes a quick action's signature covers; its own domain tag, so no other signature
+ *  verifies as one. */
+export function appQuickActionSigningBytes(input: {
+  team: string;
+  binding: string;
+  seat: string;
+  action: QuickAction;
+  nonce: string;
+  ts: number;
+}): string {
+  return [
+    'musterd-app-quick-action/v1',
+    input.team,
+    input.binding,
+    input.seat,
+    input.action,
+    input.nonce,
+    String(input.ts),
   ].join('\n');
 }
