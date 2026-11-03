@@ -10,6 +10,7 @@ describe('roleGlyph', () => {
       'designer',
       'engineer',
       'founder',
+      'ios-engineer',
       'observer',
       'planner',
       'platform',

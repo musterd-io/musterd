@@ -26,6 +26,9 @@ const GLYPHS: Record<string, string> = {
   // A code tile: </> builds the product.
   engineer:
     '<path class="b" d="M3.4 1.8h9.2a1.6 1.6 0 0 1 1.6 1.6v9.2a1.6 1.6 0 0 1-1.6 1.6H3.4a1.6 1.6 0 0 1-1.6-1.6V3.4a1.6 1.6 0 0 1 1.6-1.6Z"/><path d="M6.1 5.6 3.9 8l2.2 2.4 M9.9 5.6 12.1 8l-2.2 2.4 M8.9 4.8 7.1 11.2"/>',
+  // A phone with </> on its screen: builds the iOS app.
+  'ios-engineer':
+    '<path class="b" d="M5.4 1.5h5.2a1.6 1.6 0 0 1 1.6 1.6v9.8a1.6 1.6 0 0 1-1.6 1.6H5.4a1.6 1.6 0 0 1-1.6-1.6V3.1a1.6 1.6 0 0 1 1.6-1.6Z"/><path d="M6.9 12.6h2.2 M6.7 6 5.5 7.6l1.2 1.6 M9.3 6l1.2 1.6-1.2 1.6"/>',
   // A sprout: the one who planted it.
   founder:
     '<path class="b" d="M8 8.6C8 5.7 5.9 4 2.9 4c0 2.9 2.1 4.6 5.1 4.6Z"/><path class="b" d="M8 7.1c0-3 2.1-4.7 5.1-4.7 0 3-2.1 4.7-5.1 4.7Z"/><path d="M8 14.3V6.8 M4.6 14.3h6.8"/>',
