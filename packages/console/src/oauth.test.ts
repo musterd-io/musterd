@@ -6,6 +6,7 @@ import { blockListOf } from './clientip.js';
 import type { ConsoleConfig } from './config.js';
 import { createConsoleServer } from './http.js';
 import { makeLog } from './log.js';
+import { PINNED } from './providers.js';
 import { migrate } from './schema.js';
 import { pglite } from './testing.js';
 
@@ -274,6 +275,19 @@ describe('GitHub and Google sign-in (ADR 620)', () => {
     const replay = await callback('github', `code=good-code&state=${s3.state}`, s3.tx);
     expect(replay.status).toBe(400);
     expect(replay.body).toContain('Your sign-in expired. Sign in again.');
+  });
+
+  it("a callback's `iss` must be the pinned issuer; GitHub's is its /login/oauth path", async () => {
+    // GitHub answers with `iss=https://github.com/login/oauth` (RFC 9207), observed live
+    // 2026-11-02; pinning the bare origin made every real sign-in fail with 400.
+    expect(PINNED.github.issuer).toBe('https://github.com/login/oauth');
+    const { start, callback, fake } = await boot();
+    const s = await start('github');
+    const other = `code=good-code&state=${s.state}&iss=${encodeURIComponent('https://evil.test')}`;
+    expect((await callback('github', other, s.tx)).status).toBe(400);
+    const s2 = await start('github');
+    const ours = `code=good-code&state=${s2.state}&iss=${encodeURIComponent(fake.overrides.endpoints.github.issuer)}`;
+    expect((await callback('github', ours, s2.tx)).status).toBe(303);
   });
 
   it('a provider error or a bad code is "provider refused", never a redirect', async () => {
