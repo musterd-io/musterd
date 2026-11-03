@@ -32,7 +32,7 @@ type QuickCallback = Extract<AppCallback, { kind: 'quick_action' }>;
 
 /** A roster or result delivery lives this long on the relay. */
 export const APP_QUICK_DELIVERY_TTL_MS = 10 * 60_000;
-/** The relay ref of a roster sent at `ts` — a fetch rebuilds a fresh roster from it. */
+/** The relay ref the phone pulls a roster by (`ts` at or before now) — never pushed. */
 export const rosterRef = (ts: number) => `roster-${ts}`;
 /** The relay ref of a quick action's result. A result is one seat's word, always small enough to
  *  push, so it is never fetched. */

@@ -1240,8 +1240,10 @@ answer's text.
 - A server MUST send it as the binding's person's `steer` with `meta.quick_action`, through the same
   route as any other, and answer with a sealed `quick_action_result {nonce, action, seat, result:
   started | offline}`.
-- A server sends the binding a sealed `roster {ts, seats: [{seat, online, wakeable, lane}]}` after
-  pairing and on each `redeliver`; at most 64 seats, `lane` the seat's one live lane or null.
+- A server serves the binding a sealed `roster {ts, seats: [{seat, online, wakeable, lane}]}` when
+  the phone fetches the ref `roster-<ts>` (`ts` at or before now, inside 10 minutes); at most 64
+  seats, `lane` the seat's one live lane or null. A server MUST NOT push a roster (ADR 791,
+  amended 2026-11-03).
 
 ## A.34 Seats on shift (unreleased — ADR 792)
 

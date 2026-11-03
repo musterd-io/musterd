@@ -62,10 +62,8 @@ import {
 } from './appQuestion.js';
 import {
   APP_QUICK_DELIVERY_TTL_MS,
-  buildAppRoster,
   fetchRoster,
   quickResultRef,
-  rosterRef,
   runAppQuickAction,
   verifyAppQuickAction,
 } from './appQuickAction.js';
@@ -816,28 +814,8 @@ export async function sendAppPaired(
       device_key_id: input.deviceKeyId,
     },
   });
-  // ADR 791: the phone's seat list, so its quick actions have seats to name from the first open.
-  if (paired) await sendRoster(ctx, team, link, input.binding, keys, Date.now());
+  // ADR 791 (amended 2026-11-03): the roster is never pushed — the phone pulls `roster-<ts>`.
   return paired;
-}
-
-/** ADR 791: send this binding the team's seat roster. */
-async function sendRoster(
-  ctx: Ctx,
-  team: { id: string; slug: string },
-  link: RelayLink,
-  binding: ChannelBinding,
-  keys: AppKeys,
-  now: number,
-): Promise<boolean> {
-  return sendSealed(ctx, team, link, {
-    binding,
-    keys,
-    ref: rosterRef(now),
-    expiresAt: now + APP_QUICK_DELIVERY_TTL_MS,
-    dedupeId: `roster:${binding.id}:${now}`,
-    delivery: await buildAppRoster(ctx, team, binding, now),
-  });
 }
 
 /**
@@ -1383,8 +1361,6 @@ async function redeliver(
   }
   // The phone opened: if no verdict is live on it (expired, or decided elsewhere), the queue moves.
   if (human?.kind === 'human') await tickVerdictQueue(ctx, team, human, now);
-  // ADR 791: and its seat list is refreshed — who is online, wakeable, on which lane.
-  await sendRoster(ctx, team, link, binding, keys, now);
   return { ok: true };
 }
 

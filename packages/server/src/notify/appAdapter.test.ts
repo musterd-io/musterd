@@ -1753,72 +1753,75 @@ withDrivers('app channel quick actions and roster (ADR 791)', (o) => {
     ).resolves.toEqual({ ok: true });
   });
 
-  it('redeliver and pairing send a roster: online, wakeable and the one live lane', async () => {
+  /** What the phone does to read its seat list: fetch `roster-<ts>` and open it (ADR 791). */
+  async function pullRoster(s: Awaited<ReturnType<typeof seed>>, ts: number, now: number) {
+    const ref = `roster-${ts}`;
+    const fetched = await handleAppFetch(
+      s.ctx,
+      s.team,
+      { ask_ref: ref, binding: s.binding.id },
+      now,
+    );
+    if (!fetched) return null;
+    return receive(s, {
+      protocol: 1,
+      type: 'app_deliver',
+      ask_ref: ref,
+      dedupe_id: ref,
+      expires_at: fetched.expires_at,
+      binding: s.binding.id,
+      push: { token: PUSH_TOKEN, environment: 'development' },
+      sealed: fetched.sealed,
+    });
+  }
+
+  it('the roster is pulled, never pushed: online, wakeable and the one live lane', async () => {
     const s = await seed();
     const bo = (await addMember(s.db, s.team, { name: 'bo', kind: 'agent', role: '' })).row;
     const cy = (await addMember(s.db, s.team, { name: 'cy', kind: 'agent', role: '' })).row;
-    await enrollResidency(s.db, s.team.id, {
-      member_id: bo.id,
-      harness: 'claude-code',
-      host: 'laptop.local',
-      grant_id: 'g1',
-      authorized_by: 'nick',
-    });
-    await enrollResidency(s.db, s.team.id, {
-      member_id: cy.id,
-      harness: 'claude-code',
-      host: 'laptop.local',
-      grant_id: 'g1',
-      authorized_by: 'nick',
-    });
+    for (const m of [bo, cy])
+      await enrollResidency(s.db, s.team.id, {
+        member_id: m.id,
+        harness: 'claude-code',
+        host: 'laptop.local',
+        grant_id: 'g1',
+        authorized_by: 'nick',
+      });
     await haltMember(s.db, cy.id, s.nick.id, 'hold');
     await attach(s.db, s.ada.id, 'claude-code', 'conn-ada');
     const lane = await openLane(s.db, s.team.id, s.team.slug, 'bo', {
       title: 'Fix the flake',
       claim: true,
     });
+    // A pushed alert of a kind build 43 does not know showed "couldn't verify" on every open.
     const redeliver = JSON.stringify({ app: 1, kind: 'redeliver', binding: s.binding.id });
+    const now = Date.now();
     await expect(
-      handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), Date.now()),
+      handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), now),
     ).resolves.toEqual({ ok: true });
-    const roster = await lastOfKind(s, 'roster');
-    expect(roster.seats).toEqual([
-      { seat: 'ada', online: true, wakeable: false, lane: null },
-      { seat: 'bo', online: false, wakeable: true, lane: { id: lane.id, title: 'Fix the flake' } },
-      { seat: 'cy', online: false, wakeable: false, lane: null },
-    ]);
-
-    const before = s.sent.length;
     await sendAppPaired(s.ctx, s.team, {
       binding: s.binding as ChannelBinding,
       member: 'nick',
       deviceKeyId: s.deviceKeyId,
       pairingId: s.pairingId,
     });
-    expect(s.sent.slice(before).filter(isRoster)).toHaveLength(1);
+    expect(s.sent.filter(isRoster)).toHaveLength(0);
+
+    const roster = await pullRoster(s, now - 30_000, now);
+    expect(roster).toMatchObject({ kind: 'roster' });
+    if (roster?.kind !== 'roster') throw new Error('expected a roster');
+    expect(roster.seats).toEqual([
+      { seat: 'ada', online: true, wakeable: false, lane: null },
+      { seat: 'bo', online: false, wakeable: true, lane: { id: lane.id, title: 'Fix the flake' } },
+      { seat: 'cy', online: false, wakeable: false, lane: null },
+    ]);
   });
 
-  it('a roster too big to push is fetched by its ref; anything else is not', async () => {
+  it('a roster ref from the future or past its window is not served, nor a result', async () => {
     const { s, qk } = await withQuestionKey();
-    const t = Date.now();
-    const redeliver = JSON.stringify({ app: 1, kind: 'redeliver', binding: s.binding.id });
-    await handleRelayCallback(s.ctx, s.team, callback('redeliver', redeliver), t);
-    const rosterFrame = [...s.sent].reverse().find(isRoster) as RelayAppDeliverFrame;
-    const fetched = await handleAppFetch(
-      s.ctx,
-      s.team,
-      { ask_ref: rosterFrame.ask_ref, binding: s.binding.id },
-      t + 1_000,
-    );
-    expect(fetched?.expires_at).toBe(rosterFrame.expires_at);
-    await expect(
-      handleAppFetch(
-        s.ctx,
-        s.team,
-        { ask_ref: rosterFrame.ask_ref, binding: s.binding.id },
-        t + 11 * 60_000,
-      ),
-    ).resolves.toBeNull();
+    const now = Date.now();
+    expect(await pullRoster(s, now + 60_000, now)).toBeNull();
+    expect(await pullRoster(s, now - 11 * 60_000, now)).toBeNull();
 
     // A result is always pushed whole, so its ref is never served.
     await handleRelayCallback(
