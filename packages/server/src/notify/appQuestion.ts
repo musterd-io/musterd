@@ -233,6 +233,27 @@ export async function verifyQuestionAnswer(
 }
 
 /**
+ * Verify `signature` over `bytes` by one of this binding's phone keys (ADR 791 reuses the question
+ * path's rule): the question key is only as good as the Face ID phone key that enrolled it, so a
+ * revoked phone key refuses both.
+ */
+export async function verifyPhoneSigned(
+  ctx: Ctx,
+  teamId: string,
+  binding: ChannelBinding,
+  keys: AppKeys,
+  which: 'question' | 'signing',
+  bytes: string,
+  signature: string,
+): Promise<{ ok: true } | { ok: false; reason: 'key_revoked' | 'bad_signature' }> {
+  const phone = await phoneKey(ctx, teamId, binding, keys);
+  if (!phone) return { ok: false, reason: 'key_revoked' };
+  const key = which === 'question' ? (keys.question_key ? p256(keys.question_key) : null) : phone;
+  if (!key) return { ok: false, reason: 'key_revoked' };
+  return verifies(key, bytes, signature) ? { ok: true } : { ok: false, reason: 'bad_signature' };
+}
+
+/**
  * Send the verified answer as the bound person, through the ordinary route. The route claims the
  * question (first answer wins — a `/live` answer seconds earlier makes this a 409) and wakes the
  * asker; this stamps the proof the route keeps for a daemon-composed answer.

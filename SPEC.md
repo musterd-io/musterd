@@ -1229,3 +1229,16 @@ answer's text.
   member sent passes the daemon's hourly cap and cooldown (ADR 790), so a start is never `capped`.
 - A daemon-composed `message` MAY carry `meta.pr_event {lane, pr, state: merged | ci_red | ci_green,
   checks_url?}` to a lane's owner; it is a wake reason. A server MUST strip a client-supplied copy.
+
+## A.33 Phone quick actions and the seat roster (unreleased — ADR 791)
+
+- An app callback MAY be `{app: 1, kind: 'quick_action', binding, ref, expires_at, sealed}`, sealed
+  with purpose `quick_action`. The opened body is `{v: 1, seat, action, nonce, ts, key, signature}`:
+  one seat, one ADR 779 action, `ref` equal to `nonce`. A server MUST refuse it unless `expires_at`
+  is in the future and at most 10 minutes ahead, the signature by the binding's question key (or
+  Face ID key) verifies over `appQuickActionSigningBytes`, and the nonce is unspent on the binding.
+- A server MUST send it as the binding's person's `steer` with `meta.quick_action`, through the same
+  route as any other, and answer with a sealed `quick_action_result {nonce, action, seat, result:
+  started | offline}`.
+- A server sends the binding a sealed `roster {ts, seats: [{seat, online, wakeable, lane}]}` after
+  pairing and on each `redeliver`; at most 64 seats, `lane` the seat's one live lane or null.

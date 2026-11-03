@@ -136,6 +136,16 @@ export function noticeFor(
   if (delivery.kind === 'held') {
     return { title: NOTICE_TITLE, body: heldBody(delivery.count), sound: true };
   }
+  // ADR 791: a quick action's result and the seat roster are data for the app, not alerts — both
+  // land quietly. Placeholder copy until the phone UI (lane 01M67E5DM8) renders them.
+  if (delivery.kind === 'quick_action_result')
+    return {
+      title: NOTICE_TITLE,
+      body: `${delivery.seat}: ${delivery.result === 'started' ? 'started' : 'offline, it will see this when it is back'}`,
+      sound: false,
+    };
+  if (delivery.kind === 'roster')
+    return { title: NOTICE_TITLE, body: 'Seats updated.', sound: false };
   if (delivery.member === '')
     return { title: NOTICE_TITLE, body: LOCK_SCREEN_FALLBACK_TEXT, sound: false };
   return { title: NOTICE_TITLE, body: `Paired as ${delivery.member}.`, sound: true };
