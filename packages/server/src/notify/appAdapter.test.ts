@@ -38,9 +38,9 @@ import { getLane, openLane, updateLane } from '../store/lanes.js';
 import { addMember, haltMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { attach } from '../store/presence.js';
-import { enrollResidency } from '../store/residency.js';
 import { setQuestionNotify } from '../store/questionNotify.js';
 import { questionView } from '../store/questions.js';
+import { enrollResidency } from '../store/residency.js';
 import { createTeam } from '../store/teams.js';
 import {
   appDeliveryNonce,
