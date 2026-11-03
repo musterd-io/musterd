@@ -2847,6 +2847,18 @@ it to remove a chunk. A re-baseline to measured + 15% would loosen.
 - Falsify: `pnpm perf:check` after a build reports initial JS at or under 154,500 B, total JS
   under 405,500 B and live CSS at or under 30,500 B with this lane in.
 
+## 2026-11-02 — window views, coast and mountain: office art ~9,608,618 B (206 files), inside the ceiling (lane 01M6ENH3T54EPSBRM1RNZXBM9S)
+
+| Budget     | Ceiling     | This branch (files)   | Move |
+| ---------- | ----------- | --------------------- | ---- |
+| office art | 9,730,000 B | ~9,608,618 B (206)    | none |
+
+Twenty-four plates (two settings × two walls × two panes × three day states), 350,634 B in all,
+24,584 B the largest — the room the increment 1 entry below reserved. Total JS moves only inside the
+`windowSprites.ts` chunk (five mover kinds and their draws). No raise.
+
+- Falsify: `pnpm perf:check` after a build reports office art at or under 9,730,000 B with this lane in.
+
 ## 2026-11-02 — window views, city; Office art RAISED 8,900,000 → 9,730,000 B (lane 01M6ENGW2H25MYV40Z2TPWBNJB)
 
 | Budget     | Before (ceiling) | This branch (files)   | Ceiling                          |

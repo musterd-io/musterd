@@ -46,6 +46,70 @@ describe('moversAt (window views, lane 01M6ENGW2H)', () => {
     }
   });
 
+  describe('increment 2 (lane 01M6ENH3T5): the coast and the mountain have their own movers', () => {
+    it('the beacon flashes at night only', () => {
+      // 0.3 s on in every 4 s: within one 4 s slot some instants are lit and the rest are dark
+      const lit = (h: number) => {
+        let on = 0;
+        for (let k = 0; k < 40; k++)
+          if (moversAt('coast', T0 + k * 100, at(h), 'clear', 'revive').some((m) => m.kind === 'beacon')) on++;
+        return on;
+      };
+      expect(lit(23)).toBeGreaterThan(0);
+      expect(lit(23)).toBeLessThan(40);
+      expect(lit(12)).toBe(0);
+      expect(moversAt('city', T0, at(23), 'clear', 'revive').some((m) => m.kind === 'beacon')).toBe(false);
+    });
+
+    it('no gulls in rain', () => {
+      let clear = 0;
+      for (let k = 0; k < 200; k++) {
+        clear += moversAt('coast', T0 + k * 2_000, at(12), 'clear', 'revive').filter((m) => m.kind === 'gull').length;
+        expect(moversAt('coast', T0 + k * 2_000, at(12), 'rain', 'revive').some((m) => m.kind === 'gull')).toBe(false);
+        expect(moversAt('coast', T0 + k * 2_000, at(23), 'clear', 'revive').some((m) => m.kind === 'gull')).toBe(false);
+      }
+      expect(clear).toBeGreaterThan(0);
+    });
+
+    it('a boat crosses the horizon in its slot, deterministic per team', () => {
+      let seen = 0;
+      for (let k = 0; k < 360; k++) {
+        const ms = moversAt('coast', T0 + k * 240_000, at(12), 'clear', 'revive').filter((m) => m.kind === 'boat');
+        expect(ms).toEqual(moversAt('coast', T0 + k * 240_000, at(12), 'clear', 'revive').filter((m) => m.kind === 'boat'));
+        for (const b of ms) expect(b.y).toBeCloseTo(0.62, 2);
+        if (ms.length) seen++;
+      }
+      expect(seen).toBeGreaterThan(50);
+      expect(seen).toBeLessThan(360);
+    });
+
+    it('the hawk circles by day', () => {
+      const a = moversAt('mountain', T0, at(12), 'clear', 'revive').filter((m) => m.kind === 'hawk');
+      const b = moversAt('mountain', T0 + 10_000, at(12), 'clear', 'revive').filter((m) => m.kind === 'hawk');
+      expect(a).toHaveLength(1);
+      expect(b).toHaveLength(1);
+      expect(a[0]!.x).not.toBeCloseTo(b[0]!.x, 3);
+      expect(moversAt('mountain', T0, at(23), 'clear', 'revive').some((m) => m.kind === 'hawk')).toBe(false);
+      expect(moversAt('coast', T0, at(12), 'clear', 'revive').some((m) => m.kind === 'hawk')).toBe(false);
+    });
+
+    it('the cabin glows at night only', () => {
+      expect(moversAt('mountain', T0, at(23), 'clear', 'revive').some((m) => m.kind === 'cabin')).toBe(true);
+      expect(moversAt('mountain', T0, at(12), 'clear', 'revive').some((m) => m.kind === 'cabin')).toBe(false);
+    });
+
+    it('every new mover draws inside its clip', async () => {
+      const { fitFloor } = await import('./iso');
+      const { recordingCtx } = await import('./recording-ctx');
+      for (const [view, h, t] of [['coast', 12, 0], ['coast', 23, 100], ['mountain', 12, 0], ['mountain', 23, 0]] as const) {
+        const { ctx, ops } = recordingCtx();
+        const ms = moversAt(view, T0 + t, at(h), 'clear', 'revive');
+        drawMovers(ctx, fitFloor(1200, 900), ms);
+        expect(ops.filter((o) => o.name === 'clip').length).toBe(ms.length);
+      }
+    });
+  });
+
   it('moversMove says whether anything is in motion', () => {
     expect(moversMove(moversAt('city', T0, at(12), 'clear', 'revive'))).toBe(true); // clouds drift
     expect(moversMove([])).toBe(false);

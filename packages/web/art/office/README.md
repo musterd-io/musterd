@@ -80,8 +80,8 @@ always did, and `figureTintFor` carries the same curve to the figures of increme
 
 ## The outside (window views, lane 01M6ENGW2H)
 
-`exterior.py` builds one low-poly exterior per setting (`city` today; `coast` and `mountain` are
-increment 2) behind a back wall and renders it through an orthographic camera that looks out
+`exterior.py` builds one low-poly exterior per setting (`city`, `coast`, `mountain` — increment 2,
+lane 01M6ENH3T5, added the last two) behind a back wall and renders it through an orthographic camera that looks out
 through one pane. The two back walls face 90° apart, so each wall gets its own view of the same
 scene. A plate is **land only** on a transparent sky — the runtime paints the sky on the continuous
 clock and the sun, moon and clouds as sprites (`windowView.ts`, `windowSprites.ts`) — and no sun or
@@ -90,8 +90,17 @@ too. Lit window quads glow in the `night` state only.
 
 ```sh
 /Applications/Blender.app/Contents/MacOS/Blender -b --python packages/web/art/office/render.py -- \
-  --out packages/web/src/live/office-scene/rendered/assets --scale 3 --ky 0.31 --exterior city
+  --out packages/web/src/live/office-scene/rendered/assets --scale 3 --ky 0.31 --exterior city,coast,mountain
 ```
+
+The camera looks straight out, so a horizontal plane is edge-on: ground that must *show* — the
+sea, the sand, the meadow — is a gentle ramp rising with distance (`_ramp`), which in this view
+reads as a flat expanse ending at a horizon (`HORIZON_Z`, z 98 of the pane's 64…154). Ridges are
+vertical strips whose points alternate a step further out (`_ridge`), so the faces alternate facing
+±t and the sun lights one flank of each peak; snow is the same line with its bottom at the snowline.
+Wall 0 carries the lighthouse (coast, pane 1) and the cabin (mountain, pane 0); `windowSprites.ts`
+`LIGHTHOUSE` and `CABIN` are their pane positions, where the beacon flashes and the windows glow
+after dark. Wall 1 gets the pier and the firs, and the boat and the hawk at runtime.
 
 Writes `view/<setting>/<wall>-<pane>-<day|evening|night>` (2 walls × 2 panes × 3 states = 12 plates
 per setting, ~25 KB after quantize + WebP) and records each with a `view` span (`which`, `t0`, `t1`,
