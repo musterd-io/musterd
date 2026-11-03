@@ -35,8 +35,8 @@ export const SIGNS: Record<SignName, Sign> = {
   wiki: { wall: 0, tc: 0.205, uc: 0.53, w: 26, h: 16, text: 'wiki', lamp: true },
   // Flush under the working-hours calendar (its bottom edge is at u 0.3 − 26/188), across its middle.
   settings: { wall: 1, tc: 0.52, uc: 0.1185, w: 70, h: 16, text: 'settings', lamp: false },
-  // Over the board's right half: the shelf chimes hang over its left half.
-  board: { wall: 1, tc: 0.945, uc: 0.854, w: 64, h: 17, text: 'work board', lamp: true },
+  // Centred over the board.
+  board: { wall: 1, tc: 0.8922, uc: 0.875, w: 64, h: 17, text: 'work board', lamp: true },
 };
 
 /**

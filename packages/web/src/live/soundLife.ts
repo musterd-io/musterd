@@ -269,7 +269,7 @@ export type Moment =
   | 'bottle'
   | 'eatAt'
   | 'machine'
-  // The musterd voice (sound identity spec §2.2–2.3): the shelf chimes for finished work, the desk
+  // The musterd voice (sound identity spec §2.2–2.3): the lane ding and the goal bell for finished work, the desk
   // bells for a question / a redirect / a handoff, the door cousin for arrivals and departures.
   // `fanfare` and `askbell` left in inc 3; `doorbell` stays as the welcome's arrival.
   | 'laneDone'
@@ -280,12 +280,6 @@ export type Moment =
   | 'handoffAnswer'
   | 'arrive'
   | 'leave';
-
-/** What a `laneDone` carries: the lane's bar (`barForLane`) and its chord size (`voicesForChain`). */
-export interface MomentDetail {
-  bar?: number;
-  voices?: number;
-}
 
 /** Minimum gap between moments, ms. Moments are act-driven and sparse by nature; the one plausible
  *  burst (a flood of accepts) coalesces rather than becoming a slot machine — same principle as the
@@ -303,8 +297,8 @@ const STEP_GAP_MS = 110;
 export function shouldPlayStep(now: number, last: number): boolean {
   return shouldChime(now, last, STEP_GAP_MS);
 }
-/** The chimes never drop under the moment gate: a burst of lane closes rings every lane, each strike
- *  pushed back to a beat after the last (nick, 2026-10-28). Returns the delay in ms to wait before
+/** A lane's ding and the goal bell never drop under the moment gate: a burst of lane closes dings
+ *  every lane, each pushed back to a beat after the last (nick, 2026-10-28). Returns the delay in ms to wait before
  *  playing `name` now, or null when the gate drops it. `last` is the gate's clock; the caller advances
  *  it to `now + delay` for a queued chime so the next one lines up behind it. */
 export const CHIME_QUEUE_GAP_MS = 120;
@@ -326,17 +320,6 @@ export function momentPan(pan: number): number {
 
 // ── the musterd voice ──────────────────────────────────────────────────────────────────────────
 // The pure half lives in `soundVoice.ts`, a module with no other imports: the office scene (a lazy
-// chunk) reaches it for which bar a lane rings, and must not drag this file's keyboard and life-roll
+// chunk) reaches it for the gestures, and must not drag this file's keyboard and life-roll
 // logic along with it (the perf budget, packages/web/AGENTS.md).
-export {
-  CHIME_BARS,
-  type Gesture,
-  type Strike,
-  barForLane,
-  chordBars,
-  chordOffsets,
-  gestureFor,
-  jitterStrike,
-  rollOffsets,
-  voicesForChain,
-} from './soundVoice';
+export { BELL_HZ, BELL_PARTIALS, DING_HZ, type Gesture, type Strike, gestureFor, jitterStrike } from './soundVoice';

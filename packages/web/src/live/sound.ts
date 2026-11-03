@@ -253,10 +253,9 @@ class RoomToneFacade {
     name: import('./soundLife').Moment,
     pan: number,
     panTo?: number,
-    detail?: import('./soundLife').MomentDetail,
   ): void {
     if (!this.enabled) return;
-    this.engine?.moment(name, pan, panTo, detail);
+    this.engine?.moment(name, pan, panTo);
   }
 }
 
