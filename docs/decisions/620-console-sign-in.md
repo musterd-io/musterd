@@ -119,6 +119,11 @@ where a plausible shortcut becomes a takeover path.
   answered 403 `forbidden` from the decision 8 Origin check; every test had passed because tests
   set the header by hand. `same-origin` still sends no referrer to any other site, and the
   redemption pages' `no-store` is unchanged.
+- _2026-11-03 (fifty, lane 01M3Z44MTV):_ the page CSP's `form-action` lists the providers'
+  authorize origins beside `'self'`. Chrome and Safari apply `form-action` to the redirect a form
+  submission lands on, so `'self'` alone aborted the 303 from `/auth/github/start` to github.com in
+  the browser (`net::ERR_ABORTED`) — the second thing the first real sign-in found, after the
+  referrer policy above. The list is derived from the pinned endpoints, one home.
 
 ## Observability & Evaluation
 

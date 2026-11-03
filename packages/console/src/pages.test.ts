@@ -111,7 +111,8 @@ describe('console sign-in pages (design 2026-10-15, copy spec)', () => {
     expect(r.body).not.toContain('Your sign-in expired');
     const csp = String(r.headers['content-security-policy']);
     expect(csp).toContain("style-src 'self'");
-    expect(csp).toContain("form-action 'self'");
+    // The providers' authorize origins too: Chrome applies form-action to the 303 the form lands on.
+    expect(csp).toContain("form-action 'self' https://accounts.google.com https://github.com;");
     expect(csp).not.toContain("'unsafe-inline'");
   });
 
