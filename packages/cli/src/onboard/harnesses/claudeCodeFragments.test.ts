@@ -170,6 +170,9 @@ describe('claudeCodeAdapter — managed fragments', () => {
     expect(parsed.permissions.allow).toContain('TheirTool');
     expect(parsed.permissions.allow).toContain('Read');
     // ADR 658: the store wall rides the same ledger-owned fragment, as deny.
+    // Lane 01M6HHSR93: so do the product floor's two skill denies (rule 8).
+    expect(parsed.permissions.deny).toContain('Skill(superpowers:subagent-driven-development)');
+    expect(parsed.permissions.deny).toContain('Skill(superpowers:dispatching-parallel-agents)');
     expect(parsed.permissions.deny).toContain('Read(~/.musterd/musterd.db*)');
     expect(parsed.permissions.deny).toContain('Read(~/.musterd/note-key.json)');
     expect(

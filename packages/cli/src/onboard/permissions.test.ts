@@ -3,9 +3,11 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  floorSkillDenies,
   inspectSeatPermissions,
   installSeatPermissions,
   liftSeatPermissions,
+  seatFloorDenies,
   STANDARD_FLOOR,
   storeWall,
 } from './permissions.js';
@@ -216,7 +218,7 @@ describe('inspectSeatPermissions (ADR 261 increment 2)', () => {
   });
 
   it('reports a partial floor as stale, naming the count and not one line per entry', () => {
-    writeSettings({ permissions: { allow: ['Read', 'Glob'], deny: storeWall() } });
+    writeSettings({ permissions: { allow: ['Read', 'Glob'], deny: seatFloorDenies() } });
     const findings = inspectSeatPermissions(dir);
     expect(findings).toHaveLength(1);
     expect(findings[0]).toContain(String(STANDARD_FLOOR.allow.length - 2));
@@ -281,7 +283,7 @@ describe('inspectSeatPermissions (ADR 261 increment 2)', () => {
     writeSettings({
       permissions: {
         allow: STANDARD_FLOOR.allow.map((e, i) => respell(e, i % 2 ? 'nospace' : 'colon')),
-        deny: storeWall(),
+        deny: seatFloorDenies(),
       },
     });
     expect(inspectSeatPermissions(dir)).toEqual([]);
@@ -291,7 +293,7 @@ describe('inspectSeatPermissions (ADR 261 increment 2)', () => {
     // `Bash(git *)` matches more than `Bash(git push *)` ever would — but equivalence here is
     // SPELLING equivalence only, never subsumption: reasoning "a broader rule covers it" is the
     // harness matcher's job, and reimplementing that is the defect-3 class again.
-    writeSettings({ permissions: { allow: ['Bash(git *)'], deny: storeWall() } });
+    writeSettings({ permissions: { allow: ['Bash(git *)'], deny: seatFloorDenies() } });
     const findings = inspectSeatPermissions(dir);
     expect(findings).toHaveLength(1);
     // `Bash(git *)` is not itself a floor entry and stands in for none of them: all still missing.
@@ -344,13 +346,13 @@ describe('liftSeatPermissions — a removed role takes its ceiling with it', () 
     installSeatPermissions(dir, watcher);
     installSeatPermissions(dir, auditor);
     const before = perms();
-    expect(before.deny).toEqual([...storeWall(), 'Edit', 'Write', 'Bash(git push *)']);
+    expect(before.deny).toEqual([...seatFloorDenies(), 'Edit', 'Write', 'Bash(git push *)']);
 
     const r = liftSeatPermissions(dir, watcher, [auditor]);
     expect(r.lifted).toEqual({ deny: ['Edit', 'Write'], ask: ['WebFetch'] });
     expect(r.kept).toEqual({ deny: ['Bash(git push *)'], ask: [] });
     const after = perms();
-    expect(after.deny).toEqual([...storeWall(), 'Bash(git push *)']);
+    expect(after.deny).toEqual([...seatFloorDenies(), 'Bash(git push *)']);
     expect(after.ask).toBeUndefined();
     expect(after.allow).toEqual(before.allow);
   });
@@ -418,14 +420,62 @@ describe('the store wall (ADR 658)', () => {
     const path = join(dir, '.claude', 'settings.local.json');
     writeFileSync(path, JSON.stringify({ permissions: { allow: [...STANDARD_FLOOR.allow] } }));
     const findings = inspectSeatPermissions(dir, {});
-    expect(findings).toHaveLength(1);
+    expect(findings).toHaveLength(2); // the store wall, then the skill floor (lane 01M6HHSR93)
     expect(findings[0]).toContain('ADR 658');
     expect(findings[0]).toContain('--refresh-permissions');
 
-    expect(installSeatPermissions(dir, undefined, {}).deny).toEqual(storeWall({}));
+    expect(installSeatPermissions(dir, undefined, {}).deny).toEqual(seatFloorDenies({}));
     const s = JSON.parse(readFileSync(path, 'utf8'));
-    expect(s.permissions.deny).toEqual(storeWall({}));
+    expect(s.permissions.deny).toEqual(seatFloorDenies({}));
     expect(s.permissions.allow).toContain('Read'); // deny narrows the floor, it does not replace it
     expect(inspectSeatPermissions(dir, {})).toEqual([]);
+  });
+});
+
+describe('the product floor denies the two banned skills (lane 01M6HHSR93)', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'musterd-skillfloor-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  const settingsPath = () => join(dir, '.claude', 'settings.local.json');
+
+  it('names exactly the two rule-8 skills, in Claude Code deny syntax', () => {
+    expect(floorSkillDenies()).toEqual([
+      'Skill(superpowers:subagent-driven-development)',
+      'Skill(superpowers:dispatching-parallel-agents)',
+    ]);
+  });
+
+  it('is installed as deny even when a toolkit allows one of the skills', () => {
+    const toolkit = {
+      toolkit: 'loose',
+      charter: 'x',
+      tools: {
+        mcp_servers: [],
+        resource_scopes: [],
+        permissions: {
+          allow: ['Skill(superpowers:dispatching-parallel-agents)'],
+          ask: [],
+          deny: [],
+        },
+        codex_plugins: [],
+      },
+    };
+    installSeatPermissions(dir, toolkit, {});
+    const deny = JSON.parse(readFileSync(settingsPath(), 'utf8')).permissions.deny;
+    for (const entry of floorSkillDenies()) expect(deny).toContain(entry);
+  });
+
+  it('the inspector reports a seat missing a floor skill deny', () => {
+    mkdirSync(join(dir, '.claude'), { recursive: true });
+    writeFileSync(
+      settingsPath(),
+      JSON.stringify({ permissions: { allow: [...STANDARD_FLOOR.allow], deny: storeWall({}) } }),
+    );
+    const findings = inspectSeatPermissions(dir, {});
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain('Skill(superpowers:subagent-driven-development)');
+    expect(findings[0]).toContain('--refresh-permissions');
   });
 });
