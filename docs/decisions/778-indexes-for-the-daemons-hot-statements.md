@@ -127,6 +127,30 @@ column Postgres does not have. That is left for a measured follow-up, not done h
   `residency.wake_deferred` audit read (274 s), the wake count by act (235 s), and the goals scan
   (122 s).
 
+- 2026-11-02, the re-read after #3729 (lane `01M6EV84VH`). The daemon ran 55430ad from 12:05;
+  the window is 12:05–16:05 PST. Owed reviews left the slow log (611 runs / 374 s in the morning
+  window). A probe at 12:38 gave the static page p95 0.78 s (2.31 s in the morning) and 0.31 s at
+  load ≥10, but from only 23 samples: the load fell from 14 to 3 during the probe. Both pages were
+  over 1 s together in 5 of 150 samples (16 in the morning).
+
+  | statement | 07:00–11:00 | 12:05–16:05 |
+  | --- | --- | --- |
+  | owed reviews | 611 / 374 s | none |
+  | inbox window | 348 s | 875 / 359 s / 2.8 s |
+  | `residency.wake_deferred` audit read | 274 s | 529 / 155 s / 0.9 s |
+  | wake count by act | 235 s | 407 / 132 s / 0.9 s |
+  | goals scan | 122 s | 88 / 70 s / 2.4 s |
+  | `dbstat` walk | 5 / 92 s / 24 s | 4 / 56 s / 21.5 s |
+
+  The inbox window read (`interruptCandidates.ts`) is now first. A stale cursor widens it to the
+  14-day lookback, and most seats' cursors are stale, so it fetched every message row of that
+  window to test the text guard. v139 adds `idx_messages_interrupt_window`, partial on that guard,
+  and the read ANDs in the same term (one constant, `INTERRUPT_TEXT_GUARD`). On the idle seam the
+  directed asks the guard cannot see come from a second `UNION ALL` branch on the recipient. About
+  13% of a seat's window passes the guard (izzo's last 3,000 acts). On a synthetic 30k-message
+  store: 11 → 1.5 ms on the boundary seam, 11 → 1.8 ms on the idle seam, with the same rows for
+  every seat; `ledgerPlans.test.ts` pins both plans.
+
 ## Observability & Evaluation
 
 - Traces: the daemon already logs `sqlite_stmt_slow` (statement, ms) and `event_loop_stall`

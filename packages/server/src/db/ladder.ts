@@ -1231,7 +1231,38 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
   PRIMARY KEY (team_id, member_id)
 )`,
   },
+  {
+    // v139 — ADR 778 follow-up (lane 01M6EV84VH): the interrupt window read (interruptCandidates.ts)
+    // was the hub's top slow statement after #3729, 875 runs / 359 s in four hours. A seat's window
+    // reaches back to INTERRUPT_LOOKBACK_MS whenever its cursor is stale, which is most seats, and
+    // the only index it could use, (team_id, created_at), fetched every message row in that window
+    // to test the text guard. This index holds only the rows that pass the guard (~13% of a seat's
+    // window on the revive hub, 2026-11-02). Its WHERE is the guard term word for word: SQLite uses
+    // a partial index only when the query contains that exact term. On a synthetic 30k-message
+    // store: 11 → 1.5 ms. SQLite only, like v137's JSON indexes; hosted stores keep today's plan.
+    version: 139,
+    sqlite: (db) => db.exec(INTERRUPT_WINDOW_INDEX_SQL),
+    postgres: async () => {},
+  },
 ];
+
+/** The interrupt window's text guard (interruptCandidates.ts): a necessary condition for a row to
+ *  matter to `pendingInterrupts`. One constant for both the query and v139's partial index, because
+ *  SQLite uses a partial index only when the query carries the index's WHERE term unchanged. */
+export const INTERRUPT_TEXT_GUARD = `(
+            act IN ('steer','resolve','accept','decline')
+            OR thread_id IS NOT NULL
+            OR meta LIKE '%"urgent"%'
+            OR meta LIKE '%"lane_review"%'
+            OR meta LIKE '%"eligible"%'
+            OR meta LIKE '%"huddle"%'
+            OR meta LIKE '%"incident"%'
+          )`;
+
+/** v139: the rows that pass the interrupt window's text guard, keyed like idx_messages_inbox_cover. */
+export const INTERRUPT_WINDOW_INDEX_SQL = `CREATE INDEX IF NOT EXISTS idx_messages_interrupt_window
+  ON messages(team_id, created_at, id, to_kind, to_member, from_member)
+  WHERE ${INTERRUPT_TEXT_GUARD}`;
 
 /** v137: the lane lists `ORDER BY created_at`, by owner and for the whole team (ADR 778). */
 const LANE_LIST_INDEX_SQL = [
