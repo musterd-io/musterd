@@ -1872,8 +1872,10 @@ describe('background layer (sprite cache)', () => {
     const live2 = recordingCtx();
     drawWalls(live2.ctx, fit, { ...env, hours: 16.5 }, schedule, board(), 3, undefined, ART);
     expect(fmtOps(live1.ops)).not.toEqual(fmtOps(live2.ops)); // the clock hands moved
-    // every fixture blits its art once, and the prints paint on their mats
-    expect(live1.ops.filter((o) => o.name === 'drawImage' && o.args[0] === FAKE_IMG)).toHaveLength(ART_IDS.filter((id) => id.startsWith('wall/')).length);
+    // every fixture blits its art once, and each painting paints once in its frame (ADR 789)
+    expect(live1.ops.filter((o) => o.name === 'drawImage' && o.args[0] === FAKE_IMG)).toHaveLength(
+      ART_IDS.filter((id) => id.startsWith('wall/') || id.startsWith('painting/')).length,
+    );
   });
 
   it('a card that just landed sways on its tape, a taken one leaves a pin hole, and both settle (L5)', () => {
