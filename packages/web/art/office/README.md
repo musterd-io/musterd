@@ -56,8 +56,10 @@ would ship. Without `cwebp` the PNG stays and the runtime reads either.
 
 - **The shell**, `room/light-<day|evening|night>`: floor, both back walls, windows and skirting, all
   together, under one light rig per day state. Since window views (lane 01M6ENGW2H) the panes are
-  **transparent** — the plaster is built in pieces around them — and each window wears a rod and two
-  tied-back terracotta drapes on the wall beside its frame; the runtime paints the sky and the land
+  **transparent** — the plaster is built in pieces around them. The left wall's windows wear a rod and
+  two tied-back terracotta drapes beside the frame; the right wall's wear roman shades folded inside the
+  frame's top, because its clock, calendar and board fill the wall beside the glass (lane 01M6H8TVEQ,
+  `layout.ts` `WINDOW_TREATMENT`). The runtime paints the sky and the land
   plates under the shell (`windowView.ts`), so the glow the panes used to emit lives outside now (`LIGHT_STATES` in `scene.py`: sun, fill, world, what
   the panes emit, the window spots that pool light on the floor). `roomState.ts` crossfades the two
   nearest over 45 minutes at each edge (07:00, 16:30, 19:00).
