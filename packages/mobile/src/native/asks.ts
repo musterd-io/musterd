@@ -14,6 +14,10 @@
  * daemon calls gone (answered in the app, on /live or in Slack, or expired) leaves the phone's list
  * and Notification Center. A ref it could not reach keeps both: the ask may still be open.
  *
+ * Bodies are fetched a page at a time (lane 01M6H8H9G2): the newest {@link FIRST_PAGE} on open,
+ * at most {@link FETCH_CONCURRENCY} in flight, the rest when the list scrolls to them. Each fetch
+ * re-issues a token, so fetching asks nobody will look at spends relay and daemon work for nothing.
+ *
  * A missed push is not a lost ask: on open the app sends `redeliver`, and the daemon re-pushes
  * this binding's pending set. Those land as new notifications and refresh the list.
  *
@@ -42,6 +46,8 @@ export interface AsksView {
   held: { count: number; until: number } | null;
   /** Asks that reached this phone but could not be fetched, even on a second try. */
   unreachable: number;
+  /** Asks not fetched yet, newest first: the next page, fetched when the list scrolls to it. */
+  rest: PushRoute[];
 }
 
 /** Open one sealed body against the pin; null for anything that does not verify or is late. */
@@ -95,12 +101,19 @@ export async function fetchAskOrMiss(input: {
   return { route: fetched.route, delivery };
 }
 
+/** How many ask bodies are in flight at once: the relay and the daemon each re-issue a token. */
+export const FETCH_CONCURRENCY = 3;
+/** The asks fetched on open: about a screen and a half. The rest wait for a scroll. */
+export const FIRST_PAGE = 8;
+
 export async function loadAsks(input: {
   pin: PairingPin;
   now?: number;
   fetchImpl?: typeof fetch;
   /** The pause before the second try of an unreachable fetch; tests pass 0. */
   pauseMs?: number;
+  /** How many of the newest asks to fetch now; the rest come back in `rest`. */
+  limit?: number;
 }): Promise<AsksView> {
   const now = input.now ?? Date.now();
   const { pin } = input;
@@ -108,7 +121,7 @@ export async function loadAsks(input: {
   try {
     delivered = await phoneKeys.deliveredPushes();
   } catch {
-    return { asks: [], held: null, unreachable: 0 };
+    return { asks: [], held: null, unreachable: 0, rest: [] };
   }
 
   // One route per ref — the newest notification's — and the newest held summary.
@@ -147,30 +160,48 @@ export async function loadAsks(input: {
     refs.set(route.ref, { route, at: -1 });
   }
 
-  const fetched = await Promise.all(
-    [...refs.values()].map(async ({ route }) => ({
-      ref: route.ref,
-      got: await fetchAskOrMiss({
-        pin,
-        route,
-        now,
-        ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
-      }),
-    })),
-  );
+  // Newest notification first; an ask known only from the phone's record goes after them.
+  const ordered = [...refs.values()].sort((a, b) => b.at - a.at).map(({ route }) => route);
+  const page = await loadMoreAsks({ ...input, routes: ordered, now });
+  return { ...page, held };
+}
+
+/**
+ * Fetch the next page of `routes` (lane 01M6H8H9G2): at most {@link FETCH_CONCURRENCY} in flight,
+ * newest first. An unreachable one gets one more try; a 404 is final — it is cleared and never
+ * fetched again. What was not fetched comes back in `rest`, in order, for the next scroll.
+ */
+export async function loadMoreAsks(input: {
+  pin: PairingPin;
+  routes: PushRoute[];
+  now?: number;
+  fetchImpl?: typeof fetch;
+  pauseMs?: number;
+  limit?: number;
+}): Promise<Omit<AsksView, 'held'>> {
+  const now = input.now ?? Date.now();
+  const { pin } = input;
+  const limit = Math.max(1, input.limit ?? FIRST_PAGE);
+  const take = input.routes.slice(0, limit);
+  const rest = input.routes.slice(limit);
+  const fetchOne = (route: PushRoute) =>
+    fetchAskOrMiss({
+      pin,
+      route,
+      now,
+      ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+    });
+
+  const fetched = (
+    await inPool(take, FETCH_CONCURRENCY, async (route) => ({ route, got: await fetchOne(route) }))
+  ).map(({ route, got }) => ({ ref: route.ref, route, got }));
   // A relay that answered nothing gets one more try (2026-10-30: an ask vanished from the list).
-  if (fetched.some(({ got }) => 'miss' in got && got.miss === 'unreachable')) {
+  const retry = fetched.filter(({ got }) => 'miss' in got && got.miss === 'unreachable');
+  if (retry.length > 0) {
     await new Promise((resolve) => setTimeout(resolve, input.pauseMs ?? 1_200));
-    for (const entry of fetched) {
-      if (!('miss' in entry.got) || entry.got.miss !== 'unreachable') continue;
-      const route = refs.get(entry.ref)!.route;
-      entry.got = await fetchAskOrMiss({
-        pin,
-        route,
-        now,
-        ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
-      });
-    }
+    await inPool(retry, FETCH_CONCURRENCY, async (entry) => {
+      entry.got = await fetchOne(entry.route);
+    });
   }
   void clearSettled(settledRefs(fetched));
   const asks = fetched
@@ -179,7 +210,25 @@ export async function loadAsks(input: {
   const unreachable = fetched.filter(
     ({ got }) => 'miss' in got && got.miss === 'unreachable',
   ).length;
-  return { asks, held, unreachable };
+  return { asks, unreachable, rest };
+}
+
+/** `fn` over `items`, at most `size` at a time; results in the order of `items`. */
+export async function inPool<T, R>(
+  items: T[],
+  size: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, worker));
+  return out;
 }
 
 /** The refs the daemon called gone. An unreachable one is not settled: it may still be open. */

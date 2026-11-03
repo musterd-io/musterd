@@ -88,6 +88,11 @@ small change.
   on this binding, re-issued with a fresh token (the old one is spent), so a decided or expired ask
   drops out. Because a fetch spends the previous token, the list does not refresh while the ask
   screen — which holds its own token — is in front.
+- **A page at a time** (2026-11-03, lane `01M6H8H9G2`). Every fetch re-issues a token, so the list
+  fetches only what is about to be shown: the newest 8 refs on open (newest notification first, a
+  ref known only from `ask-routes` after them), at most 3 in flight. The rest are fetched when the
+  list scrolls near its end, or on **Show more**; while some are unfetched the headline says
+  "8+ asks need you". A 404 is final: it is not retried, and the ask is cleared at once.
 - **A settled ask's notifications clear.** When a fetch says gone (a relay 404: answered in the
   app, on /live or in Slack, or expired), and when the app sends an answer, every notification for
   that ask is removed from Notification Center (`clearDelivered`) and from the phone's record. A
