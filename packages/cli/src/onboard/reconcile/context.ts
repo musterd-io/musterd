@@ -4,6 +4,7 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -31,6 +32,9 @@ export interface FsSeam {
   fsyncDir(dir: string): void;
   rename(from: string, to: string): void;
   rm(path: string): void;
+  /** The names of a directory's subdirectories; null when it can't be read. Optional so a
+   *  hand-built test seam need not carry it — a reader treats a missing method as unreadable. */
+  listDirs?(dir: string): string[] | null;
 }
 
 /** Process seam — enough identity to distinguish PID reuse (ADR 282 lease reclamation). */
@@ -125,6 +129,16 @@ export const nodeFs: FsSeam = {
   },
   rm(path) {
     rmSync(path, { force: true });
+  },
+  listDirs(dir) {
+    try {
+      return readdirSync(dir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name)
+        .sort();
+    } catch {
+      return null;
+    }
   },
 };
 
@@ -287,6 +301,18 @@ export function memoryFs(initial?: Record<string, string>): MemoryFs {
     rm(path) {
       maybeFail({ op: 'rm', path });
       files.delete(path);
+    },
+    listDirs(dir) {
+      // Directories exist here only as the parents of files: a name with a deeper path below it.
+      const prefix = dir.endsWith('/') ? dir : `${dir}/`;
+      const names = new Set<string>();
+      for (const path of files.keys()) {
+        if (!path.startsWith(prefix)) continue;
+        const rest = path.slice(prefix.length);
+        const slash = rest.indexOf('/');
+        if (slash > 0) names.add(rest.slice(0, slash));
+      }
+      return names.size > 0 ? [...names].sort() : null;
     },
   };
 }
