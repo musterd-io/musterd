@@ -1454,20 +1454,14 @@ function observeSeatTools(ctx: HarnessContext, intent: FragmentIntent): Observed
   const desired = intent.payload as ClaudeSeatToolsPayload;
   const enabled: Record<string, unknown> = settings.enabledPlugins ?? {};
   const deny = new Set(settings.permissions?.deny ?? []);
-  const plugins = Object.entries(desired.enabledPlugins).filter(([id, on]) => enabled[id] === on);
-  const denied = desired.deny.filter((e) => deny.has(e));
-  const lingering = desired.undeny.filter((e) => deny.has(e));
-  if (plugins.length === 0 && denied.length === 0) return { state: 'absent' };
   const complete =
-    plugins.length === Object.keys(desired.enabledPlugins).length &&
-    denied.length === desired.deny.length &&
-    lingering.length === 0;
-  return {
-    state: 'present',
-    fingerprint: complete
-      ? intent.fingerprint
-      : canonicalFingerprint({ plugins, denied, lingering }),
-  };
+    Object.entries(desired.enabledPlugins).every(([id, on]) => enabled[id] === on) &&
+    desired.deny.every((e) => deny.has(e)) &&
+    !desired.undeny.some((e) => deny.has(e));
+  // Anything short of complete is `absent`, never a conflict: the write merges (it owns only the
+  // keys in its payload and keeps every other one), so a partial match — the 01M6HB9156 stopgap,
+  // a plugin the human flipped by hand — is simply written over, and the folder is adopted.
+  return complete ? { state: 'present', fingerprint: intent.fingerprint } : { state: 'absent' };
 }
 
 /** Write owns every `enabledPlugins` key in the payload (a hand-set value is overwritten), adds

@@ -383,6 +383,8 @@ describe('the ADR 794 seatTools fragment', () => {
     const fs = memoryFs({ ...humanFiles, [SETTINGS]: JSON.stringify(stopgap) });
     const c = ctx(fs, declared(['superpowers@claude-plugins-official']));
     const intent = (await seatToolsIntent(c))!;
+    // A partial match is absent, never a conflict the engine refuses to write (live 2026-11-03).
+    expect(await claudeCodeAdapter.observe(c, intent)).toEqual({ state: 'absent' });
     await claudeCodeAdapter.apply(c, { kind: 'write', intent });
     const s = JSON.parse(fs.readFile(SETTINGS)!);
     const deny = s.permissions.deny as string[];
