@@ -32,6 +32,7 @@ export * from './style.js';
 export * from './nodes.js';
 export * from './sync.js';
 export * from './guardian.js';
+export * from './seatTools.js';
 export * from './claim.js';
 export * from './claim-handshake.js';
 export * from './envelope.js';

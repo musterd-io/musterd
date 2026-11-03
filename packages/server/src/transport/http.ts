@@ -5803,6 +5803,15 @@ export async function handleHttp(
         });
       }
 
+      // Seat tool grants (ADR 794): every seat's provisioning reads its own declared set, and the
+      // full policy is admin-only. Same posture: one non-secret sub-field, nothing else. Writes
+      // stay on admin-only `POST /policy`, audited as `policy.change`.
+      if (method === 'GET' && rest === '/seat-tools') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        return sendJson(res, 200, { seat_tools: (await getPolicy(ctx.db, team.id)).seat_tools });
+      }
+
       if (method === 'GET' && rest === '/enforcement') {
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);

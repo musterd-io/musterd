@@ -58,6 +58,7 @@ withDrivers('integration · memory canary', (_o, kind) => {
     '/requests',
     '/residency',
     '/review-promises',
+    '/seat-tools',
     '/seeds',
     '/style-block',
     '/sync/lanes',
