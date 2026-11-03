@@ -36,6 +36,7 @@ import {
   SHELF_CHIMES,
   WALL_BOARD,
   WORKING_HOURS_CALENDAR,
+  WINDOW_TREATMENT,
   WINDOWS,
   BENCH,
   WINDOW_DESKS,
@@ -278,15 +279,21 @@ describe('the walls are not a matched set', () => {
     }
   });
 
-  it('never hangs a picture on a window treatment', () => {
-    // Every window wears a rod and two tied-back drapes that reach DRAPE_REACH past its frame (nick,
-    // 2026-11-03: "none of the art should be on top of any window treatments"). Two pieces sat on a
-    // drape's edge until then.
-    for (const a of ART) {
-      const half = a.w / 2 / FLOOR;
+  it('hangs nothing on a window treatment', () => {
+    // Drapes reach DRAPE_REACH past a window's frame; a shade stays inside it (nick, 2026-11-03: "none
+    // of the art should be on top of any window treatments"). Two paintings, the clock, the calendar
+    // and the board all sat on a drape until then.
+    const onWall = [
+      ...ART.map((a) => ({ what: a.painting, wall: a.wall, tc: a.tc, w: a.w })),
+      { what: 'work board', ...WALL_BOARD },
+      { what: 'calendar', ...WORKING_HOURS_CALENDAR },
+    ];
+    for (const o of onWall) {
+      const reach = WINDOW_TREATMENT[o.wall] === 'drapes' ? DRAPE_REACH : 0;
+      const half = o.w / 2 / FLOOR;
       for (const w of WINDOWS) {
-        const overlaps = a.tc + half > w.t0 - DRAPE_REACH && a.tc - half < w.t1 + DRAPE_REACH;
-        expect(overlaps, `art (${a.painting} on wall ${a.wall} at t=${a.tc}) overlaps a drape`).toBe(false);
+        const overlaps = o.tc + half > w.t0 - reach && o.tc - half < w.t1 + reach;
+        expect(overlaps, `${o.what} on wall ${o.wall} at t=${o.tc} overlaps a window treatment`).toBe(false);
       }
     }
   });

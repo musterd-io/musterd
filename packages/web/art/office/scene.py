@@ -1693,6 +1693,20 @@ def wall(asset_id: str, which: int, zs: float, col) -> bpy.types.Object:
             tt = t0 + (t1 - t0) * k / mull
             parts.append(place(f"{asset_id}/win{i}-mullion{k}", tt - 0.0015, tt + 0.0015, z0, z1 - z0, T / 2 + 1.3, 2, frame))
         parts.append(place(f"{asset_id}/win{i}-sill", t0 - 0.006, t1 + 0.006, z0 - 2.5, 2.5, T / 2 + 3.5, 7, skirt))
+        # Window treatments. The left wall's windows wear drapes; the right wall's wear roman shades, because
+        # its clock, calendar and work board fill the wall beside the glass and a drape would hang over
+        # them (nick, 2026-11-03: "none of the art should be on top of any window treatments"; he chose
+        # the shades from mockups). Neither ever covers the visible glass below the shade's folds.
+        if which == 1:
+            # A roman shade inside each frame, drawn up to its top fifth: a headrail and three soft folds,
+            # each a touch deeper than the one above, in the drapes' cloth.
+            sh = (z1 - z0) * 0.2
+            top = z1 - 3
+            parts.append(place(f"{asset_id}/win{i}-headrail", t0 + 0.004, t1 - 0.004, top - 2.2, 2.2, T / 2 + 2.4, 3.4, rod))
+            fh = (sh - 2.2) / 3
+            for k in range(3):
+                parts.append(place(f"{asset_id}/win{i}-fold{k}", t0 + 0.006, t1 - 0.006, top - 2.2 - fh * (k + 1), fh, T / 2 + 2.2, 3.0 + 1.2 * k, cloth))
+            continue
         # Drapes (window views, lane 01M6ENGW2H): a rod above the frame and two tied-back panels hung on the
         # wall BESIDE the frame — never over the pane, so the visible glass and the floor light are unchanged.
         dw = 0.045  # a panel's width along the wall, as a fraction of it

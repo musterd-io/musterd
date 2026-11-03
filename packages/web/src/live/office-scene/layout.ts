@@ -789,9 +789,9 @@ export interface ArtPiece {
 
 export const ART: readonly ArtPiece[] = [
   // back-left wall: a large landscape near the corner, then the salon cluster of three over the front
-  // door. Both walls are mostly glass and every window wears drapes that reach `DRAPE_REACH` past its
-  // frame, so the only places a picture can hang are the corner stretch (t < 0.225) and the far end
-  // (t > 0.835) — `layout.test.ts` holds both, because the first cut hung three of these ON a window
+  // door. Both walls are mostly glass and this wall's windows wear drapes that reach `DRAPE_REACH` past
+  // their frames, so the only places a picture can hang are the corner stretch (t < 0.225) and the far
+  // end (t > 0.835) — `layout.test.ts` holds both, because the first cut hung three of these ON a window
   // and the next hung two on a drape (nick, 2026-11-03: "none of the art should be on top of any
   // window treatments").
   //
@@ -813,6 +813,14 @@ export const ART: readonly ArtPiece[] = [
  * plus the rod's 0.01 overhang). Nothing hangs on the wall inside that band.
  */
 export const DRAPE_REACH = 0.055;
+
+/**
+ * What each back wall's windows wear, indexed like `WALL_EDGES` (`scene.py` `wall` builds the same).
+ * The right wall's are roman shades folded inside the frame's top: its clock, calendar and work board
+ * fill the wall beside the glass, and drapes there hung over all three (nick chose the shades from
+ * mockups, 2026-11-03).
+ */
+export const WINDOW_TREATMENT = ['drapes', 'shades'] as const;
 
 /**
  * The Team-schedule calendar, directly beneath the right-wall clock — the clock's companion, and read
