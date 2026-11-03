@@ -24,6 +24,8 @@ export interface Mover {
   /** A size, in pane widths. */
   s: number;
   alpha: number;
+  /** Clouds only: how far toward the night's slate the white goes, 0 by day → ~0.8 at full night. */
+  shade?: number;
 }
 
 const CLOUD_PERIOD_S = 140; // one pane-width per 140 s
@@ -65,18 +67,19 @@ export function moversAt(
       for (let n = 0; n < 2; n++) {
         const phase = roll(team, 0, `cloud-${which}-${i}-${n}`);
         const x = ((sec / CLOUD_PERIOD_S + phase + which * 0.37) % 1.3) - 0.15;
-        out.push({ kind: 'cloud', which, i, x, y: 0.12 + n * 0.16, s: n === 0 ? 0.22 : 0.14, alpha: weather === 'clear' ? 0.85 : 0.6 });
+        out.push({ kind: 'cloud', which, i, x, y: 0.12 + n * 0.16, s: n === 0 ? 0.22 : 0.14, alpha: weather === 'clear' ? 0.85 : 0.6, shade: night * 0.8 });
       }
       // the sun, 6 → 19, on an arc; the moon mirrored by night
       if (!wet && h >= 6 && h <= 19) {
         const sx = (h - 6) / 13;
         out.push({ kind: 'sun', which, i, x: sx, y: 0.44 - Math.sin(sx * Math.PI) * 0.36, s: 0.09, alpha: 1 });
       }
-      if (night > 0.2 && (h >= 19 || h <= 6)) {
+      // the moon and stars only through a clear-enough sky: rain and snow hide both, cloud the stars
+      if (!wet && night > 0.2 && (h >= 19 || h <= 6)) {
         const mT = ((h + 5) % 24) / 11;
         out.push({ kind: 'moon', which, i, x: 0.8 - mT * 0.68, y: 0.12 + Math.cos(mT * Math.PI) * 0.08, s: 0.05, alpha: night });
       }
-      if (night > 0.2) for (const [x, y] of STARS) out.push({ kind: 'star', which, i, x, y, s: 0.004, alpha: night });
+      if (weather === 'clear' && night > 0.2) for (const [x, y] of STARS) out.push({ kind: 'star', which, i, x, y, s: 0.004, alpha: night });
       if (view === 'coast') {
         // the boat, on wall 1: a 90 s crossing along the horizon when the 4-minute slot rolls it
         if (which === 1) {
@@ -190,7 +193,9 @@ export function drawMovers(ctx: CanvasRenderingContext2D, fit: Fit, movers: read
     ctx.globalAlpha = m.alpha;
     switch (m.kind) {
       case 'cloud': {
-        ctx.fillStyle = '#ffffff';
+        // white by day, toward a moonlit slate by night — a white cloud at midnight read as a lamp
+        const k = m.shade ?? 0;
+        ctx.fillStyle = `rgb(${Math.round(255 - 185 * k)},${Math.round(255 - 175 * k)},${Math.round(255 - 145 * k)})`;
         ctx.beginPath();
         ctx.ellipse(p.x, p.y, r, r * 0.32, 0, 0, Math.PI * 2);
         ctx.ellipse(p.x - r * 0.3, p.y - r * 0.14, r * 0.45, r * 0.4, 0, 0, Math.PI * 2);

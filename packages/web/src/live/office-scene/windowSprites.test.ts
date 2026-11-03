@@ -14,6 +14,21 @@ describe('moversAt (window views, lane 01M6ENGW2H)', () => {
     expect(moversAt('city', T0, at(19.5), 'clear', 'revive').filter((m) => m.kind === 'sun')).toHaveLength(0);
   });
 
+  it('rain hides the moon and the stars; a clear night shows both (inc 3)', () => {
+    const kinds = (w: 'clear' | 'rain' | 'cloudy') => new Set(moversAt('city', T0, at(23), w, 'revive').map((m) => m.kind));
+    expect(kinds('clear').has('moon')).toBe(true);
+    expect(kinds('clear').has('star')).toBe(true);
+    expect(kinds('rain').has('moon')).toBe(false);
+    expect(kinds('rain').has('star')).toBe(false);
+    expect(kinds('cloudy').has('star')).toBe(false);
+  });
+
+  it('clouds take the night: white at noon, shaded after dark (inc 3)', () => {
+    const shade = (h: number) => moversAt('city', T0, at(h), 'clear', 'revive').find((m) => m.kind === 'cloud')!.shade ?? 0;
+    expect(shade(12)).toBe(0);
+    expect(shade(23)).toBeGreaterThan(0.6);
+  });
+
   it('stars are out at night only', () => {
     expect(moversAt('city', T0, at(23), 'clear', 'revive').some((m) => m.kind === 'star')).toBe(true);
     expect(moversAt('city', T0, at(12), 'clear', 'revive').some((m) => m.kind === 'star')).toBe(false);

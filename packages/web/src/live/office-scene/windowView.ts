@@ -6,6 +6,7 @@ import type { RenderedAssets } from './rendered/assets';
 import { viewPlates, type DayState } from './rendered/manifest';
 import { dayOf, roomMixFor } from './rendered/roomState';
 import type { Weather } from './weather';
+import { VIEW_SETTINGS, type ViewSetting } from './viewSetting';
 
 /**
  * The world outside the windows (window views, spec 2026-11-02, lane 01M6ENGW2H). Each pane in the
@@ -15,9 +16,7 @@ import type { Weather } from './weather';
  * plate so its lit faces are real ones. A pane with no plate (an older art set, a stale span) shows the
  * sky alone — never a hole.
  */
-export type ViewSetting = 'city' | 'coast' | 'mountain';
-export const DEFAULT_VIEW: ViewSetting = 'city';
-export const VIEW_SETTINGS: readonly ViewSetting[] = ['city', 'coast', 'mountain'];
+export { DEFAULT_VIEW, VIEW_SETTINGS, type ViewSetting } from './viewSetting';
 
 /** The `?view=` dev override, the same shape as `?weather=`; null when absent or unknown. */
 export function viewOverride(search: string): ViewSetting | null {
@@ -27,6 +26,21 @@ export function viewOverride(search: string): ViewSetting | null {
   } catch {
     return null;
   }
+}
+
+/** A window plate's asset id (`view/<setting>/<which>-<i>-<state>`), as opposed to the room's art. */
+export function isViewPlate(id: string): boolean {
+  return id.startsWith('view/');
+}
+
+/** Whether a plate id belongs to this view. */
+export function isPlateOf(id: string, view: ViewSetting): boolean {
+  return id.startsWith(`view/${view}/`);
+}
+
+/** Every plate id the manifest holds for one view — what `setView` fetches. */
+export function viewPlateIds(m: { assets: readonly { id: string }[] }, view: ViewSetting): Set<string> {
+  return new Set(m.assets.filter((a) => isPlateOf(a.id, view)).map((a) => a.id));
 }
 
 type Rgb = [number, number, number];
@@ -120,6 +134,51 @@ export function paneQuad(fit: Fit, which: 0 | 1, i: number): [Pt, Pt, Pt, Pt] {
   ];
 }
 
+/** How thick the horizon haze is: a clear day still has some air; rain closes the distance most. */
+export function hazeAlpha(weather: Weather): number {
+  switch (weather) {
+    case 'cloudy':
+      return 0.26;
+    case 'snow':
+      return 0.3;
+    case 'rain':
+      return 0.36;
+    default:
+      return 0.16;
+  }
+}
+
+/** `rgb(r,g,b)` → `rgba(r,g,b,a)`; the sky stops are always the `rgb()` form `skyStops` writes. */
+function withAlpha(c: string, a: number): string {
+  return c.replace('rgb(', 'rgba(').replace(')', `,${a})`);
+}
+
+/** Where the desk lamps catch the glass, in pane space (across, down from the top): low and apart. */
+const LAMP_GLINTS: ReadonlyArray<readonly [number, number]> = [
+  [0.28, 0.7],
+  [0.74, 0.64],
+];
+
+/**
+ * After dusk the room is brighter than outside, so the glass gives the lamps back: two soft warm
+ * highlights per pane, strongest at full night. Inside the pane's clip, after the glass gradient.
+ */
+function lampReflection(ctx: CanvasRenderingContext2D, q: [Pt, Pt, Pt, Pt], daylight: number): void {
+  const a = 0.1 * (1 - daylight);
+  const across = { x: q[2].x - q[3].x, y: q[2].y - q[3].y };
+  const down = { x: q[0].x - q[3].x, y: q[0].y - q[3].y };
+  const r = Math.hypot(across.x, across.y) * 0.22;
+  for (const [s, v] of LAMP_GLINTS) {
+    const x = q[3].x + across.x * s + down.x * v;
+    const y = q[3].y + across.y * s + down.y * v;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(255,220,160,${a.toFixed(3)})`);
+    g.addColorStop(1, 'rgba(255,220,160,0)');
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+}
+
 function clipQuad(ctx: CanvasRenderingContext2D, q: [Pt, Pt, Pt, Pt]): void {
   ctx.beginPath();
   ctx.moveTo(q[0].x, q[0].y);
@@ -200,6 +259,15 @@ export function drawWindowViews(
       };
       draw(from, 1);
       if (mixState.mix > 0 && to !== from) draw(to, mixState.mix);
+      // depth: air between the far ridge and the near rooftops, in the sky's own low colour —
+      // strongest a little under the horizon, gone by the foreground, so near reads near
+      const haze = ctx.createLinearGradient(q[3].x, q[3].y, q[0].x, q[0].y);
+      const ha = hazeAlpha(weather);
+      haze.addColorStop(0.3, withAlpha(bottom, 0));
+      haze.addColorStop(0.58, withAlpha(bottom, ha));
+      haze.addColorStop(0.9, withAlpha(bottom, 0));
+      ctx.fillStyle = haze;
+      ctx.fill();
       // the glass: a soft diagonal highlight, so the pane reads as glass, not a hole
       const glass = ctx.createLinearGradient(q[3].x, q[3].y, q[1].x, q[1].y);
       glass.addColorStop(0, 'rgba(255,255,255,0.14)');
@@ -207,6 +275,7 @@ export function drawWindowViews(
       glass.addColorStop(1, 'rgba(255,255,255,0.08)');
       ctx.fillStyle = glass;
       ctx.fill();
+      if (env.daylight < 0.5) lampReflection(ctx, q, env.daylight);
       ctx.restore();
     }
   }

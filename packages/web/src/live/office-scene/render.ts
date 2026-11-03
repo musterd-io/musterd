@@ -2039,7 +2039,8 @@ export interface RenderOpts {
    *  sees the same tram. Absent (or 0, under still mode) → nothing moves: the renderer is pure, and
    *  `index.ts` passes the clock. */
   nowMs?: number | undefined;
-  /** The sky at the windows (weather.ts, lane 01M5XS6597). Absent → clear, which draws nothing. */
+  /** The sky at the windows (weather.ts, lane 01M5XS6597): it tints the sky and the plates outside,
+   *  thickens the horizon haze, and drives what falls past the glass. Absent → clear. */
   weather?: Weather | undefined;
   /** When each shelf-chime bar was last struck, in scene-clock seconds (sound identity inc 4): a bar
    *  struck within `CHIME_SWING_S` of `t` swings. Absent or all −Infinity → the chimes hang still. */
@@ -4494,8 +4495,8 @@ export function backgroundKey(
   return [
     'bg',
     // the sky outside is on the continuous clock (window views): a quarter-hour bucket re-bakes it
-    // by day, the sun pools' cadence; at night the sky holds, so the key does too
-    `${view}·${weather}·${env.hours > 4.5 && env.hours < 21.5 ? Math.floor(env.hours * 4) : 'n'}`,
+    // by day, the sun pools' cadence; at night the sky still drifts toward dawn, slowly, so an hour
+    `${view}·${weather}·${env.hours > 4.5 && env.hours < 21.5 ? Math.floor(env.hours * 4) : `n${Math.floor(env.hours)}`}`,
     `${m.from}→${m.to}@${Math.round(m.mix * 32)}`,
     env.daylight.toFixed(3),
     `sun${sunBucket(env)}`,

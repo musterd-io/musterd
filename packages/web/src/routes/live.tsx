@@ -55,6 +55,7 @@ import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
 import { useReport } from '../live/useReport';
 import { roomEntries } from '../live/workingOn';
+import { ViewToggle } from '../live/ViewToggle';
 
 const LazySeedsTray = lazy(() =>
   import('../live/SeedsTray').then((module) => ({ default: module.SeedsTray })),
@@ -745,6 +746,7 @@ function LivePage() {
           {/* Signed in only: minting a link takes a human admin's credential (ADR 580), which a
               watching page does not hold, so offering it there would only ever fail. */}
           {connected && signedIn && <WatchLinkButton cfg={cfg!} />}
+          {connected && <ViewToggle />}
           {connected && <SoundToggle />}
           <Clock />
         </span>

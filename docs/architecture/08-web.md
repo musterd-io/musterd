@@ -350,9 +350,12 @@ live/
   Board.tsx / ApprovalQueue.tsx / ApprovalCard.tsx / AuditLog.tsx   // the other live views; a card's chain control (and a focused card) reads one lane and shows asked, claimed, model, accepted, authorized (ADR 629)
   CopyId.tsx / CopyId.css / idCopy.ts   // the work board's ID chips (lane 01M62KAMZ3): every lane card (short 10-char ULID), goal card and table row wears its ID; a tap copies it, ⇧-tap copies it with its title, and `c` / ⇧C copies the hovered or focused card's; the clipboard falls back to a selection copy over plain http
   sound.ts                      // opt-in WebAudio firehose cues
+  viewPref.ts                   // the "Outside" pref (window views): which panorama the windows show on /live, in localStorage; listeners hear a change
+  ViewToggle.tsx                // the "Outside" button beside the sound toggle: city → coast → mountain, a glyph per view; /broadcast has none and stays the city
   Live.css                      // the /live palette + component styles (--lc-* tokens)
   office-scene/
     index.ts                    // the imperative scene handle {update, emit, dispose}; the emit switch
+    viewSetting.ts              // the three window views and the default, import-free so the eager header can name them
     portrait.ts                 // paints each member's head and shoulders from their rendered figure (idle, facing the camera) into a 64px PNG and publishes it to portraits.ts; repainted only when the look, colour or loaded sheets change
     laneOwners.ts               // who owns each lane the room has watched (claim / pin walks) — the deliver walk's carrier when the ask was re-routed (lane 01M4V774MK); bounded
     mapping.ts                  // actToEvent: act/envelope → OfficeEvent (the projection)

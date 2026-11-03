@@ -19,6 +19,8 @@ import { experimentEntries } from './experimentReads';
 import { nextStatusExpiry, visibleStatusLine } from './statusLine';
 import { projectWallBoard } from './office-scene/wallboard';
 import { deskWaitingFor, openHandoffs } from './office-scene/deskWaiting';
+import { DEFAULT_VIEW } from './office-scene/viewSetting';
+import { onViewPref, readViewPref } from './viewPref';
 
 /** The key (ADR 464 §3.4) is a corner card a viewer reads once; it rides a lazy chunk so the words
  *  cost /live's eager graph nothing (ADR 151/183 — initial JS sat exactly at its ceiling). */
@@ -434,6 +436,8 @@ export function OfficeScene({
           fit,
           interactiveLabels: !broadcast,
           showWorkCues: workCues === 'hybrid',
+          // "Outside" (window views inc 3): the viewer's pref on /live; a stream always shows the city.
+          ...(broadcast ? {} : { view: readViewPref() ?? DEFAULT_VIEW }),
         });
         handle.update(dataRef.current);
         handle.setSuspended(collapsedRef.current); // mounted while collapsed → start parked
@@ -458,6 +462,9 @@ export function OfficeScene({
   useEffect(() => {
     handleRef.current?.update(data);
   }, [data]);
+
+  // The header's "Outside" button writes the pref; the room swaps its panes when the plates land.
+  useEffect(() => (broadcast ? undefined : onViewPref((v) => handleRef.current?.setView(v))), [broadcast]);
 
   // Collapsed panel (opacity 0, still mounted) → park the render loop; expanding resumes with one
   // fresh synchronous frame, so the reopen stays instant. Measured before this: a collapsed office

@@ -1936,9 +1936,11 @@ describe('background layer (sprite cache)', () => {
     expect(backgroundKey(fit, { ...env, hours: 10 }, 1)).not.toBe(backgroundKey(fit, { ...env, hours: 14 }, 1));
     // …in quarter-hour steps, so a minute later is the same shell…
     expect(backgroundKey(fit, { ...env, hours: 10 + 1 / 60 }, 1)).toBe(backgroundKey(fit, { ...env, hours: 10 }, 1));
-    // …and at night, with no sun to pool, the hour drops out of the key again
+    // …and at night, with no sun to pool, the key holds within the hour — but the sky outside still
+    // drifts toward dawn, so a new hour re-bakes it (window views inc 3)
     const night = computeLightEnv(23, true);
     expect(backgroundKey(fit, { ...night, hours: 23 }, 1)).toBe(backgroundKey(fit, { ...night, hours: 23.5 }, 1));
+    expect(backgroundKey(fit, { ...night, hours: 1 }, 1)).not.toBe(backgroundKey(fit, { ...night, hours: 3 }, 1));
     // a fade step is not; and two instants 10 s apart inside a fade share a step
     const a = backgroundKey(fit, { ...env, hours: 16.6 }, 1);
     expect(a).not.toBe(backgroundKey(fit, { ...env, hours: 14 }, 1));
