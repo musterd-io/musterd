@@ -782,7 +782,8 @@ export interface ArtPiece {
   uc: number;
   w: number;
   h: number;
-  motif: 'sunrise' | 'cairn' | 'arches' | 'bauhaus';
+  /** The painting in the frame (`art/office/paintings/<index>-<painting>`, ADR 789), drawn from `painting/<index>`. */
+  painting: string;
   frame: 'thin' | 'thick' | 'none';
 }
 
@@ -791,10 +792,10 @@ export const ART: readonly ArtPiece[] = [
   // far window. Both walls are mostly glass, so the only places a picture can hang are the corner
   // stretch (t < 0.28), the gap between the windows (0.46–0.58) and the far end (t > 0.78) —
   // `layout.test.ts` holds this, because the first cut hung three of these ON a window.
-  { wall: 0, tc: 0.14, uc: 0.56, w: 54, h: 42, motif: 'arches', frame: 'thick' },
-  { wall: 0, tc: 0.83, uc: 0.68, w: 26, h: 26, motif: 'bauhaus', frame: 'none' },
-  { wall: 0, tc: 0.92, uc: 0.66, w: 22, h: 30, motif: 'cairn', frame: 'thin' },
-  { wall: 0, tc: 0.87, uc: 0.46, w: 30, h: 22, motif: 'sunrise', frame: 'thin' },
+  { wall: 0, tc: 0.14, uc: 0.56, w: 54, h: 42, painting: 'river', frame: 'thick' },
+  { wall: 0, tc: 0.83, uc: 0.68, w: 26, h: 26, painting: 'wildflowers', frame: 'none' },
+  { wall: 0, tc: 0.92, uc: 0.66, w: 22, h: 30, painting: 'still-life', frame: 'thin' },
+  { wall: 0, tc: 0.87, uc: 0.46, w: 30, h: 22, painting: 'hills', frame: 'thin' },
   // back-right wall: the big one. The former small square under the clock is now the calendar fixture.
   //
   // It used to hang at tc 0.15, directly over the corner bookshelf — which was fine when that unit
@@ -802,7 +803,7 @@ export const ART: readonly ArtPiece[] = [
   // shelf ate the picture's bottom third (nick, 2026-07-30: "a piece of art hidden behind a
   // bookcase"). Moved along the wall into the clear stretch between that shelf and the near window
   // rather than raised, because the wall crops at the top near this corner.
-  { wall: 1, tc: 0.23, uc: 0.58, w: 60, h: 44, motif: 'sunrise', frame: 'thick' },
+  { wall: 1, tc: 0.23, uc: 0.58, w: 60, h: 44, painting: 'colour-field', frame: 'thick' },
 ];
 
 /**

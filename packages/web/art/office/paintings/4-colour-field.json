@@ -1,0 +1,17 @@
+{
+  "prompt": "An original abstract color field painting, large soft-edged rectangles of deep terracotta, ochre and slate blue on canvas, layered translucent acrylic washes, visible canvas texture, museum quality modern fine art, fills the whole frame, no frame, no text",
+  "seed": 45818,
+  "resolution": "1152x864",
+  "model": "Tongyi-MAI/Z-Image-Turbo (Apache-2.0), via the mcp-tools/Z-Image-Turbo Space",
+  "steps": 8,
+  "shift": 3,
+  "date": "2026-11-03",
+  "art_slot": 4,
+  "source": "4-colour-field.webp",
+  "check": {
+    "by": "miley",
+    "date": "2026-11-03",
+    "notes": "No signature, lettering or watermark. Soft rectangles are a broad genre, not a copy of one work."
+  },
+  "approved_by": null
+}

@@ -1997,6 +1997,61 @@
         "y": 75.0
       },
       "scale": 3.0
+    },
+    {
+      "id": "painting/0",
+      "file": "office-art-painting-0.webp",
+      "w": 262,
+      "h": 190,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
+    },
+    {
+      "id": "painting/1",
+      "file": "office-art-painting-1.webp",
+      "w": 156,
+      "h": 156,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
+    },
+    {
+      "id": "painting/2",
+      "file": "office-art-painting-2.webp",
+      "w": 102,
+      "h": 150,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
+    },
+    {
+      "id": "painting/3",
+      "file": "office-art-painting-3.webp",
+      "w": 147,
+      "h": 99,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
+    },
+    {
+      "id": "painting/4",
+      "file": "office-art-painting-4.webp",
+      "w": 293,
+      "h": 197,
+      "anchor": {
+        "x": 0,
+        "y": 0
+      },
+      "scale": 6
     }
   ]
 }

@@ -355,12 +355,30 @@ the animated desktop, the curved monitor's bow shading and the bloom. The idle g
 `scene.py` `wall_art` / `wall_clock` / `wall_board` / `wall_hanger`, each at its real place on its wall (the painter's `ART`,
 `WALL_BOARD`, the clock at t 0.52 u 0.62, the planter at t 0.52 u 0.76), so the room's five light-state images need no
 re-render: the prints' frames and mats, the clock's rim, dial and numerals, the lane board's oak frame, cork and column caps,
-and the hanging planter. What is flat or live stays painted over them: the print on each mat, the clock's hands, the board's
+and the hanging planter. What is flat or live stays painted over them: the painting in each frame (below), the clock's hands, the board's
 notes, the hours sign and both walls' string lights. Before these, a rendered wall carried none of the left wall's dressing.
 The wall render never had it, and the live slice painted only the right wall's fixtures. Clock numerals are built as text
 facing out of the wall and are *not* pre-mirrored. On this wall their +x runs along +t, which the canvas reads screen-right.
 
+## The paintings (ADR 789, lane 01M6FXB2CA)
+
+The five frames hold original paintings made with an image model (Z-Image-Turbo, Apache-2.0), one source
+image per frame in `paintings/<slot>-<slug>.webp` with a sidecar `<slot>-<slug>.json`: the prompt, seed,
+model and settings, the slot in `layout.ts` `ART`, the provenance check and nick's approval. Prompts name
+a subject and a technique only — never an artist, a title, a museum or "in the style of" — and every
+image is checked by eye for a resemblance, a signature, lettering or a watermark before it ships.
+
+```sh
+python3 packages/web/art/office/paintings.py
+```
+
+crops each source to its frame's print opening (`print_opening`, the same rule as `paintings.ts`
+`printOpening`), trims a 2% edge first, writes `office-art-painting-<slot>.webp` at 6 px per unit and
+upserts its `painting/<slot>` manifest entry. Plain Python with Pillow, no Blender. The runtime draws the
+image over the rendered frame, just behind its front face (`printDepth`) and `PRINT_DROP` below
+`wallPt`'s centre, both measured from the `wall/art-N` renders; re-measure if the frames are re-rendered.
+
 ## Original art
 
 Everything in this folder is ours. No game's assets, palettes or character designs are referenced
-(spec §5).
+(spec §5). The paintings are generated, not copied: see the section above.
