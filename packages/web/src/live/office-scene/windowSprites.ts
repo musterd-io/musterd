@@ -49,6 +49,23 @@ const STARS: ReadonlyArray<[number, number]> = [
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
+/** The four panes as one strip of sky, in screen order left to right: the left wall's far window, its
+ *  near one, then the right wall's near and far. On the left wall `+t` runs screen-left, so its far
+ *  window (`i` 1) is the leftmost. */
+const SKY_PANES: ReadonlyArray<{ which: 0 | 1; i: number }> = [
+  { which: 0, i: 1 },
+  { which: 0, i: 0 },
+  { which: 1, i: 0 },
+  { which: 1, i: 1 },
+];
+
+/** Where a body `f` of the way across the sky (0 → 1) shows: one pane, and its x in that pane. */
+export function skyPane(f: number): { which: 0 | 1; i: number; x: number } {
+  const s = clamp01(f) * SKY_PANES.length;
+  const k = Math.min(SKY_PANES.length - 1, Math.floor(s));
+  return { ...SKY_PANES[k]!, x: s - k };
+}
+
 export function moversAt(
   view: ViewSetting,
   nowMs: number,
@@ -69,15 +86,20 @@ export function moversAt(
         const x = ((sec / CLOUD_PERIOD_S + phase + which * 0.37) % 1.3) - 0.15;
         out.push({ kind: 'cloud', which, i, x, y: 0.12 + n * 0.16, s: n === 0 ? 0.22 : 0.14, alpha: weather === 'clear' ? 0.85 : 0.6, shade: night * 0.8 });
       }
-      // the sun, 6 → 19, on an arc; the moon mirrored by night
+      // the sun, 6 → 19, and the moon by night: each in ONE pane at a time (nick, 2026-11-03: "i see the
+      // sun in all 4 windows … in real life that wouldnt be possible"). It is at infinity, so from inside
+      // it shows through one window only; over the day it crosses the four, left to right on screen. Its
+      // noon peak (y 0.23) stays under the right wall's roman shades, which fold over the top fifth.
       if (!wet && h >= 6 && h <= 19) {
         const sx = (h - 6) / 13;
-        out.push({ kind: 'sun', which, i, x: sx, y: 0.44 - Math.sin(sx * Math.PI) * 0.36, s: 0.09, alpha: 1 });
+        const at = skyPane(sx);
+        if (at.which === which && at.i === i) out.push({ kind: 'sun', which, i, x: at.x, y: 0.5 - Math.sin(sx * Math.PI) * 0.27, s: 0.09, alpha: 1 });
       }
       // the moon and stars only through a clear-enough sky: rain and snow hide both, cloud the stars
       if (!wet && night > 0.2 && (h >= 19 || h <= 6)) {
         const mT = ((h + 5) % 24) / 11;
-        out.push({ kind: 'moon', which, i, x: 0.8 - mT * 0.68, y: 0.12 + Math.cos(mT * Math.PI) * 0.08, s: 0.05, alpha: night });
+        const at = skyPane(mT);
+        if (at.which === which && at.i === i) out.push({ kind: 'moon', which, i, x: at.x, y: 0.12 + Math.cos(mT * Math.PI) * 0.08, s: 0.05, alpha: night });
       }
       if (weather === 'clear' && night > 0.2) for (const [x, y] of STARS) out.push({ kind: 'star', which, i, x, y, s: 0.004, alpha: night });
       if (view === 'coast') {
