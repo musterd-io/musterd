@@ -11,7 +11,7 @@ import { log } from '../log.js';
 import { appendAudit } from '../store/audit.js';
 import { boardSeat } from '../store/boardSeat.js';
 import { LaneConflictError, listLanes, updateLane } from '../store/lanes.js';
-import { getMemberById } from '../store/members.js';
+import { getMemberById, getMemberByName } from '../store/members.js';
 import { waitingSeats } from '../store/questions.js';
 import {
   effectiveWakePolicy,
@@ -23,6 +23,7 @@ import {
 } from '../store/residency.js';
 import { parseWorkingHours, type MemberRow, type TeamRow } from '../store/rows.js';
 import {
+  budgetRaisedUsd,
   getShift,
   settleEnding,
   shiftDay,
@@ -68,8 +69,10 @@ export async function seatShiftPolicy(
   ctx: Ctx,
   team: { id: string },
   member: MemberRow,
+  now: number = Date.now(),
 ): Promise<{
   budgetUsd: number;
+  basePolicyBudgetUsd: number;
   hours: WorkingHours | null;
   autonomy: 'ask' | 'claim' | 'free';
   autonomyGoals: string[] | undefined;
@@ -80,9 +83,14 @@ export async function seatShiftPolicy(
     seatWakeDefaults(await getPolicy(ctx.db, team.id), member),
     (await getResidency(ctx.db, team.id, member.id))?.policy ?? null,
   );
+  const hours = shiftHours(member, parseWorkingHours(teamRow?.working_hours));
   return {
-    budgetUsd: policy.shift_budget_usd,
-    hours: shiftHours(member, parseWorkingHours(teamRow?.working_hours)),
+    // ADR 795: the day's budget is the policy's plus what a person added for today.
+    budgetUsd:
+      policy.shift_budget_usd +
+      (await budgetRaisedUsd(ctx.db, team.id, member.name, shiftDay(hours, now))),
+    basePolicyBudgetUsd: policy.shift_budget_usd,
+    hours,
     autonomy: policy.autonomy,
     autonomyGoals: policy.autonomy_goals,
     shiftStart: policy.shift_start,
@@ -204,11 +212,129 @@ export async function applyShiftQuickAction(
 ): Promise<void> {
   if (person.kind !== 'human' || seat.kind !== 'agent') return;
   if (action === 'start') {
-    const { hours } = await seatShiftPolicy(ctx, team, seat);
+    const { hours, basePolicyBudgetUsd } = await seatShiftPolicy(ctx, team, seat, now);
+    const today = await getShift(ctx.db, team.id, seat.id, shiftDay(hours, now));
+    // ADR 795: a Start after a `budget` stop does not run on the spent budget — it asks.
+    if (today?.stop_reason === 'budget') {
+      await askBudgetRaise(ctx, team, person, seat, today.day, basePolicyBudgetUsd, now);
+      return;
+    }
     await startShift(ctx.db, team.id, seat, person.name, hours, now);
   } else if (action === 'stop') {
     await stopAndAnnounce(ctx, team, seat, 'stopped', now, { stoppedBy: person.name });
   }
+}
+
+/**
+ * ADR 795: today's budget is spent and a person pressed Start. The seat asks them, once a day, to
+ * add one more day's budget for today; the answer is settled by {@link settleBudgetAsks}.
+ */
+async function askBudgetRaise(
+  ctx: Ctx,
+  team: TeamRow,
+  person: MemberRow,
+  seat: MemberRow,
+  day: string,
+  addUsd: number,
+  now: number,
+): Promise<void> {
+  const open = await ctx.db.get<{ id: string }>(
+    `SELECT id FROM audit WHERE team_id = ? AND action = 'shift.budget_asked' AND target = ?
+       AND json_extract(detail, '$.day') = ? AND json_extract(detail, '$.settled') IS NULL
+       AND NOT EXISTS (SELECT 1 FROM audit s WHERE s.team_id = audit.team_id
+         AND s.action IN ('shift.budget_raised', 'shift.budget_declined')
+         AND json_extract(s.detail, '$.question') = json_extract(audit.detail, '$.question'))`,
+    [team.id, seat.name, day],
+  );
+  if (open) return;
+  const id = ulid();
+  const add = `$${addUsd.toFixed(2)}`;
+  await routeEnvelope(
+    ctx,
+    team,
+    seat,
+    makeEnvelope({
+      id,
+      team: team.slug,
+      from: seat.name,
+      to: { kind: 'member', name: person.name },
+      act: 'ask',
+      body: `Today's budget is spent. Add ${add} for today so I can go back on shift?`,
+      meta: {
+        species: 'consult',
+        question: {
+          text: `Today's budget is spent. Add ${add} for today so I can go back on shift?`,
+          why: 'You pressed Start after my shift stopped on its day budget.',
+          options: [
+            { label: `Yes, add ${add} for today`, consequence: 'I go back on shift now.' },
+            { label: 'No, stay off shift', consequence: 'I stay off until tomorrow.' },
+          ],
+          blocking: false,
+          audience: 'addressee',
+          inferred: false,
+        },
+      },
+      ts: now,
+    }),
+  );
+  await appendAudit(ctx.db, team.id, {
+    actor: person.name,
+    action: 'shift.budget_asked',
+    target: seat.name,
+    result: 'allow',
+    detail: { question: id, day, usd: addUsd },
+  });
+}
+
+/**
+ * ADR 795: an answered budget question — yes adds its amount to that day's budget and puts the seat
+ * back on shift (if it is still that day); no, or any other answer, closes it. Each is settled once.
+ */
+export async function settleBudgetAsks(ctx: Ctx, now: number): Promise<number> {
+  const asks = await ctx.db.all<{ team_id: string; target: string; detail: string }>(
+    `SELECT team_id, target, detail FROM audit a WHERE action = 'shift.budget_asked' AND ts > ?
+       AND NOT EXISTS (SELECT 1 FROM audit s WHERE s.team_id = a.team_id
+         AND s.action IN ('shift.budget_raised', 'shift.budget_declined')
+         AND json_extract(s.detail, '$.question') = json_extract(a.detail, '$.question'))`,
+    [now - 2 * 24 * 60 * 60_000],
+  );
+  let raised = 0;
+  for (const ask of asks) {
+    const d = JSON.parse(ask.detail) as { question: string; day: string; usd: number };
+    const answer = await ctx.db.get<{ meta: string | null; from_member: string }>(
+      `SELECT meta, from_member FROM messages WHERE team_id = ? AND act = 'accept'
+         AND json_extract(meta, '$.in_reply_to') = ? ORDER BY ts ASC LIMIT 1`,
+      [ask.team_id, d.question],
+    );
+    if (!answer) continue;
+    const choice = (JSON.parse(answer.meta ?? '{}') as { answer?: { choice?: number } }).answer
+      ?.choice;
+    const team = await getTeamById(ctx.db, ask.team_id);
+    const person = await getMemberById(ctx.db, answer.from_member);
+    const seat = team ? await getMemberByName(ctx.db, team.id, ask.target) : undefined;
+    if (!team || !seat || person?.kind !== 'human' || choice !== 0) {
+      await appendAudit(ctx.db, ask.team_id, {
+        actor: person?.name ?? null,
+        action: 'shift.budget_declined',
+        target: ask.target,
+        result: 'allow',
+        detail: { question: d.question, day: d.day },
+      });
+      continue;
+    }
+    await appendAudit(ctx.db, team.id, {
+      actor: person.name,
+      action: 'shift.budget_raised',
+      target: seat.name,
+      result: 'allow',
+      detail: { question: d.question, day: d.day, usd: d.usd },
+    });
+    const { hours } = await seatShiftPolicy(ctx, team, seat, now);
+    if (shiftDay(hours, now) === d.day)
+      await startShift(ctx.db, team.id, seat, person.name, hours, now);
+    raised++;
+  }
+  return raised;
 }
 
 /** Is there work for an on-shift seat: a lane it owns that is claimed and not done? */
@@ -222,6 +348,7 @@ async function hasClaimedWork(ctx: Ctx, team: TeamRow, seat: string): Promise<bo
 /** One pass over every live shift (ADR 792). Returns the stops it wrote. */
 export async function sweepShifts(ctx: Ctx, now: number = Date.now()): Promise<number> {
   await autoStartShifts(ctx, now);
+  await settleBudgetAsks(ctx, now);
   const rows = await ctx.db.all<ShiftRow>(
     "SELECT * FROM shifts WHERE state IN ('on', 'ending') ORDER BY team_id, member_id, day",
   );

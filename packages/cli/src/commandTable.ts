@@ -66,6 +66,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   serve: async () => (await import('./commands/serve.js')).serveCommand,
   service: async () => (await import('./commands/service.js')).serviceCommand,
   session: async () => (await import('./commands/session.js')).sessionCommand,
+  shift: async () => (await import('./commands/shift.js')).shiftCommand,
   status: async () => (await import('./commands/status.js')).statusCommand,
   store: async () => (await import('./commands/store.js')).storeCommand,
   stream: async () => (await import('./commands/stream.js')).streamCommand,
