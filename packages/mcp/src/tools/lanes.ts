@@ -33,6 +33,7 @@ import {
   type LaneWarning,
   type NextBrief,
   type ReviewPromiseReference,
+  type MemberSummary,
 } from '@musterd/protocol';
 import { projectAliases, resolveProject } from '@musterd/protocol/project';
 import { z } from 'zod';
@@ -893,7 +894,13 @@ export function registerLanes(
         // has no git; this adapter runs in the seat's own workspace, the same place
         // `lane_submit` verifies a merge (`verify` above, cwd = process.cwd()).
         const landed = await reconcile(brief.in_flight, { cwd: process.cwd() });
-        return textResult(fmtNext(brief, landed));
+        // ADR 792: a seat on shift reads its own bounds first. Best-effort: a roster read that
+        // fails leaves the brief as it was.
+        const me = await client
+          .roster()
+          .then((r) => r.members.find((m) => m.name === brief.member) ?? null)
+          .catch(() => null);
+        return textResult(withShiftLine(fmtNext(brief, landed), me));
       } catch (err) {
         return errorResult(err);
       }
@@ -917,6 +924,37 @@ function reviewRef(r: ReviewPromiseReference): string {
     case 'url':
       return r.url;
   }
+}
+
+/**
+ * ADR 792: the seat's shift bounds, under the brief's first line — on shift, until when and the
+ * budget left; ending, finish the step and stop. Nothing off shift or for a human.
+ */
+export function shiftLineForSeat(m: MemberSummary | null): string | null {
+  const shift = m?.kind === 'agent' ? m.shift : null;
+  if (!shift || shift.state === 'off') return null;
+  const left = `$${shift.budget_left_usd.toFixed(2)} left`;
+  if (shift.state === 'on') {
+    const until =
+      shift.until === null
+        ? ''
+        : ` until ${new Intl.DateTimeFormat('en-GB', {
+            ...(m?.working_hours?.timezone ? { timeZone: m.working_hours.timezone } : {}),
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(shift.until)}`;
+    return `On shift${until}, ${left}. Work your claimed lanes; answer what is directed at you.`;
+  }
+  const why =
+    shift.stop_reason === 'stopped' ? 'stopped by a person' : (shift.stop_reason ?? 'stopped');
+  return `Your shift is ending (${why.replace('_', ' ')}): finish the step you are on and end your turn.`;
+}
+
+export function withShiftLine(text: string, m: MemberSummary | null): string {
+  const line = shiftLineForSeat(m);
+  if (!line) return text;
+  const nl = text.indexOf('\n');
+  return nl === -1 ? `${text}\n${line}` : `${text.slice(0, nl)}\n${line}${text.slice(nl)}`;
 }
 
 /** Coarse elapsed time — the reader needs "hours, not minutes", never a precise duration. */

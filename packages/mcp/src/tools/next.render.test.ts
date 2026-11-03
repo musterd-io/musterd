@@ -1,6 +1,6 @@
-import type { Lane, NextBrief } from '@musterd/protocol';
+import type { Lane, MemberSummary, NextBrief } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { fmtNext } from './lanes.js';
+import { fmtNext, shiftLineForSeat, withShiftLine } from './lanes.js';
 
 function brief(why: NextBrief['why']): NextBrief {
   return { member: 'miley', in_flight: [], up_next: [], shipped: [], next_goal: null, why };
@@ -486,5 +486,56 @@ describe('fmtNext — up next carries the why tag (ADR 536 increment 2)', () => 
         .split('\n')
         .find((l) => l.includes('L1 [open]')),
     ).not.toContain(' · ');
+  });
+});
+
+describe('team_next shift line (ADR 792)', () => {
+  const seat = {
+    id: '1',
+    team: 'revive',
+    name: 'ryder',
+    kind: 'agent',
+    lifecycle: 'forever',
+    created_at: 0,
+    role: '',
+    presence: 'offline',
+    presences: [],
+    working_hours: {
+      timezone: 'America/Los_Angeles',
+      days: ['mon'],
+      start: '11:00',
+      end: '15:00',
+    },
+  } as unknown as MemberSummary;
+  const until = Date.parse('2026-11-03T23:00:00Z'); // 15:00 Pacific
+
+  it('an on-shift seat reads until when and the budget left, under the first line', () => {
+    const m = {
+      ...seat,
+      shift: { state: 'on', since: 1, until, budget_left_usd: 4.1, stop_reason: null },
+    } as MemberSummary;
+    expect(shiftLineForSeat(m)).toBe(
+      'On shift until 15:00, $4.10 left. Work your claimed lanes; answer what is directed at you.',
+    );
+    expect(withShiftLine('next — as ryder\nrest', m).split('\n')[1]).toContain(
+      'On shift until 15:00',
+    );
+  });
+
+  it('an ending shift says to wrap up; off shift, a human, or no shift says nothing', () => {
+    const ending = {
+      ...seat,
+      shift: { state: 'ending', since: 1, until: null, budget_left_usd: 2, stop_reason: 'stopped' },
+    } as MemberSummary;
+    expect(shiftLineForSeat(ending)).toBe(
+      'Your shift is ending (stopped by a person): finish the step you are on and end your turn.',
+    );
+    const off = {
+      ...seat,
+      shift: { state: 'off', since: 1, until: null, budget_left_usd: 0, stop_reason: 'budget' },
+    } as MemberSummary;
+    expect(shiftLineForSeat(off)).toBeNull();
+    expect(shiftLineForSeat({ ...seat, kind: 'human' } as MemberSummary)).toBeNull();
+    expect(withShiftLine('next — as ryder', null)).toBe('next — as ryder');
   });
 });
