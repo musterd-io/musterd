@@ -76,6 +76,7 @@ import {
   withEnvelopeSpan,
 } from '../telemetry.js';
 import { acceptedHandoffOf, applyDisputeAnswer, stampDispute } from './dispute.js';
+import { applyShiftQuickAction } from './shiftWatch.js';
 import {
   auditQuestionAnswer,
   checkInferredQuestion,
@@ -892,6 +893,20 @@ async function routeEnvelopeInner(
       result: 'allow',
       detail: { action: outgoingEnv.meta['quick_action'], act: outgoingEnv.id },
     });
+    // ADR 792: Start puts an agent seat on shift; Stop takes it off. After the steer is stored, so
+    // a refused shift write never loses the person's act.
+    if (toMemberId) {
+      const target = await getMemberById(ctx.db, toMemberId);
+      if (target)
+        await applyShiftQuickAction(
+          ctx,
+          team,
+          sender,
+          target,
+          String(outgoingEnv.meta['quick_action']),
+          outgoingEnv.ts,
+        );
+    }
   }
   if (verifiedPrivilegedAskReply && sender.kind === 'human') {
     void tickVerdictQueue(ctx, team, sender, outgoingEnv.ts);

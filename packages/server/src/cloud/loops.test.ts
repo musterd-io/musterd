@@ -22,6 +22,7 @@ describe('which background loops a server runs (1C task 8)', () => {
         'seeds_ingest',
         // ADR 724: the lane watch reads the database only (refusals and lanes), so it runs on Cloud.
         'lane_watch',
+        'shift_watch',
       ].sort(),
     );
   });
