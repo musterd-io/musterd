@@ -1163,6 +1163,7 @@ ART_PIECES = [  # layout.ts ART: wall, tc, uc, w, h, frame
 ]
 CLOCK = (1, 0.52, 0.62, 25.0)  # wall, tc, uc, R
 HANGER = (0, 0.52, 0.76)  # wall, tc, uTop
+BELL = (1, 0.79, 0.915, 6, 6.5, 15)  # bell.ts BELL: wall, tc, pivotU, out, r, h
 SIGNS = {  # signs.ts SIGNS: name -> (wall, tc, uc, w, h, text, lamp)
     "wiki": (0, 0.205, 0.53, 26, 16, "wiki", True),
     "settings": (1, 0.52, 0.1185, 70, 16, "settings", False),
@@ -1358,6 +1359,36 @@ def wall_sign(asset_id: str, name: str, zs: float, col) -> bpy.types.Object:
         tube.data.materials.append(brass)
         parts.append(tube)
     fx, fy = wall_floor(which, tc)
+    return finish(asset_id, parts, fx, fy, col)
+
+
+def wall_bell(asset_id: str, body: bool, zs: float, col) -> bpy.types.Object:
+    """The goal bell (lane 01M6HHH5EH): a brass ship's bell. `body` False builds the bracket (a wall
+    plate, an arm out to the pivot and a short yoke); True builds the bell itself (crown, flared
+    waist, a rolled lip and the clapper under it), which the runtime turns about the pivot to swing."""
+    which, tc, pu, out, r, h = BELL
+    brass = metal("sign-brass", srgb("#B8893E"), 0.4)
+    bright = metal("bell-brass", srgb("#D9A94E"), 0.28)
+    iron = matte("bell-iron", srgb("#3a3128"), 0.6)
+    fx, fy = wall_floor(which, tc)
+    zp = pu * WALL_H
+    def at(d: float) -> tuple[float, float]:
+        return (fx, d) if which == 1 else (d, fy)
+    parts = []
+    if not body:
+        parts.append(wall_disc(f"{asset_id}/plate", which, tc, pu + 3 / WALL_H, 2.4, 0, 0.9, iron, zs, 20))
+        ax, ay = at(out / 2)
+        arm = box(f"{asset_id}/arm", ax, ay, zp + 2.2, 1.4, out, 1.4, iron, zs) if which == 1 else box(f"{asset_id}/arm", ax, ay, zp + 2.2, out, 1.4, 1.4, iron, zs)
+        parts.append(arm)
+        yx, yy = at(out)
+        parts.append(cyl(f"{asset_id}/yoke", yx, yy, zp - 0.5, 0.8, 0.8, 3.0, iron, zs, 12))
+    else:
+        cx, cy = at(out)
+        parts.append(cyl(f"{asset_id}/crown", cx, cy, zp - 2.2, 1.5, 1.1, 1.7, brass, zs, 20))
+        parts.append(cyl(f"{asset_id}/shoulder", cx, cy, zp - 5.0, r * 0.62, r * 0.48, 2.8, bright, zs, 32))
+        parts.append(cyl(f"{asset_id}/waist", cx, cy, zp - h + 1.2, r * 0.92, r * 0.62, h - 6.2, bright, zs, 32))
+        parts.append(cyl(f"{asset_id}/lip", cx, cy, zp - h, r, r * 0.92, 1.2, brass, zs, 32))
+        parts.append(ball(f"{asset_id}/clapper", cx, cy, zp - h - 1.6, 1.0, 1.0, 1.0, iron, zs))
     return finish(asset_id, parts, fx, fy, col)
 
 
@@ -1983,6 +2014,8 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     a["wall/hanger"] = wall_hanger("wall/hanger", zs, export)
     for name in SIGNS:
         a[f"wall/sign-{name}"] = wall_sign(f"wall/sign-{name}", name, zs, export)
+    a["wall/bell-bracket"] = wall_bell("wall/bell-bracket", False, zs, export)
+    a["wall/bell"] = wall_bell("wall/bell", True, zs, export)
     for setup in MONITOR_SETUPS:
         for facing in ("N", "E", "S", "W"):
             a[f"monitor/{setup}/{facing}"] = desk_monitor(f"monitor/{setup}/{facing}", setup, facing, zs, export)

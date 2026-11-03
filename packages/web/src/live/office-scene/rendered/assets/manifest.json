@@ -2010,6 +2010,28 @@
       "scale": 3.0
     },
     {
+      "id": "wall/bell",
+      "file": "office-art-wall-bell.webp",
+      "w": 45,
+      "h": 60,
+      "anchor": {
+        "x": 35.11,
+        "y": 501.78
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/bell-bracket",
+      "file": "office-art-wall-bell-bracket.webp",
+      "w": 26,
+      "h": 31,
+      "anchor": {
+        "x": 18.11,
+        "y": 523.78
+      },
+      "scale": 3.0
+    },
+    {
       "id": "wall/board",
       "file": "office-art-wall-board.webp",
       "w": 374,
