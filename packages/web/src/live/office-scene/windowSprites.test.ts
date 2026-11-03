@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeLightEnv } from './lighting';
-import { drawMovers, moversAt, moversMove } from './windowSprites';
+import { drawMovers, moversAt, moversMove, skyPane } from './windowSprites';
 
 const T0 = 1_800_000_000_000;
 const at = (h: number) => computeLightEnv(h, true);
@@ -9,9 +9,25 @@ describe('moversAt (window views, lane 01M6ENGW2H)', () => {
   it('the sun rises at 6 and sets at 19', () => {
     expect(moversAt('city', T0, at(5.5), 'clear', 'revive').filter((m) => m.kind === 'sun')).toHaveLength(0);
     const noon = moversAt('city', T0, at(12), 'clear', 'revive').filter((m) => m.kind === 'sun');
-    expect(noon.length).toBeGreaterThan(0);
-    expect(noon[0]!.x).toBeCloseTo(0.46, 1);
+    expect(noon).toHaveLength(1);
     expect(moversAt('city', T0, at(19.5), 'clear', 'revive').filter((m) => m.kind === 'sun')).toHaveLength(0);
+  });
+
+  it('shows the sun and the moon in one window at a time, crossing the four left to right', () => {
+    for (let h = 0; h < 24; h += 0.25) {
+      const bodies = moversAt('city', T0, at(h), 'clear', 'revive').filter((m) => m.kind === 'sun' || m.kind === 'moon');
+      expect(bodies.filter((m) => m.kind === 'sun').length, `suns at ${h}`).toBeLessThanOrEqual(1);
+      expect(bodies.filter((m) => m.kind === 'moon').length, `moons at ${h}`).toBeLessThanOrEqual(1);
+    }
+    const sunAt = (h: number) => moversAt('city', T0, at(h), 'clear', 'revive').find((m) => m.kind === 'sun')!;
+    expect([sunAt(7).which, sunAt(7).i]).toEqual([0, 1]); // morning: the leftmost pane
+    expect([sunAt(18).which, sunAt(18).i]).toEqual([1, 1]); // evening: the rightmost
+  });
+
+  it('places a body across the strip of panes', () => {
+    expect(skyPane(0)).toEqual({ which: 0, i: 1, x: 0 });
+    expect(skyPane(0.5)).toEqual({ which: 1, i: 0, x: 0 });
+    expect(skyPane(1)).toEqual({ which: 1, i: 1, x: 1 });
   });
 
   it('rain hides the moon and the stars; a clear night shows both (inc 3)', () => {
