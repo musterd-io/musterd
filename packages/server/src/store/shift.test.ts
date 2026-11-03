@@ -131,7 +131,7 @@ withDrivers('shift store (ADR 792)', (o) => {
   });
 
   it('the spend is live: a cost reported after the lease settled counts on the next read', async () => {
-    const { db, team, ryder } = await seed();
+    const { db, team } = await seed();
     const dayStart = shiftDayStart(PACIFIC, TUE_NOON);
     await leased(db, team.id, 'ryder', 'L1', TUE_NOON - 60_000);
     await cost(db, team.id, 'ryder', 'L1', 1.25, TUE_NOON - 30_000);
