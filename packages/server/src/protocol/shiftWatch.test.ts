@@ -195,7 +195,7 @@ withDrivers('the shift watch (ADR 792)', (o) => {
 
     it('no work stops a shift only after the Start had its chance, and not while a lane is claimed', async () => {
       const { db, team, ryder, ctx } = await seed();
-      const now = Date.now();
+      const now = Date.parse('2026-11-03T12:00:00Z'); // fixed: the sweep spans 15 min, never across a day
       await startShift(db, team.id, ryder, 'nick', null, now);
       expect(await sweepShifts(ctx, now + 60_000)).toBe(0);
       const lane = await openLane(db, team.id, team.slug, 'ryder', {
@@ -240,6 +240,7 @@ withDrivers('the shift watch (ADR 792)', (o) => {
       nick: MemberRow,
       question: string,
       choice: number,
+      ts = Date.now(),
     ) {
       await routeEnvelope(
         ctx,
@@ -254,6 +255,7 @@ withDrivers('the shift watch (ADR 792)', (o) => {
           body: '',
           thread: question,
           meta: { in_reply_to: question, answer: { choice } },
+          ts,
         }),
       );
     }
@@ -262,7 +264,7 @@ withDrivers('the shift watch (ADR 792)', (o) => {
       const { db, team, ryder, ctx } = await seed();
       for (const t of ['One', 'Two', 'Three', 'Four'])
         await openLane(db, team.id, team.slug, 'nick', { title: t });
-      const now = Date.now();
+      const now = Date.parse('2026-11-03T12:00:00Z'); // fixed: the sweep spans 15 min, never across a day
       await startShift(db, team.id, ryder, 'nick', null, now);
       const after = now + SHIFT_NO_WORK_GRACE_MS + 1;
       expect(await sweepShifts(ctx, after)).toBe(0);
@@ -290,15 +292,15 @@ withDrivers('the shift watch (ADR 792)', (o) => {
     it('an answer of none stops the shift; a picked lane gets its wake first', async () => {
       const { db, team, nick, ryder, ctx } = await seed();
       await openLane(db, team.id, team.slug, 'nick', { title: 'One' });
-      const now = Date.now();
+      // A fixed noon base: the run spans ~45 minutes, and a real clock near midnight crosses into a
+      // new shift day (a shift never outlives its day), which made this flaky on CI.
+      const now = Date.parse('2026-11-03T12:00:00Z');
       await startShift(db, team.id, ryder, 'nick', null, now);
       const t1 = now + SHIFT_NO_WORK_GRACE_MS + 1;
       await sweepShifts(ctx, t1);
       const [rec] = await recommended(db, team.id);
-      await answer(ctx, team, nick, rec!.question, 0); // picked "One"
-      const answeredAt = (await db.get<{ ts: number }>('SELECT ts FROM messages WHERE id = ?', [
-        `a-${rec!.question}`,
-      ]))!.ts;
+      const answeredAt = t1 + 1_000;
+      await answer(ctx, team, nick, rec!.question, 0, answeredAt); // picked "One"
       expect(await sweepShifts(ctx, answeredAt + 60_000)).toBe(0);
       // It never claimed it: past the grace, the shift ends for want of work.
       expect(await sweepShifts(ctx, answeredAt + SHIFT_NO_WORK_GRACE_MS + 1)).toBe(1);
@@ -310,14 +312,15 @@ withDrivers('the shift watch (ADR 792)', (o) => {
       const t2 = answeredAt + SHIFT_NO_WORK_GRACE_MS + 10;
       await startShift(db, team.id, ryder, 'nick', null, t2);
       await sweepShifts(ctx, t2 + SHIFT_NO_WORK_GRACE_MS + 1);
-      const second = (await recommended(db, team.id))[0]!;
-      await answer(ctx, team, nick, second.question, 1); // "None"
+      // The new recommendation, whatever order the audit list comes back in (the first is answered).
+      const second = (await recommended(db, team.id)).find((r) => r.question !== rec!.question)!;
+      await answer(ctx, team, nick, second.question, 1, t2 + SHIFT_NO_WORK_GRACE_MS + 1); // "None"
       expect(await sweepShifts(ctx, t2 + SHIFT_NO_WORK_GRACE_MS + 2)).toBe(1);
     });
 
     it('nothing on the board to offer: it stops at once', async () => {
       const { db, team, ryder, ctx } = await seed();
-      const now = Date.now();
+      const now = Date.parse('2026-11-03T12:00:00Z'); // fixed: the sweep spans 15 min, never across a day
       await startShift(db, team.id, ryder, 'nick', null, now);
       expect(await sweepShifts(ctx, now + SHIFT_NO_WORK_GRACE_MS + 1)).toBe(1);
       expect(await recommended(db, team.id)).toHaveLength(0);
@@ -342,7 +345,7 @@ withDrivers('the shift watch (ADR 792)', (o) => {
         title: 'On goal',
         goal_id: 'g-ok',
       });
-      const now = Date.now();
+      const now = Date.parse('2026-11-03T12:00:00Z'); // fixed: the sweep spans 15 min, never across a day
       await startShift(db, team.id, ryder, 'nick', null, now);
       await sweepShifts(ctx, now + SHIFT_NO_WORK_GRACE_MS + 1);
       expect((await getLane(db, team.id, ok.id, team.slug))?.owner_seat).toBe('ryder');
