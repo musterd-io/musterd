@@ -117,6 +117,7 @@ import { startVisit, stepVisit, visitDue, type Visit } from './visitor';
 import { cameraMatches, parseManifest } from './rendered/manifest';
 import { makeSpriteCache, resetCtxState } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
+import { signRect, type SignName } from './signs';
 import { createLaneOwners } from './laneOwners';
 import {
   boardMoves,
@@ -262,6 +263,14 @@ const SAFETY_REPAINT_MS = 5000;
  * shift check rides the same override (keeping the real weekday), so `?light=23` also previews the
  * after-hours office.
  */
+/** The click area over a rendered sign (lane 01M6FXKVDD): no paint of its own, only the hover glow. */
+function signDoor(): HTMLSpanElement {
+  const d = document.createElement('span');
+  d.className = 'lc-signdoor';
+  d.setAttribute('aria-hidden', 'true');
+  return d;
+}
+
 function lightOverrideHours(): number | null {
   try {
     const q = new URLSearchParams(window.location.search).get('light');
@@ -664,18 +673,9 @@ export function mountOffice(
           el.type = 'button';
           el.className = 'lc-boardspot';
           el.setAttribute('aria-label', 'Open the work board');
-          // The sign hung above the board (live-briefing spec, increment 5): it says what the board is
-          // and that it opens, before anyone has to find out by hovering. A child of the button, so a
-          // click on the sign is a click on the board.
-          const tag = document.createElement('span');
-          tag.className = 'lc-boardspot__tag';
-          tag.textContent = 'work board';
-          const caret = document.createElement('span');
-          caret.className = 'lc-boardspot__caret';
-          caret.setAttribute('aria-hidden', 'true');
-          caret.textContent = '›';
-          tag.appendChild(caret);
-          el.appendChild(tag);
+          // The rendered sign over the board (lane 01M6FXKVDD) says what it is and that it opens; this
+          // child span is its door, so a click on the sign is a click on the board.
+          el.appendChild(signDoor());
           el.addEventListener('click', () => options.onBoardClick!(el.getBoundingClientRect()));
           if (options.onBoardHover) {
             const warm = () => options.onBoardHover!();
@@ -699,14 +699,8 @@ export function mountOffice(
           el.hidden = true;
           el.setAttribute('aria-label', 'Open settings');
           el.title = 'Settings';
-          // A small oak tab fixed flush under the calendar's frame: the wall clock is directly above
-          // the card and its header carries the days, and a sign hung on strings reached the desks.
-          // A child of the button, so a click on it opens settings.
-          const tab = document.createElement('span');
-          tab.className = 'lc-hoursspot__tab';
-          tab.setAttribute('aria-hidden', 'true');
-          tab.textContent = 'settings ›';
-          el.appendChild(tab);
+          // The rendered settings tab under the calendar's frame (lane 01M6FXKVDD); this span is its door.
+          el.appendChild(signDoor());
           const dot = document.createElement('span');
           dot.className = 'lc-hoursspot__dot';
           dot.setAttribute('aria-hidden', 'true');
@@ -729,17 +723,9 @@ export function mountOffice(
     const clickable = interactiveLabels && options.onWikiClick;
     const el = document.createElement(clickable ? 'button' : 'span');
     el.className = `lc-boardspot lc-wikispot${clickable ? '' : ' is-static'}`;
-    const tag = document.createElement('span');
-    tag.className = 'lc-boardspot__tag';
-    tag.textContent = 'wiki';
     if (clickable) {
       (el as HTMLButtonElement).type = 'button';
       el.setAttribute('aria-label', "Open the team's wiki");
-      const caret = document.createElement('span');
-      caret.className = 'lc-boardspot__caret';
-      caret.setAttribute('aria-hidden', 'true');
-      caret.textContent = '›';
-      tag.appendChild(caret);
       el.addEventListener('click', () => options.onWikiClick!(el.getBoundingClientRect()));
       if (options.onWikiHover) {
         const warm = () => options.onWikiHover!();
@@ -749,7 +735,7 @@ export function mountOffice(
     } else {
       el.setAttribute('aria-hidden', 'true');
     }
-    el.appendChild(tag);
+    el.appendChild(signDoor());
     labelHost.appendChild(el);
     return el;
   })();
@@ -760,9 +746,7 @@ export function mountOffice(
     wikiSpot.style.top = `${a.y}px`;
     wikiSpot.style.width = `${a.w}px`;
     wikiSpot.style.height = `${a.h}px`;
-    wikiSpot.style.setProperty('--lc-sign-drop', `${a.topMidY - a.y}px`);
-    wikiSpot.style.setProperty('--lc-sign-tilt', `${a.tiltDeg.toFixed(2)}deg`);
-    wikiSpot.style.setProperty('--lc-sign-scale', fit.scale.toFixed(3));
+    placeSignDoor(wikiSpot, a, 'wiki');
   }
 
   function positionHoursSpot(): void {
@@ -772,11 +756,7 @@ export function mountOffice(
     hoursSpot.style.top = `${a.y}px`;
     hoursSpot.style.width = `${a.w}px`;
     hoursSpot.style.height = `${a.h}px`;
-    hoursSpot.style.setProperty('--lc-tab-x', `${a.foot.x}px`);
-    hoursSpot.style.setProperty('--lc-tab-y', `${a.foot.y}px`);
-    hoursSpot.style.setProperty('--lc-tab-w', `${a.foot.w}px`);
-    hoursSpot.style.setProperty('--lc-tab-unit', `${a.foot.unit}px`);
-    hoursSpot.style.setProperty('--lc-sign-tilt', `${a.tiltDeg.toFixed(2)}deg`);
+    placeSignDoor(hoursSpot, a, 'settings');
   }
 
   function positionBoardSpot(): void {
@@ -786,10 +766,17 @@ export function mountOffice(
     boardSpot.style.top = `${a.y}px`;
     boardSpot.style.width = `${a.w}px`;
     boardSpot.style.height = `${a.h}px`;
-    // How far below the box's top the board's top edge is at its middle — the sign hangs from there.
-    boardSpot.style.setProperty('--lc-sign-drop', `${a.topMidY - a.y}px`);
-    boardSpot.style.setProperty('--lc-sign-tilt', `${a.tiltDeg.toFixed(2)}deg`);
-    boardSpot.style.setProperty('--lc-sign-scale', fit.scale.toFixed(3));
+    placeSignDoor(boardSpot, a, 'board');
+  }
+
+  /** Lay a spot's sign door over its rendered sign: `signRect`, relative to the spot's own box. */
+  function placeSignDoor(spot: HTMLElement, box: { x: number; y: number }, name: SignName): void {
+    const r = signRect(fit, name);
+    const st = (spot.querySelector('.lc-signdoor') as HTMLElement).style;
+    st.left = `${r.x - box.x}px`;
+    st.top = `${r.y - box.y}px`;
+    st.width = `${r.w}px`;
+    st.height = `${r.h}px`;
   }
   const ctx = canvas.getContext('2d')!;
   // Warm the izzocam chyron face the canvas labels/glyphs paint in, so they land on-brand from the

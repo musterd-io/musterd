@@ -2043,6 +2043,39 @@
       "scale": 3.0
     },
     {
+      "id": "wall/sign-board",
+      "file": "office-art-wall-sign-board.webp",
+      "w": 145,
+      "h": 135,
+      "anchor": {
+        "x": 74.0,
+        "y": 543.92
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/sign-settings",
+      "file": "office-art-wall-sign-settings.webp",
+      "w": 158,
+      "h": 125,
+      "anchor": {
+        "x": 80.68,
+        "y": 126.92
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "wall/sign-wiki",
+      "file": "office-art-wall-sign-wiki.webp",
+      "w": 66,
+      "h": 106,
+      "anchor": {
+        "x": 30.65,
+        "y": 357.09
+      },
+      "scale": 3.0
+    },
+    {
       "id": "welcome/wagon",
       "file": "office-art-welcome-wagon.webp",
       "w": 92,

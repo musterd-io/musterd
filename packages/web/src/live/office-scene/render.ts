@@ -72,6 +72,7 @@ import type { CarryKind, Dir, OfficeNode, Pose, WelcomePaint } from './types';
 import { TOSS_S } from './welcomeRoom';
 import { formatWorkingHours } from './workingHours';
 import { drawPainting, paintingQuad, PRINT_DROP, printDepth, printOpening } from './paintings';
+import { SIGN_NAMES, SIGNS } from './signs';
 
 /**
  * Canvas-2D drawing for the office. Everything is painter-ordered by logical depth (lx+ly) so seated
@@ -877,11 +878,12 @@ const READ_TAGS: Record<ReadStatus | 'more', { tag: string; pin: string; mark?: 
  * demotes the frame, which matters, because the loudest thing on this object has to stay the notes.
  */
 const PINBOARD = {
-  oak: '#DCBF8E',
+  /** The frame's oak, stained to match the signs (`scene.py` `board-oak`, lane 01M6FXKVDD). */
+  oak: '#6E4528',
   /** The top lip, where the window light lands. */
-  oakLit: '#F0DCB4',
+  oakLit: '#8E5D36',
   /** Underside and outer edge — the frame's own thickness. */
-  oakShade: '#B9915F',
+  oakShade: '#4E301B',
   cork: '#C98F52',
   /** Three freckle tones: two lighter than the cork, one darker, so the surface reads as grain. */
   fleck: ['#B87C42', '#D9A468', '#AB7038'],
@@ -1108,6 +1110,13 @@ export function drawWalls(
       const [fx, fy] = edge(a.tc);
       if (blitIf(ctx, fit, art, `wall/art-${i}`, fx, fy)) wallArt(ctx, fit, edge, a, i, art, env);
     });
+    // The signs (lane 01M6FXKVDD): rendered oak and gold; their lamps light in `drawInteriorLight`.
+    for (const name of SIGN_NAMES) {
+      const s = SIGNS[name];
+      if (s.wall !== wallIndex) continue;
+      const [sx, sy] = edge(s.tc);
+      blitIf(ctx, fit, art, `wall/sign-${name}`, sx, sy);
+    }
     if (wallIndex === 1) {
       const [cx, cy] = edge(0.52);
       run(() => {
@@ -1395,13 +1404,13 @@ function workingHoursSign(
   ctx.globalAlpha = 0.22;
   wallRect(ctx, fit, edge, T(-halfW + 6), U(-halfH - 6), T(halfW + 6), U(halfH - 6), '#503522');
   ctx.globalAlpha = 1;
-  wallRect(ctx, fit, edge, T(-halfW), U(-halfH), T(halfW), U(halfH), '#6a4a30'); // oak frame
-  wallRect(ctx, fit, edge, T(-halfW), U(halfH - 2), T(halfW), U(halfH), '#8a6440'); // its sunlit top edge
-  wallRect(ctx, fit, edge, T(-halfW + 2), U(-halfH + 2), T(halfW - 2), U(halfH - 2), '#c39a41'); // brass trim
-  wallRect(ctx, fit, edge, T(-halfW + 4), U(-halfH + 4), T(halfW - 4), U(halfH - 4), '#fbf1d8'); // paper
+  wallRect(ctx, fit, edge, T(-halfW), U(-halfH), T(halfW), U(halfH), '#5e3b22'); // oak frame, the signs' stain (lane 01M6FXKVDD)
+  wallRect(ctx, fit, edge, T(-halfW), U(halfH - 2), T(halfW), U(halfH), '#7e5030'); // its sunlit top edge
+  wallRect(ctx, fit, edge, T(-halfW + 2), U(-halfH + 2), T(halfW - 2), U(halfH - 2), '#d9b25a'); // gold trim
+  wallRect(ctx, fit, edge, T(-halfW + 4), U(-halfH + 4), T(halfW - 4), U(halfH - 4), '#f6ead2'); // paper
 
-  // The header: mustard, with a hairline of shadow under it so the band sits *on* the sheet.
-  wallRect(ctx, fit, edge, T(-halfW + 4), U(BAND), T(halfW - 4), U(halfH - 4), '#e1ad01');
+  // The header: gold leaf, with a hairline of shadow under it so the band sits *on* the sheet.
+  wallRect(ctx, fit, edge, T(-halfW + 4), U(BAND), T(halfW - 4), U(halfH - 4), '#d9ad55');
   wallRect(
     ctx,
     fit,
@@ -1414,14 +1423,14 @@ function workingHoursSign(
   );
   // Two punched holes in the band, the way a wall calendar's top sheet is punched.
   for (const dx of [-halfW + 12, halfW - 12])
-    wallDisc(ctx, fit, edge, T(dx), U(halfH - 9), 2.2, '#b8862a');
+    wallDisc(ctx, fit, edge, T(dx), U(halfH - 9), 2.2, '#a8803a');
 
   // The days on the band, the hours across the sheet. Both shrink to the paper rather than overrun it:
   // days can be a list ("MON · WED · FRI"), not just a run.
   const line = (dy: number, text: string, size: number, fill: string): void =>
     wallText(ctx, fit, edge, tc, U(dy), text, fitTextSize(ctx, text, size, INNER), fill, 'center');
-  line(halfH - 13, copy.days, 11.5, '#4e331f');
-  line(-7, copy.hours, 16, '#33261c');
+  line(halfH - 13, copy.days, 11.5, '#4e301b');
+  line(-7, copy.hours, 16, '#4e301b');
 
   // A hairline rule, then a week strip: seven marks, the working ones filled. The strip says what the
   // days line says in the one language that survives being eight pixels tall, and gives the sheet a
@@ -1431,8 +1440,8 @@ function workingHoursSign(
   WEEK.forEach((day, i) => {
     const dx = (i - 3) * 11;
     const lit = on.has(day);
-    wallDisc(ctx, fit, edge, T(dx), U(-17.5), 3.4, lit ? '#e1ad01' : 'rgba(120,96,60,0.2)');
-    if (lit) wallDisc(ctx, fit, edge, T(dx), U(-17.5), 1.5, '#7a5a1c');
+    wallDisc(ctx, fit, edge, T(dx), U(-17.5), 3.4, lit ? '#d9ad55' : 'rgba(120,96,60,0.2)');
+    if (lit) wallDisc(ctx, fit, edge, T(dx), U(-17.5), 1.5, '#6b4a1e');
   });
 
   // A brass tack in the header gives the card a restrained life. t=0 is its complete, static
@@ -3876,6 +3885,17 @@ function drawInteriorLight(
         '255, 200, 120',
         0.2 * night,
       );
+    }
+
+    // Each sign's brass picture light (lane 01M6FXKVDD): a warm wash down over the sign's face and the
+    // wall round it, and a small bright core at the shade so the lamp reads as on.
+    for (const name of SIGN_NAMES) {
+      const s = SIGNS[name];
+      if (!s.lamp) continue;
+      const edge = WALL_EDGES[s.wall]!;
+      warmPool(ctx, wallPt(edge, s.tc, s.uc, fit), s.w * 0.85 * fit.scale, 0.75, '255, 210, 140', 0.34 * night);
+      const lamp = wallPt(edge, s.tc, s.uc + (s.h / 2 + 10) / WALL_H, fit);
+      warmPool(ctx, lamp, 7 * fit.scale, 0.6, '255, 232, 190', 0.6 * night);
     }
 
     // Desk lamps emit, in two parts, and the order of them is the whole point. `litLamps` is the set of

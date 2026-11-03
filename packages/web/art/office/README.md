@@ -362,6 +362,16 @@ notes, the hours sign and both walls' string lights. Before these, a rendered wa
 The wall render never had it, and the live slice painted only the right wall's fixtures. Clock numerals are built as text
 facing out of the wall and are *not* pre-mirrored. On this wall their +x runs along +t, which the canvas reads screen-right.
 
+## The signs (lane 01M6FXKVDD)
+
+`scene.py` `wall_sign` builds the wiki, settings and work-board signs from `SIGNS` (a copy of
+`signs.ts` `SIGNS`; `signs.test.ts` holds the two equal): a bevelled oak board, raised gold lettering
+(`text_add`, pre-mirrored on the left wall), and, for the wiki and the board, brass chains and a brass
+picture light. Render with `--only wall/sign-wiki,wall/sign-settings,wall/sign-board`. The lamps light
+at runtime (`render.ts` `drawInteriorLight`); the DOM doors over the signs are invisible
+(`index.ts` `signDoor`, `.lc-signdoor`). The board's frame (`board-oak`) and the calendar card share
+the signs' stain.
+
 ## The paintings (ADR 789, lane 01M6FXB2CA)
 
 The five frames hold original paintings made with an image model (Z-Image-Turbo, Apache-2.0), one source

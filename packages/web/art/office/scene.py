@@ -1163,6 +1163,11 @@ ART_PIECES = [  # layout.ts ART: wall, tc, uc, w, h, frame
 ]
 CLOCK = (1, 0.52, 0.62, 25.0)  # wall, tc, uc, R
 HANGER = (0, 0.52, 0.76)  # wall, tc, uTop
+SIGNS = {  # signs.ts SIGNS: name -> (wall, tc, uc, w, h, text, lamp)
+    "wiki": (0, 0.205, 0.53, 26, 16, "wiki", True),
+    "settings": (1, 0.52, 0.1185, 70, 16, "settings", False),
+    "board": (1, 0.945, 0.854, 64, 17, "work board", True),
+}
 BOARD = (1, 0.8922, 0.4787, 170, 120)  # layout.ts WALL_BOARD
 BOARD_GUTTER = 26  # render.ts BOARD_GUTTER: the goal tabs hang left of the columns (ADR 751)
 BOARD_CAPS = ["#B4A88F", "#8FB0E6", "#3F74C4", "#D1503F", "#6A93D4", "#2F9E6A"]  # render.ts WALLBOARD_TONES
@@ -1283,9 +1288,82 @@ def wall_clock(asset_id: str, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, fx, fy, col)
 
 
+def metal(name: str, rgb: tuple[float, float, float], rough: float = 0.35) -> bpy.types.Material:
+    """A polished metal: gold leaf, brass."""
+    m = matte(name, rgb, rough)
+    m.node_tree.nodes.get("Principled BSDF").inputs["Metallic"].default_value = 1.0
+    return m
+
+
+def wall_sign(asset_id: str, name: str, zs: float, col) -> bpy.types.Object:
+    """One of the three signs (lane 01M6FXKVDD, nick's pick from three mockups): a bevelled oak board
+    with raised gold lettering, hung on two short brass chains from a brass rail, and a small brass
+    picture light above it. The settings tab sits flush under the calendar instead: no chains, no lamp."""
+    which, tc, uc, W, H, text, lamp = SIGNS[name]
+    oak = wood("sign-oak", srgb("#7E5030"), grain=0.14)
+    edge_oak = wood("sign-oak-edge", srgb("#4E301B"), grain=0.1)
+    gold = metal("sign-gold", srgb("#F4CF72"), 0.32)
+    gold.node_tree.nodes.get("Principled BSDF").inputs["Metallic"].default_value = 0.55
+    brass = metal("sign-brass", srgb("#B8893E"), 0.4)
+    parts = []
+    # the board: a darker back plate, the carved face proud of it
+    back = wall_block(f"{asset_id}/back", which, tc, uc, W, H, 0, 1.4, edge_oak, zs)
+    bevel(back, 0.5, 2)
+    parts.append(back)
+    face = wall_block(f"{asset_id}/face", which, tc, uc, W - 2.2, H - 2.2, 1.4, 1.2, oak, zs)
+    bevel(face, 0.7, 3)
+    parts.append(face)
+    # the lettering, raised off the face. On the left wall `+t` runs screen-left, so the glyphs are
+    # pre-mirrored there to read the right way (the clock's numerals need no mirror on the right wall).
+    bpy.ops.object.text_add()
+    tx = bpy.context.active_object
+    tx.data.body = text
+    tx.data.size = H * 0.6
+    tx.data.align_x, tx.data.align_y = "CENTER", "CENTER"
+    tx.data.extrude = 0.35
+    tx.data.bevel_depth = 0.08
+    tx.data.space_character = 1.06
+    bpy.ops.object.convert(target="MESH")
+    tx = bpy.context.active_object
+    tx.name = f"{asset_id}/letters"
+    tx.data.materials.clear()
+    tx.data.materials.append(gold)
+    dims = tx.dimensions
+    fit_w = (W - 7) / max(dims.x, 1e-6)
+    sc = min(1.0, fit_w)
+    flip = -1 if which == 0 else 1
+    tx.data.transform(Matrix.Diagonal((sc * flip, sc, 1, 1)))
+    parts.append(wall_mesh(tx, which, tc, uc, 2.9, zs))
+    if lamp:
+        # chains: two brass links up to a short rail above the board
+        top = uc + H / 2 / WALL_H
+        gap = 3.5
+        for k, off in enumerate((-W * 0.32, W * 0.32)):
+            t = tc + off / FLOOR
+            parts.append(wall_block(f"{asset_id}/chain{k}", which, t, top + gap / 2 / WALL_H, 0.6, gap, 0.8, 0.6, brass, zs))
+        rail_u = top + (gap + 0.6) / WALL_H
+        parts.append(wall_block(f"{asset_id}/rail", which, tc, rail_u, W * 0.8, 1.2, 0.4, 1.2, brass, zs))
+        # the picture light: a round backplate, an arm out of the wall and a tube shade lying along it
+        lu = rail_u + 7 / WALL_H
+        parts.append(wall_disc(f"{asset_id}/lamp-plate", which, tc, lu, 1.8, 0, 0.8, brass, zs, 16))
+        parts.append(wall_block(f"{asset_id}/lamp-arm", which, tc, lu, 0.9, 0.9, 0.8, 5.6, brass, zs))
+        L = W * 0.5
+        fx, fy = wall_floor(which, tc)
+        d = 6.6
+        loc = (d, fy, (lu * WALL_H - 1.0) * zs) if which == 0 else (fx, d, (lu * WALL_H - 1.0) * zs)
+        bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=2.0, depth=L, location=loc)
+        tube = bpy.context.active_object
+        tube.name = f"{asset_id}/lamp-shade"
+        tube.rotation_euler = (math.pi / 2, 0, 0) if which == 0 else (0, math.pi / 2, 0)
+        tube.data.materials.append(brass)
+        parts.append(tube)
+    fx, fy = wall_floor(which, tc)
+    return finish(asset_id, parts, fx, fy, col)
+
+
 def wall_board(asset_id: str, zs: float, col) -> bpy.types.Object:
     which, tc, uc, W, H = BOARD
-    oak = wood("board-oak", srgb("#DCBF8E"), grain=0.15)
+    oak = wood("board-oak", srgb("#7E5030"), grain=0.15)  # the signs' stain (lane 01M6FXKVDD)
     ck = cork("board-cork")
     FR = 3.0
     parts = [wall_block(f"{asset_id}/cork", which, tc, uc, W - 2 * FR, H - 2 * FR, 0, 1.6, ck, zs)]
@@ -1903,6 +1981,8 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     a["wall/board"] = wall_board("wall/board", zs, export)
     a["bin"] = wastebasket("bin", C, C, zs, export)
     a["wall/hanger"] = wall_hanger("wall/hanger", zs, export)
+    for name in SIGNS:
+        a[f"wall/sign-{name}"] = wall_sign(f"wall/sign-{name}", name, zs, export)
     for setup in MONITOR_SETUPS:
         for facing in ("N", "E", "S", "W"):
             a[f"monitor/{setup}/{facing}"] = desk_monitor(f"monitor/{setup}/{facing}", setup, facing, zs, export)
