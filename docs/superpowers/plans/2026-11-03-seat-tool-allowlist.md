@@ -215,9 +215,10 @@ Record each answer as a dated claim:
    listed? This is how the complement enumerates them.
 6. Does `permissions.deny: ["mcp__claude_ai_Gmail"]` block a connector's tools?
 
-- [ ] **Step 1: Run the six probes and write the page.**
-- [ ] **Step 2: Correct Tasks 8–10 here, in this plan,** where a probe answer changes them. Commit
-  the page and the plan edit on the increment 3 branch, `feat/seat-tools-claude-code`.
+- [x] **Step 1: Run the six probes and write the page.** Done 2026-11-03: 1 yes, 2 yes (personal
+  and synced skills are excluded), 3 yes (plugin servers drop too), 4 yes, 6 yes; 5 is the
+  page's on-disk section.
+- [x] **Step 2: Correct Tasks 8–11 here, in this plan,** where a probe answer changes them.
 
 ### Task 6: Resolve a seat's declared set
 
@@ -298,9 +299,14 @@ Record each answer as a dated claim:
   }
   export function readClaudeHumanLayer(fs: FsSeam, env: NodeJS.ProcessEnv): HumanLayer;
   ```
-  Read the files, never shell out. Use the spike's answer (Task 5, probe 5) for where the synced
-  plugins and connector names are listed. An unreadable source sets `complete: false`; it does not
-  throw.
+  Read the files, never shell out. The sources, from the Task 5 page
+  (`docs/wiki/claude-code-seat-isolation.md`): `enabledPlugins` true entries in
+  `~/.claude/settings.json`; one directory per synced plugin under `~/.claude/plugins/synced/<bucket>/`
+  (strip a `~g2` suffix, id `<name>@synced`); skill directory names under `~/.claude/skills/` and
+  `~/.claude/skills/synced/<bucket>/`; connector display names in `claudeAiMcpEverConnected` in
+  `~/.claude.json`, mapped to the `claude_ai_<Name>` prefix (spaces and dots become `_`); and
+  top-level `mcpServers` keys in `~/.claude.json`. An unreadable source sets `complete: false`; it
+  does not throw.
 
 - [ ] **Step 1: Write the failing tests** with `memoryFs` fixtures:
   - `lists enabled plugins only, not ones set false`;
@@ -381,7 +387,7 @@ Record each answer as a dated claim:
 - Produces:
   - `export const SEAT_MCP_CONFIG_REL = '.musterd/claude-mcp.json'`;
   - a folder fragment `mcp.strict` writing that file: the musterd server, the repo's committed
-    `.mcp.json` servers, and the toolkit's servers;
+    `.mcp.json` servers, the toolkit's servers, and each declared plugin's servers;
   - `export function claudeIsolationArgv(): string[]`, which returns
     `['--setting-sources', 'project,local', '--strict-mcp-config', '--mcp-config', SEAT_MCP_CONFIG_REL]`.
     `argTail`, `fresh()` and `resume()` all use it. The launcher spawns with `cwd` at the
@@ -394,8 +400,9 @@ Record each answer as a dated claim:
   - `an untracked user toolkit's mcp_servers are ignored with a warning; a tracked one's load`
     (use the `ExecSeam` to fake `git ls-files --error-unmatch`).
 - [ ] **Step 2: Run them and see them fail.**
-- [ ] **Step 3: Implement.** If spike probe 3 showed plugin MCP servers drop under
-  `--strict-mcp-config`, write the declared plugins' servers into the same file.
+- [ ] **Step 3: Implement.** Probe 3 showed `--strict-mcp-config` drops plugin MCP servers
+  too (the plugin itself still loads), so the file also carries each declared plugin's servers,
+  read from the plugin's `.mcp.json` in the user plugin cache.
 - [ ] **Step 4: Run them and see them pass.**
 - [ ] **Step 5: Gates, PR, auto-merge.** Body opens with ``Lane `01M6HHSVAC3RRQ5AHBCDK0WQNV`.``
   After it lands and the refresher bounces the daemon, check one live seat:
