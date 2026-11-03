@@ -2893,3 +2893,16 @@ would loosen (ADR 183).
 
 - Falsify: `pnpm perf:check` after a build reports office art at or under 9,730,000 B and total JS
   at or under 407,500 B with this lane in.
+
+## 2026-11-03 — seats on shift: total JS RAISED 410,000 → 411,000 B (lane 01M6H8BPVDT88VGYP24750EZJP)
+
+| Budget     | Ceiling   | This branch               | Move                       |
+| ---------- | --------- | ------------------------- | -------------------------- |
+| initial JS | 154,500 B | unchanged (CI)            | none                       |
+| total JS   | 410,000 B | ~410,100 B (CI, 400.5 KB) | RAISED 410,000 → 411,000 B |
+
+ADR 792 puts a seat's shift on the roster: a chip with `shiftLabel` (protocol wire, ~0.3 KB with its
+formatter) and a Stop button on the quick-action bar while the seat is on shift. Both ride the
+roster's existing chunk, so initial JS does not move; the total grows ~0.1 KB over the ceiling.
+
+- Falsify: `pnpm perf:check` after a build reports total JS at or under 411,000 B with this lane in.
