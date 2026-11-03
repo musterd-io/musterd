@@ -111,6 +111,9 @@ going red without being asked, and each person should decide how loud questions 
     matches the lane its title or body names (ADR 106's `Lane \`<id>\`.` line, or
     `(lane <id>)`), by the full id or its 10-character prefix. Check PR uses the same match when the
     lane has no branch.
+- 2026-11-03 ([ADR 790](790-human-acts-pass-the-wake-caps.md), lane `01M6FXRD8C`): Start everyone
+  no longer reports `capped`. A Start is a person's steer, and a person's act passes the hourly cap
+  and the cooldown, so each seat is `started` or `offline`.
 
 ## Observability & Evaluation
 

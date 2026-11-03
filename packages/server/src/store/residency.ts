@@ -1260,6 +1260,42 @@ interface WakeCandidate {
   thread_id?: string;
   /** ADR 210: when the triggering act was sent, for the eligibility recency test. */
   act_ts?: number;
+  /** ADR 790: set when a human sender is the only reason this candidate passed the rate gates. */
+  human_pass?: true;
+}
+
+/**
+ * ADR 790: does a person stand behind this candidate? True when its act was sent by a Member of
+ * `kind = 'human'` on this team, from a session a person drives. Read from the act's own row — the
+ * sender by member id, never by name — and an act sent from a wake or a dream session is never
+ * human-sent, whoever's seat it is (a human seat can be enrolled for wakes too), so a machine chain
+ * cannot borrow the pass. A work order or a dream has no act, so it is never human-sent. `cache` is
+ * per poll: one seat's candidates often share a sender.
+ */
+async function humanSent(
+  db: Driver,
+  teamId: string,
+  candidate: WakeCandidate,
+  cache: Map<string, boolean>,
+): Promise<boolean> {
+  if (candidate.act_id === undefined || candidate.derivation === 'work_order') return false;
+  const act = await db.get<{ from_member: string | null; from_provenance: string | null }>(
+    'SELECT from_member, from_provenance FROM messages WHERE team_id = ? AND id = ?',
+    [teamId, candidate.act_id],
+  );
+  if (!act?.from_member) return false;
+  if (act.from_provenance === 'wake' || act.from_provenance === 'dream') return false;
+  const known = cache.get(act.from_member);
+  if (known !== undefined) return known;
+  const row = await getMemberById(db, act.from_member);
+  const human =
+    row !== null &&
+    row !== undefined &&
+    row.team_id === teamId &&
+    row.left_at === null &&
+    row.kind === 'human';
+  cache.set(act.from_member, human);
+  return human;
 }
 
 /** ADR 209 rollout: typed handoff/review/work-order wakes are portable now. Ordinary inbox
@@ -2411,6 +2447,8 @@ async function deriveSeatPasses(
   const wakeOnIncidentResolve = teamPolicy.incident?.wake_on_resolve === true;
   // ADR 494 §2: the Team's schedule, read once; a Member's own schedule replaces it (ADR 206).
   const teamHours = parseWorkingHours((await getTeamById(db, teamId))?.working_hours);
+  // ADR 790: sender member id → is a human Member, read once per poll.
+  const humanSenders = new Map<string, boolean>();
   for (const enrollment of enrollments) {
     const member = await getMemberById(db, enrollment.member_id);
     if (!member || member.left_at !== null) continue;
@@ -2471,24 +2509,22 @@ async function deriveSeatPasses(
       gate('passed');
       continue;
     }
-    if ((await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap) {
-      gate('hourly_cap');
-      continue;
-    }
-
+    // ADR 790: the rate gates filter candidates, not the seat — a human-sent candidate passes both,
+    // so the candidates are read before the gates are applied.
+    const capped =
+      (await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap;
     // ADR 735: the act lane reads no cooldown — every open directed act is due on this poll; the
-    // hourly cap above and the attempt cap below are what bound it.
+    // hourly cap and the attempt cap below are what bound it.
     const cooled =
       policy.lane === 'act' ||
       (await wakesSince(db, teamId, member.name, now - policy.cooldown_ms)) === 0;
-    gate(cooled ? 'passed' : 'cooldown');
-    const candidates = await dueCandidates(
+    let candidates = await dueCandidates(
       db,
       teamSlug,
       member,
       {
         immediate: policy.lane !== 'batched',
-        batched: cooled && policy.lane !== 'interrupt',
+        batched: policy.lane !== 'interrupt',
         act: policy.lane === 'act',
         actSince: enrollment.updated_at,
         raisedDeferralWakes: policy.raised_deferral_wakes,
@@ -2510,6 +2546,25 @@ async function deriveSeatPasses(
     if (reviewLoopOn && policy.flow === 'auto' && cooled) {
       candidates.unshift(...(await dueReviewWorkOrders(db, teamId, teamSlug, member)));
     }
+    // ADR 790: an immediate candidate passes the cooldown (ADR 131 §4, as before); a human-sent
+    // one passes the cooldown and the cap. Everything after this still binds every candidate.
+    const kept: WakeCandidate[] = [];
+    for (const c of candidates) {
+      const rateOk = !capped && (cooled || c.lane === 'immediate');
+      if (rateOk) kept.push(c);
+      else if (await humanSent(db, teamId, c, humanSenders)) kept.push({ ...c, human_pass: true });
+    }
+    candidates = kept;
+    // ADR 753's gate keeps its meaning for every other sender; a human pass records `passed`.
+    gate(
+      candidates.some((c) => c.human_pass)
+        ? 'passed'
+        : capped
+          ? 'hourly_cap'
+          : cooled
+            ? 'passed'
+            : 'cooldown',
+    );
     // ADR 434 §c, read once per seat per poll and only when something is due.
     const horizon = candidates.length > 0 ? await wakeHorizon(db, teamId, member.name) : null;
     for (const candidate of candidates) {
@@ -2740,7 +2795,8 @@ async function deriveSeatPasses(
       pass.suppressed.length === 0 &&
       !pass.claimsHeld &&
       policy.dream_enabled &&
-      cooled
+      cooled &&
+      !capped
     ) {
       const hours = parseWorkingHours(member.working_hours) ?? teamHours;
       const nightStart = hours ? lastWorkingDayEnd(hours, now) : null;
@@ -2941,6 +2997,7 @@ async function writeSeatPass(
           ...(resumeEligible ? { resume_eligible: true } : {}),
           ...(c.lane_id !== undefined ? { lane_id: c.lane_id } : {}),
           ...(edge !== null ? { edge } : {}),
+          ...(c.human_pass ? { human_pass: true } : {}),
         },
       });
       const isWorkOrder = c.derivation === 'work_order';
@@ -3203,25 +3260,6 @@ export async function listWakeTranscript(
  * act re-becomes due, still bounded by the derived rate policy.
  */
 /** Teams with at least one residency enrollment — who a host suspension concerns (ADR 236). */
-/**
- * ADR 779: would a wake for this seat be held by its hourly cap right now? The same derivation the
- * lease path gates on (`wakesSince` against the effective policy), so "Start everyone" can say
- * `capped` instead of a start that silently never wakes.
- */
-export async function seatAtHourlyCap(
-  db: Driver,
-  teamId: string,
-  member: MemberRow,
-  now: number = Date.now(),
-): Promise<boolean> {
-  const enrollment = await getResidency(db, teamId, member.id);
-  const policy = effectiveWakePolicy(
-    seatWakeDefaults(await getPolicy(db, teamId), member),
-    enrollment?.policy ?? null,
-  );
-  return (await wakesSince(db, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap;
-}
-
 export async function listResidencyTeamIds(db: Driver): Promise<string[]> {
   return (await db.all<{ team_id: string }>('SELECT DISTINCT team_id FROM residency')).map(
     (r) => r.team_id,

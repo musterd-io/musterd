@@ -1225,6 +1225,7 @@ answer's text.
   it MUST be daemon-composed from the action and structured fields only (ADR 088 §4); the body
   never appears on it.
 - `POST /teams/:slug/quick-actions/start-all` (human only) sends one `start` steer per enrolled
-  agent seat and answers `{seats: [{seat, result: started | capped | offline}]}`.
+  agent seat and answers `{seats: [{seat, result: started | offline}]}`. A wake candidate a human
+  member sent passes the daemon's hourly cap and cooldown (ADR 790), so a start is never `capped`.
 - A daemon-composed `message` MAY carry `meta.pr_event {lane, pr, state: merged | ci_red | ci_green,
   checks_url?}` to a lane's owner; it is a wake reason. A server MUST strip a client-supplied copy.

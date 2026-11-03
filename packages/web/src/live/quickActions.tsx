@@ -33,19 +33,19 @@ export function sendQuickAction(cfg: LiveConfig, seat: string, action: QuickActi
   });
 }
 
-export type StartResult = 'started' | 'capped' | 'offline';
+export type StartResult = 'started' | 'offline';
 export type StartAllReply = { seats: { seat: string; result: StartResult }[] };
 
 export function startEveryone(cfg: LiveConfig): Promise<StartAllReply> {
   return apiPost<StartAllReply>(cfg, `/teams/${encodeURIComponent(cfg.team)}/quick-actions/start-all`, {});
 }
 
-/** "Started 3 · 1 held by its wake cap · 2 offline" — the counts that are not zero, in that order. */
+/** "Started 3 · 2 offline" — the counts that are not zero, in that order. A Start passes the wake
+ *  cap (ADR 790), so no seat is ever held back by it. */
 export function startAllSummary(seats: StartAllReply['seats']): string {
   const n = (r: StartResult) => seats.filter((s) => s.result === r).length;
   const parts = [
     n('started') ? `Started ${n('started')}` : null,
-    n('capped') ? `${n('capped')} held by ${n('capped') === 1 ? 'its' : 'their'} wake cap` : null,
     n('offline') ? `${n('offline')} offline` : null,
   ].filter(Boolean);
   return parts.length ? parts.join(' · ') : 'No seats to start';
@@ -93,10 +93,10 @@ export function QuickActionBar({ cfg, seat, compact = false }: { cfg: LiveConfig
   );
 }
 
-/** What **Start everyone** did, seat by seat — "capped" said in words, because it means the hourly
- *  wake cap held that seat, not that the button failed. */
+/** What **Start everyone** did, seat by seat. A daemon older than ADR 790 can still answer
+ *  `capped`; an unknown result is shown as the word it sent, never as a blank. */
 export function StartAllResults({ seats }: { seats: StartAllReply['seats'] }) {
-  const word: Record<StartResult, string> = { started: 'started', capped: 'held by wake cap', offline: 'offline' };
+  const word: Record<string, string> = { started: 'started', offline: 'offline' };
   return (
     <div className="qa-all" role="status">
       <p className="qa-all__sum">{startAllSummary(seats)}</p>
@@ -104,7 +104,7 @@ export function StartAllResults({ seats }: { seats: StartAllReply['seats'] }) {
         <ul className="qa-all__list">
           {seats.map((s) => (
             <li key={s.seat} className={`is-${s.result}`}>
-              <span className="qa-all__seat">{s.seat}</span> {word[s.result]}
+              <span className="qa-all__seat">{s.seat}</span> {word[s.result] ?? s.result}
             </li>
           ))}
         </ul>

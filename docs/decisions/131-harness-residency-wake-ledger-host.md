@@ -357,6 +357,11 @@ time; on Postgres's read-committed default two polls could both insert. On the h
 held that transaction for 1 to 2.2 s, stalling every other write. ADR 576 derives outside it,
 writes each seat in a short transaction after a recheck, and adds a unique index on live leases._
 
+_2026-11-03 ([ADR 790](790-human-acts-pass-the-wake-caps.md), lane 01M6FXRD8C): `hourly_cap` and
+`cooldown_ms` now filter a seat's candidates instead of skipping the seat, and a candidate sent by a
+human Member passes both. Measured that day: ryder's second verified answer never woke it, because
+ryder had used its 2 wakes for the hour. An agent's act is gated as before._
+
 ## Observability & Evaluation
 
 **Traces** — one `musterd.residency.wake` span per actuation (lease → spawn → occupied →

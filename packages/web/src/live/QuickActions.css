@@ -73,9 +73,6 @@
   color: var(--lc-dim);
   font-weight: 600;
 }
-.qa-all__list .is-capped {
-  color: var(--lc-warn-ink);
-}
 @media (prefers-reduced-motion: reduce) {
   .qa__btn {
     transition-duration: 0s;
