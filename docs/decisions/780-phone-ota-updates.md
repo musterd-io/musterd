@@ -63,6 +63,14 @@ no runtime version. MoveTrail, nick's other Expo app, ships this way already.
   build quota; one tester is far inside it.
 - Rolling back is publishing the previous commit, or `eas update:republish`; a bad update that
   crashes on launch is rolled back by expo-updates itself, to the last update that launched.
+- 2026-11-03 (lane `01M6HX1K7E`): no update has ever been published. All three `ios-update` runs
+  failed. On 2026-11-02 run 41474244779 failed to bundle (`@musterd/protocol/app-channel` not
+  found). Runs 41481133925 (2026-11-02) and 41737479108 (2026-11-03) were refused by EAS: "EAS
+  Update code signing requires a subscription to the EAS Production or Enterprise plan". The free
+  plan does not sign updates, and the app refuses an unsigned one. So the free EAS Update allowance
+  named above never applies. nick decided on 2026-11-03 to ship every phone change through
+  `ios-testflight` for now (free macOS runner, no EAS build spent). Using over-the-air updates
+  again needs one of two things: a paid EAS plan, or a new ADR that drops code signing.
 
 ## Observability & Evaluation
 
