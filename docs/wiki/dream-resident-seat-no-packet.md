@@ -14,7 +14,13 @@ The refusal comes from the resident seat's bash allowlist, which admits `musterd
 
 The bash allowlist's musterd set gained `dream` (lane 01M6D8H4KF, PR pending). The 2026-10-13 claim above is invalidated from the first resident dream wake on a host running that build. What made it visible: delta-2's dream wake on night 2026-10-31 (lease 01M6ASCATTEKYY7AJ3TE0XFTBD, 05:30Z 2026-11-01) ran `musterd dream`, read the denial, and answered in text with no seat tool call, so the roster never saw it and the host recorded a failed wake at $0.07. Earlier nights happened to call `team_insight_save` and so occupied; the packet was still never read. (2026-11-01; falsify: a resident dream wake on a build after the fix where bash `musterd dream` still returns the denial) <!-- claim: other -->
 
-Night 2026-11-02, delta-2 printed `spawn bwrap ENOENT` on its first bash `musterd dream` (insight 01M6G1M0MN). The 2026-11-01 allowlist change is untested on that wake because the command did not start. Seen once.
+Night 2026-11-02, delta-2 printed `spawn bwrap ENOENT` on its first bash `musterd dream` (insight 01M6G1M0MN). The 2026-11-01 allowlist change is untested on that wake because the command did not start. ~~Seen once.~~ Seen again night 2026-11-03; promoted to the section below.
+
+## After the fix, bash cannot spawn at all on delta-2
+
+On delta-2, the dream wakes after the fix get a different refusal. Bash `musterd dream` returns `spawn failed: spawn bwrap ENOENT`: the bash sandbox wrapper (bubblewrap) is not on the seat's path, so no bash command runs at all, `musterd dream` included. Seen on night 2026-11-02 (insight 01M6G1M0MN1DV3FN5VF4BSH845) and again on night 2026-11-03 (insight 01M6HT8KEBVR1H1ZZ0Q3K3W39Y). The 2026-11-01 allowlist fix therefore cannot be checked on this seat yet: the denial above is now hidden behind the spawn failure. A dream on delta-2 cannot land a page either, because git, gh and `pnpm wiki:check` all go through bash. lazara promoted this from a Claude Code seat on a linux host where `which bwrap` prints `/usr/bin/bwrap`, so it is not missing everywhere; nobody has checked delta-2's host (2026-11-03; falsify: a later delta-2 dream bash call such as `ls` runs, or `which bwrap` on delta-2's host finds it) <!-- claim: defect -->
+
+The fix is on the host: install bubblewrap there, or point the resident seat's sandbox at where it is.
 
 ## What it costs
 
