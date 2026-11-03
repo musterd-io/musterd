@@ -2847,6 +2847,21 @@ it to remove a chunk. A re-baseline to measured + 15% would loosen.
 - Falsify: `pnpm perf:check` after a build reports initial JS at or under 154,500 B, total JS
   under 405,500 B and live CSS at or under 30,500 B with this lane in.
 
+## 2026-11-03 — window views, chooser and polish: total JS RAISED 409,000 → 410,000 B (lane 01M6ENHBPBSTJJZNA21Y0NBJR4)
+
+| Budget     | Ceiling   | This branch               | Move                       |
+| ---------- | --------- | ------------------------- | -------------------------- |
+| initial JS | 154,500 B | ~150.5 KB (CI)            | none                       |
+| total JS   | 409,000 B | ~409,293 B (CI, 399.7 KB) | RAISED 409,000 → 410,000 B |
+
+The "Outside" button (`ViewToggle.tsx`) and its pref (`viewPref.ts`) first went eager and pushed
+/live's initial JS 0.6 KB over; both now load lazily (the button with a same-size placeholder, the pref
+read inside the office chunk), and initial JS is back at 150.5 KB. What is left is ~0.8 KB in total:
+the lazy button chunk, `setView` and its plate gating, the lamp reflection and the horizon haze.
+
+- Falsify: `pnpm perf:check` after a build reports initial JS at or under 154,500 B and total JS at
+  or under 410,000 B with this lane in.
+
 ## 2026-11-02 — window views, coast and mountain: office art ~9,608,618 B (206 files), inside the ceiling (lane 01M6ENH3T54EPSBRM1RNZXBM9S)
 
 | Budget     | Ceiling     | This branch (files)       | Move                           |
