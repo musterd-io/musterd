@@ -1011,6 +1011,47 @@ describe('team policy command', () => {
     expect(cleared.stakes_defaults).toEqual([]);
   });
 
+  // ADR 794: seat tool grants. The flag replaces the whole seat_tools doc — the list is the set.
+  it('sets seat tools from JSON, shows it, rejects a bad plugin id, and clears with off', async () => {
+    const doc = {
+      shared: {
+        claude_plugins: ['superpowers@claude-plugins-official', 'github@claude-plugins-official'],
+      },
+      roles: { designer: { claude_plugins: ['design@synced'] } },
+    };
+    const set = await capture(() =>
+      teamCommand(parseArgs(['policy', '--seat-tools', JSON.stringify(doc)])),
+    );
+    expect(set.code).toBe(0);
+    expect(set.out).toContain('seat tools: shared 2, designer 1');
+
+    const json = JSON.parse(
+      (await capture(() => teamCommand(parseArgs(['policy', '--json'])))).out,
+    );
+    expect(json.seat_tools.shared.claude_plugins).toEqual(doc.shared.claude_plugins);
+    expect(json.seat_tools.roles.designer.claude_plugins).toEqual(['design@synced']);
+
+    await expect(
+      capture(() =>
+        teamCommand(
+          parseArgs(['policy', '--seat-tools', '{"shared":{"claude_plugins":["figma"]}}']),
+        ),
+      ),
+    ).rejects.toThrow(/seat-tools/);
+    await expect(
+      capture(() => teamCommand(parseArgs(['policy', '--seat-tools', '{not json']))),
+    ).rejects.toThrow(/seat-tools/);
+
+    await capture(() => teamCommand(parseArgs(['policy', '--seat-tools', 'off'])));
+    const cleared = JSON.parse(
+      (await capture(() => teamCommand(parseArgs(['policy', '--json'])))).out,
+    );
+    expect(cleared.seat_tools.shared.claude_plugins).toEqual([
+      'superpowers@claude-plugins-official',
+    ]);
+    expect(cleared.seat_tools.roles).toEqual({});
+  });
+
   // Guardian spec §4: the autonomy dial — flip one class without a release, never clobber siblings.
   it('sets a guardian tier, shows it, rejects junk, and clears with off', async () => {
     const set = await capture(() =>

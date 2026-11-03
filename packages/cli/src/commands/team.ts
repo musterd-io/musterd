@@ -22,6 +22,7 @@ import {
   TOKEN_PREFIXES,
   GuardianClassSchema,
   GuardianTierSchema,
+  SeatToolsPolicyOverrideSchema,
   type TeamFile,
 } from '@musterd/protocol';
 import {
@@ -202,6 +203,7 @@ export const TEAM_FLAGS = [
   'role',
   'rotate',
   'seat',
+  'seat-tools',
   'seeds-relay',
   'seeds-token',
   'session',
@@ -745,7 +747,7 @@ async function teamGrant(parsed: Parsed): Promise<number> {
  * [--agent-connect sponsor|any_member] [--invite-requires-expiry on|off]
  * [--sponsored-agent-cap <1–100>] [--spend-cap <usd|off>] [--spend-approval <usd|off>]
  * [--unpriced-wake-cap <n|off>] [--acceptance-review-window <1–1440 minutes>]
- * [--hosted-budget <usd|off>]` — show or set the
+ * [--hosted-budget <usd|off>] [--seat-tools <json|off>]` — show or set the
  * team governance policy (admin-only, audited `policy.change`). ADR 146: `--reseat-known-agents on`
  * opts the team into dogfood-mode re-seat — an already-held agent seat re-occupies without an admin
  * decision. ADR 147: `--ask-fallback-to-nonadmin on` lets an admin-unanswered ask fall back to
@@ -813,6 +815,7 @@ const POLICY_FLAGS = new Set([
   'away-token',
   'slack-bot-token',
   'guardian-tier',
+  'seat-tools',
   'stakes-default',
   'review-by',
   'enforce-clear',
@@ -1148,6 +1151,7 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   if (enforceChanged) changed = true;
   const stakesDefaultChanged = applyStakesDefaultFlag(merged, parsed);
   if (applyGuardianTierFlag(merged, parsed)) changed = true;
+  if (applySeatToolsFlag(merged, parsed)) changed = true;
   if (stakesDefaultChanged) changed = true;
 
   // ADR 533: the doc's review date. `--review-by <YYYY-MM-DD | +<duration>>` names one; any other
@@ -1479,6 +1483,57 @@ function applyGuardianTierFlag(merged: PolicyOverride, parsed: Parsed): boolean 
   if (!cls.success || !tier.success) throw new CliError(GUARDIAN_TIER_USAGE, 2);
   merged.guardian_tiers = { ...merged.guardian_tiers, [cls.data]: tier.data };
   process.stdout.write(`${theme.ok('✓')} guardian tier: ${cls.data} → ${tier.data}\n`);
+  return true;
+}
+
+const SEAT_TOOLS_USAGE =
+  'usage: musterd team policy --seat-tools \'{"shared":{"claude_plugins":["PLUGIN@MARKETPLACE"]},' +
+  '"roles":{"<role>":{"claude_plugins":[],"codex_plugins":[],"skills":[],"mcp_servers":[]}}}\' | off';
+
+/**
+ * ADR 794: the seat tool grants — what plugins, skills and human-layer MCP servers a seat may load.
+ * The value REPLACES the whole `seat_tools` doc, because each list is the whole set; `off` unsets
+ * it, and the default (superpowers shared, no role sets) comes back. Parsed through the protocol
+ * schema here (hard rule 4), so a bad plugin id is refused before anything is sent.
+ */
+function applySeatToolsFlag(merged: PolicyOverride, parsed: Parsed): boolean {
+  const raw = flagStr(parsed.flags, 'seat-tools');
+  if (raw === undefined) return false;
+  if (raw === 'off') {
+    delete merged.seat_tools;
+    process.stdout.write(`${theme.ok('✓')} seat tools: back to the default (superpowers shared)\n`);
+    return true;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new CliError(`--seat-tools is not JSON. ${SEAT_TOOLS_USAGE}`, 2);
+  }
+  const doc = SeatToolsPolicyOverrideSchema.safeParse(json);
+  if (!doc.success) {
+    const issue = doc.error.issues[0];
+    throw new CliError(
+      `--seat-tools: ${issue ? `${issue.path.join('.')}: ${issue.message}` : 'invalid'}. ${SEAT_TOOLS_USAGE}`,
+      2,
+    );
+  }
+  merged.seat_tools = doc.data;
+  const count = (set: {
+    claude_plugins: string[];
+    codex_plugins: string[];
+    skills: string[];
+    mcp_servers: string[];
+  }) =>
+    set.claude_plugins.length +
+    set.codex_plugins.length +
+    set.skills.length +
+    set.mcp_servers.length;
+  const parts = [
+    ...(doc.data.shared ? [`shared ${String(count(doc.data.shared))}`] : []),
+    ...Object.entries(doc.data.roles ?? {}).map(([role, set]) => `${role} ${String(count(set))}`),
+  ];
+  process.stdout.write(`${theme.ok('✓')} seat tools: ${parts.join(', ')}\n`);
   return true;
 }
 
