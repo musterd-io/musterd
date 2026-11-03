@@ -51,6 +51,8 @@ describe('the app-facing modules are node-free (ADR 694)', () => {
     './question.js',
     './question.infer.js',
     './question.wire.js',
+    // ADR 791: the quick-action vocabulary rides in through `/app-channel` (plain TypeScript).
+    './quickAction.wire.js',
   ]);
   it.each([
     './approval.ts',
@@ -58,6 +60,7 @@ describe('the app-facing modules are node-free (ADR 694)', () => {
     './question.ts',
     './question.infer.ts',
     './question.wire.ts',
+    './quickAction.wire.ts',
   ])('%s imports only zod and node-free siblings', (f) => {
     const imports = [...read(f).matchAll(/from '([^']+)'/g)].map((m) => m[1]);
     expect(imports.filter((i) => !NODE_FREE.has(i!))).toEqual([]);
