@@ -118,3 +118,27 @@ export async function loadPairingPin(): Promise<PairingPin | null> {
     return null;
   }
 }
+
+/**
+ * "Pair again" (lane 01M6FJFW66): forget the pairing on this phone so it can scan a new code.
+ * The native store goes first, then the JS outbox of kept answers. False when the native side
+ * could not delete everything; the screen then says so and keeps the pairing it shows.
+ */
+export async function forgetPairing(
+  deps: { forgetNative?: () => boolean; clearOutbox?: () => Promise<void> } = {},
+): Promise<boolean> {
+  const forgetNative = deps.forgetNative ?? (() => phoneKeys.forgetPairing());
+  let ok: boolean;
+  try {
+    ok = forgetNative();
+  } catch {
+    ok = false;
+  }
+  try {
+    const clear = deps.clearOutbox ?? (await import('./outbox')).clearOutbox;
+    await clear();
+  } catch {
+    // Kept answers expire on their own, and the daemon refuses keys it no longer holds.
+  }
+  return ok;
+}

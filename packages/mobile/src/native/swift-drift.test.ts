@@ -66,6 +66,17 @@ describe('the Swift extension matches the TypeScript sentences', () => {
     expect(store).toContain('seen-nonces');
     expect(store).toContain('push-token');
     expect(store).toContain('pairing-pin');
+    // Lane 01M6FJFW66: "Pair again" deletes the pin first and never the push token.
+    expect(store).toMatch(/pairingAccounts = \[\s*pinAccount,/);
+    expect(
+      store.slice(
+        store.indexOf('pairingAccounts = ['),
+        store.indexOf(']', store.indexOf('pairingAccounts = [')),
+      ),
+    ).not.toContain('pushAccount');
+    expect(read('packages/mobile/modules/musterd-keys/ios/MusterdKeysModule.swift')).toContain(
+      'Function("forgetPairing")',
+    );
     expect(keys).toContain('#if !NOTIFICATION_EXTENSION');
     const pkg = read('packages/mobile/package.json');
     expect(plugin).not.toMatch(/require\([^)]*expo-notifications/);

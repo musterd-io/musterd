@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { flushOutbox, sendOrKeep, type Outgoing, type OutboxStorage } from './outbox';
+import { clearOutbox, flushOutbox, sendOrKeep, type Outgoing, type OutboxStorage } from './outbox';
 
 function memory(initial: Outgoing[] = []): OutboxStorage & { value: () => Outgoing[] } {
   let raw: string | null = JSON.stringify(initial);
@@ -63,5 +63,15 @@ describe('flushOutbox', () => {
 
   it('says nothing waits when the outbox is empty', async () => {
     expect(await flushOutbox({ fetchImpl: status(), storage: memory(), now: 100 })).toBe(0);
+  });
+});
+
+describe('clearOutbox (lane 01M6FJFW66)', () => {
+  it('drops every kept answer', async () => {
+    const storage = memory([
+      { url: 'https://relay.example/app/revive/callback', body: '{}', ref: 'a1', expires_at: 9e12 },
+    ]);
+    await clearOutbox(storage);
+    expect(storage.value()).toEqual([]);
   });
 });

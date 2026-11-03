@@ -193,6 +193,13 @@ public final class MusterdKeysModule: Module {
       SharedStore.loadPairingPin()
     }
 
+    // "Pair again" (lane 01M6FJFW66): the pin and what the pairing left go first, then the keys.
+    // A pin left behind with its keys gone would show paired and fail every answer.
+    Function("forgetPairing") { () -> Bool in
+      let stored = SharedStore.forget(accounts: SharedStore.pairingAccounts)
+      return PhoneKeys.forgetKeys() && stored
+    }
+
     Function("takePendingAnswer") { () -> [String: String]? in
       guard let pending = PendingAnswers.take() else { return nil }
       return ["action": pending.action, "userInfo": pending.userInfoJSON]

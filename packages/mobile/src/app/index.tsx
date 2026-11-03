@@ -1,6 +1,15 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, FlatList, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  AppState,
+  FlatList,
+  Image,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import mark from '../../assets/mark.png';
 import type { AskEntry, AsksView } from '../native/asks';
 import { heldBody, refusalLine, waitingSubtitle } from '../native/notice';
@@ -148,6 +157,35 @@ export default function AsksScreen() {
     } else if (outcome === 'failed') {
       setNote('Couldn’t turn it on just now. Try again in a minute.');
     }
+  };
+
+  // Lane 01M6FJFW66: iOS keeps the pairing in the Keychain after the app is deleted, so this is
+  // the way back to the scan screen. Behind a confirm: it destroys this phone's keys.
+  const pairAgain = () => {
+    Alert.alert(
+      'Pair this phone again?',
+      `This phone forgets ${pin?.team ?? 'its team'} and its keys. Asks stop reaching it until you scan a new code. Unpair it on /live too.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Forget and pair again',
+          style: 'destructive',
+          onPress: () =>
+            void (async () => {
+              const { forgetPairing } = await import('../native/pairingPin');
+              const ok = await forgetPairing();
+              if (!alive.current) return;
+              setNote(
+                ok
+                  ? 'Forgotten. Scan a new code from /live to pair.'
+                  : 'Couldn’t forget everything. Try again.',
+              );
+              setView(null);
+              await refresh(false);
+            })(),
+        },
+      ],
+    );
   };
 
   const paired = Boolean(pin?.binding);
@@ -307,8 +345,22 @@ export default function AsksScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={empty}
         ListFooterComponent={
-          diagnostics ? (
-            <Text style={[styles.diagnostics, { color: p.placeholder }]}>{diagnostics}</Text>
+          diagnostics || pin ? (
+            <View style={styles.footer}>
+              {diagnostics ? (
+                <Text style={[styles.diagnostics, { color: p.placeholder }]}>{diagnostics}</Text>
+              ) : null}
+              {pin ? (
+                <Squish
+                  accessibilityRole="button"
+                  accessibilityLabel="Pair this phone again"
+                  onPress={pairAgain}
+                  style={styles.textButton}
+                >
+                  <Text style={[styles.textButtonText, { color: p.muted }]}>Pair again</Text>
+                </Squish>
+              ) : null}
+            </View>
           ) : undefined
         }
         refreshControl={
@@ -401,6 +453,7 @@ function AskRow({ entry }: { entry: AskEntry }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  footer: { gap: space.md, alignItems: 'center' },
   list: { padding: space.lg, paddingTop: space.md, gap: space.md, paddingBottom: space.xl * 2 },
   header: { gap: space.md, marginBottom: space.sm },
   greeting: { fontFamily: font.medium, fontSize: 15 },
