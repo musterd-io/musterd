@@ -412,10 +412,11 @@ describe('milestone moments (E3 spec)', () => {
 });
 
 describe('the sound re-evaluation (lane 01M6096TA7)', () => {
-  it('the stream cue table is the five gestures and nothing else (sound identity spec §2.3–2.4)', () => {
+  it('the stream cue table is the four gestures and nothing else (sound identity spec §2.3–2.4)', () => {
     expect(Object.keys(CUES).sort()).toEqual(['arrive', 'handoff', 'question', 'redirect']);
-    // `done` is the bar voice, not a recipe — and every folded act maps to no gesture at all.
-    expect(gestureFor('accept')).toBe('done');
+    // An accept is the office's to show (the goal bell spec took the chime away), and every folded
+    // act maps to no gesture at all.
+    expect(gestureFor('accept')).toBeNull();
     expect(gestureFor('message')).toBeNull();
     const peak = (g: string) => Math.max(...CUES[g]!.map((n) => n.gain));
     for (const g of Object.keys(CUES)) expect(peak(g)).toBeLessThanOrEqual(0.09);

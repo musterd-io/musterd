@@ -16,17 +16,15 @@
 
 import { EMPTY_LIFE, type LifeContext } from './sound';
 import {
-  CHIME_BARS,
-  chordBars,
-  chordOffsets,
+  BELL_HZ,
+  BELL_PARTIALS,
+  DING_HZ,
   gestureFor,
   jitterStrike,
   keyboardFor,
   keypressPlan,
   lifeGapFor,
   type Moment,
-  type MomentDetail,
-  rollOffsets,
   momentPan,
   panFor,
   pickLifeEvent,
@@ -48,7 +46,7 @@ interface Note {
   gain: number;
 }
 
-// The low end of the chimes' C-major pentatonic (`CHIME_BARS`) — the stream's gestures sit under the bars.
+// The stream's gestures: C-major pentatonic, so a cue beside another is consonant.
 const C4 = 261.63;
 const D4 = 293.66;
 const E4 = 329.63;
@@ -62,9 +60,9 @@ const sine: OscillatorType = 'sine';
  * The five gestures (sound identity spec §2.3), as the stream's own cue table — one recipe per
  * gesture, keyed by gesture not act; `gestureFor` maps an act onto one, and the acts it maps to
  * null (message, status_update, wait, defer, resolve, end) are silent here by design: the office
- * shows them and the eye is enough. All in the chimes' pentatonic scale, so a cue beside a chord
- * is consonant. `done` is not in this table: a lane done is the shelf chimes (a bar voice), and
- * `chime('accept')` strikes a bar below.
+ * shows them and the eye is enough (an accept included: the office celebrates it). All in one
+ * pentatonic scale, so a cue beside another is consonant. A lane done is the room's ding and a goal
+ * the bell (goal bell spec), never a stream cue.
  */
 /** Exported for the sound tests only — the engine is the one reader. */
 /**
@@ -135,11 +133,10 @@ export const CUES: Record<string, Note[]> = {
 const BROADCAST_MASTER_GAIN = 4;
 
 /**
- * The bar voice — the one instrument of the musterd layer (sound identity spec §2.2). A struck bar:
+ * The bar voice (sound identity spec §2.2), now the lane's ding (goal bell spec). A struck bar:
  * a sine fundamental, one inharmonic partial at ×2.76 (what makes it a bar and not a keyboard
  * preset), a breath of lowpassed noise for the mallet, soft 8 ms attack, a 1.5–2.5 s decay. Every
- * strike is jittered (±4 cents, ±8 % gain, ±15 % decay) so no two are bit-identical. Shared by both
- * engines: the stream's `chime('accept')` and the room's `laneDone`/`goalDone` are the same bars.
+ * strike is jittered (±4 cents, ±8 % gain, ±15 % decay) so no two are bit-identical.
  */
 function strikeBar(ctx: AudioContext, out: AudioNode, at: number, freq: number, gain: number, decay: number): void {
   const s = jitterStrike(freq, gain, decay);
@@ -239,10 +236,6 @@ export class FirehoseSound {
     if (!ctx || !master || ctx.state !== 'running') return;
     const gesture = gestureFor(act);
     if (gesture === null) return; // folded into the room (§2.4): the office shows it
-    if (gesture === 'done') {
-      strikeBar(ctx, master, ctx.currentTime + 0.005, CHIME_BARS[5]!, 0.09, 1.8);
-      return;
-    }
     const notes = CUES[gesture]!;
     const start = ctx.currentTime + 0.005;
     for (const n of notes) {
@@ -521,7 +514,7 @@ export class RoomTone {
    * once (dropped, never queued); the ×0.75 stereo squeeze happens HERE and nowhere else —
    * `pan` arrives raw [-1, 1] from `screenPan` at the emit site.
    */
-  moment(name: Moment, pan: number, panTo?: number, detail?: MomentDetail): void {
+  moment(name: Moment, pan: number, panTo?: number): void {
     const ctx = this.ctx;
     const bus = this.lifeBus;
     if (!ctx || !bus || ctx.state !== 'running' || this.isHidden()) return;
@@ -535,15 +528,15 @@ export class RoomTone {
       this.lastMomentAt = now + delay;
       if (delay > 0) {
         // a chime behind another: queued a beat back, never dropped (lane 01M625KHCN)
-        setTimeout(() => this.voice(name, pan, panTo, detail), delay);
+        setTimeout(() => this.voice(name, pan, panTo), delay);
         return;
       }
     }
-    this.voice(name, pan, panTo, detail);
+    this.voice(name, pan, panTo);
   }
 
   /** Play `name` now — the half of `moment` after the gate. */
-  private voice(name: Moment, pan: number, panTo?: number, detail?: MomentDetail): void {
+  private voice(name: Moment, pan: number, panTo?: number): void {
     const ctx = this.ctx;
     const bus = this.lifeBus;
     if (!ctx || !bus || ctx.state !== 'running') return;
@@ -580,7 +573,7 @@ export class RoomTone {
       case 'eatAt': return this.eating(ctx, out);
       case 'machine': return this.machine(ctx, out);
       // the musterd voice (sound identity spec §2.2–2.3)
-      case 'laneDone': return this.laneDone(ctx, out, detail);
+      case 'laneDone': return this.laneDone(ctx, out);
       case 'goalDone': return this.goalDone(ctx, out);
       case 'question': return this.cueNotes(ctx, out, CUES['question']!, 0.018);
       case 'redirect': return this.cueNotes(ctx, out, CUES['redirect']!, 0.02);
@@ -596,25 +589,31 @@ export class RoomTone {
     }
   }
 
-  /** A lane done: one bar of the shelf chimes, or a small rolled chord sized by the lane's chain.
-   *  The bar is the lane's own (`barForLane` at the emit site); the chord climbs from it. ~3× a
-   *  keystroke: a struck bar across a room. */
-  private laneDone(ctx: AudioContext, out: AudioNode, detail?: MomentDetail): void {
-    const bar = detail?.bar ?? 5;
-    const voices = detail?.voices ?? 1;
-    const bars = chordBars(bar, voices);
-    const offsets = chordOffsets(voices);
-    const t0 = ctx.currentTime + 0.02;
-    bars.forEach((b, i) => strikeBar(ctx, out, t0 + offsets[i]!, CHIME_BARS[b]!, 0.022, 1.8)); // 0.03 → 0.022 (inc 3, measured +13 dB over keys; ~+10 now)
+  /** A lane done: one soft ding at the closer's desk, the goal bell's smaller, higher cousin (goal
+   *  bell spec). One note whoever was in the lane's chain. */
+  private laneDone(ctx: AudioContext, out: AudioNode): void {
+    strikeBar(ctx, out, ctx.currentTime + 0.02, DING_HZ, 0.016, 1.4);
   }
 
-  /** A goal done: the whole scale rolled once, bottom to top, the top bar allowed to ring out. The
-   *  only time all eight sound, and the loudest thing the room ever plays. */
+  /** A goal done: the goal bell, struck once and left to ring. Its partials (`BELL_PARTIALS`) decay
+   *  from 4.5 s at the strike note to 0.8 s at the top, the loudest thing the room ever plays. */
   private goalDone(ctx: AudioContext, out: AudioNode): void {
-    const offsets = rollOffsets();
     const t0 = ctx.currentTime + 0.02;
-    // 0.028 / 0.034 → 0.02 / 0.024 (inc 3): the roll measured +21 dB over a keystroke; ~+18 now.
-    CHIME_BARS.forEach((f, i) => strikeBar(ctx, out, t0 + offsets[i]!, f, i === CHIME_BARS.length - 1 ? 0.024 : 0.02, i === CHIME_BARS.length - 1 ? 2.6 : 1.6));
+    BELL_PARTIALS.forEach((m, i) => {
+      const k = i / (BELL_PARTIALS.length - 1);
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = BELL_HZ * m;
+      const env = ctx.createGain();
+      const peak = 0.026 * (1 - k * 0.7);
+      const decay = 4.5 - k * 3.7;
+      env.gain.setValueAtTime(0.0001, t0);
+      env.gain.exponentialRampToValueAtTime(peak, t0 + 0.004);
+      env.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+      o.connect(env).connect(out);
+      o.start(t0);
+      o.stop(t0 + decay + 0.05);
+    });
   }
 
   /** A gesture's notes played as a placed desk bell on the LIFE bus: the recipe's shape at the

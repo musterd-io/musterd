@@ -849,7 +849,7 @@ function OfficePreviewPage() {
         )}
         <button
           className="lc__pbtn"
-          title="a lane done (Ada pins the card; the shelf chimes ring and swing)"
+          title="a lane done (Ada pins the card; a ding and a glow at her desk)"
           onClick={() =>
             fire({ kind: 'walk-pin', who: 'Ada', lane: `preview-done-${Date.now()}`, title: 'Ship the tour', state: 'done' })
           }
@@ -858,7 +858,7 @@ function OfficePreviewPage() {
         </button>
         <button
           className="lc__pbtn"
-          title="a goal shipped (the chimes roll the whole scale)"
+          title="a goal shipped (the goal bell rings)"
           onClick={() => fire({ kind: 'goal-done', who: 'Cy', goal: 'preview-goal' })}
         >
           ♫

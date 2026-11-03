@@ -1,26 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import {
-  CHIME_BARS,
-  CHIME_QUEUE_GAP_MS,
-  chimeDelay,
-  barForLane,
-  chordBars,
-  chordOffsets,
-  gestureFor,
-  jitterStrike,
-  rollOffsets,
-  voicesForChain,
-} from './soundLife';
+import { BELL_HZ, BELL_PARTIALS, CHIME_QUEUE_GAP_MS, DING_HZ, chimeDelay, gestureFor, jitterStrike } from './soundLife';
 
 describe('the musterd voice (sound identity spec §2.2–2.4)', () => {
-  it('has eight pentatonic bars rising from C4', () => {
-    expect(CHIME_BARS).toHaveLength(8);
-    for (let i = 1; i < CHIME_BARS.length; i++) expect(CHIME_BARS[i]!).toBeGreaterThan(CHIME_BARS[i - 1]!);
-    expect(CHIME_BARS[0]).toBeCloseTo(261.63, 1);
+  it('rings the goal bell at C5 with partials up from the strike, and dings a lane an octave over it', () => {
+    expect(BELL_HZ).toBeCloseTo(523.25, 2);
+    expect(BELL_PARTIALS[0]).toBe(1);
+    for (let i = 1; i < BELL_PARTIALS.length; i++) expect(BELL_PARTIALS[i]!).toBeGreaterThan(BELL_PARTIALS[i - 1]!);
+    expect(DING_HZ).toBeCloseTo(BELL_HZ * 2, 2);
   });
 
-  it('maps every act to one of five gestures or to silence', () => {
-    expect(gestureFor('accept')).toBe('done');
+  it('maps every act to a gesture or to silence; an accept is for the office to show, not a chime', () => {
+    expect(gestureFor('accept')).toBeNull();
     expect(gestureFor('ask')).toBe('question');
     expect(gestureFor('request_help')).toBe('question');
     expect(gestureFor('steer')).toBe('redirect');
@@ -30,39 +20,6 @@ describe('the musterd voice (sound identity spec §2.2–2.4)', () => {
     for (const folded of ['message', 'status_update', 'wait', 'defer', 'resolve', 'end', 'insight']) {
       expect(gestureFor(folded)).toBeNull();
     }
-  });
-
-  it('rings the same bar for the same lane, and spreads lanes across the eight', () => {
-    expect(barForLane('01M61R493R3PE8EMD2JTVBJWF4')).toBe(barForLane('01M61R493R3PE8EMD2JTVBJWF4'));
-    const seen = new Set<number>();
-    for (let i = 0; i < 200; i++) seen.add(barForLane(`01M61R4${i.toString(36).padStart(19, '0')}`));
-    expect(seen.size).toBe(8);
-    for (const b of seen) expect(b).toBeGreaterThanOrEqual(0);
-  });
-
-  it('sizes the chord by distinct seats in the chain, one to three', () => {
-    expect(voicesForChain([])).toBe(1);
-    expect(voicesForChain([null, undefined, ''])).toBe(1);
-    expect(voicesForChain(['nick', 'miley', 'miley'])).toBe(2);
-    expect(voicesForChain(['nick', 'miley', 'izzo'])).toBe(3);
-    expect(voicesForChain(['nick', 'miley', 'izzo', 'dolly'])).toBe(3);
-  });
-
-  it('builds a chord upward and folds it down at the top so it never leaves the eight', () => {
-    expect(chordBars(2, 3)).toEqual([2, 3, 4]);
-    expect(chordBars(7, 1)).toEqual([7]);
-    expect(chordBars(7, 3)).toEqual([5, 6, 7]);
-    expect(chordBars(6, 2)).toEqual([6, 7]);
-  });
-
-  it('rolls a chord 15–40 ms apart and the goal 60–90 ms apart, all eight', () => {
-    const lo = chordOffsets(3, () => 0);
-    const hi = chordOffsets(3, () => 1);
-    expect(lo).toEqual([0, 0.015, 0.03]);
-    expect(hi[2]).toBeCloseTo(0.08, 5);
-    expect(rollOffsets(() => 0)).toHaveLength(8);
-    expect(rollOffsets(() => 0)[7]).toBeCloseTo(0.42, 5);
-    expect(rollOffsets(() => 1)[7]).toBeCloseTo(0.63, 5);
   });
 
   it('jitters every strike within ±4 cents, ±8% gain, ±15% decay', () => {
@@ -76,7 +33,7 @@ describe('the musterd voice (sound identity spec §2.2–2.4)', () => {
   });
 });
 
-describe('the chimes queue under the moment gate instead of dropping (lane 01M625KHCN)', () => {
+describe('the ding and the bell queue under the moment gate instead of dropping (lane 01M625KHCN)', () => {
   it('a lane done behind another waits a beat; a third waits two; other moments still drop', () => {
     expect(chimeDelay('laneDone', 1000, -Infinity)).toBe(0);
     expect(chimeDelay('laneDone', 1000, 1000)).toBe(CHIME_QUEUE_GAP_MS);

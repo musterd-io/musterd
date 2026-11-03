@@ -4,7 +4,8 @@ import { preloadCanvasFont } from '../canvasFont';
 import { pulseIntensity, pulseLive, type SeatPulse } from '../pulse';
 import { roomTone, screenPan, type LifeContext } from '../sound';
 import type { Moment } from '../soundLife';
-import { CHIME_BARS, barForLane, chordBars, gestureFor, voicesForChain } from '../soundVoice';
+import { gestureFor } from '../soundVoice';
+import { DESK_GLOW_S } from './deskGlow';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
@@ -80,7 +81,6 @@ import { createWelcomeRoom, type WelcomeSoundAt } from './welcomeRoom';
 import {
   animatedDeskAnchors,
   binMouthPoint,
-  CHIME_SWING_S,
   boardAnchor,
   boardSpotPoint,
   hoursAnchor,
@@ -1114,22 +1114,19 @@ export function mountOffice(
   }
   /** Who owns each lane the room has watched (lane 01M4V774MK): the deliver walk's carrier. */
   const laneOwners = createLaneOwners();
-  /** Lanes whose done already rang the chimes — `lane_resolve` and `lane_state` can both say done. */
+  /** Lanes whose done already dinged — `lane_resolve` and `lane_state` can both say done. */
   const rangDone = new Set<string>();
   let lastLaneDoneAt = -Infinity;
-  /** When each shelf-chime bar was last struck, scene-clock seconds — the swing reads it (inc 4). */
-  const chimeHits: number[] = Array.from({ length: CHIME_BARS.length }, () => -Infinity);
-  const chimesSwinging = (): boolean => clock - Math.max(...chimeHits) < CHIME_SWING_S;
-  /** Mark bars struck (now, or `at` seconds from now) and keep the loop alive for the swing. Audio
-   *  is not motion: the strike itself plays regardless; only this visible swing is gated. */
-  const strikeChimes = (bars: readonly number[], offsets: readonly number[] = []): void => {
-    if (reduced) return;
-    bars.forEach((b, i) => {
-      chimeHits[b] = clock + (offsets[i] ?? 0);
-    });
-    ensureLoop();
+  /** When each member last closed a lane, scene-clock seconds: their desk glows (goal bell spec). */
+  const deskGlows = new Map<string, number>();
+  const desksGlowing = (): boolean => {
+    for (const [who, at] of deskGlows) {
+      if (clock - at < DESK_GLOW_S) return true;
+      deskGlows.delete(who);
+    }
+    return false;
   };
-  /** Where the shelf chimes hang: beside the work board (sound identity spec §2.2). */
+  /** Where the work board hangs, as a stereo pan: the goal bell rings from there. */
   const boardPan = (): number => screenPan(boardAnchor(fit).x + boardAnchor(fit).w / 2, width);
   let seededOwners: ReadonlyMap<string, string> | undefined; // the board map last handed to `laneOwners.seed`
   /** True while `drainReplay` emits: a replayed walk is older than the board, so it never notes an owner. */
@@ -1324,7 +1321,7 @@ export function mountOffice(
       recep,
       wallBoardNow(),
       teamWorkingHours,
-      { welcome: welcomeRoom.paint, rendered, weather, chimes: chimeHits, visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
+      { welcome: welcomeRoom.paint, rendered, weather, deskGlows, visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
     );
     heads = anchors.heads;
     // The receptionist's bubble anchor — synthetic head above her desk. syncLabels skips names
@@ -2500,7 +2497,7 @@ export function mountOffice(
       recep,
       f.board,
       teamWorkingHours,
-      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, chimes: chimeHits, visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
+      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, deskGlows, visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
     );
     if (units) units.run(() => drawCues(c));
     else drawCues(c);
@@ -2920,7 +2917,7 @@ export function mountOffice(
 
   /** Is anything actually happening right now? One home — two doors used to spell this out separately. */
   const alive = () =>
-    living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active()) || chimesSwinging();
+    living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active()) || desksGlowing();
   /*
    * Coming back to a room that stopped being watched. There are two doors — the tab becoming visible
    * again and the panel re-expanding — and they ask the SAME question: the loop if the room is alive,
@@ -3665,32 +3662,24 @@ export function mountOffice(
       }
       return;
     }
-    // The shelf chimes (sound identity spec §2.2) ring ABOVE the motion gate — audio is not motion.
-    // A lane reaching done by any route rings its own bar at the work board, once per lane; the
-    // chord is one bar per distinct seat the room can see in its chain (closer, owner). A goal
-    // shipping rolls the whole scale. Replays are older than the board and ring nothing.
+    // A lane done (goal bell spec): one soft ding at the closer's desk and a short glow there; a goal
+    // shipping rings the bell over the board. Sound sits ABOVE the motion gate: audio is not motion.
+    // Replays are older than the board and ring nothing.
     if (ev.kind === 'walk-pin' && ev.state === 'done' && !replaying && !rangDone.has(ev.lane)) {
       rangDone.add(ev.lane);
       if (rangDone.size > 200) for (const oldest of rangDone) { rangDone.delete(oldest); break; }
       lastLaneDoneAt = Date.now();
-      const bar = barForLane(ev.lane);
-      const voices = voicesForChain([ev.who, laneOwners.carrier(ev.lane, ev.who)]);
-      roomTone.moment('laneDone', boardPan(), undefined, { bar, voices });
-      strikeChimes(chordBars(bar, voices), [0, 0.03, 0.06]);
+      const desk = heads.get(ev.who);
+      roomTone.moment('laneDone', desk ? screenPan(desk.x, width) : boardPan());
+      deskGlows.set(ev.who, clock);
+      ensureLoop();
     }
     if (ev.kind === 'goal-done' && !replaying) {
-      // The roll wins over a lane chord struck the same instant (§6.1): the moment gate drops, never
-      // queues, so the roll waits out the gap instead of being eaten by its own last lane.
+      // A goal's last lane dings first; the bell waits out the gap rather than landing on it.
       const wait = Math.max(0, 420 - (Date.now() - lastLaneDoneAt));
-      const roll = () => {
-        roomTone.moment('goalDone', boardPan());
-        strikeChimes(
-          CHIME_BARS.map((_, i) => i),
-          CHIME_BARS.map((_, i) => i * 0.075),
-        );
-      };
-      if (wait === 0) roll();
-      else setTimeout(roll, wait);
+      const ring = () => roomTone.moment('goalDone', boardPan());
+      if (wait === 0) ring();
+      else setTimeout(ring, wait);
     }
     if (ev.kind === 'walk-handoff') {
       // Passing hands (§2.3): one note at the sender's desk, the answer a third up at the receiver's.

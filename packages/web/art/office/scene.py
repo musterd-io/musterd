@@ -1166,7 +1166,7 @@ HANGER = (0, 0.52, 0.76)  # wall, tc, uTop
 SIGNS = {  # signs.ts SIGNS: name -> (wall, tc, uc, w, h, text, lamp)
     "wiki": (0, 0.205, 0.53, 26, 16, "wiki", True),
     "settings": (1, 0.52, 0.1185, 70, 16, "settings", False),
-    "board": (1, 0.945, 0.854, 64, 17, "work board", True),
+    "board": (1, 0.8922, 0.875, 64, 17, "work board", True),
 }
 BOARD = (1, 0.8922, 0.4787, 170, 120)  # layout.ts WALL_BOARD
 BOARD_GUTTER = 26  # render.ts BOARD_GUTTER: the goal tabs hang left of the columns (ADR 751)

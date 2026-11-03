@@ -217,7 +217,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
         if (!chimedRef.current.has(e.id) && Date.now() - e.ts < 30_000) {
           chimedRef.current.add(e.id);
           // One sound per act (sound identity spec §6.1): when the room tone is on, the office places
-          // every gesture at its object (the chimes, a desk bell, the door), so the stream's centred
+          // every gesture at its object (the goal bell, a desk bell, the door), so the stream's centred
           // cue stands down; it plays only when the cues are the one engine on.
           if (!roomTone.enabled) firehoseSound.chime(e.act);
         }

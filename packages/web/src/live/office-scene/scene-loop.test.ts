@@ -427,15 +427,13 @@ describe('the companion gesture rides a beat that played (ADR 617)', () => {
 
 describe('the musterd voice at its objects (sound identity spec §2.2–2.3, lane 01M61R4CBA)', () => {
   const emitBody = index.slice(index.indexOf('function emit(ev: OfficeEvent)'), index.indexOf("    switch (ev.kind) {", index.indexOf('function emit(ev: OfficeEvent)')));
-  it('rings the chimes at the board for a lane done by any route, once per lane, never on replay', () => {
+  it('dings a lane done once, at the closer, never on replay, and glows their desk', () => {
     expect(emitBody).toContain("ev.kind === 'walk-pin' && ev.state === 'done' && !replaying && !rangDone.has(ev.lane)");
-    expect(emitBody).toContain("roomTone.moment('laneDone', boardPan()");
-    expect(emitBody).toContain('const bar = barForLane(ev.lane)');
-    expect(emitBody).toContain('voicesForChain([ev.who, laneOwners.carrier(ev.lane, ev.who)])');
-    expect(emitBody).toContain("roomTone.moment('laneDone', boardPan(), undefined, { bar, voices })");
+    expect(emitBody).toContain("roomTone.moment('laneDone', desk ? screenPan(desk.x, width) : boardPan())");
+    expect(emitBody).toContain('deskGlows.set(ev.who, clock)');
     expect(index).not.toContain("roomTone.moment('fanfare'");
   });
-  it('rolls the scale for a goal shipped, waiting out the gate behind its last lane', () => {
+  it('rings the goal bell for a goal shipped, waiting out the gate behind its last lane', () => {
     expect(emitBody).toContain("ev.kind === 'goal-done' && !replaying");
     expect(emitBody).toContain("roomTone.moment('goalDone', boardPan())");
     expect(emitBody).toContain('420 - (Date.now() - lastLaneDoneAt)');
@@ -457,14 +455,10 @@ describe('the musterd voice at its objects (sound identity spec §2.2–2.3, lan
   });
 });
 
-describe('the shelf chimes swing when struck (sound identity inc 4, lane 01M61R4HQ3)', () => {
-  it('records the struck bars on a lane done and the whole scale on a goal, keeps the loop alive, and is gated by reduced motion', () => {
-    expect(index).toContain('strikeChimes(chordBars(bar, voices), [0, 0.03, 0.06])');
-    expect(index).toContain('CHIME_BARS.map((_, i) => i * 0.075)');
-    const fn = index.slice(index.indexOf('const strikeChimes ='), index.indexOf('ensureLoop();', index.indexOf('const strikeChimes =')) + 13);
-    expect(fn).toContain('if (reduced) return;');
-    expect(fn).toContain('ensureLoop();');
-    expect(index).toContain('|| chimesSwinging()');
-    expect((index.match(/chimes: chimeHits/g) ?? []).length).toBe(2);
+describe('a lane done glows the closer\'s desk (goal bell spec)', () => {
+  it('keeps the loop alive while a desk glows and hands the glows to both paints', () => {
+    expect(index).toContain('|| desksGlowing()');
+    expect((index.match(/weather, deskGlows, visitor/g) ?? []).length).toBe(2);
+    expect(index).not.toContain('chime');
   });
 });
