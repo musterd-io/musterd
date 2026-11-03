@@ -13,6 +13,7 @@ import { AccountStatusSchema, CapabilitiesSchema } from './capabilities.js';
 import { WAKEABILITIES, WIRE_ATTESTATION_SOURCES } from './model.js';
 import { OfflineReasonSchema } from './offline.js';
 import { PostureSchema } from './posture.js';
+import { ShiftStateSchema } from './shift.js';
 import { StyleDialsSchema, StyleEpochSchema } from './style.js';
 import { WorkingHoursSchema, type WorkingHours } from './working-hours.js';
 
@@ -340,6 +341,8 @@ export const MemberSummarySchema = MemberSchema.extend({
    * bound" is a real state the server reports as null, distinct from an older daemon's absence.
    */
   residence: ResidenceSchema.nullish(),
+  /** ADR 792: the seat's shift today; null for a human, or a seat with no shift today. */
+  shift: ShiftStateSchema.nullish(),
   /**
    * ADR 676 §8: how many of this seat's asks a human declined as "I did not expect this" on the
    * musterd app in the last {@link REPORTED_ASKS_WINDOW_MS}, and when the latest was. /live flags the
