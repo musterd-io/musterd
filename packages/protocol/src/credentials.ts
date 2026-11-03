@@ -9,6 +9,7 @@ import { LoopsPolicySchema } from './loops.js';
 import { PullPolicySchema } from './pull.js';
 import { ResidencyPolicyOverrideSchema, ResidencyPolicySchema } from './residency.js';
 import { sparsePartial } from './schema.js';
+import { SeatToolsPolicyOverrideSchema, SeatToolsPolicySchema } from './seatTools.js';
 import { StylePolicyOverrideSchema, StylePolicySchema } from './style.js';
 import { TracePolicySchema } from './trace.js';
 import { WikiSourceSchema } from './wiki.js';
@@ -241,6 +242,12 @@ export const PolicySchema = z.object({
    */
   guardian_tiers: GuardianTiersSchema.prefault({}),
   /**
+   * Seat tool grants (ADR 794): the team's shared set and per-role sets of plugins, skills and
+   * human-layer MCP servers a seat may load. `parse({})` shares superpowers only. Not a secret —
+   * seats read it through the scoped `GET /seat-tools`, as `/guardian-tiers`.
+   */
+  seat_tools: SeatToolsPolicySchema.prefault({}),
+  /**
    * Shared-blocker convergence (incident spec §5, ADR 268). Unlike every block above it, this one
    * is NOT inert on `parse({})` — increment 1 shipped clustering on for every team, so the default
    * reproduces it and `enabled: false` is the opt-out. The two wake knobs inside it are opt-in, for
@@ -380,6 +387,7 @@ export const PolicyOverrideSchema = sparsePartial(PolicySchema).extend({
   trace: sparsePartial(TracePolicySchema).optional(),
   agent_host: sparsePartial(AgentHostPolicySchema).optional(),
   style: StylePolicyOverrideSchema.optional(),
+  seat_tools: SeatToolsPolicyOverrideSchema.optional(),
 });
 export type PolicyOverride = z.infer<typeof PolicyOverrideSchema>;
 
@@ -403,6 +411,7 @@ const POLICY_SUB_SCHEMAS = {
   trace: TracePolicySchema,
   agent_host: AgentHostPolicySchema,
   style: StylePolicySchema,
+  seat_tools: SeatToolsPolicySchema,
 } as const;
 
 /** Strip the keys of one sub-object that equal their current schema default; undefined if none survive. */

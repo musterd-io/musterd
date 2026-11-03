@@ -131,6 +131,8 @@ import {
   type SampleInput,
   type SampleResult,
   type Seed,
+  type SeatToolsPolicy,
+  SeatToolsResponseSchema,
   type SubmitSeedBrief,
   type PromoteSeed,
   type CaptureRepoSeed,
@@ -2393,6 +2395,15 @@ export class HttpClient {
     return (await this.request('GET', `/teams/${slug}/guardian-tiers`)) as {
       guardian_tiers: GuardianTiers;
     };
+  }
+
+  /** The seat tool grants (ADR 794) — the scoped member read a seat's provisioning uses to learn
+   *  its declared set; the full policy is admin-only. Parsed at the boundary (hard rule 4). */
+  async getSeatTools(slug: string): Promise<{ seat_tools: SeatToolsPolicy }> {
+    const json = await this.request('GET', `/teams/${slug}/seat-tools`);
+    const parsed = SeatToolsResponseSchema.safeParse(json);
+    if (!parsed.success) throw await this.schemaFailure(parsed.error, 'seat tools');
+    return parsed.data;
   }
 
   /** Set the team governance policy — `POST /teams/:slug/policy`, admin, audited `policy.change`.

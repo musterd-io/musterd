@@ -339,4 +339,60 @@ withDrivers('policy-http', (_o, kind) => {
       expect(tiers.json).toEqual({ guardian_tiers: {} });
     });
   });
+
+  describe('GET /seat-tools — the scoped member read (ADR 794)', () => {
+    async function seatToken(): Promise<string> {
+      const minted = await post(
+        '/teams/dawn/members',
+        { name: 'probe', kind: 'service', role: 'platform' },
+        bearer(nickCred),
+      );
+      return minted.json.token as string;
+    }
+
+    it('a seat reads the default set on an untouched team', async () => {
+      const r = await get('/teams/dawn/seat-tools', bearer(await seatToken()));
+      expect(r.status).toBe(200);
+      expect(r.json).toEqual({
+        seat_tools: {
+          shared: {
+            claude_plugins: ['superpowers@claude-plugins-official'],
+            codex_plugins: [],
+            skills: [],
+            mcp_servers: [],
+          },
+          roles: {},
+        },
+      });
+    });
+
+    it('a seat reads a stored role set, and no other policy field rides along', async () => {
+      await post(
+        '/teams/dawn/policy',
+        {
+          seat_tools: {
+            roles: { designer: { claude_plugins: ['figma@claude-plugins-official'] } },
+          },
+          ask_slack_webhook: 'https://hooks.example.com/s',
+        },
+        bearer(nickCred),
+      );
+      const r = await get('/teams/dawn/seat-tools', bearer(await seatToken()));
+      expect(r.status).toBe(200);
+      expect(Object.keys(r.json)).toEqual(['seat_tools']);
+      expect(r.json.seat_tools.roles.designer.claude_plugins).toEqual([
+        'figma@claude-plugins-official',
+      ]);
+      expect(JSON.stringify(r.json)).not.toContain('hooks.example.com');
+    });
+
+    it('a seat cannot write seat_tools', async () => {
+      const write = await post(
+        '/teams/dawn/policy',
+        { seat_tools: { shared: { claude_plugins: ['posthog@claude-plugins-official'] } } },
+        bearer(await seatToken()),
+      );
+      expect(write.status).toBe(403);
+    });
+  });
 });

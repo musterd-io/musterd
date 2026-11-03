@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BINDING_DIR } from '@musterd/protocol';
+import { BINDING_DIR, PluginIdSchema } from '@musterd/protocol';
 import { z } from 'zod';
 import { BUILTIN_TOOLKIT_TEMPLATES } from './toolkits/builtins.js';
 
@@ -57,13 +57,9 @@ export const ToolkitPermissionsSchema = z
   })
   .default({ allow: [], ask: [], deny: [] });
 
-/** A Codex plugin id: `PLUGIN@MARKETPLACE` (ADR 323). Other harnesses ignore the field. */
-export const CodexPluginIdSchema = z
-  .string()
-  .regex(
-    /^[a-z0-9][a-z0-9._-]*@[a-z0-9][a-z0-9._-]*$/,
-    'codex plugin id must be PLUGIN@MARKETPLACE',
-  );
+/** A Codex plugin id: `PLUGIN@MARKETPLACE` (ADR 323). Other harnesses ignore the field. One
+ *  regex with the seat-tool grants' plugin ids (ADR 794), so the two cannot disagree. */
+export const CodexPluginIdSchema = PluginIdSchema;
 
 export const ToolkitToolsSchema = z
   .object({
