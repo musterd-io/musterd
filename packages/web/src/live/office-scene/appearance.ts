@@ -335,12 +335,41 @@ function summaryOf(eyes: Eyes, ears: Ears, neck: Neck): Accessory {
 }
 
 /**
+ * Hand-picked looks for members who asked to look like themselves (nick, 2026-11-03: "lets make my
+ * avatar (nick) look more like me", from a photo). Only the person picks the face, the hair and the
+ * clothes' cut and shades; the top's hue stays their identity colour, which is how the room says who
+ * someone is. Anything not listed is still the name's hash.
+ */
+const LOOKS_BY_NAME: Readonly<Record<string, Partial<Appearance>>> = {
+  nick: {
+    skin: '#8d5524',
+    style: 'casual',
+    grooming: 'polished',
+    hair: 'buzz',
+    hairColor: '#221a14',
+    facialHair: 'beard',
+    hat: 'none',
+    cut: 'tee',
+    onePiece: 'none',
+    bottomCut: 'trousers',
+    outer: 'none',
+    bottom: '#3f5570', // denim
+    shoes: '#22262b',
+    eyes: 'glasses-square',
+    ears: 'none',
+    neck: 'none',
+    wrist: 'watch',
+    metal: '#cfd3d8', // silver
+  },
+};
+
+/**
  * A member's complete look. Every field is an independent salted hash of the name — style, grooming,
  * hair, each spot, skin — so hair colour doesn't correlate with skin, hats don't correlate with beards,
  * and nothing about the hair says anything about the beard. The floor looks like a room of people
  * rather than a row of palette swatches, and nothing in it reads a gender off a name.
  */
-export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearance {
+function hashedAppearance(node: Pick<OfficeNode, 'name' | 'kind'>): Appearance {
   const { name, kind } = node;
   const style = pick(STYLES, name, 16);
   const grooming = pick(GROOMING, name, 17);
@@ -389,6 +418,21 @@ export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearanc
     metal: pick(METALS, name, 21),
     smile: pick(SMILES, name, 13),
     build: pick(BUILDS, name, 15),
+  };
+}
+
+/** A member's look: the hand-picked one where there is one (`LOOKS_BY_NAME`), else the hash. */
+export function appearanceOf(node: Pick<OfficeNode, 'name' | 'kind'>): Appearance {
+  const hashed = hashedAppearance(node);
+  const own = node.kind === 'agent' ? undefined : LOOKS_BY_NAME[node.name];
+  if (!own) return hashed;
+  const a = { ...hashed, ...own };
+  // the derived fields follow what was picked
+  return {
+    ...a,
+    underColor: a.outer === 'none' ? null : hashed.underColor,
+    bareArms: a.outer === 'none' && (a.onePiece !== 'none' || a.cut === 'tee' || a.cut === 'vest'),
+    accessory: summaryOf(a.eyes, a.ears, a.neck),
   };
 }
 
