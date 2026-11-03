@@ -16,7 +16,7 @@ import {
 } from '../notify/appSeal.js';
 import { appPairingChallenge } from '../store/appAttest.js';
 import { fakeAppAttest } from '../store/appAttest.testkit.js';
-import { stageAppPairing } from '../store/appPairing.js';
+import { keyFingerprint, pairingFingerprint, stageAppPairing } from '../store/appPairing.js';
 import { enrollDeviceKey } from '../store/authority.js';
 import { getMemberByName } from '../store/members.js';
 import { getTeamBySlug, setPolicy } from '../store/teams.js';
@@ -71,6 +71,11 @@ withDrivers('app pairing over HTTP (ADR 676 §5)', (_o, kind) => {
     const qr = AppPairingQrSchema.parse(started.json.qr);
     expect(qr.daemon_identity_public_key).toBe(daemon.identityPublic);
     expect(started.json.daemon_fingerprint).toMatch(/^[0-9a-f]{4}( [0-9a-f]{4}){3}$/);
+    // ADR 788: the page's value covers both keys in the QR, the same bytes the phone hashes.
+    expect(started.json.daemon_fingerprint).toBe(
+      pairingFingerprint(qr.daemon_identity_public_key, qr.daemon_receive_public_key),
+    );
+    expect(started.json.daemon_fingerprint).not.toBe(keyFingerprint(daemon.identityPublic));
 
     // The phone's sealed request (it arrives through the relay; staged directly here).
     const signing = generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -165,4 +170,21 @@ withDrivers('app pairing over HTTP (ADR 676 §5)', (_o, kind) => {
     const start = await call('POST', '/teams/dawn/channels/pairing/start', { channel: 'app' });
     expect(start.status).toBe(422);
   });
+});
+
+// ADR 788 decision 4: the vector `pairingQr.test.ts` pins on the phone, pinned here on the daemon.
+it('ADR 788: the pairing fingerprint matches the phone vector and moves with either key', () => {
+  const identity = Buffer.alloc(32, 0x01).toString('base64url');
+  const receive = Buffer.concat([Buffer.from([0x04]), Buffer.alloc(64, 0x02)]).toString(
+    'base64url',
+  );
+  expect(pairingFingerprint(identity, receive)).toBe('bf07 79a6 2f44 eeb0');
+  const otherReceive = Buffer.concat([Buffer.from([0x04]), Buffer.alloc(64, 0x03)]).toString(
+    'base64url',
+  );
+  expect(pairingFingerprint(identity, otherReceive)).not.toBe('bf07 79a6 2f44 eeb0');
+  expect(pairingFingerprint(Buffer.alloc(32, 0x09).toString('base64url'), receive)).not.toBe(
+    'bf07 79a6 2f44 eeb0',
+  );
+  expect(() => pairingFingerprint(identity, identity)).toThrow();
 });
