@@ -904,7 +904,8 @@ async function routeEnvelopeInner(
           sender,
           target,
           String(outgoingEnv.meta['quick_action']),
-          outgoingEnv.ts,
+          // The server's clock, never the envelope's: a sender sets `ts`.
+          Date.now(),
         );
     }
   }

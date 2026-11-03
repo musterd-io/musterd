@@ -102,9 +102,15 @@ export async function stopShift(
   reason: ShiftStopReason,
   hours: WorkingHours | null,
   now: number,
-  opts: { leaseLive: boolean; actor?: string | null; detail?: Record<string, unknown> },
+  opts: {
+    leaseLive: boolean;
+    actor?: string | null;
+    detail?: Record<string, unknown>;
+    /** The row's day, when it is not today's (a shift the watch finds past midnight). */
+    day?: string;
+  },
 ): Promise<ShiftRow | null> {
-  const day = shiftDay(hours, now);
+  const day = opts.day ?? shiftDay(hours, now);
   const r = await db.run(
     `UPDATE shifts SET state = ?, stopped_at = ?, stop_reason = ?
        WHERE team_id = ? AND member_id = ? AND day = ? AND state = 'on'`,

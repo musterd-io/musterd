@@ -124,7 +124,7 @@ export async function stopAndAnnounce(
   member: MemberRow,
   reason: ShiftStopReason,
   now: number,
-  opts: { stoppedBy?: string } = {},
+  opts: { stoppedBy?: string; day?: string } = {},
 ): Promise<ShiftRow | null> {
   const { budgetUsd, hours } = await seatShiftPolicy(ctx, team, member);
   const counts = await laneCounts(ctx, team, member.name);
@@ -132,6 +132,7 @@ export async function stopAndAnnounce(
   const row = await stopShift(ctx.db, team.id, member, reason, hours, now, {
     leaseLive: (await liveLease(ctx.db, member.id, now)) !== null,
     actor: opts.stoppedBy ?? null,
+    ...(opts.day ? { day: opts.day } : {}),
     detail: { lanes_claimed: counts.claimed, spent_usd: Math.round(spent * 100) / 100 },
   });
   if (!row) return null;
@@ -143,7 +144,7 @@ export async function stopAndAnnounce(
     ...counts,
     budgetUsd,
     ...(opts.stoppedBy ? { stoppedBy: opts.stoppedBy } : {}),
-    ...(reason === 'hours_end' && hours ? { hoursEnd: hours.end } : {}),
+    ...(reason === 'hours_end' && hours && !opts.day ? { hoursEnd: hours.end } : {}),
   });
   try {
     await routeEnvelope(
@@ -223,23 +224,11 @@ export async function sweepShifts(ctx: Ctx, now: number = Date.now()): Promise<n
       if (await stopAndAnnounce(ctx, team, member, 'stopped', now)) stops++;
       continue;
     }
-    // A shift started outside hours runs past midnight: the new day is a new budget, so it carries
-    // over as today's row. One started inside hours ended with them, so it stops.
+    // A shift never outlives its day (from the commit security review: a carry-over would renew
+    // itself every midnight on one person's Start, a day's budget at a time, with no end). It stops
+    // and says so; a new day starts only with a new Start.
     if (row.day !== today) {
-      if (row.inside_hours === 1) {
-        await ctx.db.run(
-          "UPDATE shifts SET state = 'off', stopped_at = ?, stop_reason = 'hours_end' WHERE team_id = ? AND member_id = ? AND day = ? AND state = 'on'",
-          [now, team.id, member.id, row.day],
-        );
-        stops++;
-      } else {
-        await ctx.db.run(
-          "UPDATE shifts SET state = 'off', stopped_at = ? WHERE team_id = ? AND member_id = ? AND day = ? AND state = 'on'",
-          [now, team.id, member.id, row.day],
-        );
-        if (!(await getShift(ctx.db, team.id, member.id, today)))
-          await startShift(ctx.db, team.id, member, row.started_by, hours, now);
-      }
+      if (await stopAndAnnounce(ctx, team, member, 'hours_end', now, { day: row.day })) stops++;
       continue;
     }
     const spent = await shiftSpentUsd(ctx.db, team.id, member.name, shiftDayStart(hours, now), now);

@@ -192,18 +192,20 @@ withDrivers('the shift watch (ADR 792)', (o) => {
       ]);
     });
 
-    it('a Start outside hours carries over midnight as a new day; one inside hours does not', async () => {
+    it('a shift never outlives its day: past midnight it stops and says so', async () => {
       const { db, team, ryder, ctx } = await seed({ hours: PACIFIC });
       await openLane(db, team.id, team.slug, 'ryder', { title: 'Fix it', claim: true });
       const hours = JSON.parse(PACIFIC);
       await startShift(db, team.id, ryder, 'nick', hours, at('2026-11-04T06:00:00Z')); // 22:00 Tue
-      await sweepShifts(ctx, at('2026-11-04T08:30:00Z')); // 00:30 Wed
-      expect((await getShift(db, team.id, ryder.id, '2026-11-03'))?.state).toBe('off');
-      expect(await getShift(db, team.id, ryder.id, '2026-11-04')).toMatchObject({
-        state: 'on',
-        started_by: 'nick',
-        inside_hours: 0,
+      expect(await sweepShifts(ctx, at('2026-11-04T08:30:00Z'))).toBe(1); // 00:30 Wed
+      expect(await getShift(db, team.id, ryder.id, '2026-11-03')).toMatchObject({
+        state: 'off',
+        stop_reason: 'hours_end',
       });
+      expect(await getShift(db, team.id, ryder.id, '2026-11-04')).toBeNull();
+      expect(await boardLines(db, team.id)).toEqual([
+        'ryder is off shift: hours ended; 1 lane still claimed.',
+      ]);
     });
   });
 });

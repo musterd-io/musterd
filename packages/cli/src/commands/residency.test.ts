@@ -247,6 +247,9 @@ describe('policyFlags (ADR 703)', () => {
       dream_enabled: true,
       dream_nightly_wakes: 2,
       dream_budget_usd: 1.5,
+      shift_budget_usd: 25,
+      shift_start: 'auto',
+      autonomy: 'claim',
     } as const;
     expect(collectPolicyFlags(parseArgs(['on', ...policyFlags(policy)]))).toEqual(policy);
   });
@@ -318,5 +321,34 @@ describe('--dream, --dream-nightly, --dream-budget (ADR 494)', () => {
     expect(renderPolicy(on)).toContain('dreams 2/night');
     expect(renderPolicy(on, { dream_enabled: true })).toContain('dreams 2/night*');
     expect(renderPolicy(ResidencyPolicySchema.parse({}))).not.toContain('dream');
+  });
+});
+
+describe('--shift-budget, --shift-start, --autonomy (ADR 792)', () => {
+  const flags = (...argv: string[]) => collectPolicyFlags(parseArgs(['policy', ...argv]));
+
+  it('writes exactly the three shift knobs', () => {
+    expect(flags('--shift-budget', '25', '--shift-start', 'auto', '--autonomy', 'claim')).toEqual({
+      shift_budget_usd: 25,
+      shift_start: 'auto',
+      autonomy: 'claim',
+    });
+  });
+
+  it('refuses a zero budget and a bad value, naming the flag', () => {
+    expect(() => flags('--shift-budget', '0')).toThrow(/--shift-budget wants dollars/);
+    expect(() => flags('--shift-budget', '101')).toThrow(/at most 100/);
+    expect(() => flags('--shift-start', 'later')).toThrow(/--shift-start wants manual\|auto/);
+    expect(() => flags('--autonomy', 'yolo')).toThrow(/--autonomy wants ask\|claim\|free/);
+  });
+
+  it('status names a shift knob only when it is not the default', () => {
+    expect(renderPolicy(ResidencyPolicySchema.parse({}))).not.toContain('shift');
+    expect(renderPolicy(ResidencyPolicySchema.parse({ shift_budget_usd: 25 }))).toContain(
+      'shift $25/day',
+    );
+    expect(
+      renderPolicy(ResidencyPolicySchema.parse({ autonomy: 'free' }), { autonomy: 'free' }),
+    ).toContain('autonomy free*');
   });
 });

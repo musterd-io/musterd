@@ -69,7 +69,8 @@ const POLICY_FLAGS_USAGE =
   '[--flow manual|auto] [--convene-huddles on|off] [--idle-wake on|off] [--max-turns <n>] ' +
   '[--budget <usd>] ' +
   '[--transcript-max <MiB, fractions OK>] [--dream on|off] [--dream-nightly <1-3>] ' +
-  '[--dream-budget <usd>]';
+  '[--dream-budget <usd>] [--shift-budget <usd>] [--shift-start manual|auto] ' +
+  '[--autonomy ask|claim|free]';
 
 // The enrolment hint and its "from an admin's own Workspace" tail live in host/registry.ts (shared
 // with the host loop, lane 01M5WXYDQJ): one helper, so no printed line can drift back to `--as`.
@@ -239,6 +240,9 @@ export const RESIDENCY_FLAGS = [
   'dream',
   'dream-budget',
   'dream-nightly',
+  'autonomy',
+  'shift-budget',
+  'shift-start',
   'enroll',
   'error',
   'exec',
@@ -375,6 +379,29 @@ export function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | un
       throw new CliError(`--dream-budget wants dollars (got "${dreamBudget}")`, 2);
     out['dream_budget_usd'] = n;
   }
+  // ADR 792: a shift's day budget, how it starts, and what it may take on alone.
+  const shiftBudget = flagStr(parsed.flags, 'shift-budget');
+  if (shiftBudget !== undefined) {
+    const n = Number(shiftBudget);
+    if (!Number.isFinite(n) || n <= 0 || n > 100)
+      throw new CliError(
+        `--shift-budget wants dollars, more than 0 and at most 100 (got "${shiftBudget}")`,
+        2,
+      );
+    out['shift_budget_usd'] = n;
+  }
+  const shiftStart = flagStr(parsed.flags, 'shift-start');
+  if (shiftStart !== undefined) {
+    if (shiftStart !== 'manual' && shiftStart !== 'auto')
+      throw new CliError(`--shift-start wants manual|auto (got "${shiftStart}")`, 2);
+    out['shift_start'] = shiftStart;
+  }
+  const autonomy = flagStr(parsed.flags, 'autonomy');
+  if (autonomy !== undefined) {
+    if (autonomy !== 'ask' && autonomy !== 'claim' && autonomy !== 'free')
+      throw new CliError(`--autonomy wants ask|claim|free (got "${autonomy}")`, 2);
+    out['autonomy'] = autonomy;
+  }
   if (parsed.flags['reset-policy'] === true) {
     if (Object.keys(out).length > 0)
       throw new CliError('--reset-policy clears every knob — drop the other policy flags', 2);
@@ -422,6 +449,9 @@ export function policyFlags(policy: ResidencyPolicyOverride): string[] {
   add('dream', policy.dream_enabled === undefined ? undefined : onOff(policy.dream_enabled));
   add('dream-nightly', policy.dream_nightly_wakes?.toString());
   add('dream-budget', policy.dream_budget_usd?.toString());
+  add('shift-budget', policy.shift_budget_usd?.toString());
+  add('shift-start', policy.shift_start);
+  add('autonomy', policy.autonomy);
   return out;
 }
 
@@ -457,6 +487,13 @@ export function renderPolicy(
   if (policy.budget_usd !== undefined)
     bits.push(`budget $${policy.budget_usd}${star('budget_usd')}`);
   bits.push(`transcript ${fmtBytes(policy.transcript_max_bytes)}${star('transcript_max_bytes')}`);
+  // ADR 792: the shift knobs only when they differ from the defaults ($10, manual, ask).
+  if (policy.shift_budget_usd !== 10 || star('shift_budget_usd'))
+    bits.push(`shift $${policy.shift_budget_usd}/day${star('shift_budget_usd')}`);
+  if (policy.shift_start !== 'manual' || star('shift_start'))
+    bits.push(`shift starts ${policy.shift_start}${star('shift_start')}`);
+  if (policy.autonomy !== 'ask' || star('autonomy'))
+    bits.push(`autonomy ${policy.autonomy}${star('autonomy')}`);
   return bits.join(' · ');
 }
 
