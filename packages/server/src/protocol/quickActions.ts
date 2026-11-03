@@ -12,7 +12,7 @@ import { appendAudit } from '../store/audit.js';
 import { listLanes } from '../store/lanes.js';
 import { getMemberById, listMembers } from '../store/members.js';
 import { hasLivePresence } from '../store/presence.js';
-import { getResidency, seatAtHourlyCap } from '../store/residency.js';
+import { getResidency } from '../store/residency.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import { listPrs, prForLane, prWatchRepos, readPrState, type GhRunner } from './prState.js';
 import { routeEnvelope } from './route.js';
@@ -102,12 +102,12 @@ export async function quickActionLineFor(
   });
 }
 
-export type StartAllResult = 'started' | 'capped' | 'offline';
+export type StartAllResult = 'started' | 'offline';
 
 /**
  * "Start everyone" (ADR 779 §3): one `start` steer per agent seat that can hear it — live, or enrolled
- * with a host that can wake it. A seat at its hourly cap is reported `capped` and not sent, so a
- * start never silently fails to wake; a seat with neither is `offline`.
+ * with a host that can wake it; a seat with neither is `offline`. A Start is a person's steer, so it
+ * passes the seat's hourly cap and cooldown (ADR 790) and is never held back as `capped`.
  */
 export async function startAll(
   ctx: Ctx,
@@ -126,10 +126,6 @@ export async function startAll(
     const enrolled = (await getResidency(ctx.db, team.id, agent.id)) !== null;
     if (!live && !enrolled) {
       seats.push({ seat: agent.name, result: 'offline' });
-      continue;
-    }
-    if (!live && (await seatAtHourlyCap(ctx.db, team.id, agent, now))) {
-      seats.push({ seat: agent.name, result: 'capped' });
       continue;
     }
     await routeEnvelope(
@@ -156,7 +152,6 @@ export async function startAll(
     result: 'allow',
     detail: {
       count: seats.filter((s) => s.result === 'started').length,
-      capped: seats.filter((s) => s.result === 'capped').length,
       offline: seats.filter((s) => s.result === 'offline').length,
     },
   });

@@ -5,15 +5,14 @@ import type { LiveConfig } from './client';
 import { QuickActionBar, StartAllResults, startAllSummary } from './quickActions';
 
 describe('Start everyone results (seats ask 2c)', () => {
-  it('says each count that is not zero, and names the wake cap', () => {
+  it('says each count that is not zero, and never a wake cap (ADR 790)', () => {
     expect(
       startAllSummary([
         { seat: 'a', result: 'started' },
         { seat: 'b', result: 'started' },
-        { seat: 'c', result: 'capped' },
         { seat: 'd', result: 'offline' },
       ]),
-    ).toBe('Started 2 · 1 held by its wake cap · 1 offline');
+    ).toBe('Started 2 · 1 offline');
     expect(startAllSummary([])).toBe('No seats to start');
   });
 });
@@ -25,8 +24,17 @@ describe('QuickActionBar (seats ask 2c)', () => {
     const labels = [...html.matchAll(/class="qa__btn"[^>]*>([^<]+)</g)].map((m) => m[1]);
     expect(labels).toEqual(['Start', 'Check inbox', 'Check PR', 'Resume']);
   });
-  it('says a capped seat was held by its wake cap, seat by seat', () => {
-    const html = renderToStaticMarkup(createElement(StartAllResults, { seats: [{ seat: 'ryder', result: 'capped' }] }));
-    expect(html).toContain('held by wake cap');
+  it('says each seat\'s result in words, and no string says capped', () => {
+    const html = renderToStaticMarkup(
+      createElement(StartAllResults, {
+        seats: [
+          { seat: 'ryder', result: 'started' },
+          { seat: 'sloane', result: 'offline' },
+        ],
+      }),
+    );
+    expect(html).toContain('ryder</span> started');
+    expect(html).toContain('sloane</span> offline');
+    expect(html).not.toMatch(/cap/i);
   });
 });

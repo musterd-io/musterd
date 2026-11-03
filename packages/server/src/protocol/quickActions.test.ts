@@ -6,7 +6,7 @@ import { withDrivers } from '../db/testing.js';
 import { appendAudit, listAuditByAction } from '../store/audit.js';
 import { openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
-import { enrollResidency } from '../store/residency.js';
+import { claimWakeLeases, enrollResidency } from '../store/residency.js';
 import { createTeam } from '../store/teams.js';
 import { quickActionLineFor, startAll } from './quickActions.js';
 import { routeEnvelope } from './route.js';
@@ -133,7 +133,7 @@ withDrivers('quick actions', (o) => {
     expect(await quickActionLineFor(db, team, 'sloane', 's1')).toBeNull();
   });
 
-  it('Start everyone starts what can hear it, says capped and offline, and audits once', async () => {
+  it('Start everyone starts what can hear it, even a seat at its cap (ADR 790), and audits once', async () => {
     const { db, team, nick, ryder, sloane, ctx } = await seed();
     for (const m of [ryder, sloane])
       await enrollResidency(db, team.id, {
@@ -144,7 +144,7 @@ withDrivers('quick actions', (o) => {
         authorized_by: 'nick',
         ...(m === sloane ? { policy: { hourly_cap: 1 } } : {}),
       });
-    // sloane already woke once this hour — her cap of 1 is spent.
+    // sloane already woke once this hour — her cap of 1 is spent, but a Start is a person's steer.
     await appendAudit(db, team.id, {
       actor: null,
       action: 'residency.woke',
@@ -155,15 +155,20 @@ withDrivers('quick actions', (o) => {
     const { seats } = await startAll(ctx, team, nick);
     expect(seats).toEqual([
       { seat: 'ryder', result: 'started' },
-      { seat: 'sloane', result: 'capped' },
+      { seat: 'sloane', result: 'started' },
       { seat: 'gone', result: 'offline' },
     ]);
     const steers = await db.all<{ id: string }>(
       "SELECT id FROM messages WHERE team_id = ? AND act = 'steer' AND json_extract(meta, '$.quick_action') = 'start'",
       [team.id],
     );
-    expect(steers).toHaveLength(1);
-    expect(await listAuditByAction(db, team.id, 'quick_action.start_all', 5)).toHaveLength(1);
+    expect(steers).toHaveLength(2);
+    // ADR 790: the capped seat's Start wakes it on the next poll.
+    const orders = await claimWakeLeases(db, team.id, team.slug, 'musterd-joiner-1', 45_000);
+    expect(orders.map((o) => o.seat).sort()).toEqual(['ryder', 'sloane']);
+    const audit = await listAuditByAction(db, team.id, 'quick_action.start_all', 5);
+    expect(audit).toHaveLength(1);
+    expect(JSON.parse(audit[0]!.detail!)).toEqual({ count: 2, offline: 1 });
     await expect(startAll(ctx, team, ryder)).rejects.toMatchObject({ code: 'forbidden' });
   });
 });

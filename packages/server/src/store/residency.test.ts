@@ -9,7 +9,7 @@ import { log } from '../log.js';
 import { readSpendCapBreach, readUnpricedWakeBreach } from '../protocol/gate.js';
 import { appendAudit, listAudit } from './audit.js';
 import { laneWarnings, openLane, updateLane } from './lanes.js';
-import { addMember, getMemberByName, setAvailability } from './members.js';
+import { addMember, getMemberByName, haltMember, setAvailability } from './members.js';
 import { saveMemory } from './memory.js';
 import { countOpenLoops, insertMessage, localNodeForTeam } from './messages.js';
 import { bindSeatToNode, upsertForeignNode } from './nodes.js';
@@ -814,19 +814,19 @@ withDrivers('residency', (o, kind) => {
     });
 
     it('applies the batched-lane cooldown but lets the immediate lane through', async () => {
-      const { db, team, nick, ada } = await seed();
+      const { db, team, ada, bob } = await seed();
       await enroll(db, team, ada);
       const now = Date.now();
-      // A wake completed 5 minutes ago — inside the 30-minute batched cooldown.
+      // ADR 790: an agent sender, so the cooldown applies. A wake completed 5 minutes ago — inside the 30-minute batched cooldown.
       await wakeOutcomeRow(db, team, 'Ada', 'old-act', 'residency.woke', now - 5 * 60_000);
 
-      await msg(db, team, nick, ada, 'handoff', 'h1', 1_000);
+      await msg(db, team, bob, ada, 'handoff', 'h1', 1_000);
       expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toHaveLength(
         0,
       );
 
       // An interrupt-class act ignores the cooldown (same scarcity as the live interrupt line).
-      await msg(db, team, nick, ada, 'steer', 's1', 2_000);
+      await msg(db, team, bob, ada, 'steer', 's1', 2_000);
       const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
       expect(orders).toHaveLength(1);
       expect(orders[0]!.lane).toBe('immediate');
@@ -895,27 +895,27 @@ withDrivers('residency', (o, kind) => {
         await claimWakeLeases(db2, team2.id, team2.slug, HOST, PRESENCE_TIMEOUT_MS),
       ).toHaveLength(0);
 
-      // The hourly cap is not waived: at the cap, an act-lane seat waits like any other.
-      const { db: db3, team: team3, nick: nick3, ada: ada3 } = await seed();
+      // The hourly cap is not waived for an agent's act (ADR 790): at the cap, an act-lane seat waits.
+      const { db: db3, team: team3, ada: ada3, bob: bob3 } = await seed();
       await enroll(db3, team3, ada3, HOST, { lane: 'act' });
       await new Promise((r) => setTimeout(r, 5));
       for (let i = 0; i < WAKE_HOURLY_CAP; i++) {
         await wakeOutcomeRow(db3, team3, 'Ada', `past-${i}`, 'residency.woke', now - 10 * 60_000);
       }
-      await msg(db3, team3, nick3, ada3, 'message', 'm2', now - 1_000);
+      await msg(db3, team3, bob3, ada3, 'message', 'm2', now - 1_000);
       expect(
         await claimWakeLeases(db3, team3.id, team3.slug, HOST, PRESENCE_TIMEOUT_MS),
       ).toHaveLength(0);
     });
 
     it('enforces the hourly cap across both lanes', async () => {
-      const { db, team, nick, ada } = await seed();
+      const { db, team, ada, bob } = await seed();
       await enroll(db, team, ada);
       const now = Date.now();
       for (let i = 0; i < WAKE_HOURLY_CAP; i++) {
         await wakeOutcomeRow(db, team, 'Ada', `past-${i}`, 'residency.woke', now - 10 * 60_000);
       }
-      await msg(db, team, nick, ada, 'steer', 's1', 1_000);
+      await msg(db, team, bob, ada, 'steer', 's1', 1_000);
       expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toHaveLength(
         0,
       );
@@ -1708,11 +1708,11 @@ withDrivers('residency', (o, kind) => {
     });
 
     it('a seat override tightens the hourly cap below the team default', async () => {
-      const { db, team, nick, ada } = await seed();
+      const { db, team, ada, bob } = await seed();
       await enroll(db, team, ada, HOST, { hourly_cap: 1 });
       await wakeOutcomeRow(db, team, 'Ada', 'past-0', 'residency.woke', Date.now() - 45 * 60_000);
-      await msg(db, team, nick, ada, 'steer', 's1', 1_000);
-      // One wake this hour ≥ the seat's cap of 1 — nothing derives (default cap of 2 would allow).
+      await msg(db, team, bob, ada, 'steer', 's1', 1_000);
+      // One wake this hour ≥ the seat's cap of 1 — an agent's steer derives nothing (ADR 790).
       expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toHaveLength(
         0,
       );
@@ -1802,6 +1802,113 @@ withDrivers('residency', (o, kind) => {
       expect((await getResidency(db, team.id, ada.id))?.policy).toBe('{"hourly_cap":5}');
       await enroll(db, team, ada, HOST, {}); // explicit clear
       expect((await getResidency(db, team.id, ada.id))?.policy).toBeNull();
+    });
+  });
+
+  describe('ADR 790: a human-sent act passes the hourly cap and the cooldown', async () => {
+    const answerMeta = {
+      in_reply_to: 'q1',
+      answer: { choice: 1 },
+      answer_proof: { channel: 'live', verified: true, by: 'nick' },
+    };
+
+    async function atCap(db: Driver, team: TeamRow, seat = 'Ada') {
+      // One wake ten minutes ago: inside the default 30-minute cooldown and at a cap of 1.
+      await wakeOutcomeRow(db, team, seat, 'past-0', 'residency.woke', Date.now() - 10 * 60_000);
+    }
+
+    async function leasedRows(db: Driver, teamId: string) {
+      return (await listAudit(db, teamId))
+        .filter((r) => r.action === 'residency.wake_leased')
+        .map((r) => JSON.parse(r.detail as string) as Record<string, unknown>);
+    }
+
+    it("a verified answer to the seat's own question passes the hourly cap", async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada, HOST, { hourly_cap: 1 });
+      await atCap(db, team);
+      await msg(db, team, nick, ada, 'accept', 'a1', Date.now() - 1_000, { meta: answerMeta });
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders).toHaveLength(1);
+      expect(orders[0]).toMatchObject({ seat: 'Ada', act_id: 'a1', sender: 'nick' });
+    });
+
+    it('a human steer passes the cooldown and the cap; an agent steer does not', async () => {
+      const { db, team, nick, ada, bob } = await seed();
+      await enroll(db, team, ada, HOST, { hourly_cap: 1 });
+      await atCap(db, team);
+      await msg(db, team, bob, ada, 'steer', 's-bob', Date.now() - 2_000);
+      expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+      await msg(db, team, nick, ada, 'steer', 's-nick', Date.now() - 1_000);
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders.map((o) => o.act_id)).toEqual(['s-nick']);
+    });
+
+    it('a human handoff inside the cooldown wakes the seat; an agent handoff waits', async () => {
+      const { db, team, nick, ada, bob } = await seed();
+      await enroll(db, team, ada);
+      await atCap(db, team);
+      await msg(db, team, bob, ada, 'handoff', 'h-bob', Date.now() - 2_000);
+      expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+      await msg(db, team, nick, ada, 'handoff', 'h-nick', Date.now() - 1_000);
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders.map((o) => o.act_id)).toEqual(['h-nick']);
+    });
+
+    it('a human act to a halted seat does not wake it', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada, HOST, { hourly_cap: 1 });
+      await atCap(db, team);
+      await haltMember(db, ada.id, nick.id, 'hold');
+      await msg(db, team, nick, ada, 'steer', 's1', Date.now() - 1_000);
+      expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+    });
+
+    it('a human act to a seat over the team spend cap is held, not leased', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada, HOST, { hourly_cap: 1 });
+      await atCap(db, team);
+      await appendAudit(db, team.id, {
+        actor: null,
+        action: 'residency.wake_cost',
+        target: 'Ada',
+        result: 'allow',
+        detail: { lease_id: 'L-cost', cost_usd: 10 },
+      });
+      await setPolicy(db, team.id, { spend_cap_usd: 10 });
+      await msg(db, team, nick, ada, 'steer', 's1', Date.now() - 1_000);
+      const breach = await readSpendCapBreach(db, team.id);
+      const orders = await claimWakeLeases(
+        db,
+        team.id,
+        team.slug,
+        HOST,
+        PRESENCE_TIMEOUT_MS,
+        Date.now(),
+        undefined,
+        breach,
+      );
+      expect(orders).toEqual([]);
+      expect(await leasedRows(db, team.id)).toEqual([]);
+    });
+
+    it('the lease row says human_pass only when a rate gate was passed', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada, HOST, { hourly_cap: 1 });
+      await atCap(db, team);
+      await msg(db, team, nick, ada, 'steer', 's1', Date.now() - 1_000);
+      await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(await leasedRows(db, team.id)).toEqual([
+        expect.objectContaining({ act: 's1', human_pass: true }),
+      ]);
+
+      const { db: db2, team: team2, nick: nick2, ada: ada2 } = await seed();
+      await enroll(db2, team2, ada2);
+      await msg(db2, team2, nick2, ada2, 'steer', 's1', Date.now() - 1_000);
+      await claimWakeLeases(db2, team2.id, team2.slug, HOST, PRESENCE_TIMEOUT_MS);
+      const rows = await leasedRows(db2, team2.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!['human_pass']).toBeUndefined();
     });
   });
 
