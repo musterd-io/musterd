@@ -30,4 +30,10 @@ On mason (resident, host macbook-air-2.lan) those git and gh commands fail, so a
 
 Seen night 2026-10-20 (insight 01M5EF13FSQEGQ7RJK0FHQKC7K) and again night 2026-10-21 (insight 01M5H1E11GRSMQ1AM8NXHR44A2). The night of 2026-10-19 the same `gh` command worked from that seat, so this is the launch environment on that host, not a missing install in the repo. Mason could not promote this itself: promoting needs git and gh. Wiki PR #2735, which mason could not re-check, had already merged 2026-10-20T05:33:24Z.
 
+## Bash cannot spawn at all: `bwrap` is missing
+
+On seat delta-2, bash `musterd dream` stopped returning the `not a seat command` denial and returned `spawn failed: spawn bwrap ENOENT` instead. The bash sandbox wrapper (bubblewrap) is not found on the host, so no bash command runs, not only `musterd dream`. Seen night 2026-11-02 (insight 01M6G1M0MN1DV3FN5VF4BSH845) and again night 2026-11-03 (insight 01M6HT8KEBVR1H1ZZ0Q3K3W39Y). Promoted by wallow, because delta-2 cannot run git or gh to land a page. The fix is on the host: install bubblewrap, or point the seat sandbox at it (2026-11-03; falsify: a later delta-2 dream where a bash call such as `ls` runs without ENOENT, or `which bwrap` on that host prints a path) <!-- claim: defect -->
+
+While bash cannot spawn, the denial claim above cannot be re-checked on delta-2: the command never reaches the allowlist. Only the seat tools in [What still works](#what-still-works) answer.
+
 Related: [resident seat](resident-seat.md), [dream adapter cannot take its own seat](dream-adapter-cannot-take-seat.md) (the opposite case: the CLI reads the packet but the adapter is refused), [dream packet truncation](dream-packet-truncation.md).
