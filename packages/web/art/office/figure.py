@@ -771,7 +771,7 @@ HOLD2 = ["walk-hold2", "idle-hold2"]  # both hands forward: the box, the moving 
 HOLD1 = ["walk-hold1", "idle-hold1"]  # the right hand out in front: the card, a mug, a bottle
 # the clips a standing member plays, which is where the lanyard shows
 STANDING_CLIPS = ["idle", "walk", "speak", "turn", *HOLD2, *HOLD1, "walk-call",
-                  "g-browse", "g-fill", "g-pour", "g-call", "g-reach", "g-wave"]
+                  "g-browse", "g-fill", "g-pour", "g-call", "g-reach", "g-wave", "g-ring", "g-clapUp"]
 
 
 class Prop:
@@ -1014,6 +1014,25 @@ def _seq(name: str, t: float) -> dict:
         bite = (math.sin(t * 2 * math.pi * 3) + 1) / 2 * hold
         return {"shoulderL": (0, swing(35), 0), "elbowL": (0, swing(80), 0),
                 "shoulderR": (0, swing(35 + 25 * bite), 0), "elbowR": (0, swing(80 + 62 * bite), 0)}
+    if name == "ring":
+        # the goal bell (lane 01M6HHH7Z4): both hands up the rope, one long pull down to the chest with a
+        # dip of the shoulders, the hands riding back up, then down to rest
+        up = smoothstep(min(1.0, t / 0.18))
+        pull = math.sin(min(1.0, max(0.0, (t - 0.18) / 0.5)) * math.pi)
+        rest = 1 - smoothstep(max(0.0, (t - 0.82) / 0.18))
+        reach = up * rest
+        return {"shoulderL": (_abduct("L", -4 * reach), swing((155 - 75 * pull) * reach), 0),
+                "shoulderR": (_abduct("R", -4 * reach), swing((165 - 80 * pull) * reach), 0),
+                "elbowL": (0, swing((18 + 70 * pull) * reach), 0), "elbowR": (0, swing((12 + 72 * pull) * reach), 0),
+                "spine": (0, swing(-9 * pull * reach), 0), "head": (0, swing(10 * reach - 8 * pull), 0)}
+    if name in ("clap", "clapUp"):
+        # applause (lane 01M6HHH7Z4): hands up at face height, where they read from any side, meeting
+        # on every other frame — a clap reads by the gap opening and closing, not by the arms moving
+        meet = (1 - math.cos(7 * math.pi * t)) / 2  # frames alternate apart / together
+        return {"shoulderL": (_abduct("L", (30 - 26 * meet) * hold), swing(78 * hold), 0),
+                "shoulderR": (_abduct("R", (30 - 26 * meet) * hold), swing(78 * hold), 0),
+                "elbowL": (_abduct("L", -24 * hold), swing(112 * hold), 0), "elbowR": (_abduct("R", -24 * hold), swing(112 * hold), 0),
+                "head": (0, swing(8 * hold), 0)}
     if name == "wave":
         rock = math.sin(t * math.pi * 5) * 22 * arc
         # upper arm out to the side, forearm up, rocking about the elbow
@@ -1022,7 +1041,8 @@ def _seq(name: str, t: float) -> dict:
     raise KeyError(name)
 
 
-SEQ_BASE = {"scratch": "seated", "sip": "seated", "swivel": "seated", "shoulders": "seated", "eat": "seated", "wave": "standing"}
+SEQ_BASE = {"scratch": "seated", "sip": "seated", "swivel": "seated", "shoulders": "seated", "eat": "seated", "wave": "standing",
+            "ring": "standing", "clap": "seated", "clapUp": "standing"}
 
 
 def gesture_pose(name: str, x: float) -> tuple[dict, float]:
@@ -1170,6 +1190,11 @@ CLIPS = [  # name, frames, loop, dirs — "not smooth enough" (nick, 2026-10-20)
     ("sit-lap", 8, True, None),
     # heads that look (lane 01M5XS5ZYP) — figureSheet.ts LOOK_ANIMS, in this order
     *[(f"g-{g}", 6, False, CARDINAL) for g in LOOKS],
+    # the goal bell (lane 01M6HHH7Z4) — figureSheet.ts BELL_ANIMS, in this order: the rope pull, and the
+    # room's applause seated and standing
+    ("g-ring", 10, False, CARDINAL),
+    ("g-clap", 8, False, CARDINAL),
+    ("g-clapUp", 8, False, CARDINAL),
 ]
 # A carrying clip changes only the arms, the sleeves and what is held (and the lanyard the arms can
 # cover): every other layer is the same pixels as the walk or the idle it is laid over, so it is not

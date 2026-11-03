@@ -92,6 +92,12 @@ export const GESTURE = {
   look45R: 23,
   look90L: 24,
   look90R: 25,
+  /** The goal bell (lane 01M6HHH7Z4): standing at the rope, both hands up it, one long pull. */
+  ring: 26,
+  /** Applause while the bell rings, seated at the desk… */
+  clap: 27,
+  /** …and standing. Played by the ceremony only, never by the scheduler. */
+  clapUp: 28,
 } as const;
 
 /**
@@ -99,7 +105,7 @@ export const GESTURE = {
  * scheduler. Listed here (rather than by id range) because this is the ONLY thing that separates the
  * two families, and the separation has to be derivable — see `IDLE_GESTURES` directly below.
  */
-const ERRAND_GESTURES = ['browse', 'fill', 'eat', 'pour', 'call', 'wave', 'reach', 'take', 'look45L', 'look45R', 'look90L', 'look90R'] as const;
+const ERRAND_GESTURES = ['browse', 'fill', 'eat', 'pour', 'call', 'wave', 'reach', 'take', 'look45L', 'look45R', 'look90L', 'look90R', 'ring', 'clap', 'clapUp'] as const;
 
 /** Beats that are the two halves of ONE motion over two legs — the first ends where the second starts
  *  (the hand up at the wall board), so neither returns to rest alone; the pair does. */

@@ -139,3 +139,12 @@ describe('the welcome wave gesture (lane 01M3F81DD9)', () => {
     expect(IDLE_GESTURES).not.toContain(GESTURE.wave);
   });
 });
+
+describe('the goal bell beats (lane 01M6HHH7Z4)', () => {
+  it('are played by the ceremony only, never picked by the idle scheduler', () => {
+    for (const beat of [GESTURE.ring, GESTURE.clap, GESTURE.clapUp]) {
+      expect(isIdleGesture(beat)).toBe(false);
+      expect(IDLE_GESTURES).not.toContain(beat);
+    }
+  });
+});

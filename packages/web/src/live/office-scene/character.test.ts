@@ -338,3 +338,16 @@ describe('heads that look (lane 01M5XS5ZYP): the look clips', () => {
     expect(lookClip('g-glance', true)).toBe('g-glance'); // only the looks have a side
   });
 });
+
+describe('the goal bell clips are on the sheet (lane 01M6HHH7Z4)', () => {
+  it('figure.json carries g-ring, g-clap and g-clapUp, east and north and their mirrors', async () => {
+    const { readFileSync } = await import('node:fs');
+    const spec = JSON.parse(readFileSync(new URL('./rendered/assets/figure.json', import.meta.url), 'utf8')) as {
+      anims: Record<string, { dirs?: string[] }>;
+    };
+    for (const clip of ['g-ring', 'g-clap', 'g-clapUp']) {
+      expect(spec.anims[clip], clip).toBeDefined();
+      expect(spec.anims[clip]!.dirs).toEqual(expect.arrayContaining(['E', 'N', 'S', 'W']));
+    }
+  });
+});

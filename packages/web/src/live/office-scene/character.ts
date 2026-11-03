@@ -8,6 +8,7 @@ import {
   dir8FromHeading,
   type GestureAnim,
   type SheetSpec,
+  type BellAnim,
   type LookAnim,
 } from './rendered/figureSheet';
 import { project, type Fit, type Pt } from './iso';
@@ -90,7 +91,7 @@ export interface CharacterOpts {
  */
 const GESTURE_CLIP: Record<
   number,
-  { anim: GestureAnim | LookAnim; seated: boolean; map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq' }
+  { anim: GestureAnim | LookAnim | BellAnim; seated: boolean; map: 'arc' | 'hold' | 'rise' | 'fall' | 'seq' }
 > = {
   [GESTURE.stretch]: { anim: 'g-stretch', seated: true, map: 'arc' },
   [GESTURE.glance]: { anim: 'g-glance', seated: true, map: 'arc' },
@@ -118,6 +119,10 @@ const GESTURE_CLIP: Record<
   [GESTURE.look45R]: { anim: 'g-look45R', seated: true, map: 'hold' },
   [GESTURE.look90L]: { anim: 'g-look90L', seated: true, map: 'hold' },
   [GESTURE.look90R]: { anim: 'g-look90R', seated: true, map: 'hold' },
+  // the goal bell (lane 01M6HHH7Z4): each carries its own motion
+  [GESTURE.ring]: { anim: 'g-ring', seated: false, map: 'seq' },
+  [GESTURE.clap]: { anim: 'g-clap', seated: true, map: 'seq' },
+  [GESTURE.clapUp]: { anim: 'g-clapUp', seated: false, map: 'seq' },
 };
 
 /**

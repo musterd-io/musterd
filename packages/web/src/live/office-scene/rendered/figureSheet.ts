@@ -61,6 +61,10 @@ export type CarryAnim = (typeof CARRY_ANIMS)[number];
  */
 export const LOOK_ANIMS = ['g-look45L', 'g-look45R', 'g-look90L', 'g-look90R'] as const;
 export type LookAnim = (typeof LOOK_ANIMS)[number];
+/** The goal bell (lane 01M6HHH7Z4), last in `figure.py` CLIPS: the rope pull, and applause seated and
+ *  standing. */
+export const BELL_ANIMS = ['g-ring', 'g-clap', 'g-clapUp'] as const;
+export type BellAnim = (typeof BELL_ANIMS)[number];
 export type Anim =
   | 'idle'
   | 'walk'
@@ -74,7 +78,8 @@ export type Anim =
   | CarryAnim
   | 'sit-hand'
   | 'sit-lap'
-  | LookAnim;
+  | LookAnim
+  | BellAnim;
 export const ANIMS: readonly Anim[] = [
   'idle',
   'walk',
@@ -90,6 +95,7 @@ export const ANIMS: readonly Anim[] = [
   'sit-hand',
   'sit-lap',
   ...LOOK_ANIMS,
+  ...BELL_ANIMS,
 ];
 
 export interface AnimSpec {

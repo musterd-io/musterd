@@ -38,7 +38,8 @@ import exterior
 def args() -> dict:
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     out = {"out": None, "scale": 3.0, "ky": scene.KY_ISO, "save": None, "only": None, "figure": False, "force": False,
-           "resample_from": None, "stills": None, "warm": None, "dog": False, "layers": None, "exterior": None}
+           "resample_from": None, "stills": None, "warm": None, "dog": False, "layers": None, "exterior": None,
+           "append_clips": None}
     i = 0
     while i < len(argv):
         k = argv[i]
@@ -71,6 +72,11 @@ def args() -> dict:
             # layer,layer,… — render only these figure layers and merge their sheets into the
             # figure.json on disk; every other layer's sheet and cells stay as they are
             out["layers"] = argv[i + 1].split(","); i += 2
+        elif k == "--append-clips":
+            # clip,clip,… — clips added at the END of figure.CLIPS: render only them and pack their
+            # frames below each sheet on disk, leaving every earlier cell where it is (lane 01M6HHH7Z4:
+            # the whole figure is ~9 h on this laptop, three new clips ~30 min)
+            out["append_clips"] = argv[i + 1].split(","); i += 2
         elif k == "--exterior":
             # setting,setting,… — render the window-view plates for these settings (exterior.py) and keep
             # every other manifest entry; implies --only over the plate ids
@@ -541,6 +547,8 @@ def render_figure(a: dict) -> None:
     for name, frames, _, dirs in figure.CLIPS:
         if a["warm"] is not None and name not in a["warm"]:
             continue
+        if a["append_clips"] is not None and name not in a["append_clips"]:
+            continue
         for di, d in enumerate(figure.DIRS):
             if d in MIRRORED or (dirs is not None and d not in dirs):
                 continue  # drawn flipped from its source direction at runtime (`frameCell`)
@@ -655,6 +663,9 @@ def render_figure(a: dict) -> None:
         "layers": [],
         "cells": {},
     }
+    if a["append_clips"] is not None:
+        append_clips(a, spec, crops, fig_json, ATLAS_W)
+        return
     only = a["layers"]
     if only is not None:
         # `--layers`: the other layers' sheets are the ones on disk, so the frame and the clip table
@@ -830,6 +841,90 @@ def render_dog(a: dict) -> None:
         json.dump(spec, fj, separators=(",", ":"))
         fj.write("\n")
     print(f"dog: wrote {os.path.basename(path)} {ATLAS_W}x{atlas.shape[0]} {os.path.getsize(path)} B, dog{suffix}.json, {time.time() - t0:.0f}s")
+
+
+def append_clips(a: dict, spec: dict, crops: dict, fig_json: str, atlas_w: int) -> None:
+    """`--append-clips`: pack the new clips' frames below each layer's sheet on disk and append their
+    cells, so `figure.json` grows by the new clips and every earlier cell keeps its rect.
+
+    The new clips must be the last ones in `figure.CLIPS`, and the clips before them must match the
+    `figure.json` on disk exactly — otherwise the runtime would read old cells at new rows."""
+    import figure
+
+    with open(fig_json) as fjson:
+        prev = json.load(fjson)
+    new = a["append_clips"]
+    names = [n for n, _, _, _ in figure.CLIPS]
+    if names[-len(new):] != new:
+        raise SystemExit(f"render.py: --append-clips takes the last clips of figure.CLIPS, in order (they are {names[-len(new):]})")
+    old_names = names[: -len(new)]
+    if list(prev["anims"]) != old_names or any(prev[k] != spec[k] for k in ("scale", "frame", "anchor", "mirror")):
+        raise SystemExit("render.py: --append-clips needs the figure.json on disk to hold exactly the clips before the new ones")
+    strip = lambda c: {k: v for k, v in c.items() if k != "layers"}  # noqa: E731
+    if any(strip(prev["anims"][n]) != strip(spec["anims"][n]) for n in old_names):
+        raise SystemExit("render.py: --append-clips: an earlier clip changed; render the whole figure")
+    for n in old_names:  # keep what the sheets were packed against
+        spec["anims"][n] = prev["anims"][n]
+    n_dirs = len(figure.DIRS)
+    old_count = sum(fr * n_dirs for n, fr, _, _ in figure.CLIPS if n in old_names)
+    files = {x["id"]: x["file"] for x in prev["layers"]}
+    spec["layers"], spec["cells"] = [], {}
+    for layer in figure.LAYERS:
+        grids = [layer, f"{layer}@arms"]
+        has = {gk: gk in prev["cells"] or bool(crops.get(gk)) for gk in grids}
+        if not any(has.values()):
+            continue
+        # the sheet on disk, decoded (a lossless WebP or a PNG), or nothing for a layer new to the figure
+        atlas = np.zeros((0, atlas_w, 4), dtype=np.float32)
+        if layer in files:
+            src = os.path.join(a["out"], files[layer])
+            if src.endswith(".webp"):
+                png = src[: -len(".webp")] + ".decoded.png"
+                subprocess.run([shutil.which("dwebp"), "-quiet", src, "-o", png], check=True)
+                atlas = read_pixels(png, mirror=False)
+                os.remove(png)
+            else:
+                atlas = read_pixels(src, mirror=False)
+        shelf_x, shelf_y, shelf_h = 0, atlas.shape[0], 0
+        added: list[tuple] = []
+        cells_out: dict[str, list] = {}
+        for gk in grids:
+            if not has[gk]:
+                continue
+            cells = list(prev["cells"].get(gk, [0] * (old_count * 6)))
+            for name, frames, _, _ in figure.CLIPS:
+                if name not in new:
+                    continue
+                for d in figure.DIRS:
+                    for f in range(frames):
+                        c = crops.get(gk, {}).get(f"{name}/{d}/{f}") if figure.stored_in(name, layer) else None
+                        if c is None:
+                            cells.extend([0, 0, 0, 0, 0, 0])
+                            continue
+                        img, ox, oy = c[0].astype(np.float32) / 255, c[1], c[2]
+                        h, w = img.shape[:2]
+                        if shelf_x + w > atlas_w:
+                            shelf_x, shelf_y, shelf_h = 0, shelf_y + shelf_h, 0
+                        added.append((img, shelf_x, shelf_y))
+                        cells.extend([shelf_x, shelf_y, w, h, ox, oy])
+                        shelf_x += w
+                        shelf_h = max(shelf_h, h)
+            cells_out[gk] = cells
+        grown = np.zeros((max(1, shelf_y + shelf_h, atlas.shape[0]), atlas_w, 4), dtype=np.float32)
+        grown[: atlas.shape[0]] = atlas
+        for img, x, y in added:
+            grown[y : y + img.shape[0], x : x + img.shape[1]] = img
+        path = os.path.join(a["out"], "office-art-fig-" + layer.replace("/", "-") + ".png")
+        write_pixels(path, grown)
+        quantize(path, 64)
+        path = to_webp(path)
+        spec["layers"].append({"id": layer, "file": os.path.basename(path)})
+        spec["cells"].update(cells_out)
+        print(f"figure: {layer}: {len(added)} new cells, {atlas_w}x{grown.shape[0]} {os.path.getsize(path)} B", flush=True)
+    with open(fig_json, "w") as fjson:
+        json.dump(spec, fjson, separators=(",", ":"))
+        fjson.write("\n")
+    print(f"figure: appended {new}; {len(spec['layers'])} layer sheets, figure.json")
 
 
 def main() -> None:

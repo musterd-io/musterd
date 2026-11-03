@@ -169,8 +169,17 @@ describe('a shorter clip over a longer base reads the base at the same point of 
 });
 
 describe('look clips (heads that look, lane 01M5XS5ZYP)', () => {
-  it('come last in ANIMS, after sit-lap, so every earlier clip keeps its cells', () => {
+  it('come after sit-lap, and only the goal bell clips after them, so every earlier clip keeps its cells', () => {
     const i = ANIMS.indexOf('sit-lap');
-    expect(ANIMS.slice(i + 1)).toEqual(['g-look45L', 'g-look45R', 'g-look90L', 'g-look90R']);
+    expect(ANIMS.slice(i + 1)).toEqual([
+      'g-look45L',
+      'g-look45R',
+      'g-look90L',
+      'g-look90R',
+      // appended by the goal bell (lane 01M6HHH7Z4, render.py --append-clips)
+      'g-ring',
+      'g-clap',
+      'g-clapUp',
+    ]);
   });
 });
