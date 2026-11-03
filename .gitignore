@@ -40,6 +40,8 @@ coverage-blobs/
 **/.musterd/session-start-*
 # musterd provisioning state — regenerated per-workspace by `musterd init` (ADR 060/085), never committed.
 **/.musterd/provisioned.json
+# ADR 794: a seat's cached seat tool grants — machine-local, rewritten on every good read, never committed.
+**/.musterd/seat-tools.json
 # ADR 326 orient stamp — per-session orientation marker, machine-local, never committed.
 **/.musterd/orient-stamp.json
 # ADR 408 inc 4 drift cache — this workspace's own provisioning measurement, rewritten by the
