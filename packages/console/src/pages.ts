@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { PINNED } from './providers.js';
 
 /**
  * The sign-in screens (design: docs/superpowers/specs/2026-10-15-console-signin-design.md;
@@ -7,8 +8,17 @@ import { readFileSync } from 'node:fs';
  * page CSP. Assets live in ../assets so both src (tests) and dist (deploy) resolve them.
  */
 
-export const PAGE_CSP =
-  "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+/**
+ * `form-action` names the providers' authorize origins as well as our own: Chrome and Safari apply
+ * it to the redirect a form submission lands on, so with `'self'` alone the 303 from
+ * `/auth/<p>/start` to the provider was aborted in the browser (`net::ERR_ABORTED`, the first real
+ * GitHub sign-in at app.musterd.io, 2026-11-03). Firefox does not, which is why it never showed.
+ */
+const FORM_ACTION = [
+  "'self'",
+  ...new Set(Object.values(PINNED).map((e) => new URL(e.authorization_endpoint).origin)),
+].join(' ');
+export const PAGE_CSP = `default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; form-action ${FORM_ACTION}; frame-ancestors 'none'; base-uri 'none'`;
 
 const ASSETS = new Map<string, { type: string; body: Buffer; cache: string }>();
 function asset(name: string, type: string, cache: string): void {
