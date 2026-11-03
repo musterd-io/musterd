@@ -55,6 +55,7 @@ The phone cannot send a quick action, and it cannot show the seats it would send
    - `lane`: the seat's one live lane `{id, title}`, or null when it holds none or several.
 
    The daemon sends it after pairing and on every `redeliver`, under the relay ref `roster-<ts>`.
+   _(Amended 2026-11-03: the roster is never pushed; the phone pulls it — see Consequences.)_
    A roster too large to push is fetched by that ref and rebuilt as of the fetch. `lane.title` is
    text the seat wrote, and the phone labels it as the seat's.
 8. **Audit.** `app.quick_action {binding_id, action, key, result}`, with the seat as target. The
@@ -69,6 +70,14 @@ The phone cannot send a quick action, and it cannot show the seats it would send
 - The `/live` Start everyone (ADR 779 §3) is unchanged. The phone has no route to it.
 - Each redeliver sends one more push (the roster). A phone that opens often costs one sealed roster
   per open.
+- 2026-11-03 (lane `01M6HH8GWM`, cider's report `01M6HH730B`): the pushed roster was a regression
+  on the live hub. The relay sends every delivery as an alert push. The phone's notification
+  extension (build 43) refuses a kind it does not know, so each app open showed nick a "couldn't
+  verify" notification and recorded a `check` refusal. A newer build cannot fix that alone: hiding
+  an alert push needs Apple's filtering entitlement. The daemon no longer pushes the roster at all.
+  The phone pulls it with `GET body/<binding>/roster-<ts>` (`ts` at or before now, inside 10
+  minutes), and `fetchRoster` builds it as of the fetch. `quick_action_result` is still pushed: it
+  only follows a button press, so a notification there is wanted.
 
 ## Observability & Evaluation
 
