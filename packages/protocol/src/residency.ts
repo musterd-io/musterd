@@ -167,11 +167,15 @@ export const ResidencyPolicySchema = z.object({
    */
   shift_budget_usd: z.number().positive().max(100).default(10),
   /** ADR 792: `manual` — on shift only on a person's Start; `auto` — on shift when hours open
-   *  (increment 3; stored now, not yet acted on). */
+   *  (ADR 793: the shift watch starts it once a day, inside hours). */
   shift_start: z.enum(['manual', 'auto']).default('manual'),
-  /** ADR 792: what an on-shift seat may take on alone when its claimed work runs out. `ask`
-   *  recommends and waits; `claim` and `free` are increment 3 (stored now, not yet acted on). */
+  /** ADR 792/793: what an on-shift seat may take on alone when its claimed work runs out. `ask`
+   *  recommends and waits; `claim` claims a lane on one of `autonomy_goals`; `free` any open lane.
+   *  A lane with a risk tag is only ever recommended. */
   autonomy: z.enum(['ask', 'claim', 'free']).default('ask'),
+  /** ADR 793: at `autonomy: claim`, the goals a person named for this seat — it claims on its own
+   *  only a lane attached to one of them. Unset or empty, `claim` claims nothing alone. */
+  autonomy_goals: z.array(z.string().min(1).max(64)).max(20).optional(),
 });
 export type ResidencyPolicy = z.infer<typeof ResidencyPolicySchema>;
 

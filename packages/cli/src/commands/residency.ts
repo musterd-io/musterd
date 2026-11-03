@@ -70,7 +70,7 @@ const POLICY_FLAGS_USAGE =
   '[--budget <usd>] ' +
   '[--transcript-max <MiB, fractions OK>] [--dream on|off] [--dream-nightly <1-3>] ' +
   '[--dream-budget <usd>] [--shift-budget <usd>] [--shift-start manual|auto] ' +
-  '[--autonomy ask|claim|free]';
+  '[--autonomy ask|claim|free] [--autonomy-goals <goal,goal>]';
 
 // The enrolment hint and its "from an admin's own Workspace" tail live in host/registry.ts (shared
 // with the host loop, lane 01M5WXYDQJ): one helper, so no printed line can drift back to `--as`.
@@ -241,6 +241,7 @@ export const RESIDENCY_FLAGS = [
   'dream-budget',
   'dream-nightly',
   'autonomy',
+  'autonomy-goals',
   'shift-budget',
   'shift-start',
   'enroll',
@@ -402,6 +403,20 @@ export function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | un
       throw new CliError(`--autonomy wants ask|claim|free (got "${autonomy}")`, 2);
     out['autonomy'] = autonomy;
   }
+  // ADR 793: the goals a seat at `--autonomy claim` may claim lanes on by itself.
+  const goals = flagStr(parsed.flags, 'autonomy-goals');
+  if (goals !== undefined) {
+    const list = goals
+      .split(',')
+      .map((g) => g.trim())
+      .filter(Boolean);
+    if (list.length === 0 || list.length > 20 || list.some((g) => g.length > 64))
+      throw new CliError(
+        `--autonomy-goals wants 1-20 comma-separated goal ids (got "${goals}")`,
+        2,
+      );
+    out['autonomy_goals'] = list;
+  }
   if (parsed.flags['reset-policy'] === true) {
     if (Object.keys(out).length > 0)
       throw new CliError('--reset-policy clears every knob — drop the other policy flags', 2);
@@ -452,6 +467,7 @@ export function policyFlags(policy: ResidencyPolicyOverride): string[] {
   add('shift-budget', policy.shift_budget_usd?.toString());
   add('shift-start', policy.shift_start);
   add('autonomy', policy.autonomy);
+  add('autonomy-goals', policy.autonomy_goals?.join(','));
   return out;
 }
 
@@ -494,6 +510,8 @@ export function renderPolicy(
     bits.push(`shift starts ${policy.shift_start}${star('shift_start')}`);
   if (policy.autonomy !== 'ask' || star('autonomy'))
     bits.push(`autonomy ${policy.autonomy}${star('autonomy')}`);
+  if (policy.autonomy_goals?.length)
+    bits.push(`claims on ${policy.autonomy_goals.join(', ')}${star('autonomy_goals')}`);
   return bits.join(' · ');
 }
 

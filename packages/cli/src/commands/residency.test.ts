@@ -250,6 +250,7 @@ describe('policyFlags (ADR 703)', () => {
       shift_budget_usd: 25,
       shift_start: 'auto',
       autonomy: 'claim',
+      autonomy_goals: ['cloud-agents', 'seats-ask'],
     } as const;
     expect(collectPolicyFlags(parseArgs(['on', ...policyFlags(policy)]))).toEqual(policy);
   });
@@ -340,6 +341,10 @@ describe('--shift-budget, --shift-start, --autonomy (ADR 792)', () => {
     expect(() => flags('--shift-budget', '101')).toThrow(/at most 100/);
     expect(() => flags('--shift-start', 'later')).toThrow(/--shift-start wants manual\|auto/);
     expect(() => flags('--autonomy', 'yolo')).toThrow(/--autonomy wants ask\|claim\|free/);
+    expect(flags('--autonomy-goals', 'cloud-agents, seats-ask')).toEqual({
+      autonomy_goals: ['cloud-agents', 'seats-ask'],
+    });
+    expect(() => flags('--autonomy-goals', ',')).toThrow(/--autonomy-goals wants/);
   });
 
   it('status names a shift knob only when it is not the default', () => {

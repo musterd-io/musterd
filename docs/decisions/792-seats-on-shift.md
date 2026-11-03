@@ -94,6 +94,7 @@ nothing bounds a run by the clock or by money, because no such run exists.
 - Follows-up: lane `01M6H8C17EYMMT8KMDC0QBH0PK` (the recommendation at `ask`, `claim`/`free`,
   `shift_start: auto`) and lane `01M6H8C6QGRZ7Z3D65AD33SZRE` (the `/live` settings and the seat
   reading its own bounds over MCP).
+- 2026-11-03 ([ADR 793](793-shift-recommend-claim-auto-start.md), lane `01M6H8C17E`): `autonomy` and `shift_start` are now acted on. Out of work, a seat recommends (at `ask`) or claims (at `claim`/`free`) before it stops `no_work`, and `auto` starts its shift once a day.
 
 ## Observability & Evaluation
 

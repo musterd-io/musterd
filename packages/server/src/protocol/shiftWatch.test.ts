@@ -4,14 +4,20 @@ import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { appendAudit, listAuditByAction } from '../store/audit.js';
-import { openLane, updateLane } from '../store/lanes.js';
+import { getLane, openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
 import { claimWakeLeases, enrollResidency } from '../store/residency.js';
-import type { TeamRow } from '../store/rows.js';
+import type { MemberRow, TeamRow } from '../store/rows.js';
 import { getShift, shiftDay, startShift } from '../store/shift.js';
 import { createTeam } from '../store/teams.js';
 import { routeEnvelope } from './route.js';
-import { rosterShifts, SHIFT_NO_WORK_GRACE_MS, shiftStopLine, sweepShifts } from './shiftWatch.js';
+import {
+  autoStartShifts,
+  rosterShifts,
+  SHIFT_NO_WORK_GRACE_MS,
+  shiftStopLine,
+  sweepShifts,
+} from './shiftWatch.js';
 
 let openStore: () => Promise<Driver>;
 
@@ -217,6 +223,157 @@ withDrivers('the shift watch (ADR 792)', (o) => {
       expect(await boardLines(db, team.id)).toEqual([
         'ryder is off shift: hours ended; 1 lane still claimed.',
       ]);
+    });
+  });
+
+  describe('out of work (ADR 793)', () => {
+    async function recommended(db: Driver, teamId: string) {
+      const rows = await listAuditByAction(db, teamId, 'shift.recommended', 5);
+      return rows.map((r) => JSON.parse(String(r.detail)) as { question: string; lanes: string[] });
+    }
+
+    /** nick answers on /live: through the route, which claims the question and stamps its proof. */
+    async function answer(
+      ctx: Ctx,
+      team: TeamRow,
+      nick: MemberRow,
+      question: string,
+      choice: number,
+    ) {
+      await routeEnvelope(
+        ctx,
+        team,
+        nick,
+        makeEnvelope({
+          id: `a-${question}`,
+          team: team.slug,
+          from: 'nick',
+          to: { kind: 'member', name: 'ryder' },
+          act: 'accept',
+          body: '',
+          thread: question,
+          meta: { in_reply_to: question, answer: { choice } },
+        }),
+      );
+    }
+
+    it('at ask, a seat with nothing claimed asks once which open lane to take, and waits', async () => {
+      const { db, team, ryder, ctx } = await seed();
+      for (const t of ['One', 'Two', 'Three', 'Four'])
+        await openLane(db, team.id, team.slug, 'nick', { title: t });
+      const now = Date.now();
+      await startShift(db, team.id, ryder, 'nick', null, now);
+      const after = now + SHIFT_NO_WORK_GRACE_MS + 1;
+      expect(await sweepShifts(ctx, after)).toBe(0);
+      const [rec] = await recommended(db, team.id);
+      expect(rec!.lanes).toHaveLength(3);
+      const ask = await db.get<{ meta: string; to_kind: string }>(
+        'SELECT meta, to_kind FROM messages WHERE id = ?',
+        [rec!.question],
+      );
+      const q = (JSON.parse(ask!.meta) as { question: { options: Array<{ label: string }> } })
+        .question;
+      expect(ask!.to_kind).toBe('team');
+      expect(q.options.map((o) => o.label)).toEqual([
+        `One (${rec!.lanes[0]})`,
+        `Two (${rec!.lanes[1]})`,
+        `Three (${rec!.lanes[2]})`,
+        'None, end my shift',
+      ]);
+      // The question is open: no second ask, no stop.
+      expect(await sweepShifts(ctx, after + 60_000)).toBe(0);
+      expect(await recommended(db, team.id)).toHaveLength(1);
+      expect((await getShift(db, team.id, ryder.id, shiftDay(null, now)))?.state).toBe('on');
+    });
+
+    it('an answer of none stops the shift; a picked lane gets its wake first', async () => {
+      const { db, team, nick, ryder, ctx } = await seed();
+      await openLane(db, team.id, team.slug, 'nick', { title: 'One' });
+      const now = Date.now();
+      await startShift(db, team.id, ryder, 'nick', null, now);
+      const t1 = now + SHIFT_NO_WORK_GRACE_MS + 1;
+      await sweepShifts(ctx, t1);
+      const [rec] = await recommended(db, team.id);
+      await answer(ctx, team, nick, rec!.question, 0); // picked "One"
+      const answeredAt = (await db.get<{ ts: number }>('SELECT ts FROM messages WHERE id = ?', [
+        `a-${rec!.question}`,
+      ]))!.ts;
+      expect(await sweepShifts(ctx, answeredAt + 60_000)).toBe(0);
+      // It never claimed it: past the grace, the shift ends for want of work.
+      expect(await sweepShifts(ctx, answeredAt + SHIFT_NO_WORK_GRACE_MS + 1)).toBe(1);
+      expect(await boardLines(db, team.id)).toEqual([
+        'ryder is off shift: no work left; nothing claimed.',
+      ]);
+
+      // A fresh Start, a fresh recommendation, answered "none": it stops on the next sweep.
+      const t2 = answeredAt + SHIFT_NO_WORK_GRACE_MS + 10;
+      await startShift(db, team.id, ryder, 'nick', null, t2);
+      await sweepShifts(ctx, t2 + SHIFT_NO_WORK_GRACE_MS + 1);
+      const second = (await recommended(db, team.id))[0]!;
+      await answer(ctx, team, nick, second.question, 1); // "None"
+      expect(await sweepShifts(ctx, t2 + SHIFT_NO_WORK_GRACE_MS + 2)).toBe(1);
+    });
+
+    it('nothing on the board to offer: it stops at once', async () => {
+      const { db, team, ryder, ctx } = await seed();
+      const now = Date.now();
+      await startShift(db, team.id, ryder, 'nick', null, now);
+      expect(await sweepShifts(ctx, now + SHIFT_NO_WORK_GRACE_MS + 1)).toBe(1);
+      expect(await recommended(db, team.id)).toHaveLength(0);
+    });
+
+    it('at claim it takes a lane on a named goal, never a risky one; at free any safe lane', async () => {
+      const { db, team, ryder, ctx } = await seed();
+      await db.run('UPDATE residency SET policy = ? WHERE member_id = ?', [
+        JSON.stringify({ autonomy: 'claim', autonomy_goals: ['g-ok'] }),
+        ryder.id,
+      ]);
+      const risky = await openLane(db, team.id, team.slug, 'nick', {
+        title: 'Risky',
+        goal_id: 'g-ok',
+        risk: ['user-facing'],
+      });
+      const other = await openLane(db, team.id, team.slug, 'nick', {
+        title: 'Other goal',
+        goal_id: 'g-no',
+      });
+      const ok = await openLane(db, team.id, team.slug, 'nick', {
+        title: 'On goal',
+        goal_id: 'g-ok',
+      });
+      const now = Date.now();
+      await startShift(db, team.id, ryder, 'nick', null, now);
+      await sweepShifts(ctx, now + SHIFT_NO_WORK_GRACE_MS + 1);
+      expect((await getLane(db, team.id, ok.id, team.slug))?.owner_seat).toBe('ryder');
+      expect((await getLane(db, team.id, risky.id, team.slug))?.owner_seat).toBeNull();
+      expect((await getLane(db, team.id, other.id, team.slug))?.owner_seat).toBeNull();
+      expect(await listAuditByAction(db, team.id, 'shift.claimed', 5)).toHaveLength(1);
+
+      await updateLane(db, team.id, ok.id, team.slug, { state: 'done' });
+      await db.run('UPDATE residency SET policy = ? WHERE member_id = ?', [
+        JSON.stringify({ autonomy: 'free' }),
+        ryder.id,
+      ]);
+      await sweepShifts(ctx, now + SHIFT_NO_WORK_GRACE_MS + 2);
+      expect((await getLane(db, team.id, other.id, team.slug))?.owner_seat).toBe('ryder');
+      expect((await getLane(db, team.id, risky.id, team.slug))?.owner_seat).toBeNull();
+    });
+
+    it('shift_start auto starts an enrolled seat once a day, inside hours only', async () => {
+      const { db, team, ryder, ctx } = await seed({ hours: PACIFIC });
+      await db.run('UPDATE residency SET policy = ? WHERE member_id = ?', [
+        JSON.stringify({ shift_start: 'auto' }),
+        ryder.id,
+      ]);
+      expect(await autoStartShifts(ctx, at('2026-11-03T15:00:00Z'))).toBe(0); // 07:00 Tue
+      expect(await autoStartShifts(ctx, at('2026-11-03T17:05:00Z'))).toBe(1); // 09:05 Tue
+      expect(await getShift(db, team.id, ryder.id, '2026-11-03')).toMatchObject({
+        state: 'on',
+        started_by: 'auto',
+        inside_hours: 1,
+      });
+      expect(await autoStartShifts(ctx, at('2026-11-03T18:00:00Z'))).toBe(0); // already today
+      expect(await autoStartShifts(ctx, at('2026-11-08T18:00:00Z'))).toBe(0); // Sunday
     });
   });
 });

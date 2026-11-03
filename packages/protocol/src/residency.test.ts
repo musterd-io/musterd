@@ -82,6 +82,14 @@ describe('ResidencyPolicySchema (ADR 131 inc 5) — the knobs, defaults in ONE p
     });
   });
 
+  it('ADR 793: autonomy goals are an optional list of goal ids', () => {
+    expect(ResidencyPolicySchema.parse({}).autonomy_goals).toBeUndefined();
+    expect(
+      ResidencyPolicySchema.parse({ autonomy_goals: ['cloud-agents'] }).autonomy_goals,
+    ).toEqual(['cloud-agents']);
+    expect(ResidencyPolicySchema.safeParse({ autonomy_goals: [''] }).success).toBe(false);
+  });
+
   it('ADR 792: the shift budget is positive and at most $100', () => {
     expect(ResidencyPolicySchema.safeParse({ shift_budget_usd: 0 }).success).toBe(false);
     expect(ResidencyPolicySchema.safeParse({ shift_budget_usd: 101 }).success).toBe(false);

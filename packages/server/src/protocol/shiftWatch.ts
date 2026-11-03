@@ -1,4 +1,5 @@
 import {
+  isWithinWorkingHours,
   makeEnvelope,
   type ShiftState,
   type ShiftStopReason,
@@ -7,18 +8,22 @@ import {
 import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
 import { log } from '../log.js';
+import { appendAudit } from '../store/audit.js';
 import { boardSeat } from '../store/boardSeat.js';
-import { listLanes } from '../store/lanes.js';
+import { LaneConflictError, listLanes, updateLane } from '../store/lanes.js';
 import { getMemberById } from '../store/members.js';
 import { waitingSeats } from '../store/questions.js';
 import {
   effectiveWakePolicy,
   getResidency,
+  listResidency,
+  listResidencyTeamIds,
   liveLease,
   seatWakeDefaults,
 } from '../store/residency.js';
 import { parseWorkingHours, type MemberRow, type TeamRow } from '../store/rows.js';
 import {
+  getShift,
   settleEnding,
   shiftDay,
   shiftDayStart,
@@ -30,6 +35,12 @@ import {
   stopShift,
   type ShiftRow,
 } from '../store/shift.js';
+import {
+  pickAutoClaim,
+  recommendationQuestion,
+  recommendationThisShift,
+  recommendFor,
+} from '../store/shiftRecommend.js';
 import { getPolicy, getTeamById } from '../store/teams.js';
 import { routeEnvelope } from './route.js';
 
@@ -57,7 +68,13 @@ export async function seatShiftPolicy(
   ctx: Ctx,
   team: { id: string },
   member: MemberRow,
-): Promise<{ budgetUsd: number; hours: WorkingHours | null }> {
+): Promise<{
+  budgetUsd: number;
+  hours: WorkingHours | null;
+  autonomy: 'ask' | 'claim' | 'free';
+  autonomyGoals: string[] | undefined;
+  shiftStart: 'manual' | 'auto';
+}> {
   const teamRow = await getTeamById(ctx.db, team.id);
   const policy = effectiveWakePolicy(
     seatWakeDefaults(await getPolicy(ctx.db, team.id), member),
@@ -66,6 +83,9 @@ export async function seatShiftPolicy(
   return {
     budgetUsd: policy.shift_budget_usd,
     hours: shiftHours(member, parseWorkingHours(teamRow?.working_hours)),
+    autonomy: policy.autonomy,
+    autonomyGoals: policy.autonomy_goals,
+    shiftStart: policy.shift_start,
   };
 }
 
@@ -201,6 +221,7 @@ async function hasClaimedWork(ctx: Ctx, team: TeamRow, seat: string): Promise<bo
 
 /** One pass over every live shift (ADR 792). Returns the stops it wrote. */
 export async function sweepShifts(ctx: Ctx, now: number = Date.now()): Promise<number> {
+  await autoStartShifts(ctx, now);
   const rows = await ctx.db.all<ShiftRow>(
     "SELECT * FROM shifts WHERE state IN ('on', 'ending') ORDER BY team_id, member_id, day",
   );
@@ -238,10 +259,117 @@ export async function sweepShifts(ctx: Ctx, now: number = Date.now()): Promise<n
     if (!waiting.has(team.id)) waiting.set(team.id, await waitingSeats(ctx.db, team.id));
     if (waiting.get(team.id)!.has(member.name)) continue;
     if (!(await hasClaimedWork(ctx, team, member.name))) {
-      if (await stopAndAnnounce(ctx, team, member, 'no_work', now)) stops++;
+      if (await outOfWork(ctx, team, member, row, now)) stops++;
     }
   }
   return stops;
+}
+
+/**
+ * ADR 793: an on-shift seat with nothing claimed. At `claim`/`free` it takes the best lane it may
+ * (never a risky one); otherwise, once per shift, it asks a person which to take; with nothing to
+ * offer, or once that recommendation was answered and it still holds nothing, it stops `no_work`.
+ * Returns whether it stopped.
+ */
+async function outOfWork(
+  ctx: Ctx,
+  team: TeamRow,
+  member: MemberRow,
+  row: ShiftRow,
+  now: number,
+): Promise<boolean> {
+  const { autonomy, autonomyGoals } = await seatShiftPolicy(ctx, team, member);
+  const ranked = await recommendFor(ctx.db, team.id, team.slug, member.name);
+  const pick = pickAutoClaim(ranked, autonomy, autonomyGoals);
+  if (pick) {
+    try {
+      await updateLane(
+        ctx.db,
+        team.id,
+        pick.id,
+        team.slug,
+        { owner_seat: member.name, state: 'claimed' },
+        now,
+        { owner_seat: null, state: 'open' },
+        { actor: member.name },
+      );
+      await appendAudit(ctx.db, team.id, {
+        actor: null,
+        action: 'shift.claimed',
+        target: member.name,
+        result: 'allow',
+        detail: { lane_id: pick.id, autonomy, shift_started_at: row.started_at },
+      });
+      return false;
+    } catch (err) {
+      // Someone took it between the read and the write: the next sweep picks again.
+      if (err instanceof LaneConflictError) return false;
+      throw err;
+    }
+  }
+  const asked = await recommendationThisShift(ctx.db, team.id, member.name, row.started_at);
+  // A person picked a lane: the answer wakes the seat to claim it. Give that wake its chance before
+  // calling it no work (the host may not have polled yet).
+  if (
+    asked?.answer === 'picked' &&
+    asked.answeredAt !== null &&
+    now - asked.answeredAt < SHIFT_NO_WORK_GRACE_MS
+  )
+    return false;
+  if (ranked.length === 0 || asked !== null)
+    return (await stopAndAnnounce(ctx, team, member, 'no_work', now)) !== null;
+  const q = recommendationQuestion(ranked);
+  const id = ulid();
+  await routeEnvelope(
+    ctx,
+    team,
+    member,
+    makeEnvelope({
+      id,
+      team: team.slug,
+      from: member.name,
+      to: { kind: 'team' },
+      act: 'ask',
+      body: q.text,
+      meta: {
+        species: 'consult',
+        question: { ...q, blocking: false, audience: 'team', inferred: false },
+      },
+      ts: now,
+    }),
+  );
+  await appendAudit(ctx.db, team.id, {
+    actor: null,
+    action: 'shift.recommended',
+    target: member.name,
+    result: 'allow',
+    detail: { question: id, lanes: ranked.map((l) => l.id), shift_started_at: row.started_at },
+  });
+  return false;
+}
+
+/**
+ * ADR 793: `shift_start: auto` — an enrolled agent seat goes on shift on its own, once a day, the
+ * first sweep inside its working hours. Never outside them, never a halted seat, and never on a day
+ * it already has a row (a stopped shift stays stopped until a person's Start).
+ */
+export async function autoStartShifts(ctx: Ctx, now: number): Promise<number> {
+  let started = 0;
+  for (const teamId of await listResidencyTeamIds(ctx.db)) {
+    const team = await getTeamById(ctx.db, teamId);
+    if (!team) continue;
+    for (const enrollment of await listResidency(ctx.db, teamId)) {
+      const member = await getMemberById(ctx.db, enrollment.member_id);
+      if (!member || member.kind !== 'agent' || member.left_at !== null) continue;
+      if (member.halted_at !== null && member.halted_at !== undefined) continue;
+      const { hours, shiftStart } = await seatShiftPolicy(ctx, team, member);
+      if (shiftStart !== 'auto' || hours === null || !isWithinWorkingHours(hours, now)) continue;
+      if (await getShift(ctx.db, teamId, member.id, shiftDay(hours, now))) continue;
+      await startShift(ctx.db, teamId, member, 'auto', hours, now);
+      started++;
+    }
+  }
+  return started;
 }
 
 export function startShiftWatch(ctx: Ctx): () => void {
