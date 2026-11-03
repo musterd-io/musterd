@@ -76,13 +76,13 @@ import {
   withEnvelopeSpan,
 } from '../telemetry.js';
 import { acceptedHandoffOf, applyDisputeAnswer, stampDispute } from './dispute.js';
-import { applyShiftQuickAction } from './shiftWatch.js';
 import {
   auditQuestionAnswer,
   checkInferredQuestion,
   prepareQuestionAnswer,
   stripAnswerProof,
 } from './questionAnswer.js';
+import { applyShiftQuickAction } from './shiftWatch.js';
 
 export interface RouteResult {
   message: MessageRow;

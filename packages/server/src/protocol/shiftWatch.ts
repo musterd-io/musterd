@@ -1,4 +1,9 @@
-import { makeEnvelope, type ShiftStopReason, type WorkingHours } from '@musterd/protocol';
+import {
+  makeEnvelope,
+  type ShiftState,
+  type ShiftStopReason,
+  type WorkingHours,
+} from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
 import { log } from '../log.js';
@@ -14,12 +19,12 @@ import {
 } from '../store/residency.js';
 import { parseWorkingHours, type MemberRow, type TeamRow } from '../store/rows.js';
 import {
-  getShift,
   settleEnding,
   shiftDay,
   shiftDayStart,
   shiftHours,
   shiftSpentUsd,
+  shiftStateOf,
   shiftStopDue,
   startShift,
   stopShift,
@@ -62,14 +67,6 @@ export async function seatShiftPolicy(
     budgetUsd: policy.shift_budget_usd,
     hours: shiftHours(member, parseWorkingHours(teamRow?.working_hours)),
   };
-}
-
-function clock(at: number, timezone: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(at);
 }
 
 function plural(n: number, word: string): string {
@@ -263,4 +260,28 @@ export function startShiftWatch(ctx: Ctx): () => void {
   const handle = setInterval(() => void tick(), SHIFT_WATCH_MS);
   if (typeof handle.unref === 'function') handle.unref();
   return () => clearInterval(handle);
+}
+
+/**
+ * ADR 792: every agent seat's shift today, for the roster — the one value `/live`, `musterd status`
+ * and `team_status` read. Only seats with a shift row in the last day and a half are read.
+ */
+export async function rosterShifts(
+  ctx: Ctx,
+  teamId: string,
+  now: number,
+): Promise<Map<string, ShiftState>> {
+  const out = new Map<string, ShiftState>();
+  const ids = await ctx.db.all<{ member_id: string }>(
+    'SELECT DISTINCT member_id FROM shifts WHERE team_id = ? AND started_at > ?',
+    [teamId, now - 36 * 60 * 60_000],
+  );
+  for (const { member_id } of ids) {
+    const member = await getMemberById(ctx.db, member_id);
+    if (!member || member.kind !== 'agent') continue;
+    const { budgetUsd, hours } = await seatShiftPolicy(ctx, { id: teamId }, member);
+    const state = await shiftStateOf(ctx.db, teamId, member, hours, budgetUsd, now);
+    if (state) out.set(member_id, state);
+  }
+  return out;
 }

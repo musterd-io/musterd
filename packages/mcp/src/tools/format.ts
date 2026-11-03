@@ -10,6 +10,7 @@ import {
   describeSyncPullStop,
   describeSyncWedge,
   type RosterSyncState,
+  shiftLabel,
 } from '@musterd/protocol';
 import { readBuildStamp } from '@musterd/protocol/build-stamp';
 import { packageRoot } from '../packageRoot.js';
@@ -104,6 +105,8 @@ export function formatMember(
     if (m.resumable_at != null && Date.now() - m.resumable_at < 30 * 24 * 60 * 60 * 1000)
       facets.push('resumable');
   }
+  // ADR 792: the seat's shift today, the same words `/live` and `musterd status` print.
+  if (m.kind === 'agent' && m.shift) facets.push(shiftLabel(m.shift, m.working_hours?.timezone));
 
   let line = `${m.name} (${facets.join(' · ')})`;
   // The payload: what they said they are doing — the fact the old tools left out entirely.

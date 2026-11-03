@@ -246,6 +246,7 @@ import {
 } from '../protocol/laneReroute.js';
 import { quickActionLineFor, startAll } from '../protocol/quickActions.js';
 import { announceIncidentResolved, routeEnvelope } from '../protocol/route.js';
+import { rosterShifts } from '../protocol/shiftWatch.js';
 import { parseEnvelope, parseOrBadRequest } from '../protocol/validate.js';
 import { raiseWakeQuestion } from '../protocol/wakeQuestion.js';
 import { claimedLanesByOwner, resolveActivity } from '../store/activity.js';
@@ -2681,6 +2682,8 @@ async function loadRosterBase(ctx: Ctx, teamSlug: string, teamId: string) {
   const residency = await seatWakeabilityFacts(ctx.db, teamId, Date.now());
   // ADR 503 Decision 5: WHERE each enrolled seat lives, from its node binding — so a launcher on
   // another machine can tell `wake` from `setup` without a folder scan. One read for the roster.
+  // ADR 792: each agent seat's shift today, one read for the roster.
+  const shifts = await rosterShifts(ctx, teamId, Date.now());
   const residences = await seatResidences(ctx.db, teamId, {
     nodeId: (await localNodeIfAny(ctx.db, teamId))?.id ?? null,
     cloud: ctx.config.mode === 'cloud',
@@ -2712,6 +2715,7 @@ async function loadRosterBase(ctx: Ctx, teamSlug: string, teamId: string) {
     reclaimable,
     residency,
     residences,
+    shifts,
     liveDrivers,
     lastAction,
     claimedLanes,
@@ -2745,6 +2749,7 @@ async function summarize(
     reclaimable,
     residency,
     residences,
+    shifts,
     liveDrivers,
     lastAction,
     claimedLanes,
@@ -2841,6 +2846,7 @@ async function summarize(
         reclaimable: isReclaimable,
         wakeable: residency.has(s.member.id),
         residence: residences.get(s.member.id) ?? null,
+        shift: shifts.get(s.member.id) ?? null,
         resumable_at: residency.get(s.member.id)?.resumable_at ?? null,
         // ADR 357: the ADR 189 enum beside the boolean. `wakeable` stays "enrolled" for every
         // consumer that reads it today; `wakeability` is the honest answer to "can a directed act

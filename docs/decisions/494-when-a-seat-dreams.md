@@ -199,6 +199,8 @@ gap: whatever a dream sends, nothing rings.
   counts older open asks in one line, and treats an ask whose named lane is `done` or `abandoned` as
   settled.
 
+_2026-11-03 ([ADR 792](792-seats-on-shift.md), lane 01M6H8BPVD): shifts read the same `working_hours` a dream does: a seat works on shift inside them and dreams outside them, from one schedule. A seat on shift is never leased a dream._
+
 ## Observability & Evaluation
 
 **Traces.** No new span. A dream is a `musterd.residency.wake` span with `derivation: 'dream'`,

@@ -44,14 +44,6 @@ import { memberAvailability } from './doorbell.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
 import { getLane, listLanes } from './lanes.js';
 import { getMemberById, getMemberByName } from './members.js';
-import {
-  getShift,
-  shiftDay,
-  shiftDayStart,
-  shiftHours,
-  shiftSpentUsd,
-  shiftStopDue,
-} from './shift.js';
 import { memoryEnvelope } from './memory.js';
 import {
   deferrals,
@@ -64,6 +56,14 @@ import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
 import { answerLineFor, waitingSeats } from './questions.js';
 import { lastActionBySubject } from './quiescence.js';
 import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
+import {
+  getShift,
+  shiftDay,
+  shiftDayStart,
+  shiftHours,
+  shiftSpentUsd,
+  shiftStopDue,
+} from './shift.js';
 import { getPolicy, getTeamById, spendApprovalUsd } from './teams.js';
 import { deriveContext } from './wakeContextBody.js';
 

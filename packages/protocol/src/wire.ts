@@ -42,6 +42,7 @@ export * from './offline.wire.js';
 export * from './question.wire.js';
 // ADR 779: the quick-action vocabulary, for /live's buttons.
 export * from './quickAction.wire.js';
+export * from './shift.wire.js';
 export * from './posture.wire.js';
 export * from './seeds.wire.js';
 // ADR 514: the dial vocabularies and prose cap /board's style sheet picks from — no zod behind them.

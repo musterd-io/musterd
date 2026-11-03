@@ -11,7 +11,7 @@ import type { TeamRow } from '../store/rows.js';
 import { getShift, shiftDay, startShift } from '../store/shift.js';
 import { createTeam } from '../store/teams.js';
 import { routeEnvelope } from './route.js';
-import { SHIFT_NO_WORK_GRACE_MS, shiftStopLine, sweepShifts } from './shiftWatch.js';
+import { rosterShifts, SHIFT_NO_WORK_GRACE_MS, shiftStopLine, sweepShifts } from './shiftWatch.js';
 
 let openStore: () => Promise<Driver>;
 
@@ -100,6 +100,17 @@ withDrivers('the shift watch (ADR 792)', (o) => {
     expect(
       shiftStopLine({ seat: 'ryder', reason: 'no_work', claimed: 0, blocked: 2, budgetUsd: 10 }),
     ).toBe('ryder is off shift: no work left; 2 lanes waiting on someone else.');
+  });
+
+  it("the roster reads each agent seat's shift today, and no one else's", async () => {
+    const { db, team, nick, ryder, ctx } = await seed();
+    const now = Date.now();
+    expect((await rosterShifts(ctx, team.id, now)).size).toBe(0);
+    await startShift(db, team.id, ryder, 'nick', null, now);
+    await startShift(db, team.id, nick, 'nick', null, now);
+    const shifts = await rosterShifts(ctx, team.id, now + 1);
+    expect([...shifts.keys()]).toEqual([ryder.id]);
+    expect(shifts.get(ryder.id)).toMatchObject({ state: 'on', budget_left_usd: 10, until: null });
   });
 
   describe('Start and Stop', () => {

@@ -14,6 +14,7 @@ export * from './grants.js';
 export * from './requests.js';
 export * from './residency.js';
 export * from './shift.js';
+export * from './shift.wire.js';
 export * from './workspace.js';
 export * from './enforcement.js';
 export * from './loops.js';

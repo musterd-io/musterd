@@ -33,14 +33,19 @@ nothing bounds a run by the clock or by money, because no such run exists.
    or `active` is due a shift wake for it.
    - The wake passes `hourly_cap` and `cooldown_ms` (the ADR 790 filter).
    - It is skipped while the seat has an open question of its own; the answer wakes it.
-   - The ADR 306 guards hold: a wake that moved nothing is not repeated for that lane, and the
-     continuation cap bounds a run.
+   - The candidate is an ADR 199 dispatch continuation, so the ADR 306 guards hold: a wake that
+     moved nothing is not repeated for that lane, the edge breaker counts failures, and the
+     continuation success cap (8 per lane) bounds a run. ADR 628's owner-engaged check does not
+     apply: on shift the owner's "recent act" is its own last wake, and a live session in the seat
+     is already the `present` gate.
    - An agent's act to an on-shift seat is still rationed (ADR 131).
    - On the wire the order is a board work order (`derivation: 'work_order'`, `lane_id`, no act),
-     so a host on an older CLI runs it unchanged. Its `composed_line` is the shift line:
-     `You are on shift until 18:00 (budget $4.10 left). Your lane `<id>` "<title>" is claimed and
-     not done — continue it. Check your inbox first.` The `residency.wake_leased` row records
-     `derivation: 'shift'`.
+     so a host on an older CLI runs it unchanged. A new derivation value would fail an older host's
+     strict parse of the whole lease response. Its `composed_line` names the seat, the shift's end,
+     the budget left and the lane by id: `you are on shift until 18:00 (budget $4.10 left). Your
+     lane <id> is claimed and not done — continue it. Check your inbox first…`. It carries no lane
+     title (ADR 179: seat-written text never rides a spawn prompt). The `residency.wake_leased` row
+     records `shift: true`.
 4. **A shift stops on four reasons, and every stop is said.**
    - `hours_end`: the shift started inside working hours, and they have ended. A Start outside
      hours is not ended by the clock.
@@ -50,9 +55,12 @@ nothing bounds a run by the clock or by money, because no such run exists.
      open.
    - `stopped`: a person's Stop.
 
-   The board seat posts one `status_update` per stop, for example `ryder is off shift: hours ended
-   at 18:00; 2 lanes still claimed.` A stop while a wake is running sets `ending`, and the row turns
-   `off` once the lease ends. Nothing cancels a running wake.
+   A shift watch (loop `shift_watch`, once a minute) writes every guardrail stop, so a stop is
+   made and said even when no host polls. The wake derivation only refuses a shift wake while a
+   stop is due. The board seat posts one `status_update` per stop, for example `ryder is off shift:
+   hours ended at 18:00; 2 lanes still claimed.` A stop while a wake is running sets `ending`, and
+   the row turns `off` once the lease ends. Nothing cancels a running wake. A shift never outlives
+   its day: one still on past midnight stops with `hours_end`, and a new day needs a new Start.
 5. **Three policy knobs, in the ADR 131 shape.** Each has a team default and a sparse per-seat
    override:
    - `shift_budget_usd`: default **10**, at most 100, never unset.
@@ -78,18 +86,26 @@ nothing bounds a run by the clock or by money, because no such run exists.
   `quick_action: 'stop'`. The ADR 135 stale-adapter warning names the fix (rebuild and reload).
 - revive's `working_hours` become 09:00–18:00 Mon–Fri, America/Los_Angeles (nick, 2026-11-03),
   set through the seed once this lands.
+- From the commit security review (2026-11-03): an earlier draft carried a shift started outside
+  hours over midnight as a new day. That would renew one person's Start every night with no end,
+  so it was dropped. Start and Stop write with the server's clock, never the envelope's `ts`.
+- `musterd start` and `musterd stop` CLI verbs, and a Start after a `budget` stop asking to raise
+  the day's budget, are not in this increment. Follows-up: lane `01M6H8C6QGRZ7Z3D65AD33SZRE`.
 - Follows-up: lane `01M6H8C17EYMMT8KMDC0QBH0PK` (the recommendation at `ask`, `claim`/`free`,
   `shift_start: auto`) and lane `01M6H8C6QGRZ7Z3D65AD33SZRE` (the `/live` settings and the seat
   reading its own bounds over MCP).
 
 ## Observability & Evaluation
 
-- **Traces:** audit `shift.started {by, inside_hours}` and `shift.stopped {reason, lanes_claimed,
-  spent_usd}`; `residency.wake_leased {derivation: 'shift', lane_id}`; the board seat's stop line.
+- **Traces:** audit `shift.started {by, inside_hours, day}` and `shift.stopped {reason, day,
+  ending, lanes_claimed, spent_usd}`; `residency.wake_leased {shift: true, lane_id}`; the board
+  seat's stop line, with `meta.shift_stop {seat, reason}`.
 - **Eval:** `shift.test.ts` pins the day boundary in the team's timezone, the budget's live sum (a
   late `wake_cost` counts), unpriced wakes, and the stop-due rules. `residency.shift.test.ts` pins
   that a claimed lane wakes an on-shift seat at its cap, that an off-shift seat is not woken for
-  it, each stop reason with its line, Start during a live lease, and an agent's act still rationed.
+  it, that a Stop steer never wakes, Start during a live lease, and an agent's act still rationed.
+  `shiftWatch.test.ts` pins Start and Stop through the route, `ending` settling, each stop reason
+  with its line, and that a shift never outlives its day.
 - **Experiment:** for a week after revive's window opens, count shift wakes per seat per day and
   stops by reason. **Falsify:** a seat whose shift runs to `budget` on most days while its lanes do
   not move, which would mean the claimed-work wake spends without progress and the ADR 306 guard is
