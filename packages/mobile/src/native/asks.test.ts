@@ -7,7 +7,15 @@ import {
 import { AppCallbackSchema } from '@musterd/protocol/app-channel';
 import { canonicalJson } from '@musterd/protocol/approval';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadAsks, markShown, requestRedelivery, settledRefs } from './asks';
+import {
+  FETCH_CONCURRENCY,
+  inPool,
+  loadAsks,
+  loadMoreAsks,
+  markShown,
+  requestRedelivery,
+  settledRefs,
+} from './asks';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys } from './phoneKeys';
 import type { PushRoute } from './push';
@@ -243,6 +251,76 @@ describe('loadAsks', () => {
     live.set('a1', ask('swapped', 10));
     vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue([notification('n1', route('a1'), 1)]);
     expect((await loadAsks({ pin, now: 1, fetchImpl })).asks).toEqual([]);
+  });
+});
+
+describe('fetching a page at a time (lane 01M6H8H9G2)', () => {
+  it('fetches only the newest page, and hands back the rest in order for the next scroll', async () => {
+    for (let i = 1; i <= 5; i++) live.set(`a${i}`, ask(`a${i}`, i));
+    vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue(
+      [1, 2, 3, 4, 5].map((i) => notification(`n${i}`, route(`a${i}`), i)),
+    );
+    const view = await loadAsks({ pin, now: 1, fetchImpl, limit: 2 });
+    expect(view.asks.map((e) => e.delivery.ask.id)).toEqual(['a5', 'a4']);
+    expect(view.rest.map((r) => r.ref)).toEqual(['a3', 'a2', 'a1']);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+    const next = await loadMoreAsks({ pin, routes: view.rest, now: 1, fetchImpl, limit: 2 });
+    expect(next.asks.map((e) => e.delivery.ask.id)).toEqual(['a3', 'a2']);
+    expect(next.rest.map((r) => r.ref)).toEqual(['a1']);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+  });
+
+  it('never has more than three bodies in flight', async () => {
+    for (let i = 1; i <= 8; i++) live.set(`a${i}`, ask(`a${i}`, i));
+    vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue(
+      [1, 2, 3, 4, 5, 6, 7, 8].map((i) => notification(`n${i}`, route(`a${i}`), i)),
+    );
+    let inFlight = 0;
+    let peak = 0;
+    const slow = vi.fn(async (url: string, init?: RequestInit) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight--;
+      return fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const view = await loadAsks({ pin, now: 1, fetchImpl: slow });
+    expect(view.asks).toHaveLength(8);
+    expect(peak).toBe(FETCH_CONCURRENCY);
+  });
+
+  it('takes a 404 as final: no second try, and the ask is cleared', async () => {
+    vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue([notification('n1', route('gone'), 1)]);
+    const view = await loadAsks({ pin, now: 1, fetchImpl, pauseMs: 0 });
+    expect(view.asks).toEqual([]);
+    expect(view.unreachable).toBe(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(phoneKeys.forgetAsks).toHaveBeenCalledWith(['gone']);
+  });
+
+  it('puts an ask known only from the phone’s record after the ones with a notification', async () => {
+    live.set('old', ask('old', 50));
+    live.set('new', ask('new', 10));
+    vi.mocked(phoneKeys.deliveredPushes).mockResolvedValue([notification('n1', route('new'), 5)]);
+    vi.mocked(phoneKeys.knownAsks).mockReturnValueOnce([{ ...route('old'), seen: true }]);
+    const view = await loadAsks({ pin, now: 1, fetchImpl, limit: 1 });
+    expect(view.asks.map((e) => e.delivery.ask.id)).toEqual(['new']);
+    expect(view.rest.map((r) => r.ref)).toEqual(['old']);
+  });
+});
+
+describe('inPool', () => {
+  it('keeps the order of its input', async () => {
+    const out = await inPool([3, 1, 2], 2, async (n) => {
+      await new Promise((resolve) => setTimeout(resolve, n));
+      return n * 10;
+    });
+    expect(out).toEqual([30, 10, 20]);
+  });
+
+  it('does nothing for an empty list', async () => {
+    expect(await inPool([], 3, async () => 1)).toEqual([]);
   });
 });
 

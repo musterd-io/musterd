@@ -38,6 +38,10 @@ export default function AsksScreen() {
   const [loading, setLoading] = useState(false);
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
   const [outgoing, setOutgoing] = useState(0);
+  const [more, setMore] = useState(false);
+  const loadingMore = useRef(false);
+  // Bumped by every refresh: a page fetched against an older list is dropped, not merged.
+  const generation = useRef(0);
   // ADR 774 §5: offer to enroll the question key, once per binding and key, until "Not now".
   const [offerKey, setOfferKey] = useState(false);
   const keyDeclined = useRef(false);
@@ -68,6 +72,7 @@ export default function AsksScreen() {
       if (redeliver) void requestRedelivery({ pin: current });
       const next = await loadAsks({ pin: current });
       if (!alive.current) return;
+      generation.current += 1;
       setView(next);
       try {
         const { needsQuestionKey } = await import('../native/questionKey');
@@ -146,6 +151,40 @@ export default function AsksScreen() {
     }, [refresh]),
   );
 
+  // Lane 01M6H8H9G2: the asks past the first page are fetched when the list nears its end.
+  const loadMore = useCallback(async () => {
+    if (!view || view.rest.length === 0 || loadingMore.current || !pin?.binding) return;
+    loadingMore.current = true;
+    const started = generation.current;
+    setMore(true);
+    try {
+      const { loadMoreAsks } = await import('../native/asks');
+      const page = await loadMoreAsks({ pin, routes: view.rest });
+      if (!alive.current || generation.current !== started) return;
+      setView((prev) =>
+        prev
+          ? {
+              ...prev,
+              asks: [...prev.asks, ...page.asks].sort(
+                (a, b) => b.delivery.ask.ts - a.delivery.ask.ts,
+              ),
+              unreachable: prev.unreachable + page.unreachable,
+              rest: page.rest,
+            }
+          : prev,
+      );
+      if (focused.current && AppState.currentState === 'active') {
+        const { markShown } = await import('../native/asks');
+        void markShown(page.asks.map((entry) => entry.route.ref));
+      }
+    } catch {
+      // A page that failed stays in `rest`; the next scroll tries again.
+    } finally {
+      loadingMore.current = false;
+      if (alive.current) setMore(false);
+    }
+  }, [view, pin]);
+
   const turnOnKey = async () => {
     if (!pin?.binding) return;
     const { enrollQuestionKey } = await import('../native/questionKey');
@@ -190,6 +229,7 @@ export default function AsksScreen() {
 
   const paired = Boolean(pin?.binding);
   const asks = paired ? (view?.asks ?? []) : [];
+  const unfetched = paired ? (view?.rest.length ?? 0) : 0;
   const team = pin?.team ?? null;
   const headline = !pin
     ? 'Pair this phone'
@@ -197,9 +237,11 @@ export default function AsksScreen() {
       ? 'Almost there'
       : asks.length === 0
         ? 'All clear'
-        : asks.length === 1
-          ? '1 ask needs you'
-          : `${asks.length} asks need you`;
+        : unfetched > 0
+          ? `${asks.length}+ asks need you`
+          : asks.length === 1
+            ? '1 ask needs you'
+            : `${asks.length} asks need you`;
   const status: { tone: 'on' | 'wait' | 'off'; text: string } = paired
     ? { tone: 'on', text: `Paired with ${team}` }
     : pin
@@ -343,10 +385,24 @@ export default function AsksScreen() {
         data={asks}
         keyExtractor={(entry) => entry.delivery.ask.id}
         ListHeaderComponent={header}
+        onEndReached={() => void loadMore()}
+        onEndReachedThreshold={0.5}
         ListEmptyComponent={empty}
         ListFooterComponent={
-          diagnostics || pin ? (
+          diagnostics || pin || unfetched > 0 ? (
             <View style={styles.footer}>
+              {unfetched > 0 ? (
+                <Squish
+                  accessibilityRole="button"
+                  accessibilityLabel="Show more asks"
+                  onPress={() => void loadMore()}
+                  style={styles.textButton}
+                >
+                  <Text style={[styles.textButtonText, { color: p.accentText }]}>
+                    {more ? 'Loading…' : 'Show more'}
+                  </Text>
+                </Squish>
+              ) : null}
               {diagnostics ? (
                 <Text style={[styles.diagnostics, { color: p.placeholder }]}>{diagnostics}</Text>
               ) : null}
