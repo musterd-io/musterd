@@ -104,6 +104,31 @@ async function createMigrateMachine(token, image) {
 }
 
 /**
+ * Poll the migrate machine until it is `stopped`, through the Machines API, for up to `deadlineMs`.
+ * Not `fly machine wait`: flyctl 0.4.123 returns `deadline_exceeded` after 60 s (the API's own wait
+ * cap) whatever `--wait-timeout` says — reproduced 2026-11-03 against a `sleep 120` probe — and the
+ * cleanup below then destroyed a live migrate machine mid-ladder, twice (lane 01M6FF11B1).
+ */
+async function waitForStopped(token, machineId, deadlineMs) {
+  const headers = { Authorization: `Bearer ${token}` };
+  const url = `https://api.machines.dev/v1/apps/${MIGRATE_APP}/machines/${machineId}`;
+  const started = Date.now();
+  let last = '';
+  while (Date.now() - started < deadlineMs) {
+    const res = await fetch(url, { headers });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok && body.state === 'stopped') return;
+    if (!res.ok)
+      throw new Error(`reading the migrate machine → ${res.status} ${body.error ?? ''}`.trim());
+    last = body.state ?? '?';
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  throw new Error(
+    `migrate machine ${machineId} did not stop within ${Math.round(deadlineMs / 1000)} s (state ${last})`,
+  );
+}
+
+/**
  * The exit code a stopped one-shot machine reported, from its `exit` event. Fly omits a zero
  * `exit_code` (verified 2026-10-02: exit 3 carries `exit_code: 3`, exit 0 carries none), so an exit
  * event without one is a clean exit. No exit event at all is null — the machine never ran.
@@ -147,17 +172,7 @@ try {
   const id = await createMigrateMachine(token, image);
   console.log(`migrate machine ${id}`);
   try {
-    run('fly', [
-      'machine',
-      'wait',
-      id,
-      '--app',
-      MIGRATE_APP,
-      '--state',
-      'stopped',
-      '--wait-timeout',
-      '10m',
-    ]);
+    await waitForStopped(token, id, 10 * 60_000);
     run('fly', ['logs', '--app', MIGRATE_APP, '--machine', id, '--no-tail']);
     const code = exitCodeOf(id);
     if (code !== 0)
