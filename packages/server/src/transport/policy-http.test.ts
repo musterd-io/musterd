@@ -386,6 +386,28 @@ withDrivers('policy-http', (_o, kind) => {
       expect(JSON.stringify(r.json)).not.toContain('hooks.example.com');
     });
 
+    it('an agent seat reads with its credential alone — no session lease, no presence touch (rollout 2026-11-03)', async () => {
+      // Live: 8 of 15 laptop seats failed this read during the first rollout because their session
+      // lease had lapsed, and fell back to repo tools + floor only. The credential hash proves which
+      // seat asks; a lease proves nothing more for a non-secret, side-effect-free read.
+      await post('/teams/dawn/members', { name: 'quiet', kind: 'agent' }, bearer(nickCred));
+      const auth = await claimAgentHttp(base, 'dawn', agentKey, nickCred, 'quiet');
+      const r = await get('/teams/dawn/seat-tools', {
+        ...bearer(auth.key),
+        'x-musterd-seat': 'quiet',
+        'x-musterd-session-lease': 'mslease_long_gone',
+      });
+      expect(r.status).toBe(200);
+      expect(r.json.seat_tools.shared.claude_plugins).toContain(
+        'superpowers@claude-plugins-official',
+      );
+      const bare = await get('/teams/dawn/seat-tools', {
+        ...bearer(auth.key),
+        'x-musterd-seat': 'quiet',
+      });
+      expect(bare.status).toBe(200);
+    });
+
     it('a seat cannot write seat_tools', async () => {
       const write = await post(
         '/teams/dawn/policy',

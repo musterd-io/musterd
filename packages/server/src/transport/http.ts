@@ -5805,9 +5805,19 @@ export async function handleHttp(
 
       // Seat tool grants (ADR 794): every seat's provisioning reads its own declared set, and the
       // full policy is admin-only. Same posture: one non-secret sub-field, nothing else. Writes
-      // stay on admin-only `POST /policy`, audited as `policy.change`.
+      // stay on admin-only `POST /policy`, audited as `policy.change`. Leaseless and presence-
+      // neutral (the ADR 408 trace-ingest posture): reconcile reads this for seats whose session is
+      // not live, and a lapsed lease failed 8 of 15 seats closed in the first rollout. The
+      // credential hash proves which seat asks; a lease proves nothing more for this read.
       if (method === 'GET' && rest === '/seat-tools') {
-        const { team, member } = await authTouch(ctx, slug, req);
+        const { team, member } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+          undefined,
+          { leaseless: true },
+        );
         assertSeatCanRead(member);
         return sendJson(res, 200, { seat_tools: (await getPolicy(ctx.db, team.id)).seat_tools });
       }
