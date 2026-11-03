@@ -152,6 +152,7 @@ const QUICK_ACTION_BODY: Record<QuickAction, string> = {
   check_inbox: 'Check inbox',
   check_pr: 'Check PR',
   resume: 'Resume',
+  stop: 'Stop',
 };
 
 /**
