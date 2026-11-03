@@ -12,7 +12,7 @@
  * a notification action cannot present the Secure Enclave prompt itself.
  */
 
-import type { AppDelivery } from '@musterd/protocol/app-channel';
+import type { AppDelivery, AppQuickAction, QuickActionResult } from '@musterd/protocol/app-channel';
 import type { NonceVerdict } from './nonceStore';
 
 /** Decision 3's one sentence, in the app. Which check failed is an oracle and is never said. */
@@ -59,6 +59,34 @@ export const QUESTION_UNDELIVERED_TEXT =
 
 /** A plain tap on the notification (Apple's own identifier): open that ask, answer nothing. */
 export const ACTION_OPEN = 'com.apple.UNNotificationDefaultActionIdentifier';
+
+type QuickAction = AppQuickAction['action'];
+
+/** The quick actions' button labels (ADR 779/792), in the order the app shows them. */
+export const QUICK_ACTION_LABELS: Record<QuickAction, string> = {
+  start: 'Start',
+  check_inbox: 'Check inbox',
+  check_pr: 'Check PR',
+  resume: 'Resume',
+  stop: 'Stop',
+};
+
+/** The order the buttons show in: Stop last. */
+export const QUICK_ACTION_ORDER = Object.keys(QUICK_ACTION_LABELS) as QuickAction[];
+
+export const ROSTER_TEXT = 'Seats updated.';
+
+/** What a quick action did (ADR 791): `offline` means the steer waits in the seat's inbox. */
+export function quickResultText(
+  seat: string,
+  action: QuickAction,
+  result: QuickActionResult,
+): string {
+  const label = QUICK_ACTION_LABELS[action];
+  return result === 'started'
+    ? `${label} reached ${seat}.`
+    : `${seat} is offline. ${label} waits in its inbox.`;
+}
 
 export interface Notice {
   title: string;
@@ -136,16 +164,15 @@ export function noticeFor(
   if (delivery.kind === 'held') {
     return { title: NOTICE_TITLE, body: heldBody(delivery.count), sound: true };
   }
-  // ADR 791: a quick action's result and the seat roster are data for the app, not alerts — both
-  // land quietly. Placeholder copy until the phone UI (lane 01M67E5DM8) renders them.
+  // ADR 791: a quick action's result is data for the person who pressed it, not an alert. The
+  // roster is never pushed (the app pulls it); a stray one lands quietly too.
   if (delivery.kind === 'quick_action_result')
     return {
       title: NOTICE_TITLE,
-      body: `${delivery.seat}: ${delivery.result === 'started' ? 'started' : 'offline, it will see this when it is back'}`,
+      body: quickResultText(delivery.seat, delivery.action, delivery.result),
       sound: false,
     };
-  if (delivery.kind === 'roster')
-    return { title: NOTICE_TITLE, body: 'Seats updated.', sound: false };
+  if (delivery.kind === 'roster') return { title: NOTICE_TITLE, body: ROSTER_TEXT, sound: false };
   if (delivery.member === '')
     return { title: NOTICE_TITLE, body: LOCK_SCREEN_FALLBACK_TEXT, sound: false };
   return { title: NOTICE_TITLE, body: `Paired as ${delivery.member}.`, sound: true };

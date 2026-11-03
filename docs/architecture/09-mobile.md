@@ -93,6 +93,18 @@ small change.
   ref known only from `ask-routes` after them), at most 3 in flight. The rest are fetched when the
   list scrolls near its end, or on **Show more**; while some are unfetched the headline says
   "8+ asks need you". A 404 is final: it is not retried, and the ask is cleared at once.
+- **Quick actions** (2026-11-03, lane `01M67E5DM8`, ADR 791). **Seats** on the home screen lists
+  the team's agent seats: online or not, whether a host can wake it, and its one lane, labelled
+  "Their lane" because the title is the seat's own text. Each seat has five buttons: Start, Check
+  inbox, Check PR, Resume, Stop (ADR 792). A question from an agent seat has the same buttons for
+  that seat under its card. The roster is pulled each time the screen comes forward, never
+  pushed: `GET body/<binding>/roster-<now−30s>`, 30 seconds behind so a slower daemon clock still
+  serves it. A press signs `appQuickActionSigningBytes` with the silent question key once it is
+  enrolled, otherwise with Face ID (nick, 2026-11-03: no Face ID for a quick action). It seals with
+  purpose `quick_action`, ref = nonce, an expiry 9 minutes out, and sends at most twice. An old
+  press is not kept for the next open. The result comes back as a `quick_action_result` push. The
+  extension shows it quietly ("Check inbox reached cider." or "cider is offline. Check inbox waits
+  in its inbox."), and a roster pushed by mistake lands quietly as "Seats updated."
 - **A settled ask's notifications clear.** When a fetch says gone (a relay 404: answered in the
   app, on /live or in Slack, or expired), and when the app sends an answer, every notification for
   that ask is removed from Notification Center (`clearDelivered`) and from the phone's record. A
@@ -374,6 +386,7 @@ src/
     phoneKeys.ts           // the typed TS contract of the native module modules/musterd-keys
     push.ts                // the musterd block on an APNs payload, and a fetched body
     questionKey.ts         // the question key: enrollment (question_key callback), and answering a question in the app
+    quickAction.ts         // quick actions (ADR 791): sign, seal and send one; pull the seat roster by ref
     readable.ts            // an ask's text cleaned for a phone: one-line summary, or paragraphs and bullets
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/
@@ -387,6 +400,7 @@ The screens are `.tsx` and outside the drift check; kept honest by hand:
 src/app/_layout.tsx   // the Stack, themed from the palette; the nameplate wordmark heads Asks
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
+src/app/seats.tsx     // the team's agent seats, pulled on focus, each with its quick actions
 src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, the question card, and answering
 src/ui/askText.tsx    // the asker's words on the ask screen: light formatting, long text folded
 src/ui/button.tsx     // the three buttons: one mustard primary, a grey secondary, a quiet text way out
@@ -394,6 +408,7 @@ src/ui/glass.tsx      // Glass (Liquid Glass card, solid fallback) and the warm 
 src/ui/icon.tsx       // an SF Symbol in the text's colour, with a text fallback (ADR 764)
 src/ui/moment.tsx     // a whole screen for one moment — on its way, done, or stopped
 src/ui/questionCard.tsx // a question: its text, why, options to tap, and a typed answer
+src/ui/quickActions.tsx // one seat's five quick-action buttons, each saying Sending…, Sent or Try again
 src/ui/motion.tsx     // Rise, Squish, Breathe, Pop, Halo — RN Animated, off under Reduce Motion
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```

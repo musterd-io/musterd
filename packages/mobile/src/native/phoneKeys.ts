@@ -25,7 +25,7 @@ import { requireNativeModule } from 'expo';
  */
 
 /** HPKE `info` discriminator, exactly the daemon's `SealPurpose` (`appSeal.ts`). */
-export type SealPurpose = 'deliver' | 'answer' | 'pair' | 'question_key';
+export type SealPurpose = 'deliver' | 'answer' | 'pair' | 'question_key' | 'quick_action';
 
 /** Why a call refused, in the five shapes the design names. */
 export type PhoneKeysErrorCode =

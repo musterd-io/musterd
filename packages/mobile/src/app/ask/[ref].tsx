@@ -15,6 +15,7 @@ import { Icon } from '../../ui/icon';
 import { Moment } from '../../ui/moment';
 import { Rise, Squish } from '../../ui/motion';
 import { QuestionCard } from '../../ui/questionCard';
+import { QuickActions } from '../../ui/quickActions';
 import { ago, Seat } from '../../ui/seat';
 import { font, radius, space, usePalette } from '../../ui/theme';
 
@@ -271,6 +272,13 @@ export default function AskScreen() {
           </Rise>
         ) : null}
         <QuestionCard entry={entry} pin={pin} onOutcome={(o) => void answered(o)} />
+        {agent ? (
+          // ADR 791: the asking seat's quick actions, so a question can be followed up from here.
+          <Rise index={3} style={styles.quick}>
+            <Text style={[styles.muted, { color: p.muted }]}>Nudge {ask.from}</Text>
+            <QuickActions pin={pin} seat={ask.from} />
+          </Rise>
+        ) : null}
       </ScrollView>
     );
   }
@@ -385,6 +393,7 @@ function Field({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   page: { padding: space.lg, gap: space.lg, paddingBottom: space.xl * 2 },
   who: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  quick: { gap: space.sm, marginTop: space.md },
   whoText: { flex: 1, gap: 2 },
   from: { fontSize: 17, fontFamily: font.semibold },
   card: { padding: space.lg, paddingTop: space.lg + 4, gap: space.md },

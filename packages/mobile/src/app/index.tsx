@@ -257,11 +257,24 @@ export default function AsksScreen() {
           {headline}
         </Text>
       </Rise>
-      <Rise index={1}>
+      <Rise index={1} style={styles.pills}>
         <View style={[styles.pill, { backgroundColor: p.surface, borderColor: p.border }]}>
           <View style={[styles.pillDot, { backgroundColor: dot }]} />
           <Text style={[styles.pillText, { color: p.text }]}>{status.text}</Text>
         </View>
+        {paired ? (
+          // ADR 791: the team's seats and their quick actions.
+          <Squish
+            accessibilityRole="button"
+            accessibilityLabel="Seats"
+            accessibilityHint="Start, check or stop your team's agent seats"
+            onPress={() => router.push('/seats')}
+            style={[styles.pill, { backgroundColor: p.surface, borderColor: p.border }]}
+          >
+            <Icon name="person.2" color={p.accentText} size={13} />
+            <Text style={[styles.pillText, { color: p.accentText }]}>Seats</Text>
+          </Squish>
+        ) : null}
       </Rise>
       {note ? (
         <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
@@ -514,6 +527,7 @@ const styles = StyleSheet.create({
   header: { gap: space.md, marginBottom: space.sm },
   greeting: { fontFamily: font.medium, fontSize: 15 },
   headline: { fontFamily: font.display, fontSize: 32, lineHeight: 38, letterSpacing: -0.8 },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   pill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -523,6 +537,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: space.md,
     paddingVertical: 6,
+    minHeight: 32,
   },
   pillDot: { width: 8, height: 8, borderRadius: radius.pill },
   pillText: { fontFamily: font.medium, fontSize: 13 },

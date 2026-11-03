@@ -168,6 +168,19 @@ enum DeliveryOpen {
         return nil
       }
       return .paired(member: member, deviceKeyId: deviceKeyId)
+    case "quick_action_result":
+      // ADR 791: what a quick action did. The ref is `qa-<nonce>`, so a result cannot pass for
+      // another request's.
+      guard let nonce = nonEmpty(object["nonce"]), route.ref == "qa-\(nonce)",
+        let seat = nonEmpty(object["seat"]), seat.count <= 64,
+        let action = object["action"] as? String, Notice.quickActionLabels[action] != nil,
+        let result = object["result"] as? String, result == "started" || result == "offline"
+      else { return nil }
+      return .quickResult(seat: seat, action: action, result: result)
+    case "roster":
+      // ADR 791 (amended 2026-11-03): never pushed, the app pulls it. A stray one lands quietly.
+      guard jsonInt(object["ts"]) != nil, object["seats"] is [Any] else { return nil }
+      return .roster
     default:
       return nil
     }

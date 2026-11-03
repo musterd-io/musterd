@@ -350,7 +350,7 @@ enum PhoneKeys {
   /// sealed one way opens the other. An unknown purpose is a client bug; refuse it.
   private static func hpkeInfo(_ purpose: String) throws -> Data {
     switch purpose {
-    case "deliver", "answer", "pair", "question_key":
+    case "deliver", "answer", "pair", "question_key", "quick_action":
       return Data("musterd-app/v1 \(purpose)".utf8)
     default:
       throw PhoneKeysError.sealedOpenFailed("unknown seal purpose")
