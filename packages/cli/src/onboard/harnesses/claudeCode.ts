@@ -24,7 +24,7 @@ import {
   resolveMcpLaunch,
   RETIRED_SURFACE_ENV,
 } from '../mcpEntry.js';
-import { canonicalRuleForm, STANDARD_FLOOR, storeWall } from '../permissions.js';
+import { canonicalRuleForm, seatFloorDenies, STANDARD_FLOOR } from '../permissions.js';
 import { nodeExec, type ExecSeam, type FsSeam, type HarnessContext } from '../reconcile/context.js';
 import {
   canonicalFingerprint,
@@ -1372,7 +1372,7 @@ function permissionsPayload(ctx: HarnessContext): ProvisionPermissions {
     deny: [
       ...new Set([
         ...STANDARD_FLOOR.deny,
-        ...storeWall(ctx.env),
+        ...seatFloorDenies(ctx.env),
         ...(toolkit?.tools.permissions.deny ?? []),
       ]),
     ].sort(),

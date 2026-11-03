@@ -114,6 +114,28 @@ export function storeWall(env: NodeJS.ProcessEnv = process.env): string[] {
   });
 }
 
+/**
+ * The product floor's skill denies (lane 01M6HHSR93, seat tool allowlist design §1). AGENTS.md
+ * hard rule 8 bans these two for every seat on every team, so no role or policy can lift them. A
+ * user-level `skillOverrides: "off"` does not reach plugin skills (Claude Code docs), so the deny
+ * has to be in the seat's own settings. Bare names: each adapter renders its own syntax.
+ */
+export const FLOOR_DENIED_SKILLS: readonly string[] = [
+  'superpowers:subagent-driven-development',
+  'superpowers:dispatching-parallel-agents',
+];
+
+/** {@link FLOOR_DENIED_SKILLS} in Claude Code deny syntax. Tested 2026-11-03: the deny blocks
+ *  invocation, but the skill still shows in the listing. */
+export function floorSkillDenies(): string[] {
+  return FLOOR_DENIED_SKILLS.map((name) => `Skill(${name})`);
+}
+
+/** Every deny a claude-code seat gets whatever its toolkit says: the store wall, then the skill floor. */
+export function seatFloorDenies(env: NodeJS.ProcessEnv = process.env): string[] {
+  return [...storeWall(env), ...floorSkillDenies()];
+}
+
 /** One file the wall names: `~/…` under home, else absolute. `sqlite` = it has `-wal`/`-shm` sidecars. */
 export interface StoreFile {
   path: string;
@@ -190,7 +212,7 @@ export function installSeatPermissions(
   const wanted: PermissionLists = {
     allow: [...STANDARD_FLOOR.allow, ...(toolkit?.tools.permissions.allow ?? [])],
     ask: [...(toolkit?.tools.permissions.ask ?? [])],
-    deny: [...storeWall(env), ...(toolkit?.tools.permissions.deny ?? [])],
+    deny: [...seatFloorDenies(env), ...(toolkit?.tools.permissions.deny ?? [])],
   };
   settings.permissions ??= {};
   const added: PermissionLists = { allow: [], ask: [], deny: [] };
@@ -382,6 +404,15 @@ export function inspectSeatPermissions(
           `${String(open.length)} of musterd's own store files (ADR 658) — e.g. ` +
           `${open.slice(0, 2).join(', ')}, so the agent's file tools can read the daemon's ` +
           `database or this machine's note key. Repair: \`musterd init --refresh-permissions\`.`,
+      );
+    }
+    const skillsOpen = floorSkillDenies().filter((entry) => !denied.has(canonicalRuleForm(entry)));
+    if (skillsOpen.length > 0) {
+      findings.push(
+        `this seat's harness permissions block (.claude/settings.local.json) does not deny ` +
+          `${skillsOpen.join(', ')} — skills AGENTS.md rule 8 bans for every seat, because a ` +
+          `subagent writes under the seat's identity with no lane or attestation. Repair: ` +
+          `\`musterd init --refresh-permissions\`.`,
       );
     }
   }

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readProvisionManifest, writeProvisionManifest } from './manifest.js';
-import { installSeatPermissions, storeWall } from './permissions.js';
+import { installSeatPermissions, seatFloorDenies } from './permissions.js';
 import {
   BUILTIN_TOOLKITS,
   GENERALIST,
@@ -282,9 +282,10 @@ describe('round-trip: built-ins render the identical workspace', () => {
       expect(toolkit.tools.resource_scopes).toEqual(expected.resourceScopes);
 
       const dir = mkdtempSync(join(tmpdir(), `musterd-roundtrip-${name}-`));
-      // The golden predates the ADR 658 store wall, which every seat gets whatever its toolkit
-      // (permissions.test.ts § the store wall); it is taken back out so this stays a rename check.
-      const wall = new Set(storeWall({}));
+      // The golden predates the ADR 658 store wall and the rule-8 skill floor, which every seat
+      // gets whatever its toolkit (permissions.test.ts); they are taken back out so this stays a
+      // rename check.
+      const wall = new Set(seatFloorDenies({}));
       const added = installSeatPermissions(dir, toolkit, {});
       expect([...wall].every((e) => added.deny.includes(e))).toBe(true);
       added.deny = added.deny.filter((e) => !wall.has(e));
