@@ -241,5 +241,17 @@ let blankQ = Notice.Body.ask(text: "x", from: "r", actionClass: "advisory", hasA
   waiting: 0, nonce: "n", question: Question.Info(text: "", options: [], token: "k"))
 check(Notice.gate(body: blankQ, routeExpiresAt: 20, now: 10) == .unverified, "a blank question")
 
+// ADR 791: a quick action's result lands quietly, keyed by its ref.
+let started = Notice.Body.quickResult(seat: "cider", action: "check_inbox", result: "started")
+check(Notice.gate(body: started, routeExpiresAt: 20, now: 10) == .open, "a live result is open")
+check(Notice.seenKey(body: started, ref: "qa-n") == "qa-n", "a result is seen by its ref")
+let startedShown = Notice.render(body: started, verdict: .fresh)
+check(startedShown.body == "Check inbox reached cider.", "started copy")
+check(startedShown.passive && !startedShown.sound && startedShown.category == nil, "a result is quiet")
+let offline = Notice.render(
+  body: .quickResult(seat: "fifty", action: "stop", result: "offline"), verdict: .fresh)
+check(offline.body == "fifty is offline. Stop waits in its inbox.", "offline copy")
+check(Notice.render(body: .roster, verdict: .fresh).body == Notice.rosterText, "a stray roster")
+
 fputs("ok\n", stdout)
 }

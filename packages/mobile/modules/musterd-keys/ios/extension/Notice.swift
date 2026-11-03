@@ -29,6 +29,27 @@ enum Notice {
       nonce: String, question: Question.Info? = nil, quiet: Bool = false)
     case held(count: Int)
     case paired(member: String, deviceKeyId: String)
+    /// ADR 791: a quick action's result for one seat (`started` or `offline`).
+    case quickResult(seat: String, action: String, result: String)
+    case roster
+  }
+
+  /// The quick actions' button labels (ADR 779/792). Spec: `QUICK_ACTION_LABELS` in `notice.ts`.
+  static let quickActionLabels: [String: String] = [
+    "start": "Start",
+    "check_inbox": "Check inbox",
+    "check_pr": "Check PR",
+    "resume": "Resume",
+    "stop": "Stop",
+  ]
+  static let rosterText = "Seats updated."
+
+  /// Spec: `quickResultText` in `notice.ts`.
+  static func quickResultText(seat: String, action: String, result: String) -> String {
+    let label = quickActionLabels[action] ?? action
+    return result == "started"
+      ? "\(label) reached \(seat)."
+      : "\(seat) is offline. \(label) waits in its inbox."
   }
 
   /// Before the nonce store is written. A route expiry or an undrawable body is not consumed.
@@ -55,7 +76,7 @@ enum Notice {
       if text.isEmpty || question?.text.isEmpty == true { return .unverified }
     case .paired(let member, _):
       if member.isEmpty { return .unverified }
-    case .held:
+    case .held, .quickResult, .roster:
       break
     }
     return .open
@@ -65,7 +86,7 @@ enum Notice {
     switch body {
     case .ask(_, _, _, _, _, let nonce, _, _):
       return nonce
-    case .held, .paired:
+    case .held, .paired, .quickResult, .roster:
       return ref
     }
   }
@@ -109,6 +130,19 @@ enum Notice {
     case .held(let count):
       let body = count == 1 ? "1 ask is held." : "\(count) asks are held."
       return Rendered(title: title, body: body, subtitle: nil, category: nil, sound: true)
+    case .quickResult(let seat, let action, let result):
+      // Data for the person who pressed it, not an alert: it lands without lighting the screen.
+      return Rendered(
+        title: title,
+        body: quickResultText(seat: seat, action: action, result: result),
+        subtitle: nil,
+        category: nil,
+        sound: false,
+        passive: true
+      )
+    case .roster:
+      return Rendered(
+        title: title, body: rosterText, subtitle: nil, category: nil, sound: false, passive: true)
     case .paired(let member, _):
       if member.isEmpty { return unverified() }
       return Rendered(

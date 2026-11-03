@@ -14,6 +14,8 @@ import {
   ADVISORY_CATEGORY,
   STALE_TEXT,
   LOCK_SCREEN_FALLBACK_TEXT,
+  QUICK_ACTION_LABELS,
+  ROSTER_TEXT,
 } from './notice';
 
 const read = (rel: string) => readFileSync(new URL(`../../../../${rel}`, import.meta.url), 'utf8');
@@ -25,6 +27,15 @@ describe('the Swift extension matches the TypeScript sentences', () => {
   const plugin = read('packages/mobile/plugins/withMusterdKeys.js');
   const podspec = read('packages/mobile/modules/musterd-keys/ios/MusterdKeys.podspec');
   const config = read('packages/mobile/modules/musterd-keys/expo-module.config.json');
+
+  it('pins the quick-action labels, result copy and seal purpose (ADR 791)', () => {
+    for (const [action, label] of Object.entries(QUICK_ACTION_LABELS))
+      expect(notice).toContain(`"${action}": "${label}"`);
+    expect(notice).toContain(ROSTER_TEXT);
+    expect(notice).toContain('reached \\(seat).');
+    expect(notice).toContain('is offline. \\(label) waits in its inbox.');
+    expect(keys).toContain('"quick_action":');
+  });
 
   it('pins the lock-screen copy and the action identifiers', () => {
     for (const sentence of [

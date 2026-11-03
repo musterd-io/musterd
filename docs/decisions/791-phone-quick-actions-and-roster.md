@@ -78,6 +78,11 @@ The phone cannot send a quick action, and it cannot show the seats it would send
   The phone pulls it with `GET body/<binding>/roster-<ts>` (`ts` at or before now, inside 10
   minutes), and `fetchRoster` builds it as of the fetch. `quick_action_result` is still pushed: it
   only follows a button press, so a notification there is wanted.
+- 2026-11-03 (lane `01M67E5DM8`): the phone side. **Seats** (`src/app/seats.tsx`) pulls
+  `roster-<now−30s>` on focus; each seat and an agent's question get the five buttons
+  (`src/ui/quickActions.tsx`, `src/native/quickAction.ts`). The notification extension renders
+  `quick_action_result` quietly and accepts a stray `roster`, and `PhoneKeys.swift` knows the
+  `quick_action` seal purpose. All of it reaches the phone in the next TestFlight build.
 
 ## Observability & Evaluation
 
