@@ -107,6 +107,8 @@ Night 2026-10-25 decided it: the line is back, so the night 2026-10-24 batch was
 
 Night 2026-11-01 grokbot printed `wake self-heal: grokbot — repaired 1 guidance file.` (host.log 80955, lease 01M6DF73P5DNS0WKBQW7CPSNDN) with no hooks, the first branch of the 2026-10-23 falsifier (insight 01M6DG248). Night 2026-11-02 grokbot printed no self-heal line at all (host.log 81086–81106, lease 01M6G1KP31195HQ4BH1XZDAGHH); same-batch dolly, wanderer and alfie also printed none. That is the 2026-10-23 falsifier's second branch, and a second full-batch silence after 2026-10-24. The 2026-10-25 claim still holds: two batches with no `repaired … hooks` for grokbot, wanderer and alfie have now run (2026-10-24 and 2026-11-02), and the 2026-10-25 alfie/izzo hooks-line has not printed in either.
 
+Night 2026-11-03 grokbot printed no self-heal line (host.log 81156–81187, lease 01M6HT8A8KQA540MM68NAT5FZA). Same-batch dolly, wanderer, alfie and big-body also printed none. Third full-batch silence after 2026-10-24 and 2026-11-02. The 2026-10-25 alfie/izzo `repaired … hooks` line has still not printed.
+
 ## What it will never touch
 
 The ADR 261 permission floor, and any file outside the seat's worktree (the machine-wide Claude Code settings, Codex's git-common-dir `hooks.json`) — spec 2026-09-16, ADR 408 decision 2. Falsify: leave a seat's `.claude/settings.local.json` one floor entry short, run the probe, and check the entry is STILL absent and the line names `--refresh-permissions`.
