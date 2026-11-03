@@ -14,6 +14,8 @@ The refusal comes from the resident seat's bash allowlist, which admits `musterd
 
 The bash allowlist's musterd set gained `dream` (lane 01M6D8H4KF, PR pending). The 2026-10-13 claim above is invalidated from the first resident dream wake on a host running that build. What made it visible: delta-2's dream wake on night 2026-10-31 (lease 01M6ASCATTEKYY7AJ3TE0XFTBD, 05:30Z 2026-11-01) ran `musterd dream`, read the denial, and answered in text with no seat tool call, so the roster never saw it and the host recorded a failed wake at $0.07. Earlier nights happened to call `team_insight_save` and so occupied; the packet was still never read. (2026-11-01; falsify: a resident dream wake on a build after the fix where bash `musterd dream` still returns the denial) <!-- claim: other -->
 
+Night 2026-11-02, delta-2 printed `spawn bwrap ENOENT` on its first bash `musterd dream` (insight 01M6G1M0MN). The 2026-11-01 allowlist change is untested on that wake because the command did not start. Seen once.
+
 ## What it costs
 
 The dream has no `lanes` record and no `learned` list. It cannot tell which insights fall inside its window or what tonight's `night` key is, so it dates sightings from insight timestamps and team-local dates. Its window never advances from a packet read. Tonight's insights still do, because `team_insight_save` is a seat tool. (2026-10-15; falsify: a resident dream's seat note or insight citing a `night` key or a `lanes` act taken from its own packet) <!-- claim: defect -->
