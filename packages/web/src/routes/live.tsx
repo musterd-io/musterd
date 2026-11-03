@@ -55,7 +55,6 @@ import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
 import { useReport } from '../live/useReport';
 import { roomEntries } from '../live/workingOn';
-import { ViewToggle } from '../live/ViewToggle';
 
 const LazySeedsTray = lazy(() =>
   import('../live/SeedsTray').then((module) => ({ default: module.SeedsTray })),
@@ -108,6 +107,9 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
 /** The log drawer hosts today's `Stream` unchanged (ADR 464 lane 2) — fetched the first time it
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
 /** The log drawer only exists while open (L, or the log button); its chunk loads then. */
+// The "Outside" button (window views inc 3) is lazy: the office it changes is a lazy chunk too, so
+// the button arriving with it costs nothing a viewer could use earlier, and keeps /live's eager JS in budget.
+const LazyViewToggle = lazy(() => import('../live/ViewToggle').then((m) => ({ default: m.ViewToggle })));
 const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })));
 /** "Who is here" (ADR 692) is chrome the room does not need to paint: it follows the first roster
  *  read in its own chunk, so the faces and their cards stay off /live's eager graph. */
@@ -746,7 +748,11 @@ function LivePage() {
           {/* Signed in only: minting a link takes a human admin's credential (ADR 580), which a
               watching page does not hold, so offering it there would only ever fail. */}
           {connected && signedIn && <WatchLinkButton cfg={cfg!} />}
-          {connected && <ViewToggle />}
+          {connected && (
+            <Suspense fallback={<span className="lc__pbtn lc__view" aria-hidden="true" />}>
+              <LazyViewToggle />
+            </Suspense>
+          )}
           {connected && <SoundToggle />}
           <Clock />
         </span>

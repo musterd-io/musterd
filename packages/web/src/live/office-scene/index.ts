@@ -63,6 +63,7 @@ import {
 } from './layout';
 import { computeLightEnv, deskLampOn, type LightEnv } from './lighting';
 import { fetchWeather, type Weather, type WeatherReading, weatherDue, weatherMoves, weatherOverride } from './weather';
+import { onViewPref, readViewPref } from '../viewPref';
 import { DEFAULT_VIEW, isPlateOf, isViewPlate, viewOverride, viewPlateIds, type ViewSetting } from './windowView';
 import { isWithinWorkingHours } from './workingHours';
 import { assignSeats, workingAtDesk, type Placement } from './seating';
@@ -431,6 +432,11 @@ export interface OfficeOptions {
    * through `OfficeHandle.setView`.
    */
   view?: ViewSetting;
+  /**
+   * `/live` only: start from the viewer's "Outside" pref (`viewPref.ts`) and follow the header button
+   * as it changes. Read here, inside the lazy chunk, so the pref module stays off /live's eager graph.
+   */
+  followViewPref?: boolean;
 }
 
 export function mountOffice(
@@ -443,7 +449,8 @@ export function mountOffice(
   // What is outside the windows (window views): `?view=` > the mount's `view` (the /live pref) > city.
   // Only the chosen view's plates are fetched; `setView` loads the next one before it swaps.
   const viewPinned = viewOverride(typeof window === 'undefined' ? '' : window.location.search);
-  let view: ViewSetting = viewPinned ?? options.view ?? DEFAULT_VIEW;
+  let view: ViewSetting =
+    viewPinned ?? (options.followViewPref ? readViewPref() : null) ?? options.view ?? DEFAULT_VIEW;
   /* Read once at mount: the flag cannot change under a running room, and re-parsing per bubble would
      put a URLSearchParams allocation on the speech path. */
   const STILL = stillMode();
@@ -529,6 +536,8 @@ export function mountOffice(
       if (!raf) paintResting();
     });
   }
+  // the header's "Outside" button writes the pref; the room swaps its panes when the plates land
+  const stopFollowingView = options.followViewPref ? onViewPref(setView) : () => {};
   function wearNow(): void {
     const fig = rendered?.figure;
     if (!fig) return;
@@ -4341,6 +4350,7 @@ export function mountOffice(
       return null;
     },
     dispose: () => {
+      stopFollowingView();
       disposed = true;
       if (visitTimer) clearInterval(visitTimer);
       sprites?.clear();

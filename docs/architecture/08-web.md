@@ -351,7 +351,7 @@ live/
   CopyId.tsx / CopyId.css / idCopy.ts   // the work board's ID chips (lane 01M62KAMZ3): every lane card (short 10-char ULID), goal card and table row wears its ID; a tap copies it, ⇧-tap copies it with its title, and `c` / ⇧C copies the hovered or focused card's; the clipboard falls back to a selection copy over plain http
   sound.ts                      // opt-in WebAudio firehose cues
   viewPref.ts                   // the "Outside" pref (window views): which panorama the windows show on /live, in localStorage; listeners hear a change
-  ViewToggle.tsx                // the "Outside" button beside the sound toggle: city → coast → mountain, a glyph per view; /broadcast has none and stays the city
+  ViewToggle.tsx                // the "Outside" button beside the sound toggle: city → coast → mountain, a glyph per view, lazy-loaded like the office it changes; /broadcast has none and stays the city
   Live.css                      // the /live palette + component styles (--lc-* tokens)
   office-scene/
     index.ts                    // the imperative scene handle {update, emit, dispose}; the emit switch
