@@ -420,5 +420,26 @@ withDrivers('retention', (o, kind) => {
       expect(s.db_bytes).toBeUndefined();
       expect(s.archive_bytes).toBeUndefined();
     });
+
+    // Lane 01M6EV84VH: the bytes come from one dbstat walk per sync_log b-tree, not a walk of the
+    // whole file, and must still add up to every page the table and its indexes hold.
+    it.skipIf(kind !== 'sqlite')(
+      'sync_log_bytes is every page of sync_log and its indexes',
+      async () => {
+        const { db, teamId } = await seeded();
+        await db.run(`INSERT INTO nodes (id, team_id, label) VALUES ('n1', ?, 'x')`, [teamId]);
+        for (let i = 1; i <= 200; i++)
+          await db.run(
+            `INSERT INTO sync_log (id, team_id, origin_node, origin_seq, hub_seq, payload, received_at)
+         VALUES (?, ?, 'n1', ?, ?, ?, ?)`,
+            [`e${i}`, teamId, i, i, JSON.stringify({ k: 'x'.repeat(200) }), NOW],
+          );
+        const whole = await db.get<{ b: number }>(
+          "SELECT SUM(d.pgsize) AS b FROM dbstat d JOIN sqlite_master m ON m.name = d.name WHERE m.tbl_name = 'sync_log'",
+        );
+        const s = await storeSizes(db, ':memory:', null);
+        expect(s.sync_log_bytes).toBe(Number(whole!.b));
+      },
+    );
   });
 });

@@ -151,6 +151,12 @@ column Postgres does not have. That is left for a measured follow-up, not done h
   store: 11 → 1.5 ms on the boundary seam, 11 → 1.8 ms on the idle seam, with the same rows for
   every seat; `ledgerPlans.test.ts` pins both plans.
 
+  The `dbstat` walk runs in the store-sizes worker, so it does not stall the event loop; it costs
+  disk I/O, once per daemon start (four restarts in the window) and then every six hours. Its
+  `name = 'sync_log' OR name LIKE …` gave dbstat no constraint, so it walked every page of the file.
+  It now walks each sync_log b-tree by `name = ?`: 56 → 5 ms on a test file where sync_log is a
+  tenth of the pages, with the same bytes.
+
 ## Observability & Evaluation
 
 - Traces: the daemon already logs `sqlite_stmt_slow` (statement, ms) and `event_loop_stall`
