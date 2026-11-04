@@ -1,7 +1,14 @@
 import { encode } from 'uqr';
 import { describe, expect, it } from 'vitest';
 import { bindingDeviceName } from '../pairingClient';
-import { countdown, pairedLine, qrSvg } from './PairPhone';
+import {
+  countdown,
+  pairedLine,
+  pairingRefusal,
+  qrSvg,
+  recallDaemonFingerprint,
+  rememberDaemonFingerprint,
+} from './PairPhone';
 
 describe('pairing a phone from /live (lane 01M64DSBQV)', () => {
   it('draws the QR as dark modules on a white field, one module per unit', async () => {
@@ -34,5 +41,30 @@ describe('pairing a phone from /live (lane 01M64DSBQV)', () => {
     expect(bindingDeviceName({ ...b, app_keys: null })).toBeNull();
     expect(bindingDeviceName({ ...b, app_keys: '{not json' })).toBeNull();
     expect(pairedLine({ ...b, app_keys: null }, at).device).toBe('your phone');
+  });
+
+  it('a refused confirm or reject says why in plain words, and ends the pairing when the server has (lane 01M6KYZ1SM)', () => {
+    // nick, 2026-11-04: "Not my phone" on a pairing the server had closed showed the raw code and
+    // left the panel stuck on "wants to pair" until a reload.
+    const closed = pairingRefusal(new Error('pairing not_awaiting_confirmation'));
+    expect(closed?.restart).toBe(true);
+    expect(closed?.text).not.toContain('not_awaiting_confirmation');
+    expect(closed?.text).toMatch(/Pair a phone/);
+    expect(pairingRefusal(new Error('pairing expired'))?.restart).toBe(true);
+    expect(pairingRefusal(new Error('pairing not_found'))?.restart).toBe(true);
+    // A cancelled passkey prompt is not a server refusal: the pairing still waits.
+    expect(pairingRefusal(new Error('The operation was aborted.'))).toBeNull();
+  });
+
+  it('remembers the daemon fingerprint across a reload, per team (lane 01M6KYZ1SM)', () => {
+    const held = new Map<string, string>();
+    const store = {
+      getItem: (k: string) => held.get(k) ?? null,
+      setItem: (k: string, v: string) => void held.set(k, v),
+    };
+    expect(recallDaemonFingerprint('revive', store)).toBeNull();
+    rememberDaemonFingerprint('revive', 'ab12 cd34', store);
+    expect(recallDaemonFingerprint('revive', store)).toBe('ab12 cd34');
+    expect(recallDaemonFingerprint('other', store)).toBeNull();
   });
 });

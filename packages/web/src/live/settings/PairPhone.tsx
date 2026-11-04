@@ -70,6 +70,57 @@ export function countdown(ms: number): string {
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/**
+ * A pairing the server refused, in plain words (lane 01M6KYZ1SM). `restart` says the server has
+ * ended it — confirmed, refused, expired or gone — so the panel goes back to "Pair a phone" instead of
+ * staying on a stage nothing can finish. Null for anything that is not a pairing refusal (a cancelled
+ * passkey prompt): the pairing still waits.
+ */
+export function pairingRefusal(e: unknown): { text: string; restart: boolean } | null {
+  const reason = /^pairing (\w+)$/.exec(message(e))?.[1];
+  if (!reason) return null;
+  const ended: Record<string, string> = {
+    not_awaiting_confirmation: 'That pairing is no longer waiting: it was already confirmed, refused or expired.',
+    expired: 'That pairing code expired.',
+    consumed: 'That pairing code was already used.',
+    not_found: 'That pairing is gone.',
+    unknown_nonce: 'That pairing is gone.',
+    too_many_attempts: 'That pairing had too many attempts.',
+    code_mismatch: 'The phone scanned a different code.',
+  };
+  const said = ended[reason];
+  if (said) return { text: `${said} Start again with Pair a phone.`, restart: true };
+  return { text: `The daemon refused that pairing (${reason}).`, restart: false };
+}
+
+type Store = Pick<Storage, 'getItem' | 'setItem'>;
+const fingerprintKey = (team: string) => `musterd.pair.daemonFingerprint.${team}`;
+const browserStore = (): Store | null => {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
+};
+
+/** Keep the daemon fingerprint the code showed, so a reload still has it to compare (lane 01M6KYZ1SM). */
+export function rememberDaemonFingerprint(team: string, fp: string, store = browserStore()): void {
+  try {
+    store?.setItem(fingerprintKey(team), fp);
+  } catch {
+    // Storage full or blocked: the panel falls back to its no-fingerprint hint.
+  }
+}
+
+/** The daemon fingerprint this browser last showed beside a code for `team`, if any. */
+export function recallDaemonFingerprint(team: string, store = browserStore()): string | null {
+  try {
+    return store?.getItem(fingerprintKey(team)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function PairPhone({
   cfg,
   me,
@@ -125,6 +176,7 @@ export function PairPhone({
     try {
       const start = await startAppPairing(cfg);
       const svg = await qrSvg(JSON.stringify(start.qr));
+      rememberDaemonFingerprint(cfg.team, start.daemon_fingerprint);
       if (mounted.current) setStage({ kind: 'code', start, svg });
     } catch (e) {
       setNote({ tone: 'err', text: message(e) });
@@ -176,7 +228,12 @@ export function PairPhone({
       void loadPaired();
       onChanged();
     } catch (e) {
-      setNote({ tone: 'err', text: message(e) });
+      const refused = pairingRefusal(e);
+      if (refused?.restart) {
+        setStage({ kind: 'idle' });
+        onChanged();
+      }
+      setNote({ tone: 'err', text: refused?.text ?? message(e) });
     } finally {
       setBusy(false);
     }
@@ -208,11 +265,20 @@ export function PairPhone({
       setNote({ tone: 'ok', text: 'rejected — nothing was paired' });
       onChanged();
     } catch (e) {
-      setNote({ tone: 'err', text: message(e) });
+      const refused = pairingRefusal(e);
+      if (refused?.restart) {
+        setStage({ kind: 'idle' });
+        onChanged();
+      }
+      setNote({ tone: 'err', text: refused?.text ?? message(e) });
     } finally {
       setBusy(false);
     }
   };
+
+  // The fingerprint to compare: this page's code, else the last one this browser showed (a reload).
+  const daemonFp =
+    stage.kind === 'phone' ? (stage.daemonFingerprint ?? recallDaemonFingerprint(cfg.team)) : null;
 
   return (
     <section className="lc-set__group lc-pair" aria-labelledby="lc-set-phone">
@@ -322,22 +388,25 @@ export function PairPhone({
           {/* The phone shows the DAEMON's fingerprint, never its own key, so that is the one thing
               a person can compare (big-body's review of #3571). The phone key is shown as what
               this confirm enrolls, not as something to match. */}
-          {stage.daemonFingerprint ? (
+          {daemonFp ? (
             <p className="lc-set__hint">
-              Your phone should have shown this fingerprint after you scanned:
-              <span className="lc-pair__fp">{stage.daemonFingerprint}</span>
-              If it did, and this is the phone you just scanned with, confirm.
+              Check that the app’s <strong>Daemon fingerprint</strong> is:
+              <span className="lc-pair__fp">{daemonFp}</span>
+              If it matches, and this is the phone you just scanned with, confirm.
             </p>
           ) : (
             <p className="lc-set__hint">
-              Confirm only if you just scanned a pairing code with this phone, and the fingerprint
-              it showed matched the one printed beside that code.
+              Confirm only if you just scanned a pairing code with this phone, and the app’s Daemon
+              fingerprint matched the one printed beside that code.
             </p>
           )}
-          <p className="lc-set__hint">
-            Confirming enrolls this phone’s key
+          {/* lane 01M6KYZ1SM: one fingerprint to compare. The phone's own key is what this confirm
+              enrolls (big-body's review of #3571) — kept, folded away, so nobody compares it. */}
+          <details className="lc-set__hint">
+            <summary>What confirming enrolls</summary>
+            This phone’s own key (not for comparing):
             <span className="lc-pair__fp">{stage.pairing.app.fingerprint}</span>
-          </p>
+          </details>
           <span className="lc-pair__act">
             <button
               type="button"
