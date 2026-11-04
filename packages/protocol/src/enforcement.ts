@@ -423,11 +423,13 @@ export interface WithholdMatch {
   fingerprint: string;
 }
 
-/** Does this command run musterd at all, env prefix or not? Under a seat-wide withhold every musterd
+/** Could this command run musterd at all — prefixed, wrapped, quoted or by path? Under a seat-wide withhold every musterd
  *  call outside {@link HELD_SEAT_MUSTERD_VERBS} counts as mutating: `musterd init` and `musterd service
  *  install` write files the shell-write heuristic does not see. */
 function invokesMusterd(flavor: 'path' | 'command', raw: string | undefined): boolean {
-  return flavor === 'command' && raw !== undefined && /(^|[\s;&|(`])musterd(\s|$)/.test(raw);
+  // Fail closed: any mention of musterd counts, so a path (`/usr/local/bin/musterd`), a wrapper
+  // (`npx musterd`) or a quoted word cannot slip one past (security review, 2026-11-04, round 3).
+  return flavor === 'command' && raw !== undefined && raw.includes('musterd');
 }
 
 /** The musterd subcommands a held seat still needs: talk to the team, read its state, move its lane. */

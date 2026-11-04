@@ -488,6 +488,16 @@ describe('matchWithhold (ADR 801)', () => {
     expect(
       matchWithhold([wide], { tool: 'Bash', command: 'musterd init --force' }, NOW),
     ).not.toBeNull();
+    expect(
+      matchWithhold([wide], { tool: 'Bash', command: 'npx musterd init --force' }, NOW),
+    ).not.toBeNull();
+    expect(
+      matchWithhold(
+        [wide],
+        { tool: 'Bash', command: '/usr/local/bin/musterd service install' },
+        NOW,
+      ),
+    ).not.toBeNull();
   });
 
   it('an expired withhold never matches, whatever a cache still holds', () => {
