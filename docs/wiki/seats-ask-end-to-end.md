@@ -27,6 +27,19 @@ Q2's answer waited behind ryder's hourly wake cap (2 per hour): the cap was chec
 - Q2's wake started a fresh session: the session digest changed between the two wakes (`cf53865c…` → `b44ab8a9…`), so the resume missed and the host fell back to fresh. It added time (the 31 s against 17 s) but nothing was lost: the fresh session got the answer's recap line. (2026-11-03; falsify: `residency.woke` for the Q2 act shows `session: resumed`.) <!-- claim: other -->
 - Wake cost: $0.31 for the request wake, $0.07 for the Q1 answer (resumed), $0.22 for the Q2 answer (fresh).
 
+**Shift run 1, 2026-11-04 19:08–20:11 UTC (ADR 792), partial.** nick pressed Start on ryder from the phone's Seats screen; /live has no Start for an offline seat (lane `01M6KZZ5WH`). He stopped it early at 20:11, because the daemon was stalling and the shift was suspected. It was not the cause (lane `01M6M61A0E`).
+
+| Event | Time (UTC) | From the hub's `audit` |
+| --- | --- | --- |
+| Start | 19:08:55 | `shift.started` (`inside_hours: true`), `quick_action.sent` |
+| Wake 1, for the Start itself | leased 19:09:12, woke 19:09:24 | **29 s** Start → woke; $0.50, 94 s |
+| Wake 2, for ghost's act (batched lane) | woke 19:39:58 | $0.30, 80 s |
+| Stop | 20:11:16 | `shift.stopped` `reason: stopped`, `spent_usd: 0.8`, `lanes_claimed: 2` |
+
+- **No claimed-work wake fired in the hour.** In its first wake ryder asked nick a question (`01M6KZGVY8`, 19:10:39). That question stayed open until 20:22:15, which covered the rest of the shift. ADR 792 holds a shift's claimed-work wakes while the seat waits on its own question (`onShiftNow` → `waitingSeats`). So the shift spent its hour waiting on a person, as designed but invisibly: the roster said "on shift" and nothing said "waiting on nick". (2026-11-04; falsify: a `residency.wake_leased` row for ryder between 19:42 and 20:11 whose act is not a person's or a ghost act.) <!-- claim: other -->
+- Start → first wake is 29 s, inside the 30 s target, though the daemon was mid auto-refresh at the time (down 19:09–19:11 UTC).
+- Cost: $0.80 for the hour, in two wakes.
+
 ## What the runs showed besides the numbers
 
 - **A typed answer from the phone works.** nick did not pick an option on Q1. He typed "What do you mean which colour?" in the iOS app, and it arrived as `answer.text` with `answer_proof {channel: app, verified: true}` and woke the seat. (2026-11-03.)
@@ -36,7 +49,7 @@ Q2's answer waited behind ryder's hourly wake cap (2 per hour): the cap was chec
 
 ## Not yet measured
 
-- A seat on shift (ADR 792): Start inside working hours, a claimed-work wake, and the `hours_end` stop at 15:00 Pacific with its board line. Follows-up: lane `01M6HSKWBZ76EJ714VHDHKF8XA`.
+- A seat on shift (ADR 792) that is not waiting on its own question: a claimed-work wake, and the `hours_end` stop at 15:00 Pacific with its board line. Shift run 1 measured Start → wake and a person's stop only. Follows-up: lane `01M6HSKWBZ76EJ714VHDHKF8XA`.
 - A lock-screen answer with the question key (no app open), and answer → woke over more than two samples.
 
 ## How to re-run it
