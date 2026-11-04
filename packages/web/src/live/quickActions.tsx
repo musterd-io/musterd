@@ -1,5 +1,5 @@
 import { QUICK_ACTIONS, type QuickAction } from '@musterd/protocol/wire';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiPost, sendAct, type LiveConfig } from './client';
 import './QuickActions.css';
 
@@ -18,8 +18,27 @@ export const QUICK_ACTION_LABEL: Record<QuickAction, string> = {
   stop: 'Stop',
 };
 
-/** The four always on the bar; Stop joins them while the seat is on shift (ADR 792). */
-const BAR_ACTIONS = QUICK_ACTIONS.filter((a) => a !== 'stop');
+/**
+ * Which buttons a seat gets, by the rule the phone's Seats screen uses (`mobile/src/native/notice.ts`
+ * `seatActions`, lane 01M6KZZ5WH): Start only for an offline seat that can be woken, Check PR only
+ * with a lane, Stop while it is here or on shift (ADR 792: a shift can outlive one wake). Check inbox
+ * and Resume always. The order is the vocabulary's own (`QUICK_ACTIONS`).
+ */
+export function seatActions(seat: {
+  online: boolean;
+  wakeable: boolean;
+  lane: boolean;
+  onShift?: boolean;
+}): QuickAction[] {
+  const on: Record<QuickAction, boolean> = {
+    start: !seat.online && seat.wakeable,
+    check_inbox: true,
+    check_pr: seat.lane,
+    resume: true,
+    stop: seat.online || seat.onShift === true,
+  };
+  return QUICK_ACTIONS.filter((a) => on[a]);
+}
 
 const QUICK_ACTION_HINT: Record<QuickAction, string> = {
   start: 'Wake it to orient and answer what waits',
@@ -60,33 +79,129 @@ export function startAllSummary(seats: StartAllReply['seats']): string {
   return parts.length ? parts.join(' · ') : 'No seats to start';
 }
 
-type Sent = { action: QuickAction; ok: boolean; text: string } | null;
+/** A button's moment after a press, as the phone has it: it says so, then settles back. */
+export type QuickState = 'sending' | 'sent' | 'failed';
+const SETTLE_MS = 4000;
 
-/** One seat's four buttons (and Stop while it is on shift), with what just happened said beside them in plain words. */
+export function quickStateLabel(action: QuickAction, state: QuickState | undefined): string {
+  if (state === 'sending') return 'Sending…';
+  if (state === 'sent') return 'Sent';
+  if (state === 'failed') return 'Couldn’t send';
+  return QUICK_ACTION_LABEL[action];
+}
+
+/** One seat's sends, one state per button: a press on Check inbox never greys out Start. */
+export function useQuickSend(cfg: LiveConfig, seat: string) {
+  const [states, setStates] = useState<Partial<Record<QuickAction, QuickState>>>({});
+  const timers = useRef(new Map<QuickAction, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const t = timers.current;
+    return () => t.forEach(clearTimeout);
+  }, []);
+  const set = (action: QuickAction, state: QuickState | undefined) =>
+    setStates((prev) => {
+      const next = { ...prev };
+      if (state) next[action] = state;
+      else delete next[action];
+      return next;
+    });
+  const send = async (action: QuickAction) => {
+    if (states[action] === 'sending') return;
+    clearTimeout(timers.current.get(action));
+    set(action, 'sending');
+    let ok = true;
+    try {
+      await sendQuickAction(cfg, seat, action);
+    } catch {
+      ok = false;
+    }
+    set(action, ok ? 'sent' : 'failed');
+    timers.current.set(
+      action,
+      setTimeout(() => set(action, undefined), SETTLE_MS),
+    );
+  };
+  return { states, send };
+}
+
+/** 12px glyphs, `currentColor`: the phone's SF Symbols, drawn small enough to ride a pill. */
+const GLYPH: Record<QuickAction | QuickState, string> = {
+  start: 'M4.5 2.8v6.4L9.6 6z',
+  check_inbox: 'M2 6.5h2.6l.9 1.6h1l.9-1.6H10M2.6 3h6.8L10 6.5V9H2V6.5z',
+  check_pr: 'M3.5 2.5v7M3.5 4.2a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4M8.5 10.2a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4M8.5 7.8V5a1.5 1.5 0 0 0-1.5-1.5H5.5',
+  resume: 'M9.5 4.5H5a2.5 2.5 0 0 0 0 5h1.5M8 2.8l1.6 1.7L8 6.2',
+  stop: 'M3.4 3.4h5.2v5.2H3.4z',
+  sending: 'M3 6h.01M6 6h.01M9 6h.01',
+  sent: 'M2.8 6.3 5 8.4l4.2-4.8',
+  failed: 'M6 3.2v3.3M6 8.6h.01',
+};
+
+function Glyph({ d, fill }: { d: string; fill: boolean }) {
+  return (
+    <svg className="qa__glyph" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+      <path
+        d={d}
+        fill={fill ? 'currentColor' : 'none'}
+        stroke={fill ? 'none' : 'currentColor'}
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** One contextual pill: its glyph and label, then its own Sending… / Sent / Couldn’t send. */
+export function QuickButton({
+  action,
+  state,
+  onPress,
+  seat,
+}: {
+  action: QuickAction;
+  state: QuickState | undefined;
+  onPress: () => void;
+  seat: string;
+}) {
+  const glyph = state ?? action;
+  const said =
+    state === 'sent'
+      ? `${QUICK_ACTION_LABEL[action]} sent to ${seat}`
+      : state === 'failed'
+        ? `${QUICK_ACTION_LABEL[action]} couldn’t reach ${seat}`
+        : '';
+  return (
+    <>
+    <button
+      type="button"
+      className={`qa__btn qa__btn--${action}${state ? ` is-${state}` : ''}`}
+      title={QUICK_ACTION_HINT[action]}
+      aria-busy={state === 'sending' || undefined}
+      onClick={onPress}
+    >
+      <Glyph d={GLYPH[glyph]} fill={glyph === 'start' || glyph === 'stop'} />
+      <span className="qa__label">{quickStateLabel(action, state)}</span>
+    </button>
+    <span className="qa__sr" role="status">
+      {said}
+    </span>
+    </>
+  );
+}
+
+/** One seat's contextual buttons (`seatActions`), each saying what its press did, in place. */
 export function QuickActionBar({
   cfg,
   seat,
+  actions,
   compact = false,
-  onShift = false,
 }: {
   cfg: LiveConfig;
   seat: string;
+  actions: readonly QuickAction[];
   compact?: boolean;
-  onShift?: boolean;
 }) {
-  const [busy, setBusy] = useState<QuickAction | null>(null);
-  const [sent, setSent] = useState<Sent>(null);
-  const run = async (action: QuickAction) => {
-    setBusy(action);
-    try {
-      await sendQuickAction(cfg, seat, action);
-      setSent({ action, ok: true, text: `${QUICK_ACTION_LABEL[action]} sent to ${seat}` });
-    } catch (e) {
-      setSent({ action, ok: false, text: e instanceof Error ? e.message : 'Could not send' });
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { states, send } = useQuickSend(cfg, seat);
   return (
     <div
       className={`qa${compact ? ' qa--compact' : ''}`}
@@ -94,24 +209,10 @@ export function QuickActionBar({
       aria-label={`Quick actions for ${seat}`}
     >
       <div className="qa__row">
-        {(onShift ? QUICK_ACTIONS : BAR_ACTIONS).map((a) => (
-          <button
-            key={a}
-            type="button"
-            className="qa__btn"
-            title={QUICK_ACTION_HINT[a]}
-            disabled={busy !== null}
-            onClick={() => void run(a)}
-          >
-            {busy === a ? 'Sending…' : QUICK_ACTION_LABEL[a]}
-          </button>
+        {actions.map((a) => (
+          <QuickButton key={a} action={a} seat={seat} state={states[a]} onPress={() => void send(a)} />
         ))}
       </div>
-      {sent && (
-        <p className={`qa__said${sent.ok ? '' : ' is-error'}`} role="status">
-          {sent.text}
-        </p>
-      )}
     </div>
   );
 }

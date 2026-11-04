@@ -87,10 +87,12 @@ describe('TeamColumn', () => {
     expect(html).toMatch(/declared/);
   });
 
-  it('offline seats fold into one line', () => {
-    const html = render({ roster: [m('a'), m('b', { presence: 'offline', posture: 'offline' })] });
-    expect(html).toContain('+ 1 offline');
-    expect(html).not.toContain('>b<');
+  it('offline seats are one line until the fold lands, and one line on a stream', () => {
+    const roster = [m('a'), m('b', { presence: 'offline', posture: 'offline' })];
+    // The fold is lazy (lane 01M6KZZ5WH): a server render shows its stand-in, the plain count.
+    expect(render({ roster })).toContain('<p class="lc-team__offline">1 offline</p>');
+    expect(render({ roster })).not.toContain('lc-team-card__name">b<');
+    expect(render({ roster, still: true })).toContain('+ 1 offline');
   });
 
   it('collapsed: a rail of avatars, each carrying its provider logo and a labelled state', () => {

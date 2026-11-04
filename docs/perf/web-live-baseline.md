@@ -2941,3 +2941,14 @@ offers one fingerprint to compare and remembers it per team across a reload. The
 compacted first (one pattern, one message). main itself read exactly 403.3 KB against the 403.3 KB
 ceiling, so any web addition failed. CI read 403.6 KB with this change (`static` job, run
 41897808595). Raised by 1 KB.
+
+## 2026-11-04 — offline seats start from /live: total JS RAISED 414,000 → 415,500 B (lane 01M6KZZ5WH7M7VMX7GN39DW2YT)
+
+nick asked for /live's "+ N offline" line to start seats, with the phone's contextual buttons. The
+fold, its rows (`OfflineSeats.tsx`), the phone's `seatActions` rule and per-pill
+Sending… / Sent / Couldn't send states with 12px glyphs (`quickActions.tsx`) are all new code. The
+fold and rows are one lazy chunk: initial JS was 151.0 KB, over its 150.9 KB ceiling, with the fold
+eager in `TeamColumn`. Made lazy, it read 150.7 KB on this laptop, so the initial budget is not
+raised. Total JS read 404.9 KB on this laptop against 404.3 KB. CI's first run of the eager
+version read 405.4 KB (`static` job, run 41912031552). Lazy-loading cannot move this total, only
+less code can. Raised by 1.5 KB.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
 import type { AskView } from './asks';
 import { CaptionPill } from './CaptionPill';
@@ -216,12 +216,22 @@ export function TeamColumn({
         ))}
       </ul>
       {still && <IdleStrip cards={cards.filter((c) => IDLE.has(c.state))} />}
-      {offline > 0 && <p className="lc-team__offline">+ {offline} offline</p>}
+      {offline > 0 &&
+        (still ? (
+          <p className="lc-team__offline">+ {offline} offline</p>
+        ) : (
+          <Suspense fallback={<p className="lc-team__offline">{offline} offline</p>}>
+            <OfflineFold roster={roster} cfg={cfg ?? null} canAct={canAct} />
+          </Suspense>
+        ))}
       {board && !loading && <Experiments entries={reads} now={now} avatarOf={avatarOf} still={still} stale={stale} />}
       {!still && <TeamColumnNotes roster={roster} unreadable={unreadable} stale={stale} />}
     </aside>
   );
 }
+
+/** The offline fold (lane 01M6KZZ5WH) is lazy whole: until it lands, the plain count stands in. */
+const OfflineFold = lazy(() => import('./OfflineSeats').then((m) => ({ default: m.OfflineFold })));
 
 /** States with nothing in hand — on a stream they are names, not cards. */
 const IDLE: ReadonlySet<TeamCardModel['state']> = new Set(['between', 'away']);
