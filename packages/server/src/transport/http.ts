@@ -630,6 +630,7 @@ import {
   pruneTraceContent,
 } from '../store/trace.js';
 import { deriveTraceReport } from '../store/traceReport.js';
+import { releaseWakeHold } from '../store/wakeHold.js';
 import { sharedWikiReader } from '../store/wiki.js';
 import { authorityAtHub, handleAuthorityRelay } from '../sync/authorityRelay.js';
 import {
@@ -6544,6 +6545,9 @@ export async function handleHttp(
         if (reportHost) await recordHostSeen(ctx.db, team.id, reportHost, Date.now());
         const body = await parseWakeReportOrAudit(ctx.db, team.id, rawBody);
         const lease = await settleWakeLease(ctx.db, team.id, body.lease_id);
+        // ADR 804: the run this lease spawned is over; its parked session holds the seat's next
+        // wake for nothing (finding 031), so its reclaim hold ends with the report.
+        if (lease) await releaseWakeHold(ctx.db, lease.id, Date.now());
         if (!lease) {
           const settled = await ctx.db.get<{
             member_id: string;
