@@ -39,6 +39,8 @@ Implementation is daemon-side derivation over rows the daemon already holds (`br
 - The daemon gains a derivation it must keep cheap: it runs over live presence and browser-session rows it already reads for the roster, not a new sweep.
   Follows-up: 01M61SG4608MWC9XV8H56DC8V8
 
+- _(2026-11-04, build note)_ Implemented as read-time derivation in the roster, live-driver, and style reads (`liveNodeDrivers` in `packages/server/src/store/presence.ts`) rather than a background row rewrite — the same observable reads, no sweep. The `/live` browser-session lease reads `browser_sessions` only when that table exists; until ADR 722 increment 1 lands it, the human-presence (CLI) lease alone decides. A presence counts as a lease only while connected (`conn_id` set) — an ambient HTTP touch is not a sign-in.
+
 ## Observability & Evaluation
 
 - Traces: `presence.driver` is already on the roster read and in the presence record; a driver change is visible as the row's value changing without a new attach. No new audit kind is added by this decision — if the build needs one to debug flapping, it names it in its own lane.

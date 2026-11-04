@@ -696,6 +696,50 @@ export async function countLivePresences(db: Driver, timeoutMs: number): Promise
 }
 
 /**
+ * The winning human lease per node (ADR 799): the human currently signed in on each node, from a
+ * live human presence (their own CLI attach) or a live `/live` browser session (`browser_sessions`,
+ * ADR 722 — local node, read only when the table exists). Most recent activity wins per node.
+ * Keyed by node id, with `''` for this daemon (presence.node IS NULL).
+ */
+export async function liveNodeDrivers(
+  db: Driver,
+  teamId: string,
+  timeoutMs: number,
+): Promise<Map<string, string>> {
+  const [l, r] = liveCutoffs(timeoutMs);
+  const best = new Map<string, { name: string; ts: number }>();
+  const offer = (node: string | null, name: string, ts: number) => {
+    const key = node ?? '';
+    const prev = best.get(key);
+    if (!prev || ts > prev.ts) best.set(key, { name, ts });
+  };
+  const humans = await db.all<{ node: string | null; name: string; last_seen_at: number }>(
+    `SELECT p.node AS node, m.name AS name, p.last_seen_at AS last_seen_at FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND m.kind = 'human' AND m.observer = 0 AND p.conn_id IS NOT NULL AND ${LIVE_PRESENCE_SQL}`,
+    [teamId, l, r],
+  );
+  for (const h of humans) offer(h.node, h.name, h.last_seen_at);
+  try {
+    const browsers = await db.all<{ name: string; last_used_at: number }>(
+      'SELECT m.name AS name, bs.last_used_at AS last_used_at FROM browser_sessions bs JOIN members m ON m.id = bs.member_id WHERE bs.team_id = ? AND bs.revoked_at IS NULL AND bs.expires_at > ?',
+      [teamId, Date.now()],
+    );
+    for (const b of browsers) offer(null, b.name, b.last_used_at);
+  } catch {
+    // No browser_sessions table yet (pre-ADR-722 daemon): CLI leases alone decide.
+  }
+  return new Map([...best].map(([k, v]) => [k, v.name]));
+}
+
+/** ADR 799: a live lease on the seat's node outranks the static hello label, which is the fallback. */
+export function effectiveDriver(
+  stored: string | null,
+  node: string | null,
+  leases: Map<string, string>,
+): string | null {
+  return leases.get(node ?? '') ?? stored;
+}
+
+/**
  * The set of `driver` names carried by a *live* presence right now on this team (ADR 021 co-presence,
  * activated by ADR 155 Increment 1). A driver names the human steering a live agent session; this is
  * how the roster derives "steering marks you working" — a human whose name is in this set composes as
@@ -708,11 +752,17 @@ export async function listLiveDrivers(
   timeoutMs: number,
 ): Promise<Set<string>> {
   const [l, r] = liveCutoffs(timeoutMs);
-  const rows = await db.all<{ driver: string }>(
-    `SELECT DISTINCT p.driver AS driver FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND p.driver IS NOT NULL AND ${LIVE_PRESENCE_SQL}`,
+  const leases = await liveNodeDrivers(db, teamId, timeoutMs);
+  const rows = await db.all<{ driver: string | null; node: string | null }>(
+    `SELECT p.driver AS driver, p.node AS node FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND m.kind != 'human' AND ${LIVE_PRESENCE_SQL}`,
     [teamId, l, r],
   );
-  return new Set(rows.map((r) => r.driver));
+  const out = new Set<string>();
+  for (const row of rows) {
+    const d = effectiveDriver(row.driver, row.node, leases);
+    if (d) out.add(d);
+  }
+  return out;
 }
 
 /** One live presence row as the roster reads it: the row, its node's label, and its wake's why. */
@@ -753,6 +803,7 @@ export async function listPresence(
     if (list) list.push(p);
     else byMember.set(p.member_id, [p]);
   }
+  const leases = await liveNodeDrivers(db, teamId, timeoutMs);
   const hearingByMember = await latestHearingByMember(db, teamId, members, byMember);
   return members.map((member) => {
     const presences = byMember.get(member.id) ?? [];
@@ -772,7 +823,10 @@ export async function listPresence(
         last_seen_at: p.last_seen_at,
         provenance: (p.provenance as Provenance | null) ?? null,
         workspace: p.workspace ?? null,
-        driver: p.driver ?? null,
+        driver:
+          member.kind === 'human'
+            ? (p.driver ?? null)
+            : effectiveDriver(p.driver ?? null, p.node ?? null, leases),
         model: p.model ?? null,
         // The tier rides only beside a model, and only when it is a tier this wire knows: a row
         // holding a value no client of ours ever wrote is read as "unknown", not passed through.

@@ -79,13 +79,36 @@ export async function teamStyle(db: Driver, teamId: string): Promise<StylePolicy
   return (await getPolicy(db, teamId)).style;
 }
 
-/** The driver a seat's newest live presence attested, if any (driver co-presence, ADR 021/155).
- *  Rows with no driver (an ambient touch, a bare `POST /presence`) are skipped, not read as none. */
+/** The driver for a seat (ADR 799): the human holding the newest live lease on the seat's node —
+ *  their own presence or a `/live` browser session — else the driver its newest presence attested
+ *  (driver co-presence, ADR 021/155). Rows with no driver are skipped, not read as none. */
 export async function driverForSeat(
   db: Driver,
   teamId: string,
   memberId: string,
 ): Promise<string | null> {
+  const seat = await db.get<{ node: string | null }>(
+    'SELECT node FROM presence WHERE team_id = ? AND member_id = ? AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+    [teamId, memberId],
+  );
+  if (seat) {
+    const lease = await db.get<{ name: string }>(
+      `SELECT m.name AS name FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = 'human' AND m.observer = 0 AND p.held_until IS NULL AND p.conn_id IS NOT NULL AND ${seat.node === null ? 'p.node IS NULL' : 'p.node = ?'} ORDER BY p.last_seen_at DESC LIMIT 1`,
+      seat.node === null ? [teamId] : [teamId, seat.node],
+    );
+    if (lease) return lease.name;
+    if (seat.node === null) {
+      try {
+        const browser = await db.get<{ name: string }>(
+          'SELECT m.name AS name FROM browser_sessions bs JOIN members m ON m.id = bs.member_id WHERE bs.team_id = ? AND bs.revoked_at IS NULL AND bs.expires_at > ? ORDER BY bs.last_used_at DESC LIMIT 1',
+          [teamId, Date.now()],
+        );
+        if (browser) return browser.name;
+      } catch {
+        // No browser_sessions table yet (pre-ADR-722 daemon).
+      }
+    }
+  }
   const row = await db.get<{ driver: string | null }>(
     'SELECT driver FROM presence WHERE team_id = ? AND member_id = ? AND held_until IS NULL AND driver IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1',
     [teamId, memberId],
@@ -95,9 +118,10 @@ export async function driverForSeat(
 
 /**
  * Whose block a caller gets — ONE rule for every route (review I5): a human (not an observer) gets
- * their own; a seat gets the driver it claimed with, else the one its live presence attested; a
- * null here means "the only-human rule, else team defaults" in {@link styleEnvelopeFor}. The claimed
- * driver is self-declared and recorded, never verified (ADR 514 Consequences, 2026-10-05).
+ * their own; a seat gets the human holding the live lease on its node (ADR 799), else the driver
+ * it claimed with / its presence attested; a null here means "the only-human rule, else team
+ * defaults" in {@link styleEnvelopeFor}. The claimed driver is self-declared and recorded, never
+ * verified (ADR 514 Consequences, 2026-10-05) — and since ADR 799 it is the fallback, not the answer.
  */
 export async function styleDriverFor(
   db: Driver,
@@ -106,7 +130,7 @@ export async function styleDriverFor(
   claimed: string | null,
 ): Promise<string | null> {
   if (member.kind === 'human' && member.observer !== 1) return member.name;
-  return claimed ?? (await driverForSeat(db, teamId, member.id));
+  return (await driverForSeat(db, teamId, member.id)) ?? claimed;
 }
 
 /**
