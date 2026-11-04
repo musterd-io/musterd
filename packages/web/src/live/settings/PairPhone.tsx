@@ -71,51 +71,34 @@ export function countdown(ms: number): string {
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
- * A pairing the server refused, in plain words (lane 01M6KYZ1SM). `restart` says the server has
- * ended it — confirmed, refused, expired or gone — so the panel goes back to "Pair a phone" instead of
- * staying on a stage nothing can finish. Null for anything that is not a pairing refusal (a cancelled
- * passkey prompt): the pairing still waits.
+ * A pairing the daemon refused because it has ended — confirmed or refused already, expired, gone —
+ * in plain words, so the panel returns to "Pair a phone" instead of a stage nothing can finish (lane
+ * 01M6KYZ1SM). Null for anything else (a cancelled passkey prompt): that pairing still waits.
  */
-export function pairingRefusal(e: unknown): { text: string; restart: boolean } | null {
-  const reason = /^pairing (\w+)$/.exec(message(e))?.[1];
-  if (!reason) return null;
-  const ended: Record<string, string> = {
-    not_awaiting_confirmation: 'That pairing is no longer waiting: it was already confirmed, refused or expired.',
-    expired: 'That pairing code expired.',
-    consumed: 'That pairing code was already used.',
-    not_found: 'That pairing is gone.',
-    unknown_nonce: 'That pairing is gone.',
-    too_many_attempts: 'That pairing had too many attempts.',
-    code_mismatch: 'The phone scanned a different code.',
-  };
-  const said = ended[reason];
-  if (said) return { text: `${said} Start again with Pair a phone.`, restart: true };
-  return { text: `The daemon refused that pairing (${reason}).`, restart: false };
+export function pairingRefusal(e: unknown): { text: string; restart: true } | null {
+  return /^pairing (not_awaiting_confirmation|expired|consumed|not_found|unknown_nonce|too_many_attempts|code_mismatch)$/.test(
+    message(e),
+  )
+    ? { text: 'That pairing has ended (confirmed, refused or expired). Start again with Pair a phone.', restart: true }
+    : null;
 }
 
-type Store = Pick<Storage, 'getItem' | 'setItem'>;
-const fingerprintKey = (team: string) => `musterd.pair.daemonFingerprint.${team}`;
-const browserStore = (): Store | null => {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
-  }
-};
+type Store = Pick<Storage, 'getItem' | 'setItem'> | null;
+const fpKey = (team: string) => `musterd.pairFp.${team}`;
+const local = (): Store => (typeof localStorage === 'undefined' ? null : localStorage);
 
-/** Keep the daemon fingerprint the code showed, so a reload still has it to compare (lane 01M6KYZ1SM). */
-export function rememberDaemonFingerprint(team: string, fp: string, store = browserStore()): void {
+/** Keep the daemon fingerprint a code showed, so a reload still has it to compare (lane 01M6KYZ1SM). */
+export function rememberDaemonFingerprint(team: string, fp: string, store: Store = local()): void {
   try {
-    store?.setItem(fingerprintKey(team), fp);
+    store?.setItem(fpKey(team), fp);
   } catch {
-    // Storage full or blocked: the panel falls back to its no-fingerprint hint.
+    // blocked storage: the panel falls back to its no-fingerprint hint
   }
 }
 
-/** The daemon fingerprint this browser last showed beside a code for `team`, if any. */
-export function recallDaemonFingerprint(team: string, store = browserStore()): string | null {
+export function recallDaemonFingerprint(team: string, store: Store = local()): string | null {
   try {
-    return store?.getItem(fingerprintKey(team)) ?? null;
+    return store?.getItem(fpKey(team)) ?? null;
   } catch {
     return null;
   }
@@ -212,6 +195,16 @@ export function PairPhone({
     if (stage.kind === 'code' && now >= stage.start.expires_at && !busy) void newCode();
   }, [stage, now, busy, newCode]);
 
+  // A refusal that ended the pairing goes back to the start (lane 01M6KYZ1SM); anything else waits.
+  const failed = (e: unknown) => {
+    const refused = pairingRefusal(e);
+    if (refused) {
+      setStage({ kind: 'idle' });
+      onChanged();
+    }
+    setNote({ tone: 'err', text: refused?.text ?? message(e) });
+  };
+
   const confirm = async (p: ChannelPairing) => {
     if (!me || !p.app) return;
     setBusy(true);
@@ -228,12 +221,7 @@ export function PairPhone({
       void loadPaired();
       onChanged();
     } catch (e) {
-      const refused = pairingRefusal(e);
-      if (refused?.restart) {
-        setStage({ kind: 'idle' });
-        onChanged();
-      }
-      setNote({ tone: 'err', text: refused?.text ?? message(e) });
+      failed(e);
     } finally {
       setBusy(false);
     }
@@ -265,12 +253,7 @@ export function PairPhone({
       setNote({ tone: 'ok', text: 'rejected — nothing was paired' });
       onChanged();
     } catch (e) {
-      const refused = pairingRefusal(e);
-      if (refused?.restart) {
-        setStage({ kind: 'idle' });
-        onChanged();
-      }
-      setNote({ tone: 'err', text: refused?.text ?? message(e) });
+      failed(e);
     } finally {
       setBusy(false);
     }
