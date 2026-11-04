@@ -16,6 +16,7 @@ import {
   openQuestions,
   questionView,
   waitingSeats,
+  seatWaiting,
 } from './questions.js';
 import type { MemberRow, TeamRow } from './rows.js';
 import { createTeam } from './teams.js';
@@ -79,6 +80,20 @@ withDrivers('questions', (o) => {
     await send(db, team, ryder, nick, 'ask', 'q1', 1, { meta: ask() });
     expect((await questionView(db, team.id, 'q1'))?.state).toBe('open');
     expect([...(await waitingSeats(db, team.id))]).toEqual(['ryder']);
+  });
+
+  it("seatWaiting reads one seat's own questions only — the shift poll's check (lane 01M6M61A0E)", async () => {
+    const { db, team, nick, swetha, ryder } = await seed();
+    await send(db, team, ryder, nick, 'ask', 'q1', 1, { meta: ask() });
+    await send(db, team, swetha, nick, 'ask', 'q2', 2, { meta: ask() });
+    expect(await seatWaiting(db, team.id, ryder.id)).toBe(true);
+    expect(await seatWaiting(db, team.id, nick.id)).toBe(false);
+    await send(db, team, ryder, null, 'resolve', 'r1', 3, { thread: 'q1' });
+    expect(await seatWaiting(db, team.id, ryder.id)).toBe(false);
+    // Agrees with the team-wide read it replaces on the poll.
+    expect(await seatWaiting(db, team.id, swetha.id)).toBe(
+      (await waitingSeats(db, team.id)).has('swetha'),
+    );
   });
 
   it("the asker's resolve withdraws it; a lane-close resolve says so", async () => {
