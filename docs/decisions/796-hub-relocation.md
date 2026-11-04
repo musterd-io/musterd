@@ -76,6 +76,12 @@ still cannot enroll.
   `*.ts.net`), and may carry no user or password; anything else is refused before the credential
   leaves the machine. The probe refuses redirects. A local process of the same user can already
   read `~/.musterd/node.json`, so the route adds no exposure beyond that.
+- _(2026-11-04)_ That last sentence held only for a process that can read the file: a local agent
+  seat whose tools cannot read `~/.musterd/` could still call the route (a second security finding,
+  forwarded by miley, lane `01M6JDXBKA93QDTCV9Z6NP6S49`). The request now carries
+  `node_credential`, which the CLI reads from `node.json` and the daemon compares (timing-safe)
+  with the credential it holds, refusing with 403 before any probe. The route now grants nothing
+  beyond reading the file. The protocol's `NodeRepointRequestSchema` gains the field.
 - Follows-up: lane `01M6HWV4HY93C1FX99KGEZFGMY` (the inventory), lane
   `01M6HWV7AF12X6T0VVPYSGM0SC` (repoint and relabel), lane `01M6HWV9E48ECHG1M77GX5HNDG` (security
   preconditions), lane `01M6HWVB7F56DF6WPPMZT662RP` (rehearsal), lane

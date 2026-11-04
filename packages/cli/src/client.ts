@@ -1981,7 +1981,7 @@ export class HttpClient {
 
   /** Revoke a node. `revoked: false` means it was already revoked or unknown. */
   /** ADR 796: point this machine's enrollment at a relocated hub (the local daemon probes it first). */
-  async nodeRepoint(body: { hub_url: string; team: string }): Promise<{
+  async nodeRepoint(body: { hub_url: string; team: string; node_credential: string }): Promise<{
     node_id: string;
     team: string;
     hub_url: string;
