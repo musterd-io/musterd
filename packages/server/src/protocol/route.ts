@@ -637,6 +637,12 @@ async function routeEnvelopeInner(
     const { pr_event: _clientPrEvent, ...restMeta } = outgoingEnv.meta;
     outgoingEnv = { ...outgoingEnv, meta: restMeta };
   }
+  // ADR 807 §9: `poll` is the daemon's record of a Twitch poll — its counts and winner. A client copy
+  // would let any member forge a poll result that reads as the daemon's, so it goes too.
+  if (!daemonComposed && outgoingEnv.meta && 'poll' in outgoingEnv.meta) {
+    const { poll: _clientPoll, ...restMeta } = outgoingEnv.meta;
+    outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
   // ADR 662: a human answer to a privileged ask is accepted only after the same A2 gate used by
   // lane verdicts. This stamp is server-owned; persistent consumers use it to distinguish answers
   // checked by this route from older bearer-only rows that must no longer release work.

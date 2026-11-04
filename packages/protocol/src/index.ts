@@ -3,6 +3,7 @@ export * from './feature-epoch.js';
 export * from './acts.js';
 export * from './ask.js';
 export * from './question.js';
+export * from './poll.js';
 export * from './quickAction.js';
 export * from './binding.js';
 export * from './provisioning.js';

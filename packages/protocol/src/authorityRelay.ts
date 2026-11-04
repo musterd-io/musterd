@@ -4,6 +4,7 @@ import { AUTHENTICATOR_KINDS } from './authority.js';
 import { MemberCeilingSchema } from './capabilities.js';
 import { LaneClaimsSchema } from './claims.js';
 import { EnvelopeSchema } from './envelope.js';
+import { OpenPollSchema, PollSpecSchema } from './poll.js';
 
 const MemberNameSchema = z.string().min(1).max(64);
 const KeyIdSchema = z.string().min(1).max(128);
@@ -181,6 +182,15 @@ export const AuthorityRelayRequestSchema = z.discriminatedUnion('op', [
       approval: RelayApprovalProofSchema.optional(),
     })
     .strict(),
+  // ADR 807: a joiner's admin opens the team's poll at the hub, with the credential_mint proof.
+  z
+    .object({
+      op: z.literal('poll.open'),
+      actor: MemberNameSchema,
+      spec: PollSpecSchema,
+      approval: RelayApprovalProofSchema.optional(),
+    })
+    .strict(),
 ]);
 export type AuthorityRelayRequest = z.infer<typeof AuthorityRelayRequestSchema>;
 
@@ -323,6 +333,10 @@ export const AuthorityRelayResponseSchema = z.discriminatedUnion('op', [
       ok: z.literal(true),
       archived_at: z.number().int().positive(),
     })
+    .strict(),
+  // The opener gets the poll back without its token: only the broadcast seat ever holds that.
+  z
+    .object({ op: z.literal('poll.open'), poll: OpenPollSchema.omit({ poll_token: true }) })
     .strict(),
 ]);
 export type AuthorityRelayResponse = z.infer<typeof AuthorityRelayResponseSchema>;
