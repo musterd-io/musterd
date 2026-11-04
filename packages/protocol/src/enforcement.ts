@@ -423,18 +423,29 @@ export interface WithholdMatch {
   fingerprint: string;
 }
 
+/** Does this command run musterd at all, env prefix or not? Under a seat-wide withhold every musterd
+ *  call outside {@link HELD_SEAT_MUSTERD_VERBS} counts as mutating: `musterd init` and `musterd service
+ *  install` write files the shell-write heuristic does not see. */
+function invokesMusterd(flavor: 'path' | 'command', raw: string | undefined): boolean {
+  return flavor === 'command' && raw !== undefined && /(^|[\s;&|(`])musterd(\s|$)/.test(raw);
+}
+
+/** The musterd subcommands a held seat still needs: talk to the team, read its state, move its lane. */
+const HELD_SEAT_MUSTERD_VERBS = new Set(['send', 'inbox', 'whoami', 'status', 'next', 'lane']);
+
 /**
- * A seat-wide withhold leaves musterd's own commands open so the seat can answer, withdraw and hand
- * off. Only a lone invocation counts: the raw command must carry no shell separator or substitution,
- * or `musterd send …; rm -rf x` would carry a write past the hold (security review, 2026-11-04).
+ * A seat-wide withhold leaves a few musterd commands open so the seat can answer, withdraw and hand
+ * off. It is decided from the RAW command, not the normalized one: normalization lifts env assignments,
+ * and `PATH=/tmp/x musterd send` runs whatever `musterd` that PATH finds. So the raw command must start
+ * with `musterd` itself, name one of {@link HELD_SEAT_MUSTERD_VERBS}, and carry no shell separator,
+ * redirect or substitution (security review, 2026-11-04).
  */
-function isLoneMusterdCommand(
-  flavor: 'path' | 'command',
-  target: string,
-  raw: string | undefined,
-): boolean {
-  if (flavor !== 'command' || !/^musterd(\s|$)/.test(target)) return false;
-  return !/[;&|`\n<>]|\$\(/.test(raw ?? '');
+function isLoneMusterdCommand(flavor: 'path' | 'command', raw: string | undefined): boolean {
+  if (flavor !== 'command' || raw === undefined) return false;
+  const command = raw.trim();
+  if (/[;&|`\n<>]|\$\(/.test(command)) return false;
+  const m = /^musterd\s+([a-z][a-z-]*)(\s|$)/.exec(command);
+  return m !== null && HELD_SEAT_MUSTERD_VERBS.has(m[1]!);
 }
 
 /**
@@ -457,7 +468,8 @@ export function matchWithhold(
   for (const withhold of withholds) {
     if (withhold.expires_at <= now) continue;
     const hit = withhold.seat_wide
-      ? isWriteShaped(call) && !isLoneMusterdCommand(flavor, target, call.command)
+      ? (isWriteShaped(call) || invokesMusterd(flavor, call.command)) &&
+        !isLoneMusterdCommand(flavor, call.command)
       : flavor === 'path'
         ? // A path withholds writes to it; reading the file the ask is about stays open.
           isWriteShaped(call) &&

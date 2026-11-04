@@ -78,7 +78,9 @@ message, meets nothing but its own instructions.
   branch (ADR 153) is still the seat's instruction, and the gate holds nothing.
 - 2026-11-04, the same build's security review: a seat could undo a human decline by resolving its
   own ask, and a seat-wide hold exempted `musterd …; <write>`. The build honours a withdrawal only
-  before any human answer, and exempts only a lone `musterd` command with no shell separator. The
+  before any human answer. It exempts only a lone `musterd send | inbox | whoami | status | next |
+  lane`, decided from the raw command (an env prefix can swap the binary); every other `musterd` call
+  counts as mutating under a seat-wide hold. The
   first means a declined seat-wide ask freezes the seat's writes until its 12h end.
 
 ## Observability & Evaluation

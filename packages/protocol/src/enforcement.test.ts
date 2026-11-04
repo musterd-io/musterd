@@ -477,6 +477,17 @@ describe('matchWithhold (ADR 801)', () => {
     expect(
       matchWithhold([wide], { tool: 'Bash', command: 'musterd inbox && echo x > f' }, NOW),
     ).not.toBeNull();
+    // An env prefix can swap the binary, and a writing subcommand is still a write.
+    expect(
+      matchWithhold(
+        [wide],
+        { tool: 'Bash', command: 'PATH=/tmp/x musterd send --act resolve' },
+        NOW,
+      ),
+    ).not.toBeNull();
+    expect(
+      matchWithhold([wide], { tool: 'Bash', command: 'musterd init --force' }, NOW),
+    ).not.toBeNull();
   });
 
   it('an expired withhold never matches, whatever a cache still holds', () => {

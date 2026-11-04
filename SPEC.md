@@ -1280,6 +1280,7 @@ answer's text.
   not a policy class kind.
 - A client MUST check a matching withhold before the class table. A scoped withhold holds a
   command matching `commands`, or a write to a path matching `paths`. A seat-wide one (no
-  `meta.withhold`) holds every write-shaped call except a lone `musterd` command (no shell
-  separator or substitution). When the server is
+  `meta.withhold`) holds every write-shaped call and every `musterd` call, except a lone
+  `musterd send | inbox | whoami | status | next | lane` with no env prefix, shell separator, redirect
+  or substitution. When the server is
   unreachable, a client MUST deny a call a cached, unexpired withhold matches.
