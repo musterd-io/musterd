@@ -18,6 +18,7 @@ import {
   SEAT_BACK,
   SINK_STAND,
   WAGON_PICKUP,
+  BELL_STAND,
   BOARD_STAND,
 } from './layout';
 import { findPath, walkable } from './nav';
@@ -311,3 +312,14 @@ describe('the stand in front of the work board', () => {
     }
   });
 });
+
+describe('the goal bell (lane 01M6HHHA96)', () => {
+  it('can be reached from every desk, along the floor', () => {
+    expect(walkable(BELL_STAND.lx, BELL_STAND.ly)).toBe(true);
+    for (const d of DESK_SLOTS) {
+      const path = findPath({ lx: d.lx, ly: d.ly }, BELL_STAND);
+      expect(path.at(-1)).toEqual(BELL_STAND);
+    }
+  });
+});
+

@@ -9,7 +9,7 @@ import {
   travelDir,
   conversationLooks,
 } from './actors';
-import { BOARD_STAND, COFFEE_STAND, DESK_SLOTS, ENTRANCE, insideCafe, STRIP_CAP } from './layout';
+import { BELL_STAND, BOARD_STAND, COFFEE_STAND, DESK_SLOTS, ENTRANCE, insideCafe, STRIP_CAP } from './layout';
 import { GESTURE, IDLE_GESTURES } from './skeleton';
 import { LEISURE_SPOTS } from './layout';
 import { REPLAY_TEMPO } from './replay';
@@ -2106,3 +2106,58 @@ describe('giveWay — walkers do not pass through each other (lane 01M67AVF78)',
     expect([a.hold, b.hold]).toEqual([false, true]);
   });
 });
+
+describe('the goal bell (lane 01M6HHHA96)', () => {
+  const run = () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    return actors;
+  };
+
+  it('walks to the bell, pulls the rope once there, and comes home', () => {
+    const actors = run();
+    expect(actors.ringBell('Ada')).toBe(true);
+    let nearest = Infinity;
+    let rangAt: number | null = null;
+    let pulled = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      const p = actors.poses().get('Ada')!;
+      nearest = Math.min(nearest, Math.hypot(p.lx - BELL_STAND.lx, p.ly - BELL_STAND.ly));
+      if (p.gesture === GESTURE.ring) pulled = true;
+      if (rangAt === null && actors.rung().includes('Ada')) rangAt = Math.hypot(p.lx - BELL_STAND.lx, p.ly - BELL_STAND.ly);
+    }
+    expect(nearest).toBeLessThan(2);
+    expect(pulled).toBe(true);
+    expect(rangAt).not.toBeNull();
+    expect(rangAt!).toBeLessThan(2); // the bell rings at the rope, not on the way
+    expect(actors.rung()).toEqual([]);
+  });
+
+  it('drops a walk in flight for the bell', () => {
+    const actors = run();
+    actors.claim('Ada', 0xc1a1);
+    actors.step(0.3);
+    expect(actors.ringBell('Ada')).toBe(true);
+    let toBell = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      if (actors.rung().includes('Ada')) toBell = true;
+    }
+    expect(toBell).toBe(true);
+  });
+
+  it('claps seated, and not while walking', () => {
+    const actors = run();
+    expect(actors.clap('Bo', 2)).toBe(true);
+    actors.step(0.1);
+    expect(actors.poses().get('Bo')!.gesture).toBe(GESTURE.clap);
+    actors.ringBell('Ada');
+    expect(actors.clap('Ada', 2)).toBe(false);
+    expect(actors.ringBell('Nobody')).toBe(false);
+  });
+});
+
