@@ -13,7 +13,8 @@ import { gateAskHumanAnswer } from './gateAsk.js';
  * ADR 801: the asking seat's open withholds, derived from the message log on every read — no table, no
  * timer, like ADR 516's holds. A withhold is a blocking `approve` ask the seat raised itself, younger
  * than {@link ASK_WITHHOLD_MAX_MS}, with no human accept and no withdrawal (a `resolve` the seat sent
- * on the ask's thread). A human decline keeps it, marked `declined` (§4).
+ * on the ask's thread before any human answered). A human decline keeps it, marked `declined` (§4),
+ * and the seat's own withdrawal after a decline does not lift it.
  *
  * A team with no human member withholds nothing: nobody there can release one.
  *
@@ -66,14 +67,18 @@ export async function openWithholds(
     }
     if (STRUCTURED_ASK_KEYS.some((k) => meta[k] !== undefined)) continue;
     if (!askWithholds(meta['species'] as AskSpecies, meta['tier'] as AskTier)) continue;
-    const withdrawn = await db.get<{ one: number }>(
-      `SELECT 1 AS one FROM messages
-          WHERE team_id = ? AND from_member = ? AND act = 'resolve' AND thread_id = ? LIMIT 1`,
-      [teamId, memberId, row.id],
-    );
-    if (withdrawn) continue;
     const answer = await gateAskHumanAnswer(db, teamId, row.id);
     if (answer?.act === 'accept') continue;
+    // A withdrawal lifts the withhold only while no human has answered: once a human declined, the
+    // seat cannot undo the decline by resolving its own ask (security review, 2026-11-04).
+    if (!answer) {
+      const withdrawn = await db.get<{ one: number }>(
+        `SELECT 1 AS one FROM messages
+            WHERE team_id = ? AND from_member = ? AND act = 'resolve' AND thread_id = ? LIMIT 1`,
+        [teamId, memberId, row.id],
+      );
+      if (withdrawn) continue;
+    }
     const scoped = AskWithholdSchema.safeParse(meta['withhold']);
     out.push({
       ask_id: row.id,

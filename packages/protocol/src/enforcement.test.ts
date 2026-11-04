@@ -470,6 +470,13 @@ describe('matchWithhold (ADR 801)', () => {
         NOW,
       ),
     ).toBeNull();
+    // A musterd command chained to a write is not musterd's own call: the hold applies.
+    expect(
+      matchWithhold([wide], { tool: 'Bash', command: 'musterd inbox; rm -rf build' }, NOW),
+    ).not.toBeNull();
+    expect(
+      matchWithhold([wide], { tool: 'Bash', command: 'musterd inbox && echo x > f' }, NOW),
+    ).not.toBeNull();
   });
 
   it('an expired withhold never matches, whatever a cache still holds', () => {

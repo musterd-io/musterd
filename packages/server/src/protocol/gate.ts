@@ -386,8 +386,8 @@ export async function gateWithhold(ctx: GateContext): Promise<GateDecision> {
       decision: 'deny',
       outcome: 'denied_declined',
       reason:
-        `declined: a human declined your ask ${askId}, so this action stays refused — take a ` +
-        `different approach or hand off. Withdrawing the ask (resolve on its thread) lifts it.`,
+        `declined: a human declined your ask ${askId}, so this action stays refused until ` +
+        `${new Date(open.expires_at).toISOString()} — take a different approach or hand off.`,
       ask_ref: askId,
     };
   }

@@ -144,4 +144,24 @@ withDrivers('askWithhold (ADR 801)', (o) => {
     await send(db, team, a, { id: 'a1', act: 'ask', meta: blocking, ts: NOW - 1000 });
     expect(await openWithholds(db, team.id, a.id, NOW)).toEqual([]);
   });
+
+  it('after a human decline, the seat withdrawing its own ask does not lift it', async () => {
+    const { db, team, nick, ada } = await seed();
+    await send(db, team, ada, { id: 'a1', act: 'ask', meta: blocking, ts: NOW - 3000 });
+    await send(db, team, nick, {
+      id: 'n1',
+      act: 'decline',
+      meta: { in_reply_to: 'a1', human_authority_checked: true },
+      ts: NOW - 2000,
+    });
+    await send(db, team, ada, {
+      id: 'r1',
+      act: 'resolve',
+      thread: 'a1',
+      meta: { ask_outcome: 'held' },
+      ts: NOW - 1000,
+    });
+    const open = await openWithholds(db, team.id, ada.id, NOW);
+    expect(open.map((w) => [w.ask_id, w.declined])).toEqual([['a1', true]]);
+  });
 });

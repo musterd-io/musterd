@@ -424,6 +424,20 @@ export interface WithholdMatch {
 }
 
 /**
+ * A seat-wide withhold leaves musterd's own commands open so the seat can answer, withdraw and hand
+ * off. Only a lone invocation counts: the raw command must carry no shell separator or substitution,
+ * or `musterd send …; rm -rf x` would carry a write past the hold (security review, 2026-11-04).
+ */
+function isLoneMusterdCommand(
+  flavor: 'path' | 'command',
+  target: string,
+  raw: string | undefined,
+): boolean {
+  if (flavor !== 'command' || !/^musterd(\s|$)/.test(target)) return false;
+  return !/[;&|`\n<>]|\$\(/.test(raw ?? '');
+}
+
+/**
  * Does one of the seat's open withholds hold this call (ADR 801 §2, §3)? A scoped withhold matches like an
  * ADR 150 class (path globs for a write to a path, command globs for a command). A seat-wide one holds every
  * write-shaped call ({@link isWriteShaped}) except musterd's own commands, so the seat can still answer,
@@ -443,7 +457,7 @@ export function matchWithhold(
   for (const withhold of withholds) {
     if (withhold.expires_at <= now) continue;
     const hit = withhold.seat_wide
-      ? isWriteShaped(call) && !(flavor === 'command' && /^musterd(\s|$)/.test(target))
+      ? isWriteShaped(call) && !isLoneMusterdCommand(flavor, target, call.command)
       : flavor === 'path'
         ? // A path withholds writes to it; reading the file the ask is about stays open.
           isWriteShaped(call) &&

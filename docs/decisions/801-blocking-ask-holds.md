@@ -48,7 +48,8 @@ message, meets nothing but its own instructions.
      Gate B's `denied_declined` does. Which answers count follows ADR 623: `approve` is privileged,
      so an A1 channel answer does not release.
    - The seat may withdraw its own ask with `resolve` and `meta.ask_outcome: 'held'`. That lifts the
-     withhold, and the record shows the action was never approved.
+     withhold, and the record shows the action was never approved. _(Amended 2026-11-04: only while no human has
+     answered; after a decline, a withdrawal does not lift it. See Consequences.)_
    - The 15-minute timeout does not lift it, because the contract at timeout is "do not proceed".
      Like an ADR 516 hold, a withhold ends at 12 hours at most.
    - The strand terminal (ADR 153) is unchanged: the seat releases its lane, and the withhold lasts
@@ -75,6 +76,10 @@ message, meets nothing but its own instructions.
   that agent until the 12h cap, and the pair would read as a coordination loss. The build therefore
   withholds only on a team with at least one human member. Without one, the ask contract's STRAND
   branch (ADR 153) is still the seat's instruction, and the gate holds nothing.
+- 2026-11-04, the same build's security review: a seat could undo a human decline by resolving its
+  own ask, and a seat-wide hold exempted `musterd …; <write>`. The build honours a withdrawal only
+  before any human answer, and exempts only a lone `musterd` command with no shell separator. The
+  first means a declined seat-wide ask freezes the seat's writes until its 12h end.
 
 ## Observability & Evaluation
 
