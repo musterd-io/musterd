@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
+import { DREAM_LEASE_SQL } from './dream.js';
 import { WAKE_AUDIT_SQL, WAKE_LEASED_SQL } from './insights.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
 import { INBOX_AFTER_CURSOR_SQL } from './messages.js';
@@ -207,6 +208,38 @@ withDrivers('inbox cursor plan', (open, kind) => {
         const plan = await db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`, [1, 1, 1, 'x']);
         expect(plan.map((r) => r.detail).join(' | ')).toContain('created_at>?');
       }
+    },
+  );
+});
+
+withDrivers('acceptance waits replies plan', (open, kind) => {
+  // Lane 01M6J3ERC4: grouping every accept/decline of the team walked its messages by
+  // idx_messages_in_reply_to at `team_id` alone — 2,979 groups to answer 4 asks on the laptop hub.
+  // The read is now scoped to the awaiting lanes' asks, and seeks `(team_id, in_reply_to)`.
+  it.skipIf(kind !== 'sqlite')(
+    'the replies to awaiting review asks seek (team, in_reply_to)',
+    async () => {
+      const db = await open();
+      const plan = await db.all<{ detail: string }>(
+        "EXPLAIN QUERY PLAN SELECT in_reply_to AS ref, MAX(created_at) AS ts FROM messages WHERE team_id = 't' AND in_reply_to IN ('a','b') AND act IN ('accept','decline') AND meta IS NOT NULL GROUP BY in_reply_to",
+      );
+      expect(plan.map((r) => r.detail).join(' | ')).toContain('in_reply_to=?');
+    },
+  );
+});
+
+withDrivers('dream lease plan', (open, kind) => {
+  it.skipIf(kind !== 'sqlite')(
+    'the dream-lease check seeks (team, action, target, ts)',
+    async () => {
+      const db = await open();
+      const plan = await db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${DREAM_LEASE_SQL}`, [
+        'L',
+        'M',
+      ]);
+      const detail = plan.map((r) => r.detail).join(' | ');
+      expect(detail).toContain('target=? AND ts>?');
+      expect(detail).toContain('sqlite_autoindex_wake_leases_1 (id=?)');
     },
   );
 });

@@ -359,15 +359,26 @@ export async function ownLeaseCreatedAt(
   return row?.created_at ?? null;
 }
 
-async function isDreamLease(db: Driver, memberId: string, leaseId: string): Promise<boolean> {
-  const row = await db.get<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM wake_leases w
+/**
+ * Is this seat's lease a dream wake? Read off the lease's own `residency.wake_leased` row.
+ *
+ * The row is found by `(team, action, target, ts)`: the mint writes it with the seat's name as
+ * target, in the same transaction, just after the lease's `created_at`. The minute of slack before
+ * `created_at` covers a clock step between the two stamps. Without the bound the subquery
+ * json_extract-ed every wake_leased row the team ever wrote (lane 01M6J3ERC4: 37 slow runs, 40 s on
+ * the laptop hub in 8 h). The member name goes in through a scalar subquery so the lease is still
+ * found by its primary key.
+ */
+export const DREAM_LEASE_SQL = `SELECT COUNT(*) AS n FROM wake_leases w
         WHERE w.id = ? AND w.member_id = ?
           AND EXISTS (SELECT 1 FROM audit a
                        WHERE a.team_id = w.team_id AND a.action = 'residency.wake_leased'
+                         AND a.target = (SELECT mm.name FROM members mm WHERE mm.id = w.member_id)
+                         AND a.ts >= w.created_at - 60000
                          AND json_extract(a.detail, '$.lease_id') = w.id
-                         AND json_extract(a.detail, '$.derivation') = 'dream')`,
-    [leaseId, memberId],
-  );
+                         AND json_extract(a.detail, '$.derivation') = 'dream')`;
+
+async function isDreamLease(db: Driver, memberId: string, leaseId: string): Promise<boolean> {
+  const row = await db.get<{ n: number }>(DREAM_LEASE_SQL, [leaseId, memberId]);
   return (row?.n ?? 0) > 0;
 }
