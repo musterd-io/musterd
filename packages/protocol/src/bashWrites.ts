@@ -121,6 +121,13 @@ function heredocTags(
  *  body never reaches its tag, or a delimiter is not a plain name — then where the body ends is a
  *  guess, and the caller treats the command as unread. */
 function stripHeredocs(command: string): { text: string; open: boolean } {
+  // Fail closed (security review, 2026-11-04): where a `<<` meets a construct that changes how bash
+  // reads it — arithmetic, a test, a parameter or command substitution, backticks — finding the
+  // body's end needs a real parser. Such a command is not read; the after-call check covers it.
+  const hasHeredoc = /<<(?!<)/.test(command.replace(/<<<+/g, ''));
+  if (hasHeredoc && /\(\(|\$\[|\[\[|\$\{|\$\(|`/.test(command)) {
+    return { text: command, open: true };
+  }
   const out: string[] = [];
   const pending: { tag: string; dash: boolean }[] = [];
   let ambiguous = false;
@@ -135,9 +142,14 @@ function stripHeredocs(command: string): { text: string; open: boolean } {
     const opened = heredocTags(line, quote);
     quote = opened.quote;
     if (opened.ambiguous) ambiguous = true;
+    // A heredoc opened on a line that ends inside a quote: where the body starts is a guess.
+    if (opened.tags.length > 0 && quote !== null) ambiguous = true;
     pending.push(...opened.tags);
   }
-  return { text: out.join('\n'), open: ambiguous || pending.length > 0 };
+  return {
+    text: out.join('\n'),
+    open: ambiguous || pending.length > 0 || (hasHeredoc && quote !== null),
+  };
 }
 
 /** A redirect operator, read from its first `<`, `>` or `&>` (an fd's digits are the word before it). */

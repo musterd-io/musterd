@@ -113,6 +113,9 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     'echo $(touch a.ts > b.ts',
     'x=$((1 << 2)) && touch a.ts',
     '(( n << y )) && touch a.ts\ny',
+    '(( n\n<< y )) && touch a.ts\ny',
+    'cat <<EOF > a.ts\n${x}\nEOF',
+    'cat <<EOF "open\nEOF\ntouch a.ts',
   ])('opaque: %s', (command) => {
     expect(t(command).opaque).toBe(true);
   });
