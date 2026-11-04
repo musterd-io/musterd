@@ -22,6 +22,22 @@ describe('idle-wake shapes (ADR 558)', () => {
     expect(IdleWakeReportSchema.parse(ok)).toEqual(ok);
     expect(IdleWakeReportSchema.safeParse({ ...ok, line: 'x' }).success).toBe(false);
   });
+  it('a report names any act id a phone answer carries (ADR 800)', () => {
+    // An app answer's id is `app-<ask ULID>-<ms>`: 44 characters. The old cap of 40 refused every
+    // report naming one, so a phone answer was never marked delivered and re-rang (lane 01M6M3YYH5).
+    const act = 'app-01M6M2HQRYT9J7Y08HF6CA26VS-1793822665231';
+    expect(act.length).toBe(44);
+    expect(
+      IdleWakeReportSchema.safeParse({ act, outcome: 'injected', harness: 'claude-code' }).success,
+    ).toBe(true);
+    expect(
+      IdleWakeReportSchema.safeParse({
+        act: 'x'.repeat(129),
+        outcome: 'injected',
+        harness: 'claude-code',
+      }).success,
+    ).toBe(false);
+  });
   it('the local state file parses empty and keeps markers', () => {
     expect(IdleWakeStateSchema.parse({})).toEqual({});
     expect(
