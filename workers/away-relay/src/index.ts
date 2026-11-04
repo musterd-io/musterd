@@ -587,7 +587,11 @@ export class TeamRelay implements DurableObject {
   /** Body fetches waiting on the daemon's `app_body`, by request id. In memory only: never stored. */
   private readonly fetches = new Map<
     string,
-    (found: { sealed: SealedBody | null; expires_at?: number }) => void
+    (found: {
+      sealed: SealedBody | null;
+      expires_at?: number;
+      ended?: 'superseded' | 'revoked';
+    }) => void
   >();
 
   constructor(
@@ -763,29 +767,37 @@ export class TeamRelay implements DurableObject {
       const socket = this.liveSocket(slug);
       if (!socket) return new Response('daemon not connected', { status: 503 });
       const requestId = crypto.randomUUID();
-      const found = await new Promise<{ sealed: SealedBody | null; expires_at?: number } | null>(
-        (resolve) => {
-          const timer = setTimeout(() => {
-            this.fetches.delete(requestId);
-            resolve(null);
-          }, APP_FETCH_TIMEOUT_MS);
-          this.fetches.set(requestId, (f) => {
-            clearTimeout(timer);
-            this.fetches.delete(requestId);
-            resolve(f);
-          });
-          socket.send(
-            JSON.stringify({
-              protocol: 1,
-              type: 'app_fetch',
-              request_id: requestId,
-              ask_ref: askRef,
-              binding,
-            }),
-          );
-        },
-      );
+      const found = await new Promise<{
+        sealed: SealedBody | null;
+        expires_at?: number;
+        ended?: 'superseded' | 'revoked';
+      } | null>((resolve) => {
+        const timer = setTimeout(() => {
+          this.fetches.delete(requestId);
+          resolve(null);
+        }, APP_FETCH_TIMEOUT_MS);
+        this.fetches.set(requestId, (f) => {
+          clearTimeout(timer);
+          this.fetches.delete(requestId);
+          resolve(f);
+        });
+        socket.send(
+          JSON.stringify({
+            protocol: 1,
+            type: 'app_fetch',
+            request_id: requestId,
+            ask_ref: askRef,
+            binding,
+          }),
+        );
+      });
       if (!found) return new Response('daemon did not answer', { status: 504 });
+      // ADR 802: the daemon says this binding ended — the phone shows "pair again", not a miss.
+      if (!found.sealed && found.ended)
+        return Response.json(
+          { ended: found.ended },
+          { status: 410, headers: { 'cache-control': 'no-store' } },
+        );
       if (!found.sealed) return new Response('not found', { status: 404 });
       return Response.json(
         {
@@ -964,6 +976,7 @@ export class TeamRelay implements DurableObject {
       this.fetches.get(frame.request_id)?.({
         sealed: frame.sealed,
         ...(frame.expires_at !== undefined ? { expires_at: frame.expires_at } : {}),
+        ...(frame.ended !== undefined ? { ended: frame.ended } : {}),
       });
       return;
     }

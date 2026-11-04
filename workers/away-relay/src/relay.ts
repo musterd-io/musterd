@@ -130,6 +130,8 @@ export type DaemonFrame =
       request_id: string;
       sealed: SealedBody | null;
       expires_at?: number;
+      /** ADR 802: kept only with `sealed: null` — a malformed frame must not end a live body. */
+      ended?: 'superseded' | 'revoked';
     }
   | { protocol: 1; type: 'resolve'; ask_ref: string };
 
@@ -300,6 +302,9 @@ export function parseDaemonFrame(raw: string): DaemonFrame | null {
       request_id: v['request_id'],
       sealed: sealed === null ? null : { v: 1, enc: sealed.enc, ct: sealed.ct },
       ...(expires !== undefined ? { expires_at: expires } : {}),
+      ...(sealed === null && (v['ended'] === 'superseded' || v['ended'] === 'revoked')
+        ? { ended: v['ended'] }
+        : {}),
     };
   }
   if (v['type'] === 'resolve') {

@@ -91,6 +91,8 @@ export const RelayAppBodyFrameSchema = z.object({
   request_id: z.string().min(1).max(64),
   sealed: SealedBodySchema.nullable(),
   expires_at: z.number().int().nonnegative().optional(),
+  /** ADR 802: the binding ended — meaningful only with `sealed: null`; the relay answers the phone 410. */
+  ended: z.enum(['superseded', 'revoked']).optional(),
 });
 export type RelayAppBodyFrame = z.infer<typeof RelayAppBodyFrameSchema>;
 
