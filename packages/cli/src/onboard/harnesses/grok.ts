@@ -67,8 +67,13 @@ function projectConfigPath(dir: string = process.cwd()): string {
 function projectHooksPath(dir: string = process.cwd()): string {
   return join(dir, '.grok', 'hooks', 'musterd.json');
 }
+/** Grok's own home: `$GROK_HOME`, else `~/.grok` — the same resolution as every other reader. */
+function grokHome(): string {
+  return process.env['GROK_HOME'] ?? join(homedir(), '.grok');
+}
+
 function globalConfigPath(): string {
-  return join(homedir(), '.grok', 'config.toml');
+  return join(grokHome(), 'config.toml');
 }
 
 /**
@@ -78,7 +83,7 @@ function globalConfigPath(): string {
 function grokUserHooksDir(): string {
   const fromTest = process.env['MUSTERD_GROK_HOOKS_HOME'];
   if (fromTest && process.env['VITEST'] === 'true') return fromTest;
-  return join(homedir(), '.grok', 'hooks');
+  return join(grokHome(), 'hooks');
 }
 
 function globalStartHookPath(): string {
@@ -549,7 +554,7 @@ export const grok: Harness = {
     if (id) return id;
     if (!payload.session_id) return undefined;
     try {
-      const home = process.env['GROK_HOME'] ?? join(homedir(), '.grok');
+      const home = grokHome();
       const cwd = payload.cwd ?? process.cwd();
       const encoded = encodeURIComponent(cwd);
       const summary = join(home, 'sessions', encoded, payload.session_id, 'summary.json');
