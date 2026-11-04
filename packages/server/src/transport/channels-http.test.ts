@@ -121,6 +121,8 @@ withDrivers('channels-http (ADR 618 §7 pairing)', (_o, kind) => {
 
     const bindings = await call('GET', '/teams/dawn/channels/bindings', nick);
     expect(bindings.json.bindings).toHaveLength(1);
+    // ADR 802 §3: only an app binding can be superseded; any other channel reads null.
+    expect(bindings.json.bindings[0].ended).toBeNull();
 
     const revoked = await call(
       'POST',

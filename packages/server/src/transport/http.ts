@@ -259,6 +259,7 @@ import { parseEnvelope, parseOrBadRequest } from '../protocol/validate.js';
 import { raiseWakeQuestion } from '../protocol/wakeQuestion.js';
 import { claimedLanesByOwner, resolveActivity } from '../store/activity.js';
 import {
+  appBindingEnded,
   appEnrollPayload,
   confirmAppPairing,
   keyFingerprint,
@@ -5288,7 +5289,17 @@ export async function handleHttp(
           return sendJson(res, 200, result);
         }
         if (method === 'GET' && rest === '/channels/bindings') {
-          return sendJson(res, 200, { bindings: await listBindings(ctx.db, team.id, member.id) });
+          // ADR 802 §3: an app binding says whether it ended (superseded by a key change, or revoked).
+          const bindings = await listBindings(ctx.db, team.id, member.id);
+          return sendJson(res, 200, {
+            bindings: await Promise.all(
+              bindings.map(async (b) => ({
+                ...b,
+                ended:
+                  b.channel === APP_CHANNEL ? await appBindingEnded(ctx.db, team.id, b.id) : null,
+              })),
+            ),
+          });
         }
         const bindingMatch = /^\/channels\/bindings\/([^/]+)\/revoke$/.exec(rest);
         if (method === 'POST' && bindingMatch) {
