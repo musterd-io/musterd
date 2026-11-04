@@ -13,14 +13,15 @@ the revocation list.
 | --- | --- | --- |
 | Daemon listener (`ss -ltnp`) | `127.0.0.1:4849` only (it is a joiner) | As the hub it must bind the tailnet address `100.115.152.1:4849`, never `0.0.0.0` |
 | Hetzner cloud firewall `joiner-ssh-only` | inbound TCP 22 from anywhere; nothing else | 4849 stays closed on the public IP: already true |
-| Host firewall | `ufw` inactive; `INPUT` policy ACCEPT (only Tailscale's `ts-input` chain) | `ufw` on: deny incoming, allow `tailscale0`, allow 22 |
-| sshd | `PasswordAuthentication yes`, `PermitRootLogin without-password` | `PasswordAuthentication no` |
-| Tailnet peers | the box, nick's phone, nicks-laptop, delta-2 (tagged), musterd-seat-delta (tagged, offline 31 d), swethas-laptop | ACL: the box's 4849 reachable only from nicks-laptop, delta-2 and nick's devices |
+| Host firewall | `ufw` was inactive. Since 2026-11-04 it is on: deny incoming, allow 22/tcp, allow `tailscale0` | done |
+| sshd | `PasswordAuthentication` was `yes`. Since 2026-11-04 it is `no` (`/etc/ssh/sshd_config.d/00-musterd.conf`); `PermitRootLogin without-password` (key only) | done |
+| Tailnet ACL | the box was an untagged member with full reach. Since 2026-11-04 it is tagged `tag:musterd-hub`. It reaches only `nicks-laptop:4849` (checked: 4849 answers 200, 22 is refused), and `tag:musterd-seat` may reach the box's 4849 | after the switch, remove the `tag:musterd-hub → nicks-laptop` grant |
 | App-channel key | absent on the box | arrives with the switch (design §"The app-channel key") |
 | Relay credential (`away_relay_token`) | absent from the box's replica; team policy secrets do not replicate | arrives inside the copied store; rotate it after the switch |
 
-The tailnet ACL could not be read from the box. It lives in the Tailscale admin console
-(login.tailscale.com → Access controls), which only nick can read.
+The tailnet policy lives in the Tailscale admin console (login.tailscale.com → Access controls).
+Members (`autogroup:member`) keep full reach, so every device on nick's account still reaches the
+box, swethas-laptop included. Seat VMs and the hub box are tagged, so they are not members.
 
 ## The relay credential
 
