@@ -199,7 +199,11 @@ export default function PairScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: p.bg }]}>
       <Backdrop />
-      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.page}
+        keyboardShouldPersistTaps="handled"
+      >
         <Rise style={styles.head}>
           <View
             style={styles.stepper}

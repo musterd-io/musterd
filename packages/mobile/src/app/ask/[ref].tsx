@@ -253,6 +253,7 @@ export default function AskScreen() {
     return (
       <ScrollView
         style={{ backgroundColor: p.bg }}
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.page}
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets
@@ -291,7 +292,11 @@ export default function AskScreen() {
   const theirs = agent ? 'The agent says' : `${ask.from} says`;
 
   return (
-    <ScrollView style={{ backgroundColor: p.bg }} contentContainerStyle={styles.page}>
+    <ScrollView
+      style={{ backgroundColor: p.bg }}
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={styles.page}
+    >
       <Backdrop />
       <Rise style={styles.who}>
         <Seat name={ask.from} agent={agent} size={34} />
