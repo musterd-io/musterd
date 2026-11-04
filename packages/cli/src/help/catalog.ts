@@ -725,7 +725,7 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'node',
-    signature: '<invite|join|rotate|revoke|list>',
+    signature: '<invite|join|repoint|relabel|rotate|revoke|list>',
     summary: 'machine credentials — admit a second machine to this team',
     group: 'team',
     detail:
@@ -734,7 +734,9 @@ export const CATALOG: readonly CommandEntry[] = [
       'OWN daemon to enroll — the daemon presents the node id it already holds and writes the durable ' +
       '`msnode_` to ~/.musterd/node.json at 0600. `rotate` re-keys a machine without changing its ' +
       'identity, so every event it has already stamped still names it. `revoke` cuts it off ' +
-      'immediately and leaves its history alone.',
+      'immediately and leaves its history alone. After a hub relocation (ADR 796), `repoint <hub-url>` ' +
+      'points this machine at the new hub with the credential it already holds — refused, and nothing ' +
+      'written, unless the new hub accepts it — and `relabel <node-id> <label>` renames a node.',
     examples: ['musterd node'],
   },
   {

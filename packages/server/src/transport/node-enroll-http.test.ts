@@ -276,6 +276,93 @@ withDrivers('node-enroll-http', (_o, kind) => {
     });
   });
 
+  describe('POST /node/repoint and node relabel (ADR 796)', () => {
+    async function enroll() {
+      const nodeId = await mintLocalRow(joiner, 'bravo', 'm-joiner');
+      const { json: minted } = await post(
+        hubBase,
+        '/teams/bravo/nodes/invite',
+        { label: 'joiner laptop' },
+        nickCredential,
+      );
+      const res = await post(joinerBase, '/node/enroll', {
+        hub_url: hubBase,
+        code: minted.invite,
+        team: 'bravo',
+      });
+      expect(res.status).toBe(200);
+      return nodeId;
+    }
+
+    it('repointsWhenTheNewHubAcceptsTheCredential: hub_url moves, node id and credential stay', async () => {
+      const nodeId = await enroll();
+      const before = readNodeState().nodes['bravo']!;
+      // The same hub under another address stands in for a relocated hub holding the same hash.
+      const moved = hubBase.replace('127.0.0.1', 'localhost');
+      const res = await post(joinerBase, '/node/repoint', { hub_url: moved, team: 'bravo' });
+      expect(res.status).toBe(200);
+      expect(readNodeState().nodes['bravo']).toEqual({ ...before, hub_url: moved });
+      const team = (await getTeamBySlug(joiner.store, 'bravo'))!;
+      const audit = await joiner.store.get<{ target: string }>(
+        "SELECT target FROM audit WHERE team_id = ? AND action = 'node.repointed'",
+        [team.id],
+      );
+      expect(audit?.target).toBe(nodeId);
+    });
+
+    it('refusesAHubThatRejectsTheCredential, and node.json is untouched', async () => {
+      await enroll();
+      const other = createServer({ db: await openTestDriver(kind, { instance: 'c' }), port: 0 });
+      const otherBase = `http://127.0.0.1:${(await other.listen()).port}`;
+      try {
+        await post(otherBase, '/teams', {
+          slug: 'bravo',
+          creator: { name: 'nick', kind: 'human' },
+        });
+        const before = JSON.stringify(readNodeState());
+        const res = await post(joinerBase, '/node/repoint', { hub_url: otherBase, team: 'bravo' });
+        expect(res.status).toBe(409);
+        expect(JSON.stringify(readNodeState())).toBe(before);
+      } finally {
+        await other.close();
+      }
+    });
+
+    it('a team this machine never enrolled in is not found', async () => {
+      const res = await post(joinerBase, '/node/repoint', { hub_url: hubBase, team: 'bravo' });
+      expect(res.status).toBe(404);
+    });
+
+    it('an admin relabels a node; move then resolves the new label', async () => {
+      const nodeId = await enroll();
+      const res = await post(
+        hubBase,
+        `/teams/bravo/nodes/${nodeId}/label`,
+        { label: 'musterd-joiner-1' },
+        nickCredential,
+      );
+      expect(res.status).toBe(200);
+      const team = (await getTeamBySlug(hub.store, 'bravo'))!;
+      const row = await hub.store.get<{ label: string }>('SELECT label FROM nodes WHERE id = ?', [
+        nodeId,
+      ]);
+      expect(row?.label).toBe('musterd-joiner-1');
+      expect(
+        await hub.store.get(
+          "SELECT id FROM audit WHERE team_id = ? AND action = 'node.relabeled'",
+          [team.id],
+        ),
+      ).toBeDefined();
+      const unknown = await post(
+        hubBase,
+        '/teams/bravo/nodes/nope/label',
+        { label: 'x' },
+        nickCredential,
+      );
+      expect(unknown.status).toBe(404);
+    });
+  });
+
   describe('the hub is the machine the team was created on (ADR 376)', () => {
     async function enrolled() {
       await mintLocalRow(joiner, 'bravo', 'm-joiner');

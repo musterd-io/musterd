@@ -20,6 +20,8 @@ const USAGE =
   'usage:\n' +
   '  musterd node invite [--label "<what machine>"]\n' +
   '  musterd node join <hub-url> <msinv_code>\n' +
+  '  musterd node repoint <hub-url>\n' +
+  '  musterd node relabel <node-id> <label>\n' +
   '  musterd node rotate <node-id>\n' +
   '  musterd node revoke <node-id>\n' +
   '  musterd node trust <node-id>\n' +
@@ -113,6 +115,34 @@ export async function nodeCommand(parsed: Parsed): Promise<number> {
         // long-lived machine secret does not belong in terminal scrollback.
         theme.meta('  credential written to ~/.musterd/node.json (0600)\n'),
     );
+    return 0;
+  }
+
+  if (sub === 'repoint') {
+    // ADR 796: after the hub moves, this machine keeps its node id and credential and only learns
+    // the new address. The local daemon probes the new hub with the credential and writes nothing
+    // unless it is accepted; like `join`, it is authorised by being on this machine.
+    const hubUrl = parsed.positionals[1];
+    if (!hubUrl) throw new CliError(USAGE, 2);
+    const { team, http } = resolveRead(parsed.flags, { claimSeatPerRequest: true });
+    const moved = await http.nodeRepoint({ hub_url: hubUrl, team });
+    process.stdout.write(
+      success(`this machine now syncs with ${moved.hub_url}`, {
+        next: 'musterd node list  (on the new hub, to see it)',
+      }) +
+        '\n' +
+        `  ${theme.meta(moved.node_id)} ${theme.meta(`team ${moved.team}`)}\n`,
+    );
+    return 0;
+  }
+
+  if (sub === 'relabel') {
+    const nodeId = parsed.positionals[1];
+    const label = parsed.positionals[2];
+    if (!nodeId || !label) throw new CliError(USAGE, 2);
+    const { team, http } = resolve(parsed.flags);
+    const relabeled = await http.nodeRelabel(team, nodeId, label);
+    process.stdout.write(success(`${nodeId} is now labeled ${relabeled.label}`) + '\n');
     return 0;
   }
 
