@@ -811,6 +811,32 @@ withDrivers('store', (o) => {
       expect((await listLiveDrivers(db, team.id, 0)).size).toBe(0);
     });
 
+    it('driver follows the human signed in on the node; static label is the fallback (ADR 799)', async () => {
+      const { db, team } = await freshTeam();
+      const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
+      const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+      const swetha = (await addMember(db, team, { name: 'swetha', kind: 'human' })).row;
+
+      await attach(db, ada.id, 'claude-code', 'c1', { driver: 'nick' });
+      const driverOfAda = async () =>
+        (await listPresence(db, team.id, 60_000)).find((s) => s.member.name === 'Ada')!
+          .presences[0]!.driver;
+
+      // No human lease live → the static hello label stands (fallback).
+      expect(await driverOfAda()).toBe('nick');
+
+      // swetha signs in on the same (local) node via her own CLI presence → she drives.
+      await attach(db, swetha.id, 'cli', 'c2', {});
+      expect(await driverOfAda()).toBe('swetha');
+      // Steering (ADR 155) is unchanged: only the explicit hello label counts there.
+      expect([...(await listLiveDrivers(db, team.id, 60_000))]).toEqual(['nick']);
+
+      // nick then signs in more recently → most recent lease wins.
+      await new Promise((r) => setTimeout(r, 2));
+      await attach(db, nick.id, 'cli', 'c3', {});
+      expect(await driverOfAda()).toBe('nick');
+    });
+
     it('resolveActivity: steering marks you working even without your own heartbeat (ADR 155)', () => {
       // Not live on your own, but steering a live agent seat → working, present (the driver-copresence fix).
       expect(resolveActivity(false, null, true)).toEqual({
