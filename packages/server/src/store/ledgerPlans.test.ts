@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
 import { WAKE_AUDIT_SQL, WAKE_LEASED_SQL } from './insights.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
+import { INBOX_AFTER_CURSOR_SQL } from './messages.js';
 import { OWED_REVIEWS_SQL } from './orientation.js';
 
 /**
@@ -186,4 +187,26 @@ withDrivers('interrupt window plan', (open, kind) => {
         expect(detail).not.toMatch(/SCAN messages/);
       },
     );
+});
+
+withDrivers('inbox cursor plan', (open, kind) => {
+  // Lane 01M6J3ERC4: the `(created_at, id)` cursor spelled as `created_at > ? OR (created_at = ? AND
+  // id > ?)` stopped idx_messages_inbox_cover at the team, so every unread first page walked the
+  // team's whole history from its oldest row — 854 slow runs, 669 s, max 3.6 s on the laptop hub
+  // 2026-11-03 18:22Z–02:10Z. INBOX_AFTER_CURSOR_SQL carries a redundant `created_at >= ?` the
+  // planner can seek on.
+  it.skipIf(kind !== 'sqlite')(
+    'the unread inbox read after a cursor seeks (team, created_at)',
+    async () => {
+      const db = await open();
+      const where = `WHERE team_id = 't' AND (to_member = 'm' OR to_kind IN ('team','broadcast')) AND from_member != 'm' AND ${INBOX_AFTER_CURSOR_SQL}`;
+      for (const sql of [
+        `SELECT * FROM messages ${where} ORDER BY created_at ASC, id ASC LIMIT 200`,
+        `SELECT COUNT(*) AS n FROM messages ${where}`,
+      ]) {
+        const plan = await db.all<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`, [1, 1, 1, 'x']);
+        expect(plan.map((r) => r.detail).join(' | ')).toContain('created_at>?');
+      }
+    },
+  );
 });
