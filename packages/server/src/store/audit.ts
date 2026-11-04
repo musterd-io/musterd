@@ -149,6 +149,9 @@ export type AuditAction =
   // when the human's standing key approved the phone key and the binding exists (binding, device
   // key id, App Attest key id and environment). Never key material, the code, or a signature.
   | 'channel.app_paired'
+  // ADR 802: a body fetch named a binding that ended (`superseded` by a daemon key change, or
+  // `revoked`), and the phone was told so. Once per binding and reason. Never key material.
+  | 'channel.app_fetch_ended'
   // ADR 676 §2, §8: a sealed delivery handed to the relay (ask, binding, sealed size, inline or
   // fetch), and a decline the human marked "I did not expect this" (ask, asking seat, binding).
   // Never the token, the nonce, a key or the body. `fatigue_held` (§8): a listed-act ask kept off
@@ -843,6 +846,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'channel.pair.revoked': 'actor',
   'channel.killswitch': 'actor',
   'channel.app_paired': 'none',
+  'channel.app_fetch_ended': 'none',
   'channel.sealed_delivered': 'none',
   'channel.answer_reported': 'none',
   'channel.fatigue_held': 'none',

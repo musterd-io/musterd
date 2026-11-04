@@ -63,6 +63,20 @@ export function pairedLine(b: ChannelBinding, now: number = Date.now()): { devic
   };
 }
 
+/**
+ * The paired row's words (ADR 802 §3). A binding paired under the daemon's old key looks paired but
+ * gets nothing: every ask to it is skipped. So it says so and offers to pair again, instead of
+ * "asks reach it" (seen 2026-11-04 after fifty rotated the laptop daemon's key).
+ */
+export function pairedStanding(b: ChannelBinding): { stale: boolean; hint: string } {
+  return b.ended === 'superseded'
+    ? {
+        stale: true,
+        hint: 'paired under this daemon’s old key · it no longer gets asks — pair again',
+      }
+    : { stale: false, hint: 'asks reach it while you’re away' };
+}
+
 export function countdown(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -288,13 +302,16 @@ export function PairPhone({
 
       {stage.kind === 'idle' && paired && (
         <div className="lc-pair__have">
-          <span className="lc-pair__tick" aria-hidden="true">
-            ✓
+          <span
+            className={`lc-pair__tick${pairedStanding(paired).stale ? ' lc-pair__tick--stale' : ''}`}
+            aria-hidden="true"
+          >
+            {pairedStanding(paired).stale ? '!' : '✓'}
           </span>
           <span className="lc-pair__havewho">
             <b>Paired with {pairedLine(paired).device}</b>
             <span className="lc-set__hint">
-              since {pairedLine(paired).since} · asks reach it while you’re away
+              since {pairedLine(paired).since} · {pairedStanding(paired).hint}
             </span>
           </span>
           {unpairing ? (
@@ -332,7 +349,7 @@ export function PairPhone({
                 disabled={busy}
                 onClick={() => void newCode()}
               >
-                Pair another phone
+                {pairedStanding(paired).stale ? 'Pair again' : 'Pair another phone'}
               </button>
             </span>
           )}

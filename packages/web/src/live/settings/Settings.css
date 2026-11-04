@@ -631,6 +631,11 @@
   color: #fff;
   font: 700 13px/1 var(--font-sans);
 }
+/* ADR 802: paired under the daemon's old key — it looks paired but gets nothing. */
+.lc-pair__tick--stale {
+  background: var(--lc-warn);
+  color: var(--lc-warn-ink);
+}
 .lc-pair__have {
   display: flex;
   flex-wrap: wrap;

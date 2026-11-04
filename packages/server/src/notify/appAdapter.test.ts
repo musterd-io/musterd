@@ -475,6 +475,50 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
     expect(await listAuditByAction(s.db, s.team.id, 'channel.ask_outcome', 10)).toEqual([]);
   });
 
+  describe('a pairing that ended (ADR 802)', () => {
+    it('after a key rotation a fetch answers ended, asks are skipped with why, audited once', async () => {
+      const s = await seed();
+      // The daemon's key rotates: the binding was paired under the old one.
+      __setAppChannelKeysForTest(await generateAppChannelKeys());
+      for (const at of [NOW + 1_000, NOW + 2_000]) {
+        await expect(
+          handleAppFetch(s.ctx, s.team, { ask_ref: 'check-1', binding: s.binding.id }, at),
+        ).resolves.toEqual({ sealed: null, ended: 'superseded' });
+      }
+      const audited = await listAuditByAction(s.db, s.team.id, 'channel.app_fetch_ended', 10);
+      expect(audited).toHaveLength(1);
+      expect(JSON.parse(audited[0]!.detail!)).toEqual({
+        binding: s.binding.id,
+        reason: 'superseded',
+      });
+
+      const before = s.sent.filter((f) => f.type === 'app_deliver').length;
+      await deliverAskToAppChannels(
+        s.ctx,
+        s.team,
+        await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-r'),
+      );
+      expect(s.sent.filter((f) => f.type === 'app_deliver')).toHaveLength(before);
+      const [outcome] = await listAuditByAction(s.db, s.team.id, 'channel.ask_outcome', 1);
+      expect(JSON.parse(outcome!.detail!)).toMatchObject({
+        ask: 'ask-r',
+        outcome: 'skipped',
+        reason: 'binding_superseded',
+      });
+    });
+
+    it("a revoked binding's fetch answers ended: revoked; a live one is unchanged", async () => {
+      const s = await seed();
+      await expect(
+        handleAppFetch(s.ctx, s.team, { ask_ref: 'check-1', binding: s.binding.id }, NOW + 1_000),
+      ).resolves.toBeNull();
+      await s.db.run("UPDATE channel_bindings SET status = 'revoked' WHERE id = ?", [s.binding.id]);
+      await expect(
+        handleAppFetch(s.ctx, s.team, { ask_ref: 'check-1', binding: s.binding.id }, NOW + 2_000),
+      ).resolves.toEqual({ sealed: null, ended: 'revoked' });
+    });
+  });
+
   it('a gated privileged ask is delivered with an A2 answer descriptor', async () => {
     const s = await seed();
     const env = await raiseAsk(s.db, s.team, s.ada, s.nick, 'ask-p', 'approve');

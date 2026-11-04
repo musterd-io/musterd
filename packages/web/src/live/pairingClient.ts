@@ -158,6 +158,8 @@ export interface ChannelBinding {
   created_at: number;
   /** An app binding's stored keys, as JSON text; only `device_name` is read here. */
   app_keys?: string | null;
+  /** ADR 802 §3: `superseded` when it was paired under the daemon's old key, so asks can't reach it. */
+  ended?: 'superseded' | 'revoked' | null;
 }
 
 /** This human's channel bindings, newest first. */
