@@ -380,6 +380,16 @@ at runtime (`render.ts` `drawInteriorLight`); the DOM doors over the signs are i
 (`index.ts` `signDoor`, `.lc-signdoor`). The board's frame (`board-oak`) and the calendar card share
 the signs' stain.
 
+## The books (lane 01M6FXB5GR)
+
+`books.py` lays out one shelf's books (`shelf_row`): runs of upright books of varied height and
+thickness with a gold, cream or black band on the spine, now and then a book leaning on the one
+before it, a flat stack of two to four, and at least one gap. Pure Python; `python3
+packages/web/art/office/test_books.py` holds it (no output means pass). `scene.py` `bookshelf` builds
+each unit from it, asking one row for a flat stack and another for a lean, and stands `SHELF_TOPS` on
+each top (a pothos and a globe; a book stack and a vase under the wiki sign; a trophy, a box and a
+succulent below the window). Render with `--only shelf/0,shelf/1,shelf/2`.
+
 ## The goal bell (lane 01M6HHH5EH)
 
 `scene.py` `wall_bell` builds the brass bell over the work board's top-left corner from `BELL` (a copy

@@ -24,6 +24,8 @@ import os
 import bpy
 from mathutils import Matrix, Vector
 
+import books
+
 # ── layout.ts numbers (keep in step with layout.ts; the TypeScript is the source of truth) ────
 FLOOR = 900
 THICK = 22          # iso.ts: floor slab thickness
@@ -690,6 +692,51 @@ def plant(asset_id: str, lx: float, ly: float, species: str, zs: float, col) -> 
     return finish(asset_id, [m, shadow(f"{asset_id}/shadow", lx, ly, across * 0.6, across * 0.45, zs)], lx, ly, col)
 
 
+# What stands on each bookcase's top (nick, 2026-11-03: "we can also put stuff ontop of the top shelf
+# of bookcases"): kind, where along the top, size. Kept low on the wiki shelf (its sign hangs ~26 units
+# above the top) and on the low-wide one (it sits under a window's sill).
+SHELF_TOPS = {
+    0: [("pothos", -9, 1.0), ("globe", 10, 1.0)],
+    1: [("stack", -14, 1.0), ("vase", 12, 0.9)],
+    2: [("trophy", -20, 1.0), ("box", 4, 1.0), ("succulent", 24, 1.0)],
+}
+
+
+def shelf_top_piece(name: str, kind: str, cx: float, cy: float, top: float, size: float, zs: float) -> list:
+    """One object on a bookcase top, standing on `top`."""
+    clay = paint("top-clay", srgb("#b9603a"), 0.7)
+    leaf = matte("top-leaf", srgb("#4f8a3a"), 0.75)
+    brass = paint("top-brass", srgb("#c9a24d"), 0.35)
+    cream = paint("top-cream", srgb("#efe4cf"), 0.6)
+    if kind == "pothos":
+        out = [cyl(f"{name}-pot", cx, cy, top, 4.2 * size, 5.0 * size, 6 * size, clay, zs, 20)]
+        for j, (dx, dy, dz) in enumerate([(-3, 0, 6), (2, 1, 7), (0, -2, 8), (4, -1, 5), (-4, 2, 4)]):
+            out.append(ball(f"{name}-leaf{j}", cx + dx, cy + dy, top + dz * size, 2.6, 2.6, 2.0, leaf, zs))
+        out.append(ball(f"{name}-trail", cx + 5, cy, top - 3, 1.6, 1.6, 3.2, leaf, zs))
+        return out
+    if kind == "globe":
+        return [cyl(f"{name}-stand", cx, cy, top, 2.4, 1.2, 2.5, brass, zs, 16),
+                ball(f"{name}-sphere", cx, cy, top + 2.5, 4.2, 4.2, 4.2, paint("top-globe", srgb("#3f6f8f"), 0.5), zs)]
+    if kind == "stack":
+        out = []
+        for j, hexc in enumerate(["#7a2e2a", "#efe4cf", "#2c4a5e"]):
+            out.append(box(f"{name}-{j}", cx + (j % 2) * 0.8, cy, top + j * 2.1, 12 - j * 1.5, 9 - j, 2.0, paint(f"book-{hexc}", srgb(hexc), 0.82), zs))
+        return out
+    if kind == "vase":
+        return [cyl(f"{name}-body", cx, cy, top, 2.6 * size, 3.6 * size, 9 * size, cream, zs, 24),
+                ball(f"{name}-sprig", cx, cy, top + 9 * size, 2.2, 2.2, 3.0, leaf, zs)]
+    if kind == "trophy":
+        return [box(f"{name}-base", cx, cy, top, 5, 5, 2, wood("top-walnut", srgb("#5b4130"), grain=0.1), zs),
+                cyl(f"{name}-stem", cx, cy, top + 2, 0.8, 0.8, 3, brass, zs, 12),
+                cyl(f"{name}-cup", cx, cy, top + 5, 1.6, 3.4, 4.5, brass, zs, 20)]
+    if kind == "box":
+        return [box(f"{name}-lid", cx, cy, top, 9, 7, 4.5, paint("top-box", srgb("#d8c7a3"), 0.75), zs)]
+    if kind == "succulent":
+        return [cyl(f"{name}-pot", cx, cy, top, 2.8, 3.4, 3.6, cream, zs, 16),
+                ball(f"{name}-rosette", cx, cy, top + 3.4, 3.0, 3.0, 2.0, matte("top-succ", srgb("#7aa37a"), 0.7), zs)]
+    raise KeyError(kind)
+
+
 def bookshelf(asset_id: str, lx: float, ly: float, d: str, long: float, deep: float, high: float, rows: int, tone: float, zs: float, col) -> bpy.types.Object:
     """A shelf unit against a wall: carcass, shelves, books in rows (their fronts toward the room)."""
     sn = d in ("S", "N")
@@ -708,20 +755,56 @@ def bookshelf(asset_id: str, lx: float, ly: float, d: str, long: float, deep: fl
         uy = ly + (0 if sn else sgn * (long / 2 - P / 2))
         parts.append(box(f"{asset_id}/upright", ux, uy, 0, P if sn else deep, deep if sn else P, high, carcass, zs))
     band = (high - 10) / rows
-    rnd = 0
+    unit = int(asset_id.rsplit("/", 1)[-1]) if asset_id[-1].isdigit() else 0
+    inside = long - 2 * P
+
+    def at(along: float, into: float) -> tuple[float, float]:
+        """A point `along` the shelf from its middle, `into` it from the front (toward the wall)."""
+        front = deep / 2 - 0.8
+        if sn:
+            return lx + along, ly + fwd[1] * (front - into)
+        return lx + fwd[0] * (front - into), ly + along
+
+    def book_mat(hex6: str):
+        return paint(f"book-{hex6}", srgb(hex6), 0.82)
+
+    # Books that look real (lane 01M6FXB5GR, `books.py`): uprights of varied height and thickness with
+    # a gold, cream or black band on the spine, a lean against the run, a flat stack, a gap. One row
+    # of each unit is asked for a flat stack and another for a lean, so every unit has both.
     for row in range(rows):
         base_up = 8 + row * band
         parts.append(box(f"{asset_id}/shelf{row}", lx, ly, base_up - 1.5, wx - 2 * P, dy - 2 * P, 1.5, carcass, zs))
-        n = max(2, int(long / 9))
-        for i in range(n):
-            rnd = (rnd * 1103515245 + 12345 + row * 7 + i) & 0x7FFFFFFF
-            bw = 5 + (rnd % 4)
-            bh = min(band - 4, 11 + (rnd % 9))
-            along = -long / 2 + 5 + i * ((long - 10) / n)
-            color = srgb(BOOK_COLORS[(rnd >> 4) % len(BOOK_COLORS)])
-            bx = lx + (along if sn else fwd[0] * (deep / 2 - 7))
-            by = ly + (fwd[1] * (deep / 2 - 7) if sn else along)
-            parts.append(box(f"{asset_id}/book", bx, by, base_up, bw if sn else 9, 9 if sn else bw, bh, paint(f"book-{(rnd >> 4) % 8}", color, 0.8), zs))
+        for k, bk in enumerate(books.shelf_row(unit * 101 + row * 17 + 5, inside, band, deep, want_flat=row == 0, want_lean=row == rows - 1)):
+            d = bk["d"]
+            cx, cy = at(bk["along"], d / 2)
+            name = f"{asset_id}/book{row}-{k}"
+            if bk["kind"] == "flat":
+                rng = __import__("random").Random(unit * 7 + row * 3 + k)
+                each = bk["h"] / bk["count"]
+                for j in range(bk["count"]):
+                    off = rng.uniform(-0.7, 0.7)
+                    ox, oy = at(bk["along"] + off, d / 2 + rng.uniform(-0.4, 0.4))
+                    hexc = books.CLOTHS[(unit * 5 + row * 3 + k * 7 + j) % len(books.CLOTHS)]
+                    w = bk["w"] - j * rng.uniform(0.2, 0.9)
+                    parts.append(box(f"{name}-{j}", ox, oy, base_up + j * each, w if sn else d, d if sn else w, each - 0.15, book_mat(hexc), zs))
+                continue
+            w, h = bk["w"], bk["h"]
+            spine = box(name, cx, cy, base_up, w if sn else d, d if sn else w, h, book_mat(bk["color"]), zs)
+            bz = base_up + h * bk["band_at"]
+            ring = box(f"{name}-band", cx, cy, bz, (w + 0.12) if sn else (d + 0.12), (d + 0.12) if sn else (w + 0.12), 0.9, book_mat(bk["band_color"]), zs)
+            if bk["kind"] == "lean":
+                # tip it toward the books before it, about its bottom edge on the far side
+                t = math.radians(bk["tilt"])
+                lo = bk["along"] + (w + h * math.sin(t)) / 2  # the far bottom edge, along the shelf
+                px, py = at(lo, d / 2)
+                pivot = Vector((px, py, base_up * zs))
+                # the top toward -along: about Y on a shelf along x, about X on one along y
+                rot = Matrix.Rotation(-t, 4, "Y") if sn else Matrix.Rotation(t, 4, "X")
+                for o in (spine, ring):
+                    o.matrix_world = Matrix.Translation(pivot) @ rot @ Matrix.Translation(-pivot) @ o.matrix_world
+            parts.extend([spine, ring])
+    for k, (kind, along, size) in enumerate(SHELF_TOPS.get(unit, [])):
+        parts.extend(shelf_top_piece(f"{asset_id}/top{k}", kind, *at(along, deep / 2), high, size, zs))
     parts.append(shadow(f"{asset_id}/shadow", lx + fwd[0] * 4, ly + fwd[1] * 4, wx * 0.6, dy * 0.6, zs))
     return finish(asset_id, parts, lx, ly, col)
 
