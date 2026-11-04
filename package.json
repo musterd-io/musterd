@@ -70,6 +70,8 @@
     "wake:rail": "node --disable-warning=ExperimentalWarning scripts/research/wake-contract-rail.ts",
     "pilot:readout": "node --disable-warning=ExperimentalWarning scripts/research/resident-pilot-readout.ts",
     "corpus:snapshot": "node --disable-warning=ExperimentalWarning scripts/corpus/snapshot.ts",
+    "corpus:backup": "node --disable-warning=ExperimentalWarning scripts/corpus/backup.ts",
+    "corpus:check": "node --disable-warning=ExperimentalWarning scripts/corpus/check.ts",
     "dataset:export": "node --disable-warning=ExperimentalWarning scripts/dataset/export.ts",
     "dataset:exn-snapshot": "node --disable-warning=ExperimentalWarning scripts/dataset/exn-snapshot.ts",
     "release": "node --disable-warning=ExperimentalWarning scripts/release.ts",

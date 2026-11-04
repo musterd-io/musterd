@@ -52,6 +52,18 @@ upgrades), owner ghost. No schedule and no automation yet (2026-09-05): the uplo
 service key from `/Users/nick/agents/.env`, which no launchd job carries — automating that handoff is
 a follow-up, not this lane.
 
+**The manual cadence lapsed, and is now automated** (2026-11-04, [ADR 798](../decisions/798-corpus-backup-runs-itself.md); falsify: `pnpm corpus:check`). <!-- claim: other -->
+Nobody ran the manual cadence after 2026-09-05; by 2026-11-04 the corpus measured 1,635 MB raw
+(`musterd.db` 721 MB, `trace.db` 780 MB) with the newest snapshot still the September one.
+`pnpm corpus:backup` now snapshots, uploads every artifact to the same private bucket (artifacts
+over the bucket's 50 MB object cap as ordered `.part-NNN` slices), verifies remote sizes, and stamps
+`~/.musterd/corpus-backups/LAST.json`; a launchd agent runs it Sundays 04:00, credentials in
+`~/.musterd/corpus-backup.env` (chmod 600). Exercised 2026-11-04: snapshot `2026-11-04T05-48-03-769Z`
+(36 files, 225.8 MB stored — the 5.7 MB economics above no longer hold), restore drill `ok`
+(36,691 messages), and `trace.db`'s parts re-downloaded and reassembled to the manifest sha256.
+Whether the job fires unattended is owned by `docs/watches/2026-11-04-corpus-backup-cadence.md`,
+verdict due 2026-12-04.
+
 **`trace.db` joins the snapshot** (2026-09-25; falsify: `corpus:snapshot --dry-run` lists it). <!-- claim: other -->
 ADR 445 increment 3a. It is the one source the snapshot writes back to: after the manifest
 is on disk it stamps the live store's `content_captured_through` watermark, and the daemon's 30-day
