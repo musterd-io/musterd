@@ -349,4 +349,15 @@ describe('the lead ask shows once (lane 01M6ETDT29)', () => {
     expect(html).toContain('body of second');
     expect(html).toContain('2 need you');
   });
+
+  it('keeps a choice lead in the sheet: Choose… opens it, and the options live there (lane 01M6HSRAQ7)', () => {
+    // nick, 2026-11-03: a lead whose body had "1." and "2." lines showed "pick one · Choose…", and
+    // Choose… opened a sheet with only its counters. The bar has no answer for a choice; the card does.
+    const choice = { ...ask('pick', 'blocking', 10_000), body: 'Which way?\n1. ship it today\n2. hold for review' };
+    const html = render([choice as Envelope]);
+    expect(html).toContain('Choose…');
+    expect(html).toMatch(/class="lc-ask lc-ask--[a-z]+ lc-ask--choice"/);
+    expect(html).toContain('ship it today');
+    expect(html).toContain('hold for review');
+  });
 });
