@@ -1,9 +1,10 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import type { AskEntry, AsksView } from '../native/asks';
 import { heldBody, refusalLine, waitingSubtitle } from '../native/notice';
 import { showOffer } from '../native/offer';
+import { endedNote, type PairingEnded } from '../native/pairingEnded';
 import type { PairingPin } from '../native/pairingPin';
 import { summary } from '../native/readable';
 import { Button } from '../ui/button';
@@ -12,6 +13,7 @@ import { Icon } from '../ui/icon';
 import { Breathe, Rise, Squish } from '../ui/motion';
 import { NAV_HEIGHT } from '../ui/nav';
 import { Notice, SectionLabel } from '../ui/notice';
+import { confirmPairAgain } from '../ui/pairAgain';
 import { ago, Seat } from '../ui/seat';
 import { font, radius, space, usePalette } from '../ui/theme';
 
@@ -36,6 +38,8 @@ export default function AsksScreen() {
   const generation = useRef(0);
   // ADR 774 §5: offer to enroll the question key, once per binding and key, until "Not now".
   const [offerKey, setOfferKey] = useState(false);
+  // ADR 802: the daemon says this phone's pairing ended (a key rotation, or unpaired on /live).
+  const [ended, setEnded] = useState<PairingEnded | null>(null);
   const keyDeclined = useRef(false);
   const alive = useRef(true);
   // Every list refresh re-fetches each ask, which re-issues its token and spends the old one. The
@@ -53,6 +57,13 @@ export default function AsksScreen() {
       if (!current?.binding) {
         setView(null);
         return;
+      }
+      try {
+        const { checkPairing } = await import('../native/quickAction');
+        const verdict = await checkPairing({ pin: current });
+        if (alive.current) setEnded(verdict);
+      } catch {
+        if (alive.current) setEnded(null);
       }
       const { loadAsks, markShown, requestRedelivery } = await import('../native/asks');
       // Answers a dropped relay kept from leaving go first (outbox.ts), and before the re-delivery:
@@ -192,32 +203,18 @@ export default function AsksScreen() {
 
   // Lane 01M6FJFW66: iOS keeps the pairing in the Keychain after the app is deleted, so this is
   // the way back to the scan screen. Behind a confirm: it destroys this phone's keys.
-  const pairAgain = () => {
-    Alert.alert(
-      'Pair this phone again?',
-      `This phone forgets ${pin?.team ?? 'its team'} and its keys. Asks stop reaching it until you scan a new code. Unpair it on /live too.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Forget and pair again',
-          style: 'destructive',
-          onPress: () =>
-            void (async () => {
-              const { forgetPairing } = await import('../native/pairingPin');
-              const ok = await forgetPairing();
-              if (!alive.current) return;
-              setNote(
-                ok
-                  ? 'Forgotten. Scan a new code from /live to pair.'
-                  : 'Couldn’t forget everything. Try again.',
-              );
-              setView(null);
-              await refresh(false);
-            })(),
-        },
-      ],
-    );
-  };
+  const pairAgain = () =>
+    confirmPairAgain(pin?.team ?? null, (ok) => {
+      if (!alive.current) return;
+      setNote(
+        ok
+          ? 'Forgotten. Scan a new code from /live to pair.'
+          : 'Couldn’t forget everything. Try again.',
+      );
+      setView(null);
+      setEnded(null);
+      void refresh(false);
+    });
 
   const paired = Boolean(pin?.binding);
   const asks = paired ? (view?.asks ?? []) : [];
@@ -261,6 +258,13 @@ export default function AsksScreen() {
           </Squish>
         ) : null}
       </Rise>
+      {paired && ended ? (
+        <Rise>
+          <Notice icon="link.badge.plus" tone="alert" {...endedNote(ended)}>
+            <Button label="Pair again" icon="qrcode.viewfinder" onPress={pairAgain} />
+          </Notice>
+        </Rise>
+      ) : null}
       {note ? (
         <Rise>
           <Notice icon="checkmark.circle.fill" title={note} />
@@ -330,7 +334,7 @@ export default function AsksScreen() {
   // "All clear" only when nothing is waiting anywhere: an ask that couldn't load, or asks held for
   // quiet hours, still need you, and their notice above already says so (big-body's review of lane
   // 01M6HQ4DT4: both cards showed at once).
-  const waitingElsewhere = !!view && (view.unreachable > 0 || !!view.held);
+  const waitingElsewhere = !!ended || (!!view && (view.unreachable > 0 || !!view.held));
   const empty = waitingElsewhere ? undefined : paired ? (
     <Rise index={1}>
       <Glass style={styles.calm}>

@@ -7,7 +7,7 @@ import {
   type KeyObject,
   type webcrypto,
 } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Aes128Gcm, CipherSuite, DhkemP256HkdfSha256, HkdfSha256 } from '@hpke/core';
@@ -127,6 +127,29 @@ let keysCache: { path: string; keys: AppChannelKeys } | null = null;
 export function __setAppChannelKeysForTest(keys: AppChannelKeys | null): void {
   keysOverride = keys;
   keysCache = null;
+}
+
+let bornAtOverride: number | null = null;
+
+/** Tests set when "the key file was written"; `null` clears. */
+export function __setAppChannelKeyBornAtForTest(at: number | null): void {
+  bornAtOverride = at;
+}
+
+/**
+ * When the daemon's current app-channel key was written: the key file's birth time, else its
+ * mtime (ADR 802 decision 2). The file is written once and never rewritten, so this is when the
+ * current key came to be. Under injected test keys it is the injected time, else 0.
+ */
+export function appChannelKeyBornAt(env: NodeJS.ProcessEnv = process.env): number {
+  if (bornAtOverride !== null) return bornAtOverride;
+  if (keysOverride) return 0;
+  try {
+    const st = statSync(appChannelKeyPath(env));
+    return st.birthtimeMs > 0 ? st.birthtimeMs : st.mtimeMs;
+  } catch {
+    return 0;
+  }
 }
 
 /** `app-channel.key` lives beside the effective config (`MUSTERD_CONFIG`, else `~/.musterd/config.json`). */

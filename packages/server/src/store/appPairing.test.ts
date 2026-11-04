@@ -1,6 +1,6 @@
 import { createHash, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
 import { descriptorSigningBytes, type ApprovalDescriptor } from '@musterd/protocol';
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import {
@@ -12,12 +12,14 @@ import {
 import { appPairingChallenge } from './appAttest.js';
 import { fakeAppAttest } from './appAttest.testkit.js';
 import {
+  appBindingEnded,
   appBindingKeys,
   appEnrollPayload,
   confirmAppPairing,
   stageAppPairing,
   stagedAppKeys,
   startAppPairing,
+  UNKNOWN_DAEMON_KEY,
 } from './appPairing.js';
 import { listAuditByAction } from './audit.js';
 import { buildDescriptor, enrollDeviceKey, listDeviceKeys, requireAuthority } from './authority.js';
@@ -191,6 +193,8 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
     expect(bound).toMatchObject({
       receive_public_key: p.receive.publicRaw,
       device_key_id: done.deviceKeyId,
+      // ADR 802 §1: the key the phone pinned from the QR rides on the binding.
+      daemon_identity_public_key: daemon.identityPublic,
     });
     const phoneKey = (await listDeviceKeys(db, team.id, nick.id)).find(
       (k) => k.id === done.deviceKeyId,
@@ -443,5 +447,84 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
         now: NOW,
       }),
     ).resolves.toEqual({ ok: false, reason: 'app_pairing' });
+  });
+
+  describe('a pairing that ended (ADR 802)', () => {
+    async function bind(
+      db: Driver,
+      teamId: string,
+      memberId: string,
+      over: { created_at?: number; status?: string; daemon?: string } = {},
+    ) {
+      const id = `b-${Math.random().toString(36).slice(2)}`;
+      const keys = {
+        signing_public_key: 's',
+        receive_public_key: 'r',
+        attest_key_id: 'a',
+        environment: 'production',
+        ...(over.daemon ? { daemon_identity_public_key: over.daemon } : {}),
+      };
+      await db.run(
+        `INSERT INTO channel_bindings
+           (id, team_id, member_id, channel, provider_tenant_id, provider_user_id, generation,
+            status, created_at, revoked_at, app_keys)
+         VALUES (?, ?, ?, 'app', ?, ?, 1, ?, ?, NULL, ?)`,
+        [
+          id,
+          teamId,
+          memberId,
+          `t-${id}`,
+          `u-${id}`,
+          over.status ?? 'active',
+          over.created_at ?? NOW,
+          JSON.stringify(keys),
+        ],
+      );
+      return id;
+    }
+    const recorded = async (db: Driver, id: string) =>
+      (await db.get<{ app_keys: string }>('SELECT app_keys FROM channel_bindings WHERE id = ?', [
+        id,
+      ]))!.app_keys;
+
+    it("current when the pinned key is the daemon's; superseded after a rotation; revoked when revoked", async () => {
+      const { db, team, nick } = await setup();
+      const same = await bind(db, team.id, nick.id, { daemon: 'K1' });
+      const old = await bind(db, team.id, nick.id, { daemon: 'K0' });
+      const gone = await bind(db, team.id, nick.id, { daemon: 'K1', status: 'revoked' });
+      await expect(appBindingEnded(db, team.id, same, { current: 'K1' })).resolves.toBeNull();
+      await expect(appBindingEnded(db, team.id, old, { current: 'K1' })).resolves.toBe(
+        'superseded',
+      );
+      await expect(appBindingEnded(db, team.id, gone, { current: 'K1' })).resolves.toBe('revoked');
+      await expect(appBindingEnded(db, team.id, 'nope', { current: 'K1' })).resolves.toBeNull();
+    });
+
+    it('backfills an old row once: current if paired after the key file, else unknown (superseded)', async () => {
+      const { db, team, nick } = await setup();
+      const after = await bind(db, team.id, nick.id, { created_at: NOW + 10 });
+      const before = await bind(db, team.id, nick.id, { created_at: NOW - 10 });
+      await expect(
+        appBindingEnded(db, team.id, after, { current: 'K1', keyBornAt: NOW }),
+      ).resolves.toBeNull();
+      await expect(
+        appBindingEnded(db, team.id, before, { current: 'K1', keyBornAt: NOW }),
+      ).resolves.toBe('superseded');
+      expect(JSON.parse(await recorded(db, after)).daemon_identity_public_key).toBe('K1');
+      expect(JSON.parse(await recorded(db, before)).daemon_identity_public_key).toBe(
+        UNKNOWN_DAEMON_KEY,
+      );
+      // The verdict sticks: a later key-file time (a copy, a touch) cannot flip it.
+      await expect(
+        appBindingEnded(db, team.id, after, { current: 'K1', keyBornAt: NOW + 100 }),
+      ).resolves.toBeNull();
+      await expect(
+        appBindingEnded(db, team.id, before, { current: 'K1', keyBornAt: 0 }),
+      ).resolves.toBe('superseded');
+      // A real rotation still supersedes the backfilled current key.
+      await expect(appBindingEnded(db, team.id, after, { current: 'K2' })).resolves.toBe(
+        'superseded',
+      );
+    });
   });
 });

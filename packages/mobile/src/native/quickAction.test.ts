@@ -14,7 +14,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QUICK_ACTION_ORDER, quickResultText, seatActions } from './notice';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys } from './phoneKeys';
-import { fetchPortrait, fetchRoster, ROSTER_SKEW_MS, sendQuickAction } from './quickAction';
+import {
+  checkPairing,
+  fetchPortrait,
+  fetchRoster,
+  ROSTER_SKEW_MS,
+  sendQuickAction,
+} from './quickAction';
 
 const KEY = `B${'Q'.repeat(86)}`;
 
@@ -338,5 +344,41 @@ describe('quick action copy', () => {
       'check_inbox',
       'resume',
     ]);
+  });
+});
+
+describe('a pairing that ended (ADR 802)', () => {
+  const answering = (status: number, body: unknown) =>
+    vi.fn(async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+
+  it('a 410 with a known reason is the verdict; 404, 503 and odd bodies are not', async () => {
+    await expect(
+      checkPairing({ pin, now: NOW, fetchImpl: answering(410, { ended: 'superseded' }) }),
+    ).resolves.toBe('superseded');
+    await expect(
+      checkPairing({ pin, now: NOW, fetchImpl: answering(410, { ended: 'revoked' }) }),
+    ).resolves.toBe('revoked');
+    await expect(
+      checkPairing({ pin, now: NOW, fetchImpl: answering(410, { ended: 'other' }) }),
+    ).resolves.toBeNull();
+    await expect(
+      checkPairing({ pin, now: NOW, fetchImpl: answering(404, 'not found') }),
+    ).resolves.toBeNull();
+    await expect(
+      checkPairing({ pin, now: NOW, fetchImpl: answering(503, 'daemon not connected') }),
+    ).resolves.toBeNull();
+  });
+
+  it("probes a ref no ask has, on this pin's binding", async () => {
+    const fetchImpl = answering(404, 'not found');
+    await checkPairing({ pin, now: NOW, fetchImpl });
+    const [url] = vi.mocked(fetchImpl).mock.calls[0]! as unknown as [string];
+    expect(url).toContain(`/body/${pin.binding}/check-${NOW}`);
+  });
+
+  it('the roster fetch passes the ended miss through to Seats', async () => {
+    await expect(
+      fetchRoster({ pin, now: NOW, fetchImpl: answering(410, { ended: 'superseded' }) }),
+    ).resolves.toEqual({ miss: 'ended', ended: 'superseded' });
   });
 });

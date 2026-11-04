@@ -68,8 +68,16 @@ small change.
   (`pairingPin.ts` → the module's `forgetPairing`) deletes the pin first, then the ask routes,
   questions, question enrollment and outbox, the seen nonces and refusals, then the three enclave
   key references. That destroys the keys, and the JS answer outbox is cleared. The push token
-  stays. Home then shows Scan. Unpairing on `/live` does not reach the phone, so the person does
-  both (lane 01M6FJFW66).
+  stays. Home then shows Scan (lane 01M6FJFW66). The confirm is `src/ui/pairAgain.ts`, shared by
+  Home, Seats and the ask screen.
+- **A pairing that ended says so** (ADR 802). Each time Home refreshes, it fetches a body for a
+  ref no ask has (`checkPairing`, `check-<ts>`). A standing pairing answers 404. One the daemon
+  has superseded (its key changed after this phone paired) or revoked (unpaired on /live)
+  answers `410 {"ended": …}`. Every body fetch reads that 410, the roster's and an ask's included,
+  so Home, Seats and the ask screen all show one note with **Pair again**: "Your team's daemon
+  changed" or "This phone was unpaired" (`pairingEnded.ts`). The status is unsigned, so the
+  phone forgets nothing on its own and trusts nothing new. A delivery that fails a check still
+  shows only the generic text (ADR 676 decision 3). An old relay answers 404, so nothing shows.
 - **Reconcile.** On open the app asks the daemon, through the relay, to re-deliver what is pending
   (ADR 659): the daemon is the source of truth and the relay stores no sealed body. It asks at most
   once a minute, because each request re-pushes every pending ask. While the app is in front, a
@@ -393,16 +401,18 @@ src/
     offer.ts               // a listed act's offer as shown and signed: digest checked on the phone
     outbox.ts              // an answer the relay dropped: kept sealed, re-sent on every open until taken
     pair.ts                // after the fingerprint matches: keys, attestation, seal, POST, pin
+    pairingEnded.ts        // ADR 802: the daemon's "pairing ended" (superseded or revoked) and its note
     pairingPin.ts          // the keychain pin pairing writes and the extension reads
     pairingQr.ts           // the QR parse, the relay origin, the fingerprint, the challenge
     phoneKeys.ts           // the typed TS contract of the native module modules/musterd-keys
     push.ts                // the musterd block on an APNs payload, and a fetched body
     questionKey.ts         // the question key: enrollment (question_key callback), and answering a question in the app
-    quickAction.ts         // quick actions (ADR 791): sign, seal and send one; pull the seat roster by ref; pull a seat portrait by digest (ADR 797)
+    quickAction.ts         // quick actions (ADR 791): sign, seal and send one; pull the seat roster by ref; pull a seat portrait by digest (ADR 797); check the pairing stands (ADR 802)
     readable.ts            // an ask's text cleaned for a phone: one-line summary, or paragraphs and bullets
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/
     haptics.ts             // a light tick under a press, a success buzz when something lands (ADR 760)
+    pairAgain.ts           // "Pair this phone again?" behind a confirm: forgets the pin and keys
     theme.ts               // brand.md palette (mustard accent on zinc), light only; DM Sans faces (ADR 760)
 ```
 
