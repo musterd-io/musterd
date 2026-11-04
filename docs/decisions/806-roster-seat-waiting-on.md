@@ -40,6 +40,7 @@ else?
   unchanged, because the roster is pulled, not pushed (ADR 791, amended 2026-11-03).
 - The phone shows the addressee's name, which is already on the roster's team. Nothing new
   leaves the daemon: no question text, no options.
+- 2026-11-04 (lane `01M6MAPBST`, fifty): decisions 1–2 landed. `AppDeliverySchema`'s roster seat carries the optional `waiting {to, since}`, and `buildAppRoster` fills it from `openQuestions`, oldest first per asker. The phone line follows in lane `01M6M84GPJ`.
 
 ## Observability & Evaluation
 
