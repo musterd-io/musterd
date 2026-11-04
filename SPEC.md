@@ -1263,3 +1263,24 @@ answer's text.
   that day's budget and starts the shift.
 - A seat on shift is woken for each lane it owns in `claimed` or `active`, past its hourly cap and
   cooldown. The wake order is a board work order (`derivation: work_order`, `lane_id`, no act).
+
+## A.35 A blocking ask withholds at the gate (unreleased — ADR 801)
+
+- A `blocking` `approve` ask MAY carry `meta.withhold {commands?, paths?}`: lists of ADR 150 class
+  globs (at most 10 each, at least one glob in all). A server MUST refuse `meta.withhold` on any
+  other species or tier.
+- While such an ask is open, `GET /teams/:slug/enforcement` answers its sender with
+  `withholds: [{ask_id, commands, paths, seat_wide, declined, expires_at}]` beside `enforcement`. It
+  MUST list only the caller's own asks, and none on a team with no human member. Lane-review, gate, hold, policy-review, handoff and question
+  asks never withhold. An ask stops being open on a human accept (ADR 623 authority rules), on a
+  `resolve` its sender sends on its thread before any human answer, or 12 hours after it was sent; a
+  human decline keeps it open with `declined: true`, and a later `resolve` does not close it.
+- `POST /teams/:slug/gate` accepts `kind: 'ask-withhold'` with `ask_ref`. A server MUST re-read the
+  caller's open withholds, not trust the request, and deny while the ask is open. `ask-withhold` is
+  not a policy class kind.
+- A client MUST check a matching withhold before the class table. A scoped withhold holds a
+  command matching `commands`, or a write to a path matching `paths`. A seat-wide one (no
+  `meta.withhold`) holds every write-shaped call and every `musterd` call, except a lone
+  `musterd send | inbox | whoami | status | next | lane` with no env prefix, shell separator, redirect
+  or substitution. When the server is
+  unreachable, a client MUST deny a call a cached, unexpired withhold matches.

@@ -55,7 +55,9 @@ import {
   type Policy,
   type PolicyOverride,
   type WireAttestationSource,
+  type ActiveWithhold,
   type EnforcementPolicy,
+  EnforcementReadSchema,
   type ActorAttestation,
   type GateCheckRequest,
   type LanePushReport,
@@ -2443,10 +2445,16 @@ export class HttpClient {
 
   /** The enforcement class table (ADR 150) — `GET /teams/:slug/enforcement`, MEMBER-readable (unlike the
    *  admin-only full policy). The PreToolUse hook fetches it to match tool calls client-side. */
-  async getEnforcement(slug: string): Promise<{ enforcement: EnforcementPolicy }> {
-    return (await this.request('GET', `/teams/${slug}/enforcement`)) as {
-      enforcement: EnforcementPolicy;
-    };
+  async getEnforcement(
+    slug: string,
+  ): Promise<{ enforcement: EnforcementPolicy; withholds?: ActiveWithhold[] }> {
+    // ADR 801: `withholds` is this seat's open blocking-ask withholds; an older daemon omits it, and
+    // the response parses at the boundary (hard rule 4) so a malformed one never reaches the gate.
+    const raw = await this.request('GET', `/teams/${slug}/enforcement`);
+    const parsed = EnforcementReadSchema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    // A malformed withhold list must not drop the class table with it: keep the table, drop the list.
+    return { enforcement: (raw as { enforcement: EnforcementPolicy }).enforcement };
   }
 
   /** Adjudicate a matched tool call (ADR 150) — `POST /teams/:slug/gate`, member-authed as the acting

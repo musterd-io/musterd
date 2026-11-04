@@ -266,6 +266,7 @@ import {
   stagedAppKeys,
   startAppPairing,
 } from '../store/appPairing.js';
+import { openWithholds } from '../store/askWithhold.js';
 import {
   appendAudit,
   appendLaneEventRequired,
@@ -5909,7 +5910,12 @@ export async function handleHttp(
       if (method === 'GET' && rest === '/enforcement') {
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
-        return sendJson(res, 200, { enforcement: (await getPolicy(ctx.db, team.id)).enforcement });
+        // ADR 801: the caller's OWN open blocking-ask withholds ride beside the table — always the
+        // authenticated member, never one a parameter names, so a seat sees only what holds it.
+        return sendJson(res, 200, {
+          enforcement: (await getPolicy(ctx.db, team.id)).enforcement,
+          withholds: await openWithholds(ctx.db, team.id, member.id, Date.now()),
+        });
       }
 
       // The gate ingest: the hook POSTs the shapes of a MATCHED tool call (never an undeclared one), the

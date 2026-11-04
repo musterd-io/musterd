@@ -195,6 +195,45 @@ export function reviewWaitMinutes(waitMs: number | undefined): number {
  * the second *non-proceed* terminal: record WIP on the lane's branch, release the lane to open, record
  * `ask_outcome='stranded'`, close the unit of work — and still never execute the blocked action.
  */
+/**
+ * ADR 801: a blocking `approve` ask holds at the gate, not only in prose. `meta.withhold` names the
+ * action the ask is about, as command globs and path globs in the ADR 150 class `match` shapes; while
+ * the ask is open the gate denies the asking seat any call that matches. An ask that names none
+ * withholds the seat's mutating calls instead (`seat_wide`). Only the top tier of the `approve`
+ * species withholds: the lower tiers proceed with a recorded risk, so they have nothing to hold.
+ */
+export interface AskWithhold {
+  commands?: string[];
+  paths?: string[];
+}
+/** At most this many globs per list, so one ask cannot carry an unbounded match table. */
+export const ASK_WITHHOLD_MAX_GLOBS = 10;
+/** A withhold ends at this age if nothing else ends it first (ADR 801 §4, the ADR 516 hold cap). */
+export const ASK_WITHHOLD_MAX_MS = 12 * 60 * 60_000;
+
+/** Does an ask of this species and tier withhold at the gate (ADR 801 §1, §6)? */
+export function askWithholds(species: AskSpecies, tier: AskTier): boolean {
+  return species === 'approve' && askTierHolds(tier);
+}
+
+/**
+ * The sentence the send reply adds for a withholding ask (ADR 801 §3): which calls the gate now
+ * refuses this seat, and how the hold ends. `scoped` means the ask named `meta.withhold`.
+ */
+export function askWithholdText(id: string, form: 'scoped' | 'seat_wide'): string {
+  const what =
+    form === 'scoped'
+      ? 'the gate now refuses you any call matching meta.withhold'
+      : 'the gate now refuses you every mutating call (file writes, writing shell commands); reads, ' +
+        'inbox and team tools stay open. To hold only the action you asked about, withdraw this ask and ' +
+        're-raise it with meta.withhold {commands?, paths?}';
+  return (
+    `Withheld (ADR 801): ${what}. It ends when a human accepts, or when you withdraw the ask ` +
+    `(team_send {act:'resolve', thread:'${id}', meta:{ask_ref:'${id}', ask_outcome:'held'}}), or after 12h. A decline ` +
+    `keeps it refused.`
+  );
+}
+
 export function askContractText(id: string, tier: AskTier, unblockerReachable?: boolean): string {
   const mins = Math.round(askContract(tier).timeout_ms / 60_000);
   if (askTierHolds(tier) && unblockerReachable === false) {

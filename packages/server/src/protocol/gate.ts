@@ -13,6 +13,7 @@ import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
+import { openWithholds } from '../store/askWithhold.js';
 import { appendAudit } from '../store/audit.js';
 import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
 import {
@@ -357,6 +358,51 @@ export async function gateB(ctx: GateContext): Promise<GateDecision> {
 }
 
 /**
+ * ADR 801 — a call the acting seat's own open blocking approve ask withholds. The hook matched it
+ * against the withholds `GET /enforcement` served; the daemon re-reads them here rather than trust the
+ * client's copy, so an ask a human accepted since the hook's cache was filled releases on this call.
+ *   - **the ask is no longer open** (accepted, withdrawn, or 12h old) → allow (`released`).
+ *   - **a human declined it** → deny (`denied_declined`); the decline keeps the action refused.
+ *   - **still unanswered** → deny (`denied_awaiting`), naming the ask and how it ends.
+ * There is no posture: a withhold always blocks, because the seat itself asked to be held.
+ */
+export async function gateWithhold(ctx: GateContext): Promise<GateDecision> {
+  const askId = ctx.req.ask_ref;
+  const open = askId
+    ? (await openWithholds(ctx.srv.db, ctx.team.id, ctx.member.id, Date.now())).find(
+        (w) => w.ask_id === askId,
+      )
+    : undefined;
+  if (!askId || !open) {
+    return {
+      decision: 'allow',
+      outcome: 'released',
+      reason: `your ask ${askId ?? '(none)'} no longer withholds this call — proceeding`,
+      ...(askId ? { ask_ref: askId } : {}),
+    };
+  }
+  if (open.declined) {
+    return {
+      decision: 'deny',
+      outcome: 'denied_declined',
+      reason:
+        `declined: a human declined your ask ${askId}, so this action stays refused until ` +
+        `${new Date(open.expires_at).toISOString()} — take a different approach or hand off.`,
+      ask_ref: askId,
+    };
+  }
+  return {
+    decision: 'deny',
+    outcome: 'denied_awaiting',
+    reason:
+      `held by your own blocking ask ${askId} (ADR 801): wait for a human answer. It ends when a human ` +
+      `accepts, when you withdraw it (team_send {act:'resolve', thread:'${askId}', meta:{ask_ref:'${askId}', ask_outcome:'held'}}), ` +
+      `or at ${new Date(open.expires_at).toISOString()}.`,
+    ask_ref: askId,
+  };
+}
+
+/**
  * Adjudicate a matched tool call and record the decision. Writes exactly one `lane.gate` / `action.gate`
  * audit row — **shapes only**: `target` is the legible class name (never the raw path/command), `detail`
  * carries class + fingerprint + posture + tool + outcome. The raw `req.target` is used solely to make the
@@ -374,7 +420,9 @@ export async function adjudicateGate(
     ? route.decision
     : req.kind === 'contended-surface'
       ? await gateA(ctx)
-      : await gateB(ctx);
+      : req.kind === 'ask-withhold'
+        ? await gateWithhold(ctx)
+        : await gateB(ctx);
   const action = req.kind === 'contended-surface' ? 'lane.gate' : 'action.gate';
   await appendAudit(srv.db, team.id, {
     actor: member.name,
@@ -388,6 +436,8 @@ export async function adjudicateGate(
       tool: req.tool,
       outcome: decision.outcome,
       ...(decision.ask_ref ? { ask_ref: decision.ask_ref } : {}),
+      // ADR 801: the seat's own blocking ask held this call — the Eval reads this cause.
+      ...(req.kind === 'ask-withhold' ? { cause: 'ask_withhold' } : {}),
       // ADR 513: which role the route needed, so the warn→redirect join can read it per role.
       ...(route ? { kind: 'role-route', role: route.role } : {}),
       // ADR 691/693: a hold decided this edit — held (refused or warned) or lapsed, and whose.

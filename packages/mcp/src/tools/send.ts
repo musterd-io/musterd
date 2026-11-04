@@ -8,6 +8,8 @@ import {
   AskTierSchema,
   askContract,
   askContractText,
+  askWithholdText,
+  askWithholds,
   askProseChoiceNotice,
   askConcernsMe,
   chooseAutoTarget,
@@ -322,9 +324,18 @@ export function registerSend(
         // it: when provably unreachable, the top-tier orders become STRAND, not hold. Older daemons omit
         // it and the pure local contract stands.
         const serverContract = ackBody?.ask_contract;
+        // ADR 801 §3: a blocking approve ask now holds at the gate — say what it withholds, on the spot.
+        const withholdNotice =
+          args.act === 'ask' &&
+          isAskTier(meta['tier']) &&
+          meta['species'] === 'approve' &&
+          askWithholds('approve', meta['tier'])
+            ? askWithholdText(envelope.id, meta['withhold'] !== undefined ? 'scoped' : 'seat_wide')
+            : null;
         const askGuidance =
           args.act === 'ask' && isAskTier(meta['tier'])
-            ? askContractText(envelope.id, meta['tier'], serverContract?.unblocker_reachable)
+            ? askContractText(envelope.id, meta['tier'], serverContract?.unblocker_reachable) +
+              (withholdNotice ? ` ${withholdNotice}` : '')
             : null;
         // ADR 684: an ask whose options are prose reaches the human as Approve / Deny — say so now,
         // while the sender can still re-send it as option lines.
@@ -453,6 +464,7 @@ export function registerSend(
             ...(args.act === 'ask' && isAskTier(meta['tier'])
               ? { ask_contract: serverContract ?? askContract(meta['tier']) }
               : {}),
+            ...(withholdNotice ? { withhold_notice: withholdNotice } : {}),
             ...(proseChoiceNotice ? { prose_choice_notice: proseChoiceNotice } : {}),
             ...(handoffLane ? { handoff_lane: handoffLane } : {}),
             ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),

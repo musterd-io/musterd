@@ -35,7 +35,8 @@ message, meets nothing but its own instructions.
    reads the seat's open withholds together with the enforcement table, in the same request and
    under the same cache. A match denies, and the reason names the ask and its contract, as Gate B's
    `denied_awaiting` does. The withhold applies only to the seat that raised the ask; other seats are
-   unaffected.
+   unaffected. _(Amended 2026-11-04: a team with no human member withholds nothing, because only a human
+   can release a withhold. See Consequences.)_
 3. **A blocking `approve` ask with no `meta.withhold` withholds the seat's mutating calls.** These
    are file writes and Bash commands that are not read-only, except `musterd` and git read
    commands. Reads, inbox calls and `team_*` tools stay open, so the seat can wait, answer and hand
@@ -47,7 +48,8 @@ message, meets nothing but its own instructions.
      Gate B's `denied_declined` does. Which answers count follows ADR 623: `approve` is privileged,
      so an A1 channel answer does not release.
    - The seat may withdraw its own ask with `resolve` and `meta.ask_outcome: 'held'`. That lifts the
-     withhold, and the record shows the action was never approved.
+     withhold, and the record shows the action was never approved. _(Amended 2026-11-04: only while no human has
+     answered; after a decline, a withdrawal does not lift it. See Consequences.)_
    - The 15-minute timeout does not lift it, because the contract at timeout is "do not proceed".
      Like an ADR 516 hold, a withhold ends at 12 hours at most.
    - The strand terminal (ADR 153) is unchanged: the seat releases its lane, and the withhold lasts
@@ -69,6 +71,17 @@ message, meets nothing but its own instructions.
   withholds show up mostly as noise in the first week's read, narrowing is the fix, not removal.
 - `meta.withhold` is a protocol change (hard rule 1); this ADR is its record.
 - Follows-up: lane 01M6M4R80S builds this once this ADR is accepted.
+- 2026-11-04, during the build (lane 01M6M4R80S): lazara's review found that CooperBench pair teams
+  have no human. A seat-wide withhold on any blocking approve ask an agent sends there would freeze
+  that agent until the 12h cap, and the pair would read as a coordination loss. The build therefore
+  withholds only on a team with at least one human member. Without one, the ask contract's STRAND
+  branch (ADR 153) is still the seat's instruction, and the gate holds nothing.
+- 2026-11-04, the same build's security review: a seat could undo a human decline by resolving its
+  own ask, and a seat-wide hold exempted `musterd …; <write>`. The build honours a withdrawal only
+  before any human answer. It exempts only a lone `musterd send | inbox | whoami | status | next |
+  lane`, decided from the raw command (an env prefix can swap the binary); every other `musterd` call
+  counts as mutating under a seat-wide hold. The
+  first means a declined seat-wide ask freezes the seat's writes until its 12h end.
 
 ## Observability & Evaluation
 

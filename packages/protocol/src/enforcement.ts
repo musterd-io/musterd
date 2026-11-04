@@ -81,8 +81,17 @@ export type EnforcementPolicy = z.infer<typeof EnforcementPolicySchema>;
  * the client-computed `class`/`fingerprint` (cooperative-agent threat model — this is inducement, not a
  * security boundary). An undeclared call never produces a request: the hook only POSTs on a match.
  */
+/**
+ * ADR 801: the kinds a `POST /gate` request can carry. The class kinds, plus `ask-withhold` — a call the
+ * acting seat's own open blocking approve ask withholds. `ask-withhold` is NOT a class kind: no team
+ * policy can declare one; it exists only while a seat's ask is open.
+ */
+export const ASK_WITHHOLD_KIND = 'ask-withhold' as const;
+export const GATE_REQUEST_KINDS = [...ENFORCEMENT_CLASS_KINDS, ASK_WITHHOLD_KIND] as const;
+export type GateRequestKind = (typeof GATE_REQUEST_KINDS)[number];
+
 export const GateCheckRequestSchema = z.object({
-  kind: z.enum(ENFORCEMENT_CLASS_KINDS),
+  kind: z.enum(GATE_REQUEST_KINDS),
   class: z.string().min(1),
   fingerprint: z.string().min(1),
   posture: z.enum(ENFORCEMENT_POSTURES),
@@ -376,6 +385,104 @@ export function matchEnforcement(
       if (globToRegExp(glob, flavor).test(target)) {
         return { cls, target, fingerprint: gateFingerprint(cls.class, target) };
       }
+    }
+  }
+  return null;
+}
+
+/* ─────────────────────────── ADR 801 — an open ask withholds ─────────────────────────── */
+
+/**
+ * One open withhold, as `GET /enforcement` serves it to the seat that raised the ask (ADR 801 §2). The
+ * daemon derives it from the message log on every read: the seat's blocking approve asks younger than
+ * 12h with no human accept and no withdrawal. `seat_wide` is the no-`meta.withhold` form (§3).
+ * `declined` keeps the calls refused after a human decline (§4).
+ */
+export const ActiveWithholdSchema = z.object({
+  ask_id: z.string().min(1),
+  commands: z.array(z.string().min(1)).default([]),
+  paths: z.array(z.string().min(1)).default([]),
+  seat_wide: z.boolean(),
+  declined: z.boolean().default(false),
+  expires_at: z.number(),
+});
+export type ActiveWithhold = z.infer<typeof ActiveWithholdSchema>;
+
+/** The `GET /teams/:slug/enforcement` response (ADR 150, ADR 801): the class table and the caller's own
+ *  open withholds. `withholds` defaults to empty, so an older daemon's reply still parses. */
+export const EnforcementReadSchema = z.object({
+  enforcement: EnforcementPolicySchema,
+  withholds: z.array(ActiveWithholdSchema).default([]),
+});
+export type EnforcementRead = z.infer<typeof EnforcementReadSchema>;
+
+/** A withhold match: the ask that holds the call, the target, and the fingerprint the gate audits. */
+export interface WithholdMatch {
+  withhold: ActiveWithhold;
+  target: string;
+  fingerprint: string;
+}
+
+/** Could this command run musterd at all — prefixed, wrapped, quoted or by path? Under a seat-wide withhold every musterd
+ *  call outside {@link HELD_SEAT_MUSTERD_VERBS} counts as mutating: `musterd init` and `musterd service
+ *  install` write files the shell-write heuristic does not see. */
+function invokesMusterd(flavor: 'path' | 'command', raw: string | undefined): boolean {
+  // Fail closed: any mention of musterd counts, so a path (`/usr/local/bin/musterd`), a wrapper
+  // (`npx musterd`) or a quoted word cannot slip one past (security review, 2026-11-04, round 3).
+  return flavor === 'command' && raw !== undefined && raw.includes('musterd');
+}
+
+/** The musterd subcommands a held seat still needs: talk to the team, read its state, move its lane. */
+const HELD_SEAT_MUSTERD_VERBS = new Set(['send', 'inbox', 'whoami', 'status', 'next', 'lane']);
+
+/**
+ * A seat-wide withhold leaves a few musterd commands open so the seat can answer, withdraw and hand
+ * off. It is decided from the RAW command, not the normalized one: normalization lifts env assignments,
+ * and `PATH=/tmp/x musterd send` runs whatever `musterd` that PATH finds. So the raw command must start
+ * with `musterd` itself, name one of {@link HELD_SEAT_MUSTERD_VERBS}, and carry no shell separator,
+ * redirect or substitution (security review, 2026-11-04).
+ */
+function isLoneMusterdCommand(flavor: 'path' | 'command', raw: string | undefined): boolean {
+  if (flavor !== 'command' || raw === undefined) return false;
+  const command = raw.trim();
+  if (/[;&|`\n<>]|\$\(/.test(command)) return false;
+  const m = /^musterd\s+([a-z][a-z-]*)(\s|$)/.exec(command);
+  return m !== null && HELD_SEAT_MUSTERD_VERBS.has(m[1]!);
+}
+
+/**
+ * Does one of the seat's open withholds hold this call (ADR 801 §2, §3)? A scoped withhold matches like an
+ * ADR 150 class (path globs for a write to a path, command globs for a command). A seat-wide one holds every
+ * write-shaped call ({@link isWriteShaped}) except musterd's own commands, so the seat can still answer,
+ * withdraw and hand off. An expired withhold never matches, whatever the cache says.
+ */
+export function matchWithhold(
+  withholds: readonly ActiveWithhold[],
+  call: GateToolCall,
+  now: number,
+): WithholdMatch | null {
+  const path = call.path?.trim();
+  const command = call.command != null ? normalizeCommand(call.command) : undefined;
+  const target =
+    path && path.length > 0 ? path : command && command.length > 0 ? command : undefined;
+  if (target === undefined) return null;
+  const flavor: 'path' | 'command' = target === path ? 'path' : 'command';
+  for (const withhold of withholds) {
+    if (withhold.expires_at <= now) continue;
+    const hit = withhold.seat_wide
+      ? (isWriteShaped(call) || invokesMusterd(flavor, call.command)) &&
+        !isLoneMusterdCommand(flavor, call.command)
+      : flavor === 'path'
+        ? // A path withholds writes to it; reading the file the ask is about stays open.
+          isWriteShaped(call) &&
+          withhold.paths.some((glob) => globToRegExp(glob, 'path').test(target))
+        : withhold.commands.some((glob) => globToRegExp(glob, 'command').test(target));
+    if (hit) {
+      return {
+        withhold,
+        target,
+        fingerprint: gateFingerprint(`${ASK_WITHHOLD_KIND}:${withhold.ask_id}`, target),
+      };
     }
   }
   return null;
