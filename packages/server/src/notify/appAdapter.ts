@@ -27,7 +27,13 @@ import { humanAskAnswerApproval } from '@musterd/protocol/approval';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
-import { appBindingKeys, stageAppPairing, type AppKeys } from '../store/appPairing.js';
+import {
+  appBindingEnded,
+  appBindingKeys,
+  stageAppPairing,
+  type AppBindingEnded,
+  type AppKeys,
+} from '../store/appPairing.js';
 import {
   askDigest,
   consumeAskChannelToken,
@@ -527,7 +533,13 @@ async function appTargetFor(
   ) {
     return { skip: 'present' };
   }
-  return (await activeAppBinding(ctx.db, team.id, human.id)) ?? { skip: 'no_binding' };
+  const target = await activeAppBinding(ctx.db, team.id, human.id);
+  if (!target) return { skip: 'no_binding' };
+  // ADR 802 §6: every delivery sealed to a superseded binding would only show "could not be
+  // verified" on the phone, so it is skipped, and the skip says why.
+  if ((await appBindingEnded(ctx.db, team.id, target.binding.id)) === 'superseded')
+    return { skip: 'binding_superseded' };
+  return target;
 }
 
 /** Log and record what became of one ask on this human's app channel. */
@@ -1421,6 +1433,28 @@ async function liveAppAsks(
   return out;
 }
 
+/** ADR 802 O&E: audit an ended fetch once per binding and reason, not on every fetch. */
+async function noteFetchEnded(
+  ctx: Ctx,
+  teamId: string,
+  bindingId: string,
+  reason: AppBindingEnded,
+): Promise<void> {
+  const seen = await ctx.db.get<{ n: number }>(
+    `SELECT 1 AS n FROM audit WHERE team_id = ? AND action = 'channel.app_fetch_ended' AND target = ?
+       AND detail LIKE ? LIMIT 1`,
+    [teamId, bindingId, `%"reason":"${reason}"%`],
+  );
+  if (seen) return;
+  await appendAudit(ctx.db, teamId, {
+    actor: null,
+    action: 'channel.app_fetch_ended',
+    target: bindingId,
+    result: 'deny',
+    detail: { binding: bindingId, reason },
+  });
+}
+
 /** Spend the token a re-issued delivery replaces, so one live token per ask and binding remains. */
 async function spend(ctx: Ctx, tokenHash: string, now: number): Promise<void> {
   await ctx.db.run(
@@ -1441,7 +1475,15 @@ export async function handleAppFetch(
   team: { id: string; slug: string },
   frame: Pick<RelayAppFetchFrame, 'ask_ref' | 'binding'>,
   now: number = Date.now(),
-): Promise<{ sealed: SealedBodyWire; expires_at: number } | null> {
+): Promise<
+  { sealed: SealedBodyWire; expires_at: number } | { sealed: null; ended: AppBindingEnded } | null
+> {
+  // ADR 802 §4: a binding that ended says so, and the relay answers the phone 410.
+  const ended = await appBindingEnded(ctx.db, team.id, frame.binding);
+  if (ended) {
+    await noteFetchEnded(ctx, team.id, frame.binding, ended);
+    return { sealed: null, ended };
+  }
   const binding = await ctx.db.get<ChannelBinding>(
     `SELECT * FROM channel_bindings WHERE id = ? AND team_id = ? AND channel = ? AND status = 'active'`,
     [frame.binding, team.id, APP_CHANNEL],

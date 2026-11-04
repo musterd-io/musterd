@@ -4,6 +4,7 @@ import { bindingDeviceName } from '../pairingClient';
 import {
   countdown,
   pairedLine,
+  pairedStanding,
   pairingRefusal,
   stagedToAdopt,
   qrSvg,
@@ -82,5 +83,16 @@ describe('pairing a phone from /live (lane 01M64DSBQV)', () => {
     expect(stagedToAdopt([], ended)).toBeUndefined();
     // A new phone's request is adopted as before.
     expect(stagedToAdopt([p1, { ...p1, id: 'p2' }], ended)?.id).toBe('p2');
+  });
+
+  it('a binding paired under the daemon\'s old key says so and offers to pair again (ADR 802)', () => {
+    const b = { id: 'b1', channel: 'app', status: 'active', created_at: 0 };
+    expect(pairedStanding({ ...b, ended: 'superseded' })).toMatchObject({ stale: true });
+    expect(pairedStanding({ ...b, ended: 'superseded' }).hint).toMatch(/old key.*pair again/);
+    expect(pairedStanding({ ...b, ended: null })).toEqual({
+      stale: false,
+      hint: 'asks reach it while you’re away',
+    });
+    expect(pairedStanding(b).stale).toBe(false);
   });
 });

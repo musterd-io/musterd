@@ -493,7 +493,9 @@ export function startAwayRelay(ctx: Ctx): () => void {
                   type: 'app_body',
                   request_id: requestId,
                   sealed: found?.sealed ?? null,
-                  ...(found ? { expires_at: found.expires_at } : {}),
+                  ...(found && 'expires_at' in found ? { expires_at: found.expires_at } : {}),
+                  // ADR 802 §4: the relay answers the phone 410 {ended}.
+                  ...(found && 'ended' in found ? { ended: found.ended } : {}),
                 } satisfies RelayAppBodyFrame),
               );
             });
