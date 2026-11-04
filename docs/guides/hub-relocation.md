@@ -36,9 +36,28 @@ laptop's set-aside store holds a dead credential.
 
 ## Rotate and re-pair (the app-channel key)
 
-Not yet run. The plan's step: stop a test daemon, set its `app-channel.key` aside, restart it (a new
-key is generated), then pair a phone again with "Pair again". It needs nick's phone, so it runs on
-nick's go-ahead.
+Run once on 2026-11-04 against the laptop daemon (the real one, on nick's answer to question
+`01M6KYAKXD`). A separate test daemon would have needed its own team slug in the relay's
+`TEAM_CREDENTIALS_JSON`, which is the same secret revive's relay uses. It passed. The steps:
+
+1. Announce the bounce on `@team`.
+2. On the daemon's machine, move `~/.musterd/app-channel.key` aside. Keep a copy: putting it back and
+   restarting restores the old pairing, as long as the phone has not yet tapped "Pair again".
+3. `musterd service restart --force`. The daemon makes a new key the first time a pairing starts,
+   not at boot.
+4. On /live, under **You → Your phone**, click **Pair another phone**. Note the daemon fingerprint
+   beside the code.
+5. On the phone, tap **Pair again**, then **Forget and pair again**, then scan.
+6. Compare the app's **Daemon fingerprint** with the one beside the code. The other fingerprint on
+   /live ("Confirming enrolls this phone's key") is the phone's own key; it is not for comparing.
+   If they match, **Confirm with passkey**.
+7. Unpair the old phone entry on /live. Its keys died with the old daemon key.
+8. Check: send the person a `team_question`. It reached the phone, and the answer came back
+   verified, via the app.
+
+What made it harder than it should be (lane `01M6KYZ1SM`): a "Not my phone" on a pairing the server had
+already closed left the panel stuck until a page reload, and nothing marks the old pairing as dead.
+On switch day the same steps run against the box's daemon.
 
 ## Credentials on the box (the revocation list)
 
