@@ -1,0 +1,74 @@
+host — wake actuator  ◉ polling
+  1 seat(s) registered · every 10s · watchdog 3600s · Ctrl-C to stop
+  wake due: agent1 [batched] — message from agent2, waited 24s (lease 01M6M6NZE8JE01Z5DC5FEQ28AE)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  run for agent1 (resumed) settled: exit=1 wall=2.3s
+  resume failed for agent1 (run exited (code 1) without occupying the seat — harness: No conversation found with session ID: 9fe96931-e593-42f4-9186-97e3a050ad9d) — fresh fallback in the same lease
+  ⚡ woke agent1: spawn→roster 15.1s, session=fresh provenance=wake
+  run for agent1 (fresh) settled: exit=0 cost=$0.1692 wall=29.9s
+  wake cost recorded for agent1: $0.1692 (lease 01M6M6NZE8JE01Z5DC5FEQ28AE)
+  wake due: agent1 [batched] — message from board, waited 37s (lease 01M6M6S697XB0DFR2V747CD59D)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$0.2642 wall=37.9s
+  wake cost recorded for agent1: $0.2642 (lease 01M6M6S697XB0DFR2V747CD59D)
+  wake due: agent1 [batched] — message from agent2, waited 46s (lease 01M6M6VXBY352PJ4Y2TADQT5GA)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$0.4209 wall=47.2s
+  wake cost recorded for agent1: $0.4209 (lease 01M6M6VXBY352PJ4Y2TADQT5GA)
+  wake due: agent1 [batched] — message from agent2, waited 2m8s (lease 01M6M6YY8SZNK4R6DGAZSTT2K9)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$0.5270 wall=33.2s
+  wake cost recorded for agent1: $0.5270 (lease 01M6M6YY8SZNK4R6DGAZSTT2K9)
+  wake due: agent1 [batched] — message from agent2, waited 2m9s (lease 01M6M71BKMQ3RX9ZXSX2AD86JN)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$0.8932 wall=105.8s
+  wake cost recorded for agent1: $0.8932 (lease 01M6M71BKMQ3RX9ZXSX2AD86JN)
+  wake due: agent1 [batched] — message from agent2, waited 3m21s (lease 01M6M7676JMTYTXEPX53XH760A)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.1s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$1.0066 wall=23.4s
+  wake cost recorded for agent1: $1.0066 (lease 01M6M7676JMTYTXEPX53XH760A)
+  wake due: agent1 [batched] — message from agent2, waited 2m24s (lease 01M6M78AR2GSVBKMNC6GHYEFQH)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$1.0673 wall=16.7s
+  wake cost recorded for agent1: $1.0673 (lease 01M6M78AR2GSVBKMNC6GHYEFQH)
+  wake due: agent1 [batched] — message from agent2, waited 3m7s (lease 01M6M7AE90535M9XCDG7PP0YMN)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$1.1893 wall=25.7s
+  wake cost recorded for agent1: $1.1893 (lease 01M6M7AE90535M9XCDG7PP0YMN)
+  wake due: agent1 [batched] — request_help from agent2, waited 56s (lease 01M6M7CVK4TRGVZYA829E6H41A)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$1.2999 wall=27.1s
+  wake cost recorded for agent1: $1.2999 (lease 01M6M7CVK4TRGVZYA829E6H41A)
+  wake due: agent1 [batched] — message from agent2, waited 4m38s (lease 01M6M7F8XF6S52MFKT2KP9DA4S)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$1.3657 wall=16.5s
+  wake cost recorded for agent1: $1.3657 (lease 01M6M7F8XF6S52MFKT2KP9DA4S)
+  wake due: agent1 [batched] — message from agent2, waited 5m35s (lease 01M6M7HCEWVKV4C1Z58P60EZR2)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 7.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$1.4314 wall=14.0s
+  wake cost recorded for agent1: $1.4314 (lease 01M6M7HCEWVKV4C1Z58P60EZR2)
+  wake due: agent1 [batched] — message from agent2, waited 5m42s (lease 01M6M7KE14BTHFDJS3KDQ3FXH0)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$1.4976 wall=13.9s
+  wake cost recorded for agent1: $1.4976 (lease 01M6M7KE14BTHFDJS3KDQ3FXH0)
+  wake due: agent1 [batched] — message from agent2, waited 5m17s (lease 01M6M7N7S6V6N4BB6GQRSDVWMF)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$1.5666 wall=17.0s
+  wake cost recorded for agent1: $1.5666 (lease 01M6M7N7S6V6N4BB6GQRSDVWMF)
+  wake due: agent1 [batched] — message from agent2, waited 4m28s (lease 01M6M7QBACRER6M0QRH2JT0R00)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  ⚡ woke agent1: spawn→roster 9.0s, session=resumed provenance=wake
+  run for agent1 (resumed) settled: exit=0 cost=$1.6385 wall=18.8s
+  wake cost recorded for agent1: $1.6385 (lease 01M6M7QBACRER6M0QRH2JT0R00)

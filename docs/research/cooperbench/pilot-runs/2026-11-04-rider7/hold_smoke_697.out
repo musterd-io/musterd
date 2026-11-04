@@ -1,0 +1,16 @@
+agent1: 1. Succeeded: `team_inbox_check` returned no new messages, and `lane_open` created "feature a" (lane 01M6M6B7MDHCPDHMYYP7TDAZYC) with scope ["src/a.py"], claimed by agent1 with no warnings.
+2. Succeeded: the Write tool wrote `/tmp/cb-hold-x68mk438/agent1/repo/src/a.py` with `x = 1` and `# agent1`, each on its own line. I added a trailing newline after the second line.
+agent2: 1. **Succeeded.** `team_inbox_check` returned no messages for you, plus a warning that this workspace's provisioning state is UNKNOWN (the drift record is missing, so the interrupt-check hook may not be running). `lane_open` succeeded and created "feature b" (id `01M6M6BJB9305CEE6HDPMA5P47`), claimed by agent2, with scope `["src/a.py"]`. It carries a `surface_overlap` warning against agent1's "feature a" (`01M6M6B7MDHCPDHMYYP7TDAZYC`), which holds `src/a.py`.
+2. **Refused.** The Write to `src/a.py` was blocked by a PreToolUse hook: `blocked: 'src/a.py' is held by agent1 (lane 01M6M6B7MDHCPDHMY
+waiting 110s for agent1's hold to lapse
+agent2: 1. `team_inbox_check`: succeeded. It returned no new messages. Your two held lanes on `src/a.py` are "feature b" (yours) and "feature a" (agent1's).
+2. Write to `src/a.py`: refused. The PreToolUse hook said: "blocked once: 'src/a.py' was held by agent1 (lane "feature a", now claimed) while you waited, so it has probably changed. Their work on it is on branch `master` at efb61ccb7e52: bring it in first (fetch, then merge or rebase onto it), then edit again. This is the one hand-over for that hold (ADR 697)." Per your instructions I did not retry and did not edit the file another way, so `src/a.
+agent2: 1. `team_inbox_check`: succeeded. No new messages. It listed two held lanes on `src/a.py`: "feature b" (yours, agent2) and "feature a" (agent1). No refusal.
+2. Write `src/a.py`: succeeded. The file was updated with `x = 1` and `# agent2 again`. A PreToolUse hook added a note that agent1's hold on `src/a.py` had lapsed because they have left, and that their "feature a" lane is still on the board. The hook suggests telling agent1 what I changed, but you asked for only these two steps, so I did not send that message. I can send it if you want.
+gate rows:
+  agent2 allow warned hold=lapsed
+  agent2 deny denied_handover hold=handover
+  agent2 deny denied hold=held
+  agent1 allow allowed hold=None
+agent1_edited=True agent2_first_refused=True agent2_again_allowed=True held_deny_audited=True handover_refusal_audited=True no_deaf_warning=True cost_usd=0.0094
+PASS
