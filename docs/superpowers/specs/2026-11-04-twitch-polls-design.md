@@ -191,3 +191,19 @@ that one lets viewer words reach a seat.
 - The daemon never receives viewer text. A test asserts the counts endpoint's input schema has no string
   field from chat.
 - The poll-scoped credential cannot write to another poll and stops working after close.
+
+## Corrections
+
+- _(2026-11-04, miley, from the code map behind the plan)_ **Hub forwarding is the authority relay, not
+  `/policy`.** `POST /policy` is hub-local and a joiner refuses it (`hub_local_required`). An admin on
+  another machine opens a poll through the ADR 728 authority relay (`authorityRelayIfJoiner`, a new
+  `poll.open` op), which already carries A2 proof. End and cancel use the holds forward (`holdAct`).
+- _(2026-11-04, miley)_ **An admin with no enrolled passkey is refused.** `requireAuthority` passes a
+  human with no enrolled key as `bearer_unenrolled`. Opening a poll refuses that assurance, so nick's
+  "yes" to a passkey holds even before he enrolls more devices.
+- _(2026-11-04, miley)_ **The phone needs a new app-channel kind.** The app today signs only offers the
+  daemon pushes and quick actions. Starting a poll from the phone is a new `poll_open` callback,
+  signed with the Face ID key. It is the plan's last build increment.
+- _(2026-11-04, miley)_ **The stream machine reports Twitch's live state on its own** (`POST /stream/live`
+  on its observer seat, every 30 s), so `/live` can enable Start before any poll exists.
+
