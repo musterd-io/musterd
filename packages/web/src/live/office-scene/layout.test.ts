@@ -23,6 +23,8 @@ import {
   STRIP_CAP,
   FWD,
   LEISURE_SPOTS,
+  DECOR,
+  READING_NOOK,
   MAX_S_FACING,
   MEETING,
   MIN_SPOT_GAP,
@@ -542,5 +544,28 @@ describe('scene.py mirrors the café it renders', () => {
     expect(num(/sink=dict\(dx=(-?\d+)/)).toBe(SINK.dx);
     expect(num(/fridge=dict\(dx=(-?\d+)/)).toBe(LOUNGE.fridge.dx);
     expect(num(/cooler=dict\(dx=(-?\d+)/)).toBe(LOUNGE.cooler.dx);
+  });
+});
+
+describe('the reading nook and the display pieces (lane 01M6FXBBHM)', () => {
+  it('adds exactly one leisure seat, in its own corner zone', () => {
+    const corner = LEISURE_SPOTS.filter((s) => s.zone === 'corner');
+    expect(corner).toHaveLength(1);
+    expect(corner[0]!.sit).toBe(1);
+  });
+  it('shows at least two sculptures or installations, all on the floor', () => {
+    expect(DECOR.filter((d) => d.kind === 'sculpture' || d.kind === 'installation').length).toBeGreaterThanOrEqual(2);
+    for (const d of [...DECOR, READING_NOOK.chair, READING_NOOK.lamp, READING_NOOK.table]) {
+      expect(d.lx).toBeGreaterThan(0);
+      expect(d.ly).toBeGreaterThan(0);
+      expect(d.lx).toBeLessThan(FLOOR);
+      expect(d.ly).toBeLessThan(FLOOR);
+    }
+  });
+  it('matches the copy scene.py renders it from', () => {
+    const py = readFileSync(new URL('../../../art/office/scene.py', import.meta.url), 'utf8');
+    const { chair, lamp, table } = READING_NOOK;
+    expect(py).toContain(`READING_NOOK = dict(chair=(${chair.lx}, ${chair.ly}, "${chair.dir}"), lamp=(${lamp.lx}, ${lamp.ly}), table=(${table.lx}, ${table.ly}))`);
+    for (const d of DECOR) expect(py).toContain(`("${d.id}", ${d.lx}, ${d.ly}, ${d.w}, ${d.d})`);
   });
 });

@@ -174,3 +174,8 @@ export function sunBeam(hours: number): { len: number; shear: number } {
   const side = Math.max(-1, Math.min(1, (12.75 - hours) / 6.25)); // + morning … − evening
   return { len: BEAM_LEN * (0.8 + 0.8 * (1 - height)), shear: BEAM_SHEAR * 1.4 * side };
 }
+
+/** The reading nook's floor lamp is on after dark, whoever sits there (lane 01M6FXBBHM). */
+export function floorLampOn(env: Pick<LightEnv, 'daylight'>): boolean {
+  return env.daylight < 0.5;
+}

@@ -2926,3 +2926,10 @@ across 59 sheets (`render.py --append-clips`, which re-quantizes the sheets it g
 - Cumulative since the office decor refresh began (2026-11-03, ~9.62 MB): about +430 KB, inside the
   +1 MB the decor spec allows before asking nick.
 
+## 2026-11-04 — the reading nook and display pieces: total JS RAISED 412,000 → 413,000 B (lane 01M6FXBBHM6YYS8ZSNB5Y1B39S)
+
+The office decor refresh's last increment adds the reading nook (an armchair, a floor lamp, a side
+table) and two floor sculptures: their depth items in `receptionItems`, nav blockers, the `corner`
+leisure zone and the floor lamp's glow in `drawInteriorLight`. CI read 402.8 KB against the 402.3 KB
+ceiling (`static` job, run 41760691020). Raised by 1 KB.
+

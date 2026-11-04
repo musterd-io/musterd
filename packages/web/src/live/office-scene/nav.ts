@@ -6,6 +6,7 @@ import {
   CHAIR_OFF,
   CHAIR_SIZE,
   deskDims,
+  DECOR,
   DESK_SLOTS,
   END_TABLE,
   ENTRANCE,
@@ -13,9 +14,12 @@ import {
   LOUNGE,
   MEETING,
   NOOK,
+  NOOK_LAMP,
+  NOOK_TABLE,
   BIN,
   PLANTS,
   PRINTER,
+  READING_NOOK,
   RECEPTION,
   WAIT_CHAIR,
   STOOL,
@@ -158,6 +162,13 @@ function solidRects(): Rect[] {
     rect(RECEPTION.endTable.lx, RECEPTION.endTable.ly, END_TABLE, END_TABLE, BODY_R, 'end-table'),
   );
   out.push(rect(RECEPTION.plant.lx, RECEPTION.plant.ly, 26, 26, BODY_R, 'reception-plant'));
+  // The reading nook and the floor display pieces (lane 01M6FXBBHM): the chair padded like the other
+  // armchairs so its own seat stays reachable.
+  const nk = READING_NOOK;
+  out.push(rect(nk.chair.lx, nk.chair.ly, WAIT_CHAIR, WAIT_CHAIR, 4, 'nook-chair'));
+  out.push(rect(nk.lamp.lx, nk.lamp.ly, NOOK_LAMP, NOOK_LAMP, BODY_R, 'nook-lamp'));
+  out.push(rect(nk.table.lx, nk.table.ly, NOOK_TABLE, NOOK_TABLE, BODY_R, 'nook-table'));
+  for (const d of DECOR) out.push(rect(d.lx, d.ly, d.w, d.d, BODY_R, 'decor'));
   out.push(rect(PRINTER.lx, PRINTER.ly, PRINTER.w, PRINTER.d, BODY_R, 'printer'));
   // The front desk blocks like the bookshelves do — a counter you can walk through is a rug.
   out.push(

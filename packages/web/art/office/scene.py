@@ -78,6 +78,10 @@ RECEPTION = dict(rug=(140, 810, 200, 120, "#c07a55", "#9c5c3c", "border"), chair
                  end_table=(152, 860), plant=(268, 872))
 FRONT_DESK = dict(lx=165, ly=742, long=92, deep=50, high=DESK_UP)
 WAIT_CHAIR = 42
+# The reading nook by the corner bookshelf and the floor display pieces (lane 01M6FXBBHM): layout.ts
+# READING_NOOK and DECOR, mirrored (layout.test.ts holds them equal).
+READING_NOOK = dict(chair=(58, 44, "S"), lamp=(22, 18), table=(92, 58))
+DECOR = [("decor/bronze", 30, 720, 16, 16), ("decor/cairn", 876, 690, 18, 18)]
 END_TABLE = 26
 ENTRANCE = (47, 815)
 PRINTER = dict(lx=505, ly=60, w=46, d=34, h=32)
@@ -1569,6 +1573,66 @@ def end_table(asset_id: str, zs: float, col) -> bpy.types.Object:
     return finish(asset_id, parts, lx, ly, col)
 
 
+def floor_lamp(asset_id: str, lx: float, ly: float, zs: float, col) -> bpy.types.Object:
+    """The reading nook's floor lamp (lane 01M6FXBBHM): a weighted brass foot, a slim pole, and a linen
+    drum shade that glows at night (the glow is painted at runtime with the room's other lamps)."""
+    brass = paint("top-brass", srgb("#c9a24d"), 0.35)
+    linen = paint("lamp-linen", srgb("#efe4cf"), 0.85)
+    parts = [cyl(f"{asset_id}/foot", lx, ly, 0, 6, 6.5, 1.6, brass, zs, 24),
+             cyl(f"{asset_id}/pole", lx, ly, 1.6, 0.7, 0.7, 62, brass, zs, 12),
+             cyl(f"{asset_id}/shade", lx, ly, 60, 8.5, 6.5, 12, linen, zs, 32)]
+    parts.append(shadow(f"{asset_id}/shadow", lx, ly, 10, 10, zs))
+    return finish(asset_id, parts, lx, ly, col)
+
+
+def side_table(asset_id: str, lx: float, ly: float, zs: float, col) -> bpy.types.Object:
+    """The nook's side table: a round oak top on a pedestal, a short stack of books and a mug on it."""
+    oak = wood("oak", OAK)
+    dark = wood("oak-dark", OAK_DARK, grain=0.1)
+    parts = [cyl(f"{asset_id}/base", lx, ly, 0, 7, 7, 1.5, dark, zs, 24),
+             cyl(f"{asset_id}/stem", lx, ly, 1.5, 2, 2, 16, dark, zs, 16),
+             cyl(f"{asset_id}/top", lx, ly, 17.5, 12, 12, 2, oak, zs, 32)]
+    for j, hexc in enumerate(["#2c4a5e", "#efe4cf", "#7a2e2a"]):
+        parts.append(box(f"{asset_id}/book{j}", lx - 3 + j * 0.6, ly + 1, 19.5 + j * 1.9, 11 - j, 8 - j * 0.5, 1.8, paint(f"book-{hexc}", srgb(hexc), 0.82), zs))
+    parts.append(cyl(f"{asset_id}/mug", lx + 6, ly - 3, 19.5, 1.8, 1.8, 3.2, paint("mug-white", srgb("#f2eee6"), 0.5), zs, 16))
+    parts.append(shadow(f"{asset_id}/shadow", lx, ly, 14, 14, zs))
+    return finish(asset_id, parts, lx, ly, col)
+
+
+def sculpture(asset_id: str, kind: str, lx: float, ly: float, w: float, zs: float, col) -> bpy.types.Object:
+    """A floor display piece (lane 01M6FXBBHM), original and abstract. `bronze`: a twisting ribbon of
+    three bronze rings on a slim rod, on a white plinth. `cairn`: smooth river stones balanced on a
+    walnut plinth, each a little off-centre, the top one small."""
+    parts = []
+    if kind == "bronze":
+        plinth = paint("plinth", srgb("#f2eee6"), 0.7)
+        bronze = metal("bronze", srgb("#9c6b3a"), 0.38)
+        parts.append(box(f"{asset_id}/plinth", lx, ly, 0, w, w, 26, plinth, zs))
+        parts.append(cyl(f"{asset_id}/rod", lx, ly, 26, 0.7, 0.7, 8, bronze, zs, 12))
+        for j, (r, tilt, spin) in enumerate([(7.5, 62, 0), (6.0, 48, 70), (4.6, 70, 140)]):
+            bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=0.9, major_segments=48, minor_segments=12,
+                                             location=(lx, ly, (34 + j * 4.5) * zs))
+            o = bpy.context.active_object
+            o.name = f"{asset_id}/ring{j}"
+            o.rotation_euler = (math.radians(tilt), 0, math.radians(spin))
+            o.data.materials.append(bronze)
+            smooth(o)
+            parts.append(o)
+    elif kind == "cairn":
+        walnut = wood("top-walnut", srgb("#5b4130"), grain=0.1)
+        parts.append(box(f"{asset_id}/plinth", lx, ly, 0, w, w, 10, walnut, zs))
+        stones = [("#8a8780", 8.5, 4.2, 0, 0), ("#6f6b63", 7.0, 3.6, 1.2, -0.8), ("#a8a49a", 5.6, 3.0, -0.9, 0.6),
+                  ("#5e5a54", 4.4, 2.6, 0.6, 0.4), ("#b9b4a8", 3.0, 2.0, -0.3, -0.2)]
+        z = 10.0
+        for j, (hexc, r, hh, dx, dy) in enumerate(stones):
+            parts.append(ball(f"{asset_id}/stone{j}", lx + dx, ly + dy, z, r, r * 0.9, hh, matte(f"stone-{j}", srgb(hexc), 0.55), zs))
+            z += hh * 2 - 0.6
+    else:
+        raise KeyError(kind)
+    parts.append(shadow(f"{asset_id}/shadow", lx, ly, w * 0.9, w * 0.9, zs))
+    return finish(asset_id, parts, lx, ly, col)
+
+
 def printer(asset_id: str, zs: float, col) -> bpy.types.Object:
     P = PRINTER
     lx, ly = P["lx"], P["ly"]
@@ -2081,6 +2145,12 @@ def build_scene(ky: float = KY_ISO, px_per_unit: float = 3.0) -> dict[str, bpy.t
     a["nook/armchair"] = armchair("nook/armchair", NOOK[0] + ac["dx"], NOOK[1] + ac["dy"], WAIT_CHAIR, "W", zs, export)
     a["reception/desk"] = front_desk("reception/desk", zs, export)
     a["reception/endtable"] = end_table("reception/endtable", zs, export)
+    nk = READING_NOOK
+    a["corner/armchair"] = armchair("corner/armchair", nk["chair"][0], nk["chair"][1], WAIT_CHAIR, nk["chair"][2], zs, export)
+    a["corner/lamp"] = floor_lamp("corner/lamp", *nk["lamp"], zs, export)
+    a["corner/table"] = side_table("corner/table", *nk["table"], zs, export)
+    for aid, dlx, dly, dw, _dd in DECOR:
+        a[aid] = sculpture(aid, aid.split("/")[1], dlx, dly, dw, zs, export)
     ch = RECEPTION["chair"]
     a["reception/armchair"] = armchair("reception/armchair", ch[0], ch[1], WAIT_CHAIR, ch[2], zs, export)
     a["meeting/table"] = meeting_table("meeting/table", zs, export)

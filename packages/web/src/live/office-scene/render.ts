@@ -41,6 +41,8 @@ import {
   PLANTS,
   PODS,
   PRINTER,
+  DECOR,
+  READING_NOOK,
   RECEPTION,
   WALL_BOARD,
   WIKI_SHELF,
@@ -51,7 +53,7 @@ import {
 } from './layout';
 import type { ReadStatus } from '../experimentReads';
 import { READ_PIN_CAP, readPins, stickySway, WALL_COLUMNS, type WallBoard } from './wallboard';
-import { DAY_ENV, deskLampOn, sunBeam, type LightEnv } from './lighting';
+import { DAY_ENV, deskLampOn, floorLampOn, sunBeam, type LightEnv } from './lighting';
 import type { Weather } from './weather';
 import { drawMovers, moversAt } from './windowSprites';
 import { DEFAULT_VIEW, drawWindowViews, type ViewSetting } from './windowView';
@@ -1860,6 +1862,15 @@ function receptionItems(
       'recep·plant',
       blitDraw(fit, rendered, 'plant/fiddle', R.plant.lx, R.plant.ly),
     ),
+    // The reading nook and the floor display pieces (lane 01M6FXBBHM), each at its own footprint depth.
+    ...(
+      [
+        ['corner/lamp', READING_NOOK.lamp],
+        ['corner/armchair', READING_NOOK.chair],
+        ['corner/table', READING_NOOK.table],
+        ...DECOR.map((d) => [d.id, d] as const),
+      ] as const
+    ).map(([id, at]) => still(depth(at.lx, at.ly), id, blitDraw(fit, rendered, id, at.lx, at.ly))),
   ];
 }
 
@@ -3858,6 +3869,15 @@ function drawInteriorLight(
       warmPool(ctx, wallPt(edge, s.tc, s.uc, fit), s.w * 0.85 * fit.scale, 0.75, '255, 210, 140', 0.34 * night);
       const lamp = wallPt(edge, s.tc, s.uc + (s.h / 2 + 10) / WALL_H, fit);
       warmPool(ctx, lamp, 7 * fit.scale, 0.6, '255, 232, 190', 0.6 * night);
+    }
+
+    // The reading nook's floor lamp (lane 01M6FXBBHM): a pool on the floor under the shade and a soft
+    // glow round the drum, so the corner reads as somewhere to sit after dark.
+    if (floorLampOn(env)) {
+      const L = READING_NOOK.lamp;
+      const foot = project(L.lx, L.ly, fit);
+      warmPool(ctx, { x: foot.x, y: foot.y }, 70 * fit.scale, 0.55, '255, 200, 128', 0.32 * night);
+      warmPool(ctx, { x: foot.x, y: foot.y - 66 * fit.scale }, 18 * fit.scale, 0.8, '255, 226, 180', 0.55 * night);
     }
 
     // Desk lamps emit, in two parts, and the order of them is the whole point. `litLamps` is the set of

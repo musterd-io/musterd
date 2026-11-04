@@ -369,6 +369,61 @@
       "scale": 3.0
     },
     {
+      "id": "corner/armchair",
+      "file": "office-art-corner-armchair.webp",
+      "w": 168,
+      "h": 204,
+      "anchor": {
+        "x": 83.7,
+        "y": 160.62
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "corner/lamp",
+      "file": "office-art-corner-lamp.webp",
+      "w": 65,
+      "h": 242,
+      "anchor": {
+        "x": 32.48,
+        "y": 223.89
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "corner/table",
+      "file": "office-art-corner-table.webp",
+      "w": 90,
+      "h": 110,
+      "anchor": {
+        "x": 45.12,
+        "y": 85.18
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "decor/bronze",
+      "file": "office-art-decor-bronze.webp",
+      "w": 93,
+      "h": 170,
+      "anchor": {
+        "x": 46.43,
+        "y": 145.24
+      },
+      "scale": 3.0
+    },
+    {
+      "id": "decor/cairn",
+      "file": "office-art-decor-cairn.webp",
+      "w": 103,
+      "h": 146,
+      "anchor": {
+        "x": 51.53,
+        "y": 117.84
+      },
+      "scale": 3.0
+    },
+    {
       "id": "desk/base",
       "file": "office-art-desk-base.webp",
       "w": 360,

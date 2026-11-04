@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeLightEnv, deskLampLevel, deskLampOn, sunBeam } from './lighting';
+import { computeLightEnv, deskLampLevel, deskLampOn, floorLampOn, sunBeam } from './lighting';
 
 /** The office lighting model: natural light follows the PST clock, overhead follows occupancy, desk lamps
  * follow the dark. These lock the behaviour the render/CSS wiring depends on. */
@@ -162,5 +162,12 @@ describe('sunBeam — the window light shafts follow the sun (lane 01M4VR902N)',
       expect(b.len).toBeLessThanOrEqual(250);
       expect(Math.abs(b.shear)).toBeLessThanOrEqual(46 * 1.4 + 1e-9);
     }
+  });
+});
+
+describe('the reading nook lamp (lane 01M6FXBBHM)', () => {
+  it('is on after dark, whoever sits there', () => {
+    expect(floorLampOn({ daylight: 0.2 })).toBe(true);
+    expect(floorLampOn({ daylight: 0.8 })).toBe(false);
   });
 });

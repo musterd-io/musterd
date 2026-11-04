@@ -634,6 +634,30 @@ export const WAIT_CHAIR = 42; // 34 → 42 (2026-10-27): an armchair is wider th
 /** A café stool's footprint (office v3-3): a round seat on a post. */
 export const STOOL = 26;
 export const END_TABLE = 26;
+/**
+ * The reading nook (office decor refresh, lane 01M6FXBBHM; nick: "By the corner bookshelf"): an
+ * armchair in the back corner beside the corner bookcase, a floor lamp behind it that glows after dark,
+ * and a side table with a book and a mug. The chair is one more leisure seat (zone `corner`). `scene.py`
+ * READING_NOOK mirrors these numbers.
+ */
+export const READING_NOOK = {
+  chair: { lx: 58, ly: 44, dir: 'S' as Dir },
+  lamp: { lx: 22, ly: 18 },
+  table: { lx: 92, ly: 58 },
+};
+/** The floor lamp's footprint and the side table's, logical units. */
+export const NOOK_LAMP = 12;
+export const NOOK_TABLE = 24;
+/**
+ * The floor display pieces (lane 01M6FXBBHM; nick: "some type of art installations or scultupers"):
+ * original, abstract, on plinths, in dead corners clear of every path. `scene.py` DECOR mirrors them.
+ */
+export const DECOR: ReadonlyArray<{ id: string; lx: number; ly: number; w: number; d: number; kind: 'sculpture' | 'installation' }> = [
+  // three bronze rings twisting on a rod, on a white plinth: the left wall, between the fiddle and reception
+  { id: 'decor/bronze', lx: 30, ly: 720, w: 16, d: 16, kind: 'sculpture' },
+  // balanced river stones on a walnut plinth: the right wall's front stretch, past the armchairs
+  { id: 'decor/cairn', lx: 876, ly: 690, w: 18, d: 18, kind: 'installation' },
+];
 export const RECEPTION = {
   // Smaller again (260x165 -> 210x125) and pulled into the corner. The rug's east edge is what sets
   // the lane: at 290 it left 15 units to the front duo's rug, which is not a walkway, it is a gap.
@@ -998,7 +1022,7 @@ export const WIKI_SHELF = 1;
 
 export interface LeisureSpot {
   /** Which programmed zone this belongs to — the read the spot is meant to give at a glance. */
-  zone: 'lounge' | 'waiting' | 'meeting' | 'reading';
+  zone: 'lounge' | 'waiting' | 'meeting' | 'reading' | 'corner';
   lx: number;
   ly: number;
   dir: Dir;
@@ -1153,8 +1177,20 @@ export const LEISURE_SPOTS: LeisureSpot[] = (() => {
       sit: 0,
     };
   });
+  // The reading nook's armchair (lane 01M6FXBBHM): one seat, a book in the lap.
+  const nf = FWD[READING_NOOK.chair.dir];
+  const corner: LeisureSpot[] = [
+    {
+      zone: 'corner' as const,
+      lx: READING_NOOK.chair.lx + nf[0] * CHAIR_SEAT_FWD,
+      ly: READING_NOOK.chair.ly + nf[1] * CHAIR_SEAT_FWD,
+      dir: READING_NOOK.chair.dir,
+      sit: 1,
+      casual: true,
+    },
+  ];
   // Interleave: round-robin the zones so consecutive indices are in different parts of the room.
-  const zones = [lounge, waiting, meeting, reading];
+  const zones = [lounge, waiting, meeting, reading, corner];
   const out: LeisureSpot[] = [];
   for (let i = 0; out.length < zones.reduce((n, z) => n + z.length, 0); i++) {
     for (const z of zones) if (z[i]) out.push(z[i]!);
