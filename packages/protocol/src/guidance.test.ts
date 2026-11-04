@@ -269,6 +269,7 @@ describe('version-bump discipline (ADR 085)', () => {
     59: 'f5384d800cf1085a', // ADR 726 follow-up: a claimed lane supplies roster status, so lane-picker and orientation no longer prompt redundant status_update sends
     60: 'dee6c5d030e4394b', // + waiting without polling names the act lane: an act-lane seat ends its turn and the host resumes it (ADR 735, lane 01M5WS00G1)
     61: 'c0955cd051fbe95d', // ADR 784: security and Dependabot findings are addressed as tier 1.
+    62: 'c06e0853e3ba0131', // ADR 801: the blocking-tier playbook says the gate holds the ask — meta.withhold, the seat-wide form, withdrawal before an answer, the 12h decline, no-human teams
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
