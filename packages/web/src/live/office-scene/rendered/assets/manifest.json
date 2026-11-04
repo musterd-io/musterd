@@ -2122,33 +2122,33 @@
     {
       "id": "wall/sign-board",
       "file": "office-art-wall-sign-board.webp",
-      "w": 145,
-      "h": 135,
+      "w": 230,
+      "h": 180,
       "anchor": {
-        "x": 74.21,
-        "y": 555.84
+        "x": 116.21,
+        "y": 565.84
       },
       "scale": 3.0
     },
     {
       "id": "wall/sign-settings",
       "file": "office-art-wall-sign-settings.webp",
-      "w": 158,
-      "h": 125,
+      "w": 214,
+      "h": 169,
       "anchor": {
-        "x": 80.68,
-        "y": 126.92
+        "x": 108.68,
+        "y": 138.92
       },
       "scale": 3.0
     },
     {
       "id": "wall/sign-wiki",
       "file": "office-art-wall-sign-wiki.webp",
-      "w": 66,
-      "h": 106,
+      "w": 98,
+      "h": 126,
       "anchor": {
-        "x": 30.65,
-        "y": 357.09
+        "x": 47.06,
+        "y": 369.17
       },
       "scale": 3.0
     },
