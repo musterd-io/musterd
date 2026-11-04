@@ -40,9 +40,11 @@ export interface PortraitCache {
 }
 
 /** The cache for a daemon whose database lives at `dbPath`. */
-export function portraitCache(dbPath: string): PortraitCache {
+export function portraitCache(dbPath: string | undefined): PortraitCache {
   const root =
-    dbPath === ':memory:' || dbPath === 'postgres' ? null : join(dirname(dbPath), 'portraits');
+    !dbPath || dbPath === ':memory:' || dbPath === 'postgres'
+      ? null
+      : join(dirname(dbPath), 'portraits');
   const indexes = new Map<string, Map<string, string>>();
   const memory = new Map<string, Buffer>();
 
@@ -105,11 +107,12 @@ export function portraitCache(dbPath: string): PortraitCache {
 const caches = new Map<string, PortraitCache>();
 
 /** One cache per database path, so every route and the roster read the same index. */
-export function portraitsOf(dbPath: string): PortraitCache {
-  let cache = caches.get(dbPath);
+export function portraitsOf(dbPath: string | undefined): PortraitCache {
+  const key = dbPath ?? ':memory:';
+  let cache = caches.get(key);
   if (!cache) {
     cache = portraitCache(dbPath);
-    caches.set(dbPath, cache);
+    caches.set(key, cache);
   }
   return cache;
 }
