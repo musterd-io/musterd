@@ -1,16 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  AppState,
-  FlatList,
-  Image,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import mark from '../../assets/mark.png';
+import { Alert, AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import type { AskEntry, AsksView } from '../native/asks';
 import { heldBody, refusalLine, waitingSubtitle } from '../native/notice';
 import { showOffer } from '../native/offer';
@@ -19,7 +9,8 @@ import { summary } from '../native/readable';
 import { Button } from '../ui/button';
 import { Backdrop, Glass } from '../ui/glass';
 import { Icon } from '../ui/icon';
-import { Halo, Rise, Squish } from '../ui/motion';
+import { Breathe, Rise, Squish } from '../ui/motion';
+import { Notice, SectionLabel } from '../ui/notice';
 import { ago, Seat } from '../ui/seat';
 import { font, radius, space, usePalette } from '../ui/theme';
 
@@ -231,35 +222,27 @@ export default function AsksScreen() {
   const asks = paired ? (view?.asks ?? []) : [];
   const unfetched = paired ? (view?.rest.length ?? 0) : 0;
   const team = pin?.team ?? null;
-  const headline = !pin
-    ? 'Pair this phone'
-    : !paired
-      ? 'Almost there'
-      : asks.length === 0
-        ? 'All clear'
-        : unfetched > 0
-          ? `${asks.length}+ asks need you`
-          : asks.length === 1
-            ? '1 ask needs you'
-            : `${asks.length} asks need you`;
+  const count = unfetched > 0 ? `${asks.length}+` : asks.length;
   const status: { tone: 'on' | 'wait' | 'off'; text: string } = paired
-    ? { tone: 'on', text: `Paired with ${team}` }
+    ? { tone: 'on', text: team ?? 'Paired' }
     : pin
       ? { tone: 'wait', text: 'Waiting for approval' }
       : { tone: 'off', text: 'Not paired' };
   const dot = { on: p.success, wait: p.accent, off: p.placeholder }[status.tone];
 
+  // No headline (nick, 2026-11-03: "No big text, heros, headers"): the wordmark is the title, a row
+  // of pills says where this phone stands, and notes are compact cards.
   const header = (
     <View style={styles.header}>
-      <Rise>
-        <Text style={[styles.greeting, { color: p.muted }]}>{greeting(new Date())}</Text>
-        <Text accessibilityRole="header" style={[styles.headline, { color: p.text }]}>
-          {headline}
-        </Text>
-      </Rise>
-      <Rise index={1} style={styles.pills}>
-        <View style={[styles.pill, { backgroundColor: p.surface, borderColor: p.border }]}>
-          <View style={[styles.pillDot, { backgroundColor: dot }]} />
+      <Rise style={styles.pills}>
+        <View
+          accessible
+          accessibilityLabel={paired ? `Paired with ${team}` : status.text}
+          style={[styles.pill, { backgroundColor: p.surface, borderColor: p.border }]}
+        >
+          <Breathe>
+            <View style={[styles.pillDot, { backgroundColor: dot }]} />
+          </Breathe>
           <Text style={[styles.pillText, { color: p.text }]}>{status.text}</Text>
         </View>
         {paired ? (
@@ -271,120 +254,124 @@ export default function AsksScreen() {
             onPress={() => router.push('/seats')}
             style={[styles.pill, { backgroundColor: p.surface, borderColor: p.border }]}
           >
-            <Icon name="person.2" color={p.accentText} size={13} />
+            <Icon name="person.2.fill" color={p.accentText} size={12} />
             <Text style={[styles.pillText, { color: p.accentText }]}>Seats</Text>
+            <Icon name="chevron.right" color={p.placeholder} size={10} />
           </Squish>
         ) : null}
       </Rise>
       {note ? (
-        <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
-          <Text style={[styles.bannerText, { color: p.text }]}>{note}</Text>
+        <Rise>
+          <Notice icon="checkmark.circle.fill" title={note} />
         </Rise>
       ) : null}
       {paired && offerKey ? (
         <Rise>
-          <Glass style={styles.offer}>
-            <Text style={[styles.bannerTitle, { color: p.text }]}>
-              Answer questions from the lock screen
-            </Text>
-            <Text style={[styles.bannerText, { color: p.muted }]}>
-              Turn it on once with Face ID. Then tap an answer right on the notification.
-            </Text>
-            <Button label="Turn on" icon="faceid" onPress={() => void turnOnKey()} />
-            <Button
-              label="Not now"
-              kind="quiet"
-              onPress={() => {
-                keyDeclined.current = true;
-                setOfferKey(false);
-              }}
-            />
-          </Glass>
+          <Notice
+            icon="faceid"
+            tone="warm"
+            title="Answer from the lock screen"
+            body="Turn it on once with Face ID, then tap an answer right on the notification."
+          >
+            <View style={styles.actions}>
+              <View style={styles.grow}>
+                <Button label="Turn on" icon="faceid" onPress={() => void turnOnKey()} />
+              </View>
+              <Button
+                label="Not now"
+                kind="quiet"
+                onPress={() => {
+                  keyDeclined.current = true;
+                  setOfferKey(false);
+                }}
+              />
+            </View>
+          </Notice>
         </Rise>
       ) : null}
       {outgoing > 0 ? (
-        <Rise style={[styles.banner, { backgroundColor: p.tint }]}>
-          <Text style={[styles.bannerTitle, { color: p.accentText }]}>
-            {outgoing === 1
-              ? '1 answer is still on its way'
-              : `${outgoing} answers are still on their way`}
-          </Text>
-          <Text style={[styles.bannerText, { color: p.text }]}>
-            Your team hasn’t got it yet. musterd sends it again each time you open the app.
-          </Text>
+        <Rise>
+          <Notice
+            icon="paperplane.fill"
+            tone="warm"
+            title={outgoing === 1 ? '1 answer on its way' : `${outgoing} answers on their way`}
+            body="Your team hasn’t got it yet. It goes again each time you open the app."
+          />
         </Rise>
       ) : null}
       {view && view.unreachable > 0 ? (
-        <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
-          <Text style={[styles.bannerText, { color: p.text }]}>
-            {view.unreachable === 1
-              ? '1 ask couldn’t load. Pull down to try again.'
-              : `${view.unreachable} asks couldn’t load. Pull down to try again.`}
-          </Text>
+        <Rise>
+          <Notice
+            icon="arrow.clockwise"
+            title={
+              view.unreachable === 1
+                ? '1 ask couldn’t load'
+                : `${view.unreachable} asks couldn’t load`
+            }
+            body="Pull down to try again."
+          />
         </Rise>
       ) : null}
       {view?.held ? (
-        <Rise style={[styles.banner, { backgroundColor: p.tint }]}>
-          <Text style={[styles.bannerTitle, { color: p.accentText }]}>
-            {heldBody(view.held.count)}
-          </Text>
-          <Text style={[styles.bannerText, { color: p.text }]}>
-            They come here as the hour allows. /live has them now.
-          </Text>
+        <Rise>
+          <Notice
+            icon="moon.zzz.fill"
+            tone="warm"
+            title={heldBody(view.held.count)}
+            body="They come here as the hour allows. /live has them now."
+          />
         </Rise>
       ) : null}
+      {paired && asks.length > 0 ? <SectionLabel label="Needs you" count={count} /> : null}
     </View>
   );
 
   const empty = paired ? (
-    <View style={styles.calm}>
-      <Rise index={2}>
-        <Halo color={p.tint}>
-          <Image source={mark} style={styles.mark} accessibilityIgnoresInvertColors />
-        </Halo>
-      </Rise>
-      <Rise index={3}>
-        <Text style={[styles.calmText, { color: p.muted }]}>
-          New asks land here while you’re away from your desk.
-        </Text>
-      </Rise>
-      <Rise index={4}>
+    <Rise index={1}>
+      <Glass style={styles.calm}>
+        <View style={[styles.calmTile, { backgroundColor: p.tint }]}>
+          <Icon name="checkmark.seal.fill" color={p.accentText} size={20} bounce />
+        </View>
+        <View style={styles.words}>
+          <Text style={[styles.calmTitle, { color: p.text }]}>All clear</Text>
+          <Text style={[styles.calmText, { color: p.muted }]}>
+            New asks land here while you’re away.
+          </Text>
+        </View>
         <Squish
           accessibilityRole="button"
           accessibilityLabel="Check now"
           onPress={() => void refresh(true)}
-          style={styles.textButton}
+          style={[styles.check, { backgroundColor: p.raised }]}
         >
-          <Text style={[styles.textButtonText, { color: p.accentText }]}>
-            {loading ? 'Checking…' : 'Check now'}
+          <Icon name="arrow.clockwise" color={p.text} size={13} />
+          <Text style={[styles.checkText, { color: p.text }]}>
+            {loading ? 'Checking' : 'Check'}
           </Text>
         </Squish>
-      </Rise>
-    </View>
+      </Glass>
+    </Rise>
   ) : (
-    <Rise index={2}>
+    <Rise index={1}>
       <Glass style={styles.start}>
-        {['Show the code on your computer', 'Scan it here', 'Approve with your passkey'].map(
-          (step, i) => (
-            <View key={step} style={styles.step}>
-              <View style={[styles.stepNumber, { backgroundColor: p.tint }]}>
-                <Text style={[styles.stepNumberText, { color: p.accentText }]}>{i + 1}</Text>
+        {STEPS.map((step, i) => (
+          <View key={step.text} style={styles.step}>
+            <View style={styles.stepRail}>
+              <View style={[styles.stepTile, { backgroundColor: p.tint }]}>
+                <Icon name={step.icon} color={p.accentText} size={15} />
               </View>
-              <Text style={[styles.stepText, { color: p.text }]}>{step}</Text>
+              {i < STEPS.length - 1 ? (
+                <View style={[styles.stepLine, { backgroundColor: p.border }]} />
+              ) : null}
             </View>
-          ),
-        )}
-        <Squish
-          accessibilityRole="button"
-          accessibilityLabel={pin ? 'Finish pairing' : 'Scan pairing code'}
+            <Text style={[styles.stepText, { color: p.text }]}>{step.text}</Text>
+          </View>
+        ))}
+        <Button
+          label={pin ? 'Finish pairing' : 'Scan pairing code'}
+          icon="qrcode.viewfinder"
           onPress={() => router.push('/pair')}
-          style={[styles.primary, { backgroundColor: p.accent }]}
-        >
-          <Icon name="qrcode.viewfinder" color={p.onAccent} size={19} />
-          <Text style={[styles.primaryText, { color: p.onAccent }]}>
-            {pin ? 'Finish pairing' : 'Scan pairing code'}
-          </Text>
-        </Squish>
+        />
       </Glass>
     </Rise>
   );
@@ -449,13 +436,11 @@ export default function AsksScreen() {
   );
 }
 
-function greeting(now: Date): string {
-  const hour = now.getHours();
-  if (hour < 5) return 'Up late';
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
+const STEPS = [
+  { icon: 'desktopcomputer', text: 'Show the code on your computer' },
+  { icon: 'qrcode.viewfinder', text: 'Scan it here' },
+  { icon: 'person.badge.key.fill', text: 'Approve with your passkey' },
+] as const;
 
 function AskRow({ entry }: { entry: AskEntry }) {
   const p = usePalette();
@@ -487,28 +472,32 @@ function AskRow({ entry }: { entry: AskEntry }) {
     >
       <Glass style={styles.row}>
         <View style={styles.rowTop}>
-          <Seat name={delivery.ask.from} agent={agent} />
-          <View style={styles.rowWho}>
+          <Seat name={delivery.ask.from} agent={agent} size={30} />
+          <Text numberOfLines={1} style={styles.rowWho}>
             <Text style={[styles.from, { color: p.text }]}>{delivery.ask.from}</Text>
-            <Text style={[styles.meta, { color: p.muted }]}>
-              {agent ? 'agent' : 'person'} · {ago(delivery.ask.ts, Date.now())}
+            <Text style={[styles.meta, { color: p.placeholder }]}>
+              {'  '}
+              {ago(delivery.ask.ts, Date.now())}
             </Text>
-          </View>
+          </Text>
           {listed ? (
             <View style={[styles.chip, { backgroundColor: p.tint }]}>
-              <Icon name="faceid" color={p.accentText} size={12} />
+              <Icon name="faceid" color={p.accentText} size={11} />
               <Text style={[styles.chipText, { color: p.accentText }]}>Face ID</Text>
             </View>
           ) : question ? (
             <View style={[styles.chip, { backgroundColor: p.raised }]}>
-              <Icon name="questionmark.bubble" color={p.text} size={12} />
-              <Text style={[styles.chipText, { color: p.text }]}>Question</Text>
+              <Icon name="questionmark.bubble.fill" color={p.muted} size={11} />
+              <Text style={[styles.chipText, { color: p.muted }]}>Question</Text>
             </View>
           ) : null}
         </View>
-        <Text numberOfLines={3} style={[styles.askText, { color: p.text }]}>
-          {headline}
-        </Text>
+        <View style={styles.rowBody}>
+          <Text numberOfLines={2} style={[styles.askText, { color: p.text }]}>
+            {headline}
+          </Text>
+          <Icon name="chevron.right" color={p.placeholder} size={12} />
+        </View>
         {waiting ? (
           <View style={styles.waitingRow}>
             <View style={[styles.waitingDot, { backgroundColor: p.accent }]} />
@@ -522,77 +511,80 @@ function AskRow({ entry }: { entry: AskEntry }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  footer: { gap: space.md, alignItems: 'center' },
-  list: { padding: space.lg, paddingTop: space.md, gap: space.md, paddingBottom: space.xl * 2 },
-  header: { gap: space.md, marginBottom: space.sm },
-  greeting: { fontFamily: font.medium, fontSize: 15 },
-  headline: { fontFamily: font.display, fontSize: 32, lineHeight: 38, letterSpacing: -0.8 },
+  footer: { gap: space.sm, alignItems: 'center', marginTop: space.md },
+  list: { padding: space.lg, paddingTop: space.sm, gap: space.sm + 2, paddingBottom: space.xl * 2 },
+  header: { gap: space.sm + 2, marginBottom: space.xs },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   pill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
+    gap: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.pill,
     paddingHorizontal: space.md,
-    paddingVertical: 6,
     minHeight: 32,
   },
-  pillDot: { width: 8, height: 8, borderRadius: radius.pill },
+  pillDot: { width: 7, height: 7, borderRadius: radius.pill },
   pillText: { fontFamily: font.medium, fontSize: 13 },
-  banner: { borderRadius: radius.md, padding: space.lg, gap: space.xs },
-  offer: { padding: space.lg, gap: space.sm },
-  bannerTitle: { fontFamily: font.bold, fontSize: 15 },
-  bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
-  calm: { alignItems: 'center', gap: space.md, paddingTop: space.xl * 2 },
-  mark: { width: 88, height: 88, marginVertical: space.lg },
-  calmText: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  textButton: { minHeight: 44, paddingHorizontal: space.lg, justifyContent: 'center' },
-  textButtonText: { fontFamily: font.semibold, fontSize: 15 },
-  start: { padding: space.lg, gap: space.lg },
-  step: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  stepNumber: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepNumberText: { fontFamily: font.bold, fontSize: 14 },
-  stepText: { flex: 1, fontFamily: font.medium, fontSize: 16, lineHeight: 22 },
-  primary: {
-    flexDirection: 'row',
-    gap: space.sm,
-    minHeight: 52,
+  actions: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  grow: { flex: 1 },
+  words: { flex: 1, gap: 1 },
+  calm: { padding: space.md, flexDirection: 'row', alignItems: 'center', gap: space.md },
+  calmTile: {
+    width: 40,
+    height: 40,
     borderRadius: radius.md,
-    paddingHorizontal: space.xl,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryText: { fontFamily: font.bold, fontSize: 17 },
-  row: { padding: space.lg, gap: space.md },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  rowWho: { flex: 1, gap: 1 },
-  from: { fontSize: 15, fontFamily: font.semibold },
-  meta: { fontFamily: font.regular, fontSize: 13 },
+  calmTitle: { fontFamily: font.semibold, fontSize: 15 },
+  calmText: { fontFamily: font.regular, fontSize: 13, lineHeight: 18 },
+  check: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    minHeight: 34,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+  },
+  checkText: { fontFamily: font.semibold, fontSize: 13 },
+  textButton: { minHeight: 44, paddingHorizontal: space.lg, justifyContent: 'center' },
+  textButtonText: { fontFamily: font.medium, fontSize: 14 },
+  start: { padding: space.lg, gap: space.md },
+  step: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
+  stepRail: { alignItems: 'center', width: 30 },
+  stepTile: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepLine: { width: 2, height: 14, borderRadius: 1, marginTop: 4 },
+  stepText: { flex: 1, fontFamily: font.medium, fontSize: 15, lineHeight: 30 },
+  row: { padding: space.md, gap: space.sm },
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm + 2 },
+  rowWho: { flex: 1 },
+  from: { fontSize: 14, fontFamily: font.semibold },
+  meta: { fontFamily: font.regular, fontSize: 12 },
+  rowBody: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderRadius: radius.pill,
-    paddingHorizontal: space.sm + 2,
+    paddingHorizontal: space.sm,
     paddingVertical: 3,
   },
-  chipText: { fontSize: 12, fontFamily: font.bold },
-  askText: { fontSize: 17, lineHeight: 24, fontFamily: font.medium },
-  waitingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  chipText: { fontSize: 11, fontFamily: font.semibold },
+  askText: { flex: 1, fontSize: 15, lineHeight: 21, fontFamily: font.medium },
+  waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   waitingDot: { width: 6, height: 6, borderRadius: radius.pill },
   diagnostics: {
     fontFamily: font.regular,
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
-    marginTop: space.lg,
   },
 });

@@ -1,8 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import mark from '../../assets/mark.png';
+import { AppState, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { PairOutcome } from '../native/pair';
 import {
   daemonFingerprint,
@@ -15,7 +14,7 @@ import { Backdrop, Glass } from '../ui/glass';
 import { success } from '../ui/haptics';
 import { Icon } from '../ui/icon';
 import { Moment } from '../ui/moment';
-import { Breathe, Halo, Pop, Rise } from '../ui/motion';
+import { Breathe, Rise } from '../ui/motion';
 import { font, radius, space, usePalette } from '../ui/theme';
 
 /**
@@ -168,61 +167,71 @@ export default function PairScreen() {
 
   if (phase.name === 'paired') {
     return (
-      <View style={[styles.screen, { backgroundColor: p.bg }]}>
-        <Backdrop />
-        <ScrollView contentContainerStyle={styles.center}>
-          <Pop style={styles.hero}>
-            <Halo color={p.tint}>
-              <Image source={mark} style={styles.mark} accessibilityIgnoresInvertColors />
-            </Halo>
-          </Pop>
-          <Rise index={1}>
-            <Text
-              accessibilityRole="header"
-              style={[styles.headline, styles.centered, { color: p.text }]}
-            >
-              Paired with {phase.team}
-            </Text>
-          </Rise>
-          <Rise index={2}>
-            <Text style={[styles.copy, styles.centered, { color: p.muted }]}>
-              Asks reach you here while you’re away from your desk.
-            </Text>
-          </Rise>
-          {phase.fingerprint ? (
-            <Rise index={3} style={styles.stretch}>
-              <Fingerprint value={phase.fingerprint} label="Approved by the daemon" />
-            </Rise>
-          ) : null}
-          <Rise index={4} style={styles.stretch}>
-            <Button label="Done" onPress={() => router.back()} />
-          </Rise>
-        </ScrollView>
-      </View>
+      <Moment
+        icon="checkmark"
+        tone="done"
+        title={`Paired with ${phase.team}`}
+        copy="Asks reach you here while you’re away from your desk."
+      >
+        {phase.fingerprint ? (
+          <Fingerprint value={phase.fingerprint} label="Approved by the daemon" />
+        ) : null}
+        <Button label="Done" onPress={() => router.back()} />
+      </Moment>
     );
   }
 
   const head =
     phase.name === 'scan'
-      ? { title: 'Scan the code', copy: 'It’s on your computer, under Pair a phone.' }
+      ? { title: 'Scan the code', copy: 'It’s on your computer, under Pair a phone.', step: 0 }
       : phase.name === 'confirm'
         ? {
             title: 'Check the match',
             copy: `Same as your computer shows? Team ${phase.scanned.qr.team}.`,
+            step: 1,
           }
         : {
             title: 'Approve on your computer',
             copy: 'Use a passkey you already have. This phone can’t approve itself.',
+            step: 2,
           };
 
   return (
     <View style={[styles.screen, { backgroundColor: p.bg }]}>
       <Backdrop />
-      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.page}
+        keyboardShouldPersistTaps="handled"
+      >
         <Rise style={styles.head}>
-          <Text accessibilityRole="header" style={[styles.headline, { color: p.text }]}>
-            {head.title}
-          </Text>
+          <View
+            style={styles.stepper}
+            accessible
+            accessibilityLabel={`Step ${head.step + 1} of 3: ${head.title}`}
+          >
+            {(['Scan', 'Check', 'Approve'] as const).map((name, i) => {
+              const on = i <= head.step;
+              return (
+                <View key={name} style={styles.stepItem}>
+                  <View style={[styles.stepDot, { backgroundColor: on ? p.accent : p.border }]}>
+                    {i < head.step ? <Icon name="checkmark" color={p.onAccent} size={9} /> : null}
+                  </View>
+                  <Text style={[styles.stepName, { color: i === head.step ? p.text : p.muted }]}>
+                    {name}
+                  </Text>
+                  {i < 2 ? (
+                    <View
+                      style={[
+                        styles.stepLine,
+                        { backgroundColor: i < head.step ? p.accent : p.border },
+                      ]}
+                    />
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
           <Text style={[styles.copy, { color: p.muted }]}>{head.copy}</Text>
         </Rise>
 
@@ -411,23 +420,23 @@ const CORNERS = [
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   page: { padding: space.lg, paddingTop: space.md, gap: space.lg, paddingBottom: space.xl * 2 },
-  center: {
-    flexGrow: 1,
+  head: { gap: space.sm },
+  stepper: { flexDirection: 'row', alignItems: 'center' },
+  stepItem: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  stepDot: {
+    width: 16,
+    height: 16,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: space.xl,
-    gap: space.md,
   },
-  head: { gap: space.xs },
-  headline: { fontFamily: font.display, fontSize: 30, lineHeight: 36, letterSpacing: -0.7 },
+  stepName: { fontFamily: font.semibold, fontSize: 13 },
+  stepLine: { flex: 1, height: 2, borderRadius: 1, marginHorizontal: 4 },
   copy: { fontFamily: font.regular, fontSize: 15, lineHeight: 22 },
   small: { fontFamily: font.regular, fontSize: 13, lineHeight: 18 },
   centered: { textAlign: 'center' },
-  stretch: { alignSelf: 'stretch' },
-  hero: { alignItems: 'center', marginVertical: space.xl },
-  mark: { width: 88, height: 88 },
   actions: { gap: space.sm },
-  print: { padding: space.lg, gap: space.sm, alignItems: 'center' },
+  print: { padding: space.md, gap: space.xs, alignItems: 'center' },
   label: {
     fontFamily: font.semibold,
     fontSize: 12,
@@ -436,8 +445,8 @@ const styles = StyleSheet.create({
   },
   fingerprint: {
     fontFamily: font.medium,
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 16,
+    lineHeight: 22,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
     letterSpacing: 1,

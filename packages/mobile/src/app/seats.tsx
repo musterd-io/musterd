@@ -6,6 +6,7 @@ import type { PairingPin } from '../native/pairingPin';
 import type { QuickAction, QuickOutcome, Roster, RosterSeat } from '../native/quickAction';
 import { Backdrop, Glass } from '../ui/glass';
 import { Rise } from '../ui/motion';
+import { Notice, SectionLabel } from '../ui/notice';
 import { QuickActions } from '../ui/quickActions';
 import { Seat } from '../ui/seat';
 import { font, radius, space, usePalette } from '../ui/theme';
@@ -83,19 +84,21 @@ export default function SeatsScreen() {
         keyExtractor={(s) => s.seat}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Rise>
-              <Text accessibilityRole="header" style={[styles.headline, { color: p.muted }]}>
-                {roster ? `${online} of ${seats.length} online` : 'Seats'}
-              </Text>
-            </Rise>
             {miss && !loading ? (
-              <Rise style={[styles.banner, { backgroundColor: p.raised }]}>
-                <Text style={[styles.bannerText, { color: p.text }]}>
-                  {miss === 'unreachable'
-                    ? 'Couldn’t reach your team. Pull down to try again.'
-                    : 'Your team didn’t send its seats. Pull down to try again.'}
-                </Text>
+              <Rise>
+                <Notice
+                  icon="wifi.exclamationmark"
+                  title={
+                    miss === 'unreachable'
+                      ? 'Couldn’t reach your team'
+                      : 'Your team didn’t send its seats'
+                  }
+                  body="Pull down to try again."
+                />
               </Rise>
+            ) : null}
+            {roster && seats.length > 0 ? (
+              <SectionLabel label="Online" count={`${online}/${seats.length}`} />
             ) : null}
           </View>
         }
@@ -201,10 +204,7 @@ function SeatCard({ pin, seat }: { pin: PairingPin; seat: RosterSeat }) {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { padding: space.lg, paddingTop: space.md, gap: space.sm, paddingBottom: space.xl * 2 },
-  header: { gap: space.md, marginBottom: space.sm },
-  headline: { fontFamily: font.semibold, fontSize: 13, letterSpacing: 0.2 },
-  banner: { borderRadius: radius.md, padding: space.lg },
-  bannerText: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
+  header: { gap: space.sm + 2, marginBottom: space.xs },
   empty: { fontFamily: font.regular, fontSize: 15, textAlign: 'center', marginTop: space.xl },
   card: { paddingVertical: space.sm + 2, paddingHorizontal: space.md, gap: space.sm },
   top: { flexDirection: 'row', alignItems: 'center', gap: space.md },

@@ -26,7 +26,11 @@ export default function RootLayout() {
         screenOptions={{
           headerTintColor: p.accentText,
           headerTitleStyle: { color: p.text, fontFamily: font.semibold },
-          headerStyle: { backgroundColor: p.bg },
+          // Transparent on every screen, not only home: a solid bar hid each screen's warm glow
+          // under a flat white band (nick on build 47: "so generic"). The scroll views inset
+          // themselves under it (contentInsetAdjustmentBehavior), so nothing starts behind it.
+          headerTransparent: true,
+          headerStyle: { backgroundColor: 'transparent' },
           headerShadowVisible: false,
           contentStyle: { backgroundColor: p.bg },
         }}
@@ -35,9 +39,6 @@ export default function RootLayout() {
           name="index"
           options={{
             title: 'Asks',
-            // Transparent, so the home screen's warm glow runs up behind the wordmark.
-            headerTransparent: true,
-            headerStyle: { backgroundColor: 'transparent' },
             // The nameplate wordmark (ADR 704), rendered from docs/design/assets/wordmark.svg.
             headerTitle: () => (
               <Image

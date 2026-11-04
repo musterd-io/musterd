@@ -1,15 +1,16 @@
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Backdrop } from './glass';
+import { Backdrop, Glass } from './glass';
 import { Icon } from './icon';
 import { Breathe, Pop, Rise } from './motion';
 import { font, radius, space, usePalette } from './theme';
 
 /**
- * A whole screen given to one moment: something on its way, done, or stopped. A symbol in a
- * round badge (or the breathing dots while it waits), a short title, one line under it, and the
- * buttons. `tone` colours the badge: `done` is mustard, `stop` is the quiet grey of a dead end.
+ * A screen given to one moment: something on its way, done, or stopped. Not a hero (nick,
+ * 2026-11-03: "No big text, heros, headers"): one glass card near the top, a symbol in a small
+ * tile (or the breathing dots while it waits), a short title, a line under it, and the buttons.
+ * `tone` colours the tile: `done` is mustard, `stop` is the quiet grey of a dead end.
  */
 export function Moment({
   icon,
@@ -29,63 +30,56 @@ export function Moment({
   return (
     <View style={[styles.screen, { backgroundColor: p.bg }]}>
       <Backdrop />
-      {icon ? (
-        <Pop style={[styles.badge, { backgroundColor: done ? p.accent : p.raised }]}>
-          <Icon name={icon} color={done ? p.onAccent : p.muted} size={30} bounce={done} />
-        </Pop>
-      ) : (
-        <View style={styles.dots}>
-          {[0, 1, 2].map((i) => (
-            <Breathe key={i} delay={i * 220}>
-              <View style={[styles.dot, { backgroundColor: p.accent }]} />
-            </Breathe>
-          ))}
-        </View>
-      )}
-      <Rise index={1}>
-        <Text accessibilityRole="header" style={[styles.title, { color: p.text }]}>
-          {title}
-        </Text>
-      </Rise>
-      {copy ? (
-        <Rise index={2}>
-          <Text style={[styles.copy, { color: p.muted }]}>{copy}</Text>
-        </Rise>
-      ) : null}
-      {children ? (
-        <Rise index={3} style={styles.actions}>
-          {children}
-        </Rise>
-      ) : null}
+      <Pop style={styles.wrap}>
+        <Glass style={styles.card}>
+          <View style={styles.row}>
+            {icon ? (
+              <View style={[styles.tile, { backgroundColor: done ? p.accent : p.raised }]}>
+                <Icon name={icon} color={done ? p.onAccent : p.muted} size={20} bounce={done} />
+              </View>
+            ) : (
+              <View style={[styles.tile, styles.dots, { backgroundColor: p.tint }]}>
+                {[0, 1, 2].map((i) => (
+                  <Breathe key={i} delay={i * 220}>
+                    <View style={[styles.dot, { backgroundColor: p.accent }]} />
+                  </Breathe>
+                ))}
+              </View>
+            )}
+            <View style={styles.words}>
+              <Text accessibilityRole="header" style={[styles.title, { color: p.text }]}>
+                {title}
+              </Text>
+              {copy ? <Text style={[styles.copy, { color: p.muted }]}>{copy}</Text> : null}
+            </View>
+          </View>
+          {children ? (
+            <Rise index={1} style={styles.actions}>
+              {children}
+            </Rise>
+          ) : null}
+        </Glass>
+      </Pop>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
+  screen: { flex: 1, padding: space.lg, paddingTop: space.xl * 3 },
+  wrap: { alignSelf: 'stretch' },
+  card: { padding: space.lg, gap: space.lg },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  tile: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: space.xl,
-    gap: space.md,
   },
-  badge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: space.sm,
-  },
-  dots: { flexDirection: 'row', gap: space.sm, marginBottom: space.sm },
-  dot: { width: 10, height: 10, borderRadius: radius.pill },
-  title: { fontFamily: font.bold, fontSize: 24, letterSpacing: -0.4, textAlign: 'center' },
-  copy: {
-    fontFamily: font.regular,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    maxWidth: 320,
-  },
-  actions: { alignSelf: 'stretch', gap: space.sm, marginTop: space.md },
+  dots: { flexDirection: 'row', gap: 4 },
+  dot: { width: 6, height: 6, borderRadius: radius.pill },
+  words: { flex: 1, gap: 2 },
+  title: { fontFamily: font.semibold, fontSize: 17, lineHeight: 22 },
+  copy: { fontFamily: font.regular, fontSize: 14, lineHeight: 20 },
+  actions: { gap: space.sm },
 });
