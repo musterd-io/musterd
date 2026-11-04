@@ -1244,7 +1244,8 @@ answer's text.
 - A server serves the binding a sealed `roster {ts, seats: [{seat, online, wakeable, lane}]}` when
   the phone fetches the ref `roster-<ts>` (`ts` at or before now, inside 10 minutes); at most 64
   seats, `lane` the seat's one live lane or null. A server MUST NOT push a roster (ADR 791,
-  amended 2026-11-03).
+  amended 2026-11-03). A seat MAY carry `portrait` (ADR 797) and `waiting {to, since}`: its oldest
+  open question, `to` null for a question to the team, omitted when it has none (ADR 806).
 
 ## A.34 Seats on shift (unreleased — ADR 792)
 

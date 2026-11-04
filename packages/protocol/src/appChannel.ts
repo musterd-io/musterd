@@ -297,6 +297,8 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
           lane: z.object({ id: z.string(), title: z.string() }).nullable(),
           /** ADR 797: the seat's portrait digest; the phone fetches the PNG by `portraitRef`. */
           portrait: PortraitDigestSchema.nullable().optional(),
+          /** ADR 806: the seat's oldest open question — to whom (null: the team) and since when. */
+          waiting: z.object({ to: z.string().nullable(), since: z.number().int() }).optional(),
         }),
       )
       .max(APP_ROSTER_MAX),
