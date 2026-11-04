@@ -1,7 +1,7 @@
 import { PROTOCOL_VERSION, type Envelope } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import type { HttpClient } from '../client.js';
-import { pendingActionSummary } from './helpers.js';
+import { boundedPendingActionSummary, NUDGE_INBOX_LIMIT, pendingActionSummary } from './helpers.js';
 
 function env(partial: Partial<Envelope>): Envelope {
   return {
@@ -86,5 +86,59 @@ describe('pendingActionSummary walks every unread page (the banner counts the to
     expect(
       await pendingActionSummary({ inbox } as unknown as HttpClient, 'dawn', 'nick'),
     ).toBeUndefined();
+  });
+});
+
+/**
+ * Lane 01M6JG3BCV: the nudge rides most commands, and the full walk cost a seat with ~22k unread
+ * ~114 /inbox requests per command (8,011 in 8 h on the laptop hub, 2026-11-03). The nudge reads
+ * ONE bounded page instead, which carries the daemon's pinned obligations, and says `N+` when
+ * unread rows were left uncarried — a floor, never a silent under-count.
+ */
+describe('boundedPendingActionSummary reads one page and marks a floor', () => {
+  it('makes exactly one bounded peek read, even when the page is truncated', async () => {
+    const inbox = vi.fn<HttpClient['inbox']>().mockResolvedValue({
+      messages: [env({ id: 'a', ts: 1_000, received_at: 1_000 })],
+      cursor: { last_read_ts: 0 },
+      truncated: true,
+      unread_remaining: 21_900,
+    });
+    const http = { inbox } as unknown as HttpClient;
+
+    const pending = await boundedPendingActionSummary(http, 'dawn', 'nick');
+
+    expect(inbox).toHaveBeenCalledTimes(1);
+    expect(inbox).toHaveBeenCalledWith('dawn', {
+      unread: true,
+      limit: NUDGE_INBOX_LIMIT,
+      peek: true,
+    });
+    expect(pending).toMatchObject({ count: 1, atLeast: true });
+  });
+
+  it('is exact when nothing unread was left uncarried', async () => {
+    const inbox = vi.fn<HttpClient['inbox']>().mockResolvedValue({
+      messages: [
+        env({ id: 'a', ts: 1_000, received_at: 1_000 }),
+        env({ id: 'b', ts: 2_000, received_at: 2_000, act: 'ask' }),
+      ],
+      cursor: { last_read_ts: 0 },
+      answered: ['b'],
+    });
+    const http = { inbox } as unknown as HttpClient;
+
+    const pending = await boundedPendingActionSummary(http, 'dawn', 'nick');
+
+    expect(pending).toMatchObject({ count: 1, atLeast: false, since: 1_000 });
+  });
+
+  it('returns undefined when nothing waits', async () => {
+    const inbox = vi.fn<HttpClient['inbox']>().mockResolvedValue({
+      messages: [env({ id: 'a', act: 'status_update', to: { kind: 'team' } })],
+      cursor: { last_read_ts: 0 },
+      unread_remaining: 40,
+    });
+    const http = { inbox } as unknown as HttpClient;
+    expect(await boundedPendingActionSummary(http, 'dawn', 'nick')).toBeUndefined();
   });
 });

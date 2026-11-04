@@ -466,6 +466,38 @@ export async function pendingActionSummary(
   return { count: waiting.length, since, waiting };
 }
 
+/** Unread rows the nudge's one read carries, beside the daemon's pinned obligations (≤ 50). */
+export const NUDGE_INBOX_LIMIT = 100;
+
+/**
+ * The reachability nudge's count, from ONE bounded read (lane 01M6JG3BCV). The nudge rides most
+ * commands, and {@link pendingActionSummary}'s full walk cost a seat with ~22k unread ~114 /inbox
+ * requests per command — 8,011 in 8 h on the laptop hub, 2026-11-03. A read that names a `limit`
+ * carries the newest rows plus the daemon's pinned obligation set (ADR 429), with discharge folded
+ * server-side, which is the statusline's read (session.ts). When unread rows were left uncarried,
+ * the count is a floor and `atLeast` says so: the banner reads `N+`, never a smaller number
+ * presented as the total (the 2026-09-03 "8 of 120" bug). `status`, `inbox` and `nudge` keep the
+ * full walk, because ADR 770 has them show one set.
+ */
+export async function boundedPendingActionSummary(
+  http: HttpClient,
+  team: string,
+  me: string,
+): Promise<{ count: number; since: number; atLeast: boolean } | undefined> {
+  const viewer = await viewerFlags(http, team, me);
+  const page = await http.inbox(team, { unread: true, limit: NUDGE_INBOX_LIMIT, peek: true });
+  const waiting = openActionNeeded(
+    page.messages,
+    me,
+    new Set(page.answered ?? []),
+    new Set(dischargedIds(page)),
+    viewer,
+  );
+  if (waiting.length === 0) return undefined;
+  const since = waiting.reduce((min, m) => Math.min(min, m.ts), Infinity);
+  return { count: waiting.length, since, atLeast: (page.unread_remaining ?? 0) > 0 };
+}
+
 /**
  * Commands that carry no acting identity, or already surface the pending acts themselves, so the
  * post-command reachability nudge (ADR 046) is skipped for them: `inbox` renders the acts and
@@ -522,13 +554,19 @@ export async function reachabilityNudge(
     if (!explicit || !identity) return '';
     let timer: NodeJS.Timeout | undefined;
     const pending = await Promise.race([
-      pendingActionSummary(http, team, identity.name),
+      boundedPendingActionSummary(http, team, identity.name),
       new Promise<undefined>((resolve) => {
         timer = setTimeout(() => resolve(undefined), budgetMs);
       }),
     ]).finally(() => clearTimeout(timer));
     if (!pending) return '';
-    return renderReachabilityNudge(pending.count, pending.since, identity.name);
+    return renderReachabilityNudge(
+      pending.count,
+      pending.since,
+      identity.name,
+      Date.now(),
+      pending.atLeast,
+    );
   } catch {
     return '';
   }

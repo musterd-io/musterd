@@ -704,11 +704,13 @@ export function renderReachabilityNudge(
   sinceTs: number,
   me: string,
   now = Date.now(),
+  /** The count is a floor: unread rows were left uncarried, so more may wait (lane 01M6JG3BCV). */
+  atLeast = false,
 ): string {
   if (count <= 0) return '';
-  const noun = count === 1 ? 'act' : 'acts';
+  const noun = count === 1 && !atLeast ? 'act' : 'acts';
   return (
-    theme.actionNeeded(`⚑ ${count} ${noun} waiting for ${me}`) +
+    theme.actionNeeded(`⚑ ${count}${atLeast ? '+' : ''} ${noun} waiting for ${me}`) +
     theme.meta(` — musterd inbox  (since ${sinceLabel(sinceTs, now)})`)
   );
 }
