@@ -1249,3 +1249,15 @@ describe('renderWaitingActs --limit (lane 01M2TPW3JAS)', () => {
     expect(renderWaitingActs(waiting(2), 9_000)).toHaveLength(2);
   });
 });
+
+describe('renderReachabilityNudge floor (lane 01M6JG3BCV)', () => {
+  it('says N+ when the count is a floor', () => {
+    const since = Date.UTC(2026, 5, 9, 14, 17);
+    expect(renderReachabilityNudge(12, since, 'David', since, true)).toContain(
+      '12+ acts waiting for David',
+    );
+    expect(renderReachabilityNudge(1, since, 'David', since, true)).toContain(
+      '1+ acts waiting for David',
+    );
+  });
+});
