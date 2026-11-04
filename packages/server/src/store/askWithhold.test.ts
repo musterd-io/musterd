@@ -101,7 +101,7 @@ withDrivers('askWithhold (ADR 801)', (o) => {
       id: 'r1',
       act: 'resolve',
       thread: 'a1',
-      meta: { ask_outcome: 'held' },
+      meta: { ask_ref: 'a1', ask_outcome: 'held' },
       ts: NOW - 1000,
     });
     expect(await openWithholds(db, team.id, ada.id, NOW)).toEqual([]);
@@ -158,7 +158,7 @@ withDrivers('askWithhold (ADR 801)', (o) => {
       id: 'r1',
       act: 'resolve',
       thread: 'a1',
-      meta: { ask_outcome: 'held' },
+      meta: { ask_ref: 'a1', ask_outcome: 'held' },
       ts: NOW - 1000,
     });
     const open = await openWithholds(db, team.id, ada.id, NOW);

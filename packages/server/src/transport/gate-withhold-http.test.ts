@@ -123,7 +123,8 @@ withDrivers('gate-withhold-http', (_o, kind) => {
       expect(r.json.reason).toContain('held by your own blocking ask ask-1');
       const team = (await getTeamBySlug(server.store, 'dawn'))!;
       const row = (await listAudit(server.store, team.id)).find((a) => a.action === 'action.gate');
-      expect(row?.detail).toMatchObject({ cause: 'ask_withhold', outcome: 'denied_awaiting' });
+      const detail = typeof row?.detail === 'string' ? JSON.parse(row.detail) : row?.detail;
+      expect(detail).toMatchObject({ cause: 'ask_withhold', outcome: 'denied_awaiting' });
       expect(JSON.stringify(row?.detail)).not.toContain('gh release create v1');
     });
 
@@ -158,7 +159,7 @@ withDrivers('gate-withhold-http', (_o, kind) => {
         id: 'res-1',
         act: 'resolve',
         thread: 'ask-1',
-        meta: { ask_outcome: 'held' },
+        meta: { ask_ref: 'ask-1', ask_outcome: 'held' },
       });
       expect(w.status).toBe(201);
       const r = await gate('ask-1');

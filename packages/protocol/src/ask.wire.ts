@@ -229,7 +229,7 @@ export function askWithholdText(id: string, form: 'scoped' | 'seat_wide'): strin
         're-raise it with meta.withhold {commands?, paths?}';
   return (
     `Withheld (ADR 801): ${what}. It ends when a human accepts, or when you withdraw the ask ` +
-    `(team_send {act:'resolve', thread:'${id}', meta:{ask_outcome:'held'}}), or after 12h. A decline ` +
+    `(team_send {act:'resolve', thread:'${id}', meta:{ask_ref:'${id}', ask_outcome:'held'}}), or after 12h. A decline ` +
     `keeps it refused.`
   );
 }

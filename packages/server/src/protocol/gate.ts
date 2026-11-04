@@ -396,7 +396,7 @@ export async function gateWithhold(ctx: GateContext): Promise<GateDecision> {
     outcome: 'denied_awaiting',
     reason:
       `held by your own blocking ask ${askId} (ADR 801): wait for a human answer. It ends when a human ` +
-      `accepts, when you withdraw it (team_send {act:'resolve', thread:'${askId}', meta:{ask_outcome:'held'}}), ` +
+      `accepts, when you withdraw it (team_send {act:'resolve', thread:'${askId}', meta:{ask_ref:'${askId}', ask_outcome:'held'}}), ` +
       `or at ${new Date(open.expires_at).toISOString()}.`,
     ask_ref: askId,
   };
