@@ -74,6 +74,8 @@ by enrolling in the wrong direction.**
   strands a third machine.
 - No protocol change. No schema change. Two `conflict` refusals and their tests.
 
+_2026-11-03 ([ADR 796](796-hub-relocation.md), lane 01M6HWV2CG): decision 4 is decided. The hub moves as its file (a byte copy after every joiner drains), the old hub rejoins as a new node, and an inventory proves the copy. Both refusals above stand outside the ceremony._
+
 ## Observability & Evaluation
 
 **Traces.** No new span. Both refusals are ordinary `MusterdError('conflict')` responses; the CLI

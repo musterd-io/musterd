@@ -15,7 +15,7 @@ import { resolveHoldUntil } from '../service/hold.js';
 import { resolve } from './helpers.js';
 
 const USAGE =
-  'usage: musterd hold set <autorefresh_paused|merges_paused|notice> --for <2h|90m> | --until <HH:MM> --reason "<why>"\n' +
+  'usage: musterd hold set <autorefresh_paused|merges_paused|wakes_paused|notice> --for <2h|90m> | --until <HH:MM> --reason "<why>"\n' +
   '       musterd hold propose <effect> --for <2h|90m> | --until <HH:MM> --reason "<why>"\n' +
   '       musterd hold lift <id>\n' +
   '       musterd hold list [--all]';
@@ -188,6 +188,8 @@ export function enforcementNote(effect: HoldEffect): string {
       return 'every machine’s autorefresh stands down until it ends; a manual `musterd service refresh` still works';
     case 'merges_paused':
       return 'agent seats’ `gh pr merge` and pushes to main are denied at the gate until it ends; humans are not gated, and a GitHub auto-merge armed earlier still fires';
+    case 'wakes_paused':
+      return 'the daemon starts no new wake for any seat until it ends; a wake already running finishes, and live sessions are untouched';
     case 'notice':
       return 'a notice — shown to every seat, enforced nowhere';
   }

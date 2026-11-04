@@ -8,11 +8,16 @@
 export const HOLD_MAX_MS = 12 * 3600_000;
 
 /**
- * A closed set. `autorefresh_paused` and `merges_paused` are enforced (the autorefresh tick, the
- * PreToolUse gate); `notice` never is, and every renderer labels it so. An unknown effect is never
- * treated as enforced — a new one needs an ADR.
+ * A closed set. `autorefresh_paused`, `merges_paused` and `wakes_paused` are enforced (the
+ * autorefresh tick, the PreToolUse gate, the wake derivation — ADR 796); `notice` never is, and
+ * every renderer labels it so. An unknown effect is never treated as enforced — a new one needs an ADR.
  */
-export const HOLD_EFFECTS = ['autorefresh_paused', 'merges_paused', 'notice'] as const;
+export const HOLD_EFFECTS = [
+  'autorefresh_paused',
+  'merges_paused',
+  'wakes_paused',
+  'notice',
+] as const;
 export type HoldEffect = (typeof HOLD_EFFECTS)[number];
 
 /** The shape `HoldSchema` parses to — declared here so the pure reads need no zod. */
@@ -47,6 +52,7 @@ export function isHoldEnforced(effect: HoldEffect): boolean {
 const EFFECT_LABEL: Record<HoldEffect, string> = {
   autorefresh_paused: 'autorefresh paused',
   merges_paused: 'merges paused',
+  wakes_paused: 'wakes paused',
   notice: 'notice — not enforced',
 };
 
