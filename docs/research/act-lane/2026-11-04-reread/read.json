@@ -1,0 +1,298 @@
+{
+ "window": {
+  "since": "2026-10-29T00:00Z",
+  "until": "2026-11-04T00:00Z",
+  "act_lane": [
+   "grokbot",
+   "izzo",
+   "miley"
+  ]
+ },
+ "R8a": {
+  "n": 20,
+  "median_free_wait_s": 227.6,
+  "unobserved_share": 0.101,
+  "verdict": "part of it",
+  "rule": "<= 120 s acted; >= 900 s did not; n < 5 inconclusive; unobserved > 50% invalid"
+ },
+ "R7a": {
+  "act_lane_n": 20,
+  "act_lane_median_waited_s": 59271.2,
+  "others_n": 53,
+  "others_median_waited_s": 11.7
+ },
+ "R7b": {
+  "usd_per_seat_day": {
+   "izzo": {
+    "2026-10-29": 0.24,
+    "2026-10-30": 0.0
+   }
+  },
+  "kill_rule_breaches": []
+ },
+ "beside": {
+  "share_of_waited_time": {
+   "izzo": {
+    "present": 0.672,
+    "unobserved": 0.122,
+    "hourly_cap": 0.117,
+    "snoozed": 0.038,
+    "lease_live": 0.032,
+    "passed": 0.013,
+    "reclaimable": 0.006
+   },
+   "miley": {
+    "present": 0.907,
+    "unobserved": 0.087,
+    "reclaimable": 0.003,
+    "snoozed": 0.003,
+    "passed": 0.001
+   }
+  }
+ },
+ "waits": [
+  {
+   "seat": "izzo",
+   "act_ts": 1793236030160,
+   "waited_s": 23214.079,
+   "free_s": 7576.4,
+   "by_state": {
+    "present": 14858604,
+    "passed": 155491,
+    "lease_live": 559983,
+    "hourly_cap": 7420919,
+    "reclaimable": 219082
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793236848443,
+   "waited_s": 25909.389,
+   "free_s": 8534.6,
+   "by_state": {
+    "present": 14086007,
+    "passed": 849014,
+    "lease_live": 1545452,
+    "hourly_cap": 7685540,
+    "reclaimable": 261955,
+    "snoozed": 1481421
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793236855453,
+   "waited_s": 26035.301,
+   "free_s": 8550.1,
+   "by_state": {
+    "present": 14142579,
+    "passed": 864568,
+    "lease_live": 1545452,
+    "hourly_cap": 7685540,
+    "reclaimable": 315741,
+    "snoozed": 1481421
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793243148830,
+   "waited_s": 23219.634,
+   "free_s": 9261.6,
+   "by_state": {
+    "present": 7880345,
+    "passed": 900192,
+    "lease_live": 2477117,
+    "hourly_cap": 8361413,
+    "reclaimable": 358849,
+    "snoozed": 3241718
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793247965283,
+   "waited_s": 18535.292,
+   "free_s": 8300.0,
+   "by_state": {
+    "present": 4331477,
+    "passed": 880015,
+    "reclaimable": 401051,
+    "lease_live": 2261002,
+    "hourly_cap": 7420029,
+    "snoozed": 3241718
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793249062098,
+   "waited_s": 20921.239,
+   "free_s": 9570.5,
+   "by_state": {
+    "present": 3290492,
+    "passed": 1247527,
+    "reclaimable": 452550,
+    "lease_live": 3338266,
+    "hourly_cap": 8323005,
+    "snoozed": 4269399
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793249989563,
+   "waited_s": 20127.228,
+   "free_s": 9586.0,
+   "by_state": {
+    "present": 2439258,
+    "passed": 1263034,
+    "reclaimable": 494266,
+    "lease_live": 3338266,
+    "hourly_cap": 8323005,
+    "snoozed": 4269399
+   }
+  },
+  {
+   "seat": "miley",
+   "act_ts": 1793324326443,
+   "waited_s": 81312.681,
+   "free_s": 58965.7,
+   "by_state": {
+    "present": 22346934,
+    "unobserved": 58965742,
+    "passed": 5
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793333177517,
+   "waited_s": 2.189,
+   "free_s": 2.2,
+   "by_state": {
+    "passed": 2189
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793333665210,
+   "waited_s": 71973.912,
+   "free_s": 57678.6,
+   "by_state": {
+    "present": 14295304,
+    "unobserved": 57678604,
+    "passed": 4
+   }
+  },
+  {
+   "seat": "miley",
+   "act_ts": 1793645075180,
+   "waited_s": 174672.891,
+   "free_s": 243.3,
+   "by_state": {
+    "present": 173461836,
+    "reclaimable": 619888,
+    "passed": 243272,
+    "snoozed": 347895
+   }
+  },
+  {
+   "seat": "miley",
+   "act_ts": 1793682760123,
+   "waited_s": 134022.638,
+   "free_s": 211.8,
+   "by_state": {
+    "present": 132936170,
+    "reclaimable": 526729,
+    "passed": 211844,
+    "snoozed": 347895
+   }
+  },
+  {
+   "seat": "miley",
+   "act_ts": 1793682769562,
+   "waited_s": 47463.791,
+   "free_s": 0.0,
+   "by_state": {
+    "present": 47420655,
+    "reclaimable": 43132,
+    "passed": 4
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793729184176,
+   "waited_s": 87052.78,
+   "free_s": 0.0,
+   "by_state": {
+    "present": 86986245,
+    "reclaimable": 66486,
+    "passed": 49
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793731778308,
+   "waited_s": 84567.676,
+   "free_s": 17.5,
+   "by_state": {
+    "present": 84452431,
+    "reclaimable": 97723,
+    "passed": 17522
+   }
+  },
+  {
+   "seat": "miley",
+   "act_ts": 1793737243175,
+   "waited_s": 79251.517,
+   "free_s": 131.5,
+   "by_state": {
+    "present": 78478245,
+    "reclaimable": 305356,
+    "passed": 131507,
+    "snoozed": 336409
+   }
+  },
+  {
+   "seat": "miley",
+   "act_ts": 1793737318289,
+   "waited_s": 79104.638,
+   "free_s": 110.8,
+   "by_state": {
+    "present": 78403131,
+    "reclaimable": 254252,
+    "passed": 110846,
+    "snoozed": 336409
+   }
+  },
+  {
+   "seat": "miley",
+   "act_ts": 1793737325088,
+   "waited_s": 79035.636,
+   "free_s": 89.9,
+   "by_state": {
+    "present": 78396332,
+    "reclaimable": 213024,
+    "passed": 89871,
+    "snoozed": 336409
+   }
+  },
+  {
+   "seat": "miley",
+   "act_ts": 1793737331238,
+   "waited_s": 5656.867,
+   "free_s": 0.0,
+   "by_state": {
+    "present": 5614928,
+    "reclaimable": 41923,
+    "passed": 16
+   }
+  },
+  {
+   "seat": "izzo",
+   "act_ts": 1793745344350,
+   "waited_s": 71078.576,
+   "free_s": 32.3,
+   "by_state": {
+    "present": 70907360,
+    "reclaimable": 138953,
+    "passed": 32263
+   }
+  }
+ ]
+}
