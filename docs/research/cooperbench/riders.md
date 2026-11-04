@@ -238,3 +238,52 @@ acts, board reads, status updates, pass, cost.
 **Not gaming.** As riders 1–5: no instruction, hint or tool is added to any arm for it. The ended-lane
 audience and the derived hand-off are the product every seat on every team gets; the hook command text
 does not change, so the arm's pinned settings do not either.
+
+## Rider 7: finding 028's loop — the musterd arm on the act lane, where a seat ends its turn and the host wakes it on the next act
+
+**Lane:** `01M6M3YG37` (this pre-registration, the arm change and the run → finding 031); goal
+`coordination-cost`. **Status:** pre-registered 2026-11-04, before the arm change has landed and before
+any pair ran. Run manifest: [rider7-manifest.md](./rider7-manifest.md). Design note, with its gate and
+the 2026-11-04 amendment: [cooperbench-act-lane-wake.md](../../design/cooperbench-act-lane-wake.md).
+Decided by nick, 2026-11-04, in session ("go with the third, amend the gate and run it").
+
+**What changes.** Nothing in the product. The arm runs its seats on [ADR 735](../../decisions/735-act-lane-the-seat-ends-its-turn.md)'s
+act lane, which every team has: the pair's team sets `lane: act`, `tool_policy: seat-policy`,
+`timeout 3600 s`, `transcript_max 256 MiB`, `hourly_cap 60`, and `musterd host` runs in each agent's
+container. The agents' instructions lose one sentence the arm added — "wait in ONE call … `wait: 45`"
+— and keep the product's own guidance, which says to end the turn. The container's settings carry the
+ADR 261 permission floor (Edit, Write, Bash) so a wake under `seat-policy` can edit and run git, and the
+project-local session-capture hook so a wake resumes the agent's own transcript. The first `claude`
+call ends at the agent's first idle turn; the adapter then waits until both seats' lanes are done and
+no directed act is unread, or 7,200 s, as today. That is the treatment, and it is a change between
+arms; the manifest names every piece.
+
+**Why these rules.** Finding 028 R6b: 90 wait-mode `team_inbox_check` calls, 94 of 98 returning an act.
+The waits were turns, not polls, so the cost is the loop. The act lane inverts it: the seat ends its
+turn and the next act resumes it. A wake is a turn too, so R7a counts both.
+
+**Read**, from the first complete musterd run over all 10 `core` pairs, with the claim run's residue
+scripts and `mtools.py` unchanged, plus one new script beside them (`rider7.py`, written before the
+run) that counts the daemon's wake rows and sums each wake's priced cost:
+
+| | Count | Finding 028 (`core`) |
+| --- | --- | --- |
+| R7a | turns spent waiting: wait-mode `team_inbox_check` calls (`mtools.py`) **plus** wakes (`residency.wake` rows in the pair's daemon database) | 90 (+ 0 wakes) |
+| R7b | model dollars for the 10 pairs: the first call's `total_cost_usd` plus every wake's, per agent, summed | $18.45 |
+| R7c | act→wake wait, median over every wake with a `waited_ms` (ADR 749) | — |
+
+**Verdict rule.** R7a **≤ 55** "the lane replaced the waiting turns", **≥ 75** "it did not"; between,
+"part of it", with each wake's trigger act beside it. R7b **≤ $15.00** "the loop cost less",
+**≥ $18.00** "it did not"; between, "part of it". R7c **≤ 2 min** "the host woke the seat as the gate
+promised", **≥ 15 min** "it did not"; between, "part of it", split by the gate that held it (ADR 753),
+and a run where R7c reads "did not" voids R7a and R7b as reads of the lane: a seat that was not woken
+in time measured the 7,200 s cap, not the loop. Each rule stands alone otherwise. Reported beside them
+with no rule: wakes per pair, fresh vs resumed wakes, plain `team_inbox_check` calls, `ToolSearch`
+calls, pushes recorded and announced (`rider5.py`), board reads, status updates, pairs that hit the
+7,200 s cap, pass, conflicts.
+
+**Not gaming.** Every knob is a team setting any team has. The permission list is the floor a real
+workspace carries. The instruction change removes a sentence the arm added and leaves the product's
+guidance in force. Nothing is added that exists only for the benchmark; the hook command texts are
+musterd's own, pinned by `test_config.py`.
+

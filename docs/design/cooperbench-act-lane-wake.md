@@ -5,6 +5,14 @@
 > ([manifest](../research/act-lane-manifest.md), "Re-read on the ADR 753 build", read 2026-11-04)
 > reads R8a "acted". If R8a reads "did not act", the act lane is not ready, and rider 7 would only
 > measure the same turn-taking again. This note then freezes as the record of why.
+> _(Amended 2026-11-04, nick, in session, lane `01M6M3YG37`: [finding 030](../research/030-act-lane-reread.md)
+> read R8a "part of it" — 3.8 min median free wait over 20 waits — and showed the two things that held
+> revive's seats are the seats' own attended sessions (67–91% of waited time) and the hourly cap on a
+> burst of seven acts, neither of which a CooperBench pair has: no attended session, a cap set to 60, a
+> few acts per pair. The gate is now **"the act lane wakes an unattended seat within 2 min"**, which the
+> same read supports: 11 of 20 waits woke in ≤ 4.1 min once the seat was unattended, 9 of them in ≤ 2.2
+> min. Rider 7 is built and pre-registered under that gate: [rider7-manifest.md](../research/cooperbench/rider7-manifest.md).
+> The original gate stays above as written, so the record shows it was changed, by whom, and on what.)_
 
 ## Why
 
