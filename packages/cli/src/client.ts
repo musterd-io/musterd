@@ -1980,6 +1980,26 @@ export class HttpClient {
   }
 
   /** Revoke a node. `revoked: false` means it was already revoked or unknown. */
+  /** ADR 796: point this machine's enrollment at a relocated hub (the local daemon probes it first). */
+  async nodeRepoint(body: { hub_url: string; team: string }): Promise<{
+    node_id: string;
+    team: string;
+    hub_url: string;
+  }> {
+    return (await this.request('POST', '/node/repoint', body)) as {
+      node_id: string;
+      team: string;
+      hub_url: string;
+    };
+  }
+
+  /** ADR 796: an admin renames a node, on the hub. */
+  async nodeRelabel(slug: string, nodeId: string, label: string): Promise<{ label: string }> {
+    return (await this.request('POST', `/teams/${slug}/nodes/${encodeURIComponent(nodeId)}/label`, {
+      label,
+    })) as { label: string };
+  }
+
   async nodeRevoke(slug: string, nodeId: string): Promise<{ revoked: boolean }> {
     return (await this.request(
       'POST',

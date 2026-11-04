@@ -309,3 +309,18 @@ export const NodeEnrollRequestSchema = z.object({
   team: z.string().min(1),
 });
 export type NodeEnrollRequest = z.infer<typeof NodeEnrollRequestSchema>;
+
+/**
+ * `POST /node/repoint` (ADR 796) — the local half of a hub relocation: point this machine's
+ * enrollment at the relocated hub, keeping its node id and credential. The daemon probes the new hub
+ * with the stored credential first and writes nothing unless it is accepted.
+ */
+export const NodeRepointRequestSchema = z.object({
+  hub_url: z.string().url(),
+  team: z.string().min(1),
+});
+export type NodeRepointRequest = z.infer<typeof NodeRepointRequestSchema>;
+
+/** `POST /teams/:slug/nodes/:id/label` (ADR 796) — an admin renames a node. */
+export const NodeRelabelRequestSchema = z.object({ label: z.string().trim().min(1).max(64) });
+export type NodeRelabelRequest = z.infer<typeof NodeRelabelRequestSchema>;

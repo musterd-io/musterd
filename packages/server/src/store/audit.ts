@@ -567,6 +567,9 @@ export type AuditAction =
   | 'shift.budget_asked'
   | 'shift.budget_raised'
   | 'shift.budget_declined'
+  // ADR 796: a node renamed, and this machine re-pointed at a relocated hub.
+  | 'node.relabeled'
+  | 'node.repointed'
   | 'pr_event.sent'
   | 'pr_watch.unavailable'
   | 'question.notify_set'
@@ -970,6 +973,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'shift.budget_asked': 'target',
   'shift.budget_raised': 'target',
   'shift.budget_declined': 'target',
+  'node.relabeled': 'target',
+  'node.repointed': 'target',
   'pr_event.sent': 'none',
   'pr_watch.unavailable': 'none',
   'question.notify_set': 'actor',

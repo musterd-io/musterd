@@ -69,6 +69,13 @@ still cannot enroll.
   problem is fixed forward. Going back is the same ceremony run in reverse.
 - `wakes_paused` is useful beyond a move (a demo, an incident) and is in the holds vocabulary on
   every surface: `musterd hold set wakes_paused`, `/live`'s holds banner, the CLI help.
+- _(2026-11-03)_ `POST /node/repoint` presents this machine's node credential to the address it
+  is given, so the security review of lane `01M6HWV7AF12X6T0VVPYSGM0SC` narrowed who may aim it and
+  where. A request with an `Origin` header is refused (a browser page cannot call it). The address
+  must be `https`, or plain `http` only to loopback or a tailnet address (100.64.0.0/10,
+  `*.ts.net`), and may carry no user or password; anything else is refused before the credential
+  leaves the machine. The probe refuses redirects. A local process of the same user can already
+  read `~/.musterd/node.json`, so the route adds no exposure beyond that.
 - Follows-up: lane `01M6HWV4HY93C1FX99KGEZFGMY` (the inventory), lane
   `01M6HWV7AF12X6T0VVPYSGM0SC` (repoint and relabel), lane `01M6HWV9E48ECHG1M77GX5HNDG` (security
   preconditions), lane `01M6HWVB7F56DF6WPPMZT662RP` (rehearsal), lane

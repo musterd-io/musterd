@@ -2,7 +2,13 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { nodeStatePath, readNodeState, saveNodeEnrollment } from './state.js';
+import {
+  nodeStatePath,
+  readNodeState,
+  repointNodeEnrollment,
+  repointTargetRefusal,
+  saveNodeEnrollment,
+} from './state.js';
 
 /**
  * `~/.musterd/node.json` (ADR 328 §2) — the machine's node credentials, one entry per enrolled
@@ -122,6 +128,59 @@ describe('node.json', () => {
     writeFileSync(nodeStatePath(), 'not json at all');
     expect(readNodeState().nodes).toEqual({});
     writeFileSync(nodeStatePath(), '{"nodes":{"revive":{"credential":42}}}');
+    expect(readNodeState().nodes).toEqual({});
+  });
+});
+
+describe('where a repoint may send the credential (ADR 796)', () => {
+  it.each([
+    'https://hub.example.com',
+    'http://localhost:4849',
+    'http://127.0.0.1:4849',
+    'http://[::1]:4849',
+    'http://100.101.102.103:4849',
+    'http://musterd-joiner-1.tail1234.ts.net:4849',
+  ])('allows %s', (url) => {
+    expect(repointTargetRefusal(url)).toBeNull();
+  });
+
+  it.each([
+    'http://hub.example.com:4849',
+    'http://192.168.1.10:4849',
+    'http://100.128.0.1:4849',
+    'http://100.63.0.1:4849',
+    'ftp://hub.example.com',
+    'https://user:pw@hub.example.com',
+    'not a url',
+  ])('refuses %s', (url) => {
+    expect(repointTargetRefusal(url)).toEqual(expect.any(String));
+  });
+});
+
+describe('repointing an enrollment (ADR 796)', () => {
+  it('moves only hub_url; node id, credential and enrolled_at stay', () => {
+    saveNodeEnrollment({
+      team: 'revive',
+      hub_url: 'http://old-hub:4849',
+      node_id: '01M',
+      credential: 'msnode_aaa',
+      enrolled_at: 7,
+    });
+    const next = repointNodeEnrollment('revive', 'http://new-hub:4849');
+    expect(next).toEqual({
+      hub_url: 'http://new-hub:4849',
+      node_id: '01M',
+      credential: 'msnode_aaa',
+      enrolled_at: 7,
+    });
+    expect(readNodeState().nodes['revive']).toEqual(next);
+    expect(statSync(nodeStatePath()).mode & 0o777).toBe(0o600);
+  });
+
+  it('refuses a team this machine never enrolled in, and writes nothing', () => {
+    expect(() => repointNodeEnrollment('ghost-team', 'http://new-hub:4849')).toThrow(
+      /no enrollment/,
+    );
     expect(readNodeState().nodes).toEqual({});
   });
 });

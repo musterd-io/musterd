@@ -1,4 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
@@ -32,12 +34,19 @@ withDrivers('node-enroll-http', (_o, kind) => {
   let joinerCredential: string;
   let dir: string;
 
-  async function post(base: string, path: string, body?: unknown, auth?: string) {
+  async function post(
+    base: string,
+    path: string,
+    body?: unknown,
+    auth?: string,
+    extra: Record<string, string> = {},
+  ) {
     const response = await fetch(base + path, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         ...(auth ? { authorization: `Bearer ${auth}` } : {}),
+        ...extra,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -273,6 +282,137 @@ withDrivers('node-enroll-http', (_o, kind) => {
       // 400 rather than 422: the daemon's own `parseOrBadRequest` maps a schema failure to
       // bad_request, and this route follows the convention every other body-parsing route uses.
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('POST /node/repoint and node relabel (ADR 796)', () => {
+    async function enroll() {
+      const nodeId = await mintLocalRow(joiner, 'bravo', 'm-joiner');
+      const { json: minted } = await post(
+        hubBase,
+        '/teams/bravo/nodes/invite',
+        { label: 'joiner laptop' },
+        nickCredential,
+      );
+      const res = await post(joinerBase, '/node/enroll', {
+        hub_url: hubBase,
+        code: minted.invite,
+        team: 'bravo',
+      });
+      expect(res.status).toBe(200);
+      return nodeId;
+    }
+
+    it('repointsWhenTheNewHubAcceptsTheCredential: hub_url moves, node id and credential stay', async () => {
+      const nodeId = await enroll();
+      const before = readNodeState().nodes['bravo']!;
+      // The same hub under another address stands in for a relocated hub holding the same hash.
+      const moved = hubBase.replace('127.0.0.1', 'localhost');
+      const res = await post(joinerBase, '/node/repoint', { hub_url: moved, team: 'bravo' });
+      expect(res.status).toBe(200);
+      expect(readNodeState().nodes['bravo']).toEqual({ ...before, hub_url: moved });
+      const team = (await getTeamBySlug(joiner.store, 'bravo'))!;
+      const audit = await joiner.store.get<{ target: string }>(
+        "SELECT target FROM audit WHERE team_id = ? AND action = 'node.repointed'",
+        [team.id],
+      );
+      expect(audit?.target).toBe(nodeId);
+    });
+
+    it('refusesAHubThatRejectsTheCredential, and node.json is untouched', async () => {
+      await enroll();
+      const other = createServer({ db: await openTestDriver(kind, { instance: 'c' }), port: 0 });
+      const otherBase = `http://127.0.0.1:${(await other.listen()).port}`;
+      try {
+        await post(otherBase, '/teams', {
+          slug: 'bravo',
+          creator: { name: 'nick', kind: 'human' },
+        });
+        const before = JSON.stringify(readNodeState());
+        const res = await post(joinerBase, '/node/repoint', { hub_url: otherBase, team: 'bravo' });
+        expect(res.status).toBe(409);
+        expect(JSON.stringify(readNodeState())).toBe(before);
+      } finally {
+        await other.close();
+      }
+    });
+
+    it('refusesPlainHttpOffTheTailnet before the credential leaves the machine', async () => {
+      await enroll();
+      const before = JSON.stringify(readNodeState());
+      const res = await post(joinerBase, '/node/repoint', {
+        hub_url: 'http://hub.example.com:4849',
+        team: 'bravo',
+      });
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(readNodeState())).toBe(before);
+    });
+
+    it('refusesABrowserCaller: a request with an Origin header', async () => {
+      await enroll();
+      const res = await post(
+        joinerBase,
+        '/node/repoint',
+        { hub_url: hubBase, team: 'bravo' },
+        undefined,
+        { origin: 'https://evil.example' },
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it('refusesARedirect: the credential is never carried to a host nobody named', async () => {
+      await enroll();
+      const bouncer = createHttpServer((_req, res) => {
+        res.writeHead(302, { location: `${hubBase}/teams/bravo/sync/pull?after=0&limit=1` });
+        res.end();
+      });
+      await new Promise<void>((done) => bouncer.listen(0, '127.0.0.1', done));
+      const port = (bouncer.address() as AddressInfo).port;
+      try {
+        const before = JSON.stringify(readNodeState());
+        const res = await post(joinerBase, '/node/repoint', {
+          hub_url: `http://127.0.0.1:${port}`,
+          team: 'bravo',
+        });
+        expect(res.status).toBe(409);
+        expect(JSON.stringify(readNodeState())).toBe(before);
+      } finally {
+        await new Promise<void>((done) => bouncer.close(() => done()));
+      }
+    });
+
+    it('a team this machine never enrolled in is not found', async () => {
+      const res = await post(joinerBase, '/node/repoint', { hub_url: hubBase, team: 'bravo' });
+      expect(res.status).toBe(404);
+    });
+
+    it('an admin relabels a node; move then resolves the new label', async () => {
+      const nodeId = await enroll();
+      const res = await post(
+        hubBase,
+        `/teams/bravo/nodes/${nodeId}/label`,
+        { label: 'musterd-joiner-1' },
+        nickCredential,
+      );
+      expect(res.status).toBe(200);
+      const team = (await getTeamBySlug(hub.store, 'bravo'))!;
+      const row = await hub.store.get<{ label: string }>('SELECT label FROM nodes WHERE id = ?', [
+        nodeId,
+      ]);
+      expect(row?.label).toBe('musterd-joiner-1');
+      expect(
+        await hub.store.get(
+          "SELECT id FROM audit WHERE team_id = ? AND action = 'node.relabeled'",
+          [team.id],
+        ),
+      ).toBeDefined();
+      const unknown = await post(
+        hubBase,
+        '/teams/bravo/nodes/nope/label',
+        { label: 'x' },
+        nickCredential,
+      );
+      expect(unknown.status).toBe(404);
     });
   });
 

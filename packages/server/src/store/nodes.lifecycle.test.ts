@@ -4,7 +4,15 @@ import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
-import { authenticateNode, bindNode, listNodes, revokeNode, rotateNode } from './nodes.js';
+import {
+  authenticateNode,
+  bindNode,
+  listNodes,
+  relabelNode,
+  resolveNodeRef,
+  revokeNode,
+  rotateNode,
+} from './nodes.js';
 import { createTeam } from './teams.js';
 
 let openStore: () => Promise<Driver>;
@@ -167,6 +175,29 @@ withDrivers('nodes.lifecycle', (o) => {
       expect(local.credential_prefix).toBeNull();
       expect(local.enrolled_at).toBeNull();
       await db.close();
+    });
+  });
+
+  describe('relabel (ADR 796)', async () => {
+    it('relabels a live node, and move resolves it by the new label', async () => {
+      const { db, team } = await seed();
+      await bindNode(db, team.id, 'node-hub', 'mac.lan', 'msnode_hub', 'nick');
+      expect(await relabelNode(db, team.id, 'node-hub', '  musterd-joiner-1 ')).toBe(true);
+      expect(await resolveNodeRef(db, team.id, 'musterd-joiner-1')).toEqual({
+        ok: true,
+        node: { id: 'node-hub', label: 'musterd-joiner-1' },
+      });
+    });
+
+    it('refuses an empty or long label, a revoked node, and another team’s node', async () => {
+      const { db, team } = await seed();
+      await bindNode(db, team.id, 'node-a', 'a', 'msnode_a', 'nick');
+      expect(await relabelNode(db, team.id, 'node-a', '  ')).toBe(false);
+      expect(await relabelNode(db, team.id, 'node-a', 'x'.repeat(65))).toBe(false);
+      await revokeNode(db, team.id, 'node-a');
+      expect(await relabelNode(db, team.id, 'node-a', 'b')).toBe(false);
+      const other = await createTeam(db, { slug: 'other' });
+      expect(await relabelNode(db, other.id, 'node-a', 'b')).toBe(false);
     });
   });
 });

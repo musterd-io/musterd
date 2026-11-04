@@ -25,6 +25,7 @@ const ROWS: Row[] = [
   { gate: 'requireLocalPeer', method: 'POST', path: '/store/prune', want: 404 },
   { gate: 'requireLocalPeer', method: 'POST', path: '/store/compact', want: 404 },
   { gate: 'requireLocalPeer', method: 'POST', path: '/node/enroll', want: 404 },
+  { gate: 'requireLocalPeer', method: 'POST', path: '/node/repoint', want: 404 },
   { gate: 'requireLocalPeer', method: 'POST', path: '/teams/revive/signin-handoff', want: 404 },
   { gate: 'requireLocalPeer', method: 'GET', path: '/teams/revive/local-identity', want: 404 },
   {

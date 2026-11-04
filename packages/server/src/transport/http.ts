@@ -119,6 +119,8 @@ import {
   BootstrapCutoverRequestSchema,
   BootstrapMigrationRequestSchema,
   NodeEnrollRequestSchema,
+  NodeRelabelRequestSchema,
+  NodeRepointRequestSchema,
   NodeInviteMintSchema,
   NodeJoinRequestSchema,
   NodeJoinResponseSchema,
@@ -218,7 +220,12 @@ import {
 } from '../errors.js';
 import { reapOrphans } from '../footprint/reap.js';
 import { log, noteRequestFailure, redactPath } from '../log.js';
-import { saveNodeEnrollment } from '../node/state.js';
+import {
+  readNodeState,
+  repointNodeEnrollment,
+  repointTargetRefusal,
+  saveNodeEnrollment,
+} from '../node/state.js';
 import { sendAppPaired } from '../notify/appAdapter.js';
 import { loadAppChannelKeys } from '../notify/appSeal.js';
 import { flushHeldRings } from '../notify/doorbell.js';
@@ -451,6 +458,7 @@ import {
   listNodes,
   mintInvite,
   revokeNode,
+  relabelNode,
   rotateNode,
   touchNode,
   unbindSeat,
@@ -646,6 +654,7 @@ import {
   trustAtHub,
   TrustRefusedError,
 } from '../sync/claim.js';
+import { readPullCursor } from '../sync/fold.js';
 import { readHubLink } from '../sync/hubLink.js';
 import { readHubStop } from '../sync/hubStop.js';
 import {
@@ -3247,6 +3256,66 @@ export async function handleHttp(
       // ADR 552: open the doorbell stream now rather than at the next rescan.
       kickSyncStream(ctx);
       return sendJson(res, 200, { node_id: minted.node_id, team: body.team });
+    }
+
+    if (method === 'POST' && path === '/node/repoint') {
+      // ADR 796: after a hub relocation, point this machine at the new hub with the credential it
+      // already holds (the relocated hub carries its hash). Probe first; on any refusal nothing is
+      // written, so a typo or the wrong box can never strand this machine's enrollment.
+      requireLocalPeer(ctx, req, 'pointing this machine at a relocated hub');
+      // The probe below sends this machine's credential, so a browser page on this machine must not
+      // be able to aim it: a browser always sends Origin on a cross-site POST, the CLI never does.
+      if (req.headers.origin !== undefined)
+        throw new MusterdError('forbidden', 'repointing is a CLI verb — a browser cannot call it');
+      const body = parseOrBadRequest(NodeRepointRequestSchema, await readJson(req));
+      const refusal = repointTargetRefusal(body.hub_url);
+      if (refusal)
+        throw new MusterdError('bad_request', `${body.hub_url}: ${refusal} — nothing was sent`);
+      const current = readNodeState().nodes[body.team];
+      if (!current)
+        throw new MusterdError(
+          'not_found',
+          `this machine has no enrollment for "${body.team}" — join it with \`musterd node join\``,
+        );
+      const team = await getTeamBySlug(ctx.db, body.team);
+      const cursor = team ? await readPullCursor(ctx.db, team.id) : 0;
+      // The probe asks for everything after this machine's pull cursor. 409 means the new hub holds
+      // LESS than this machine has already applied: the wrong store, or a lossy copy. Refused too.
+      const probe = new URL(`/teams/${body.team}/sync/pull`, body.hub_url);
+      probe.searchParams.set('after', String(cursor));
+      probe.searchParams.set('limit', '1');
+      const probed = await fetch(probe, {
+        headers: { authorization: `Bearer ${current.credential}` },
+        // A redirect would carry the credential on to a host nobody named.
+        redirect: 'error',
+        signal: AbortSignal.timeout(10_000),
+      }).catch(() => null);
+      if (!probed || !probed.ok)
+        throw new MusterdError(
+          'conflict',
+          `${body.hub_url} did not accept this machine's credential (` +
+            (probed
+              ? probed.status === 409
+                ? 'it holds less than this machine has already applied'
+                : `status ${probed.status}`
+              : 'unreachable') +
+            ') — nothing changed',
+        );
+      repointNodeEnrollment(body.team, body.hub_url);
+      if (team)
+        await appendAudit(ctx.db, team.id, {
+          actor: null,
+          action: 'node.repointed',
+          target: current.node_id,
+          result: 'allow',
+          detail: { from: current.hub_url, to: body.hub_url },
+        });
+      kickSyncStream(ctx);
+      return sendJson(res, 200, {
+        node_id: current.node_id,
+        team: body.team,
+        hub_url: body.hub_url,
+      });
     }
 
     if (method === 'POST' && path === '/teams') {
@@ -7618,6 +7687,24 @@ export async function handleHttp(
             team: slug,
           }),
         );
+      }
+
+      // ADR 796: rename a node (after a relocation the hub identity keeps the old hostname).
+      const nodeLabel = rest.match(/^\/nodes\/([^/]+)\/label$/);
+      if (method === 'POST' && nodeLabel) {
+        const { team, member } = await authAdmin(ctx, slug, req);
+        const nodeId = decodeURIComponent(nodeLabel[1]!);
+        const body = parseOrBadRequest(NodeRelabelRequestSchema, await readJson(req));
+        if (!(await relabelNode(ctx.db, team.id, nodeId, body.label)))
+          throw new MusterdError('not_found', `no live node "${nodeId}" on ${slug}`);
+        await appendAudit(ctx.db, team.id, {
+          actor: member.name,
+          action: 'node.relabeled',
+          target: nodeId,
+          result: 'allow',
+          detail: { label: body.label },
+        });
+        return sendJson(res, 200, { node_id: nodeId, label: body.label });
       }
 
       const nodeVerb = rest.match(/^\/nodes\/([^/]+)\/(rotate|revoke)$/);
