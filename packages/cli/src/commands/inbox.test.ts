@@ -539,8 +539,15 @@ describe('inbox command', () => {
    *
    * So on a deferral harness the line must name the round trip, or it prescribes an unreachable
    * repair — the same failure it already refuses for `musterd claim`.
+   *
+   * But only as the fallback (lane 01M6KZYRJC). `team_join` carries `anthropic/alwaysLoad` (lane
+   * 01M4S53E79, ADR 741), so in an ordinary session it is already callable, and leading with
+   * ToolSearch spends a turn on a lookup that does nothing. The ADR 741 week-after read (2026-11-04)
+   * counted 7 `select:mcp__musterd__team_join` lookups after 2026-10-27, 4 of them within six
+   * messages of this line. So the line leads with the call and names the round trip as the step
+   * for when the call is not there.
    */
-  it('names the ToolSearch round trip on a deferral harness, so the repair it prescribes is reachable', async () => {
+  it('leads with team_join on a deferral harness and names the ToolSearch round trip only as the fallback', async () => {
     mkdirSync(join(dir, '.musterd'), { recursive: true });
     writeFileSync(
       join(dir, '.musterd', 'binding.json'),
@@ -561,11 +568,12 @@ describe('inbox command', () => {
       .hookSpecificOutput.additionalContext;
     // The repair still ends at team_join — it is the only thing that holds a Presence.
     expect(line).toMatch(/team_join/);
-    // …but it must say how to make team_join callable first, by name.
-    expect(line).toMatch(/ToolSearch/);
-    // The ordering has to be explicit: fetching the schema AFTER trying the call is the loop the
-    // seat is already stuck in.
-    expect(line.indexOf('ToolSearch')).toBeLessThan(line.lastIndexOf('team_join'));
+    // …it still says, by name, how to make team_join callable when it is not…
+    expect(line).toMatch(/ToolSearch select:mcp__musterd__team_join/);
+    // …but the call comes first: team_join is hot, so the lookup is the fallback, not step one.
+    expect(line.indexOf('call team_join')).toBeGreaterThan(-1);
+    expect(line.indexOf('call team_join')).toBeLessThan(line.indexOf('ToolSearch'));
+    expect(line).toMatch(/not callable/);
   });
 
   it('does NOT name ToolSearch on a harness with no deferral path — the line stays as short as it can', async () => {

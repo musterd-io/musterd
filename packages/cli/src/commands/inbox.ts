@@ -642,10 +642,16 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
       // implicit, this sentence prescribes a repair the reader cannot perform, which is the exact
       // failure it already refuses for `musterd claim`; the model then burns the turn discovering
       // the round trip for itself, which is what stanley measured on 2026-09-14.
+      //
+      // The call comes first and the round trip second (lane 01M6KZYRJC). `team_join` loads up front
+      // (`anthropic/alwaysLoad`, lane 01M4S53E79), so in an ordinary session it is already callable
+      // and leading with the lookup spends a turn for nothing. The ADR 741 week-after read
+      // (2026-11-04) found 4 of 7 `team_join` lookups right after this line. The round trip is still
+      // named, for the 09-14 case where a reconnect brings the tools back deferred.
       const reJoin =
         discoveryVerb !== undefined
-          ? `re-fetch the schema first (${discoveryVerb} select:mcp__musterd__team_join), then ` +
-            `call team_join`
+          ? `call team_join (only if it is not callable — after an MCP reconnect — run ` +
+            `${discoveryVerb} select:mcp__musterd__team_join first)`
           : `re-join from your harness adapter (team_join)`;
       emit(
         `musterd: the interrupt line is deaf — this seat's session lease is dead, so every ` +
