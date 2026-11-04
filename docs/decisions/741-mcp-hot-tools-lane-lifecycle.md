@@ -101,4 +101,5 @@ is deferred tools: team_wake_context 19, team_insight_save 12, team_question 10.
 4.4s (was 4.1s); $/turn median 0.31 (was 0.27). The falsifier did not trigger. One leak:
 team_join was looked up 6 times although hot — the dead-lease hook in
 `packages/cli/src/commands/inbox.ts` prescribed `ToolSearch select:mcp__musterd__team_join`;
-dolly's lane 01M6KZYRTK removed that line.
+dolly's lane 01M6KZYRJC (#3819) now leads with call `team_join`, keeping ToolSearch as the fallback after an MCP
+reconnect.
