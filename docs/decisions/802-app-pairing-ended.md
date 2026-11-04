@@ -72,7 +72,12 @@ weakening decision 3: the phone never trusts, and never distinguishes, anything 
    - **Decision 3 is unchanged.** A delivery that fails a check still shows only the generic
      text, whatever the reason.
 
-6. **Who builds what.** The `RelayAppBodyFrameSchema` field and the relay's 410 path are a
+6. **Nothing is pushed to a superseded binding.** Every delivery sealed to it would only show the
+   generic "could not be verified" text on the phone. The app adapter skips the binding, and the
+   skip is recorded with reason `binding_superseded`, like the adapter's other skip reasons, so
+   the skip is never silent.
+
+7. **Who builds what.** The `RelayAppBodyFrameSchema` field and the relay's 410 path are a
    protocol lane (engineer). The daemon's recording, backfill, standing and `ended` on
    `app_body` and `/channels/bindings`, the phone's note, and /live's flag stay in lane
    01M6M06CHY (ios-engineer). The relay deploy is nick's.
