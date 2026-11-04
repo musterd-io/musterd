@@ -40,6 +40,24 @@ Q2's answer waited behind ryder's hourly wake cap (2 per hour): the cap was chec
 - Start → first wake is 29 s, inside the 30 s target, though the daemon was mid auto-refresh at the time (down 19:09–19:11 UTC).
 - Cost: $0.80 for the hour, in two wakes.
 
+**Shift run 2, 2026-11-04 21:10–21:57 UTC (ADR 792), ended on its own.** nick answered ryder's questions from the phone as they came. All times are from the hub's `audit`.
+
+| Event | Time (UTC) | Detail |
+| --- | --- | --- |
+| Start | 21:10:51 | `shift.started` (`inside_hours: true`), from nick's CLI |
+| Wake for the Start | leased 21:11:00, woke 21:11:17 | **26 s** Start → woke; $0.55, 117 s |
+| Wake for nick's answer (app) | answered 21:12:53, woke 21:14:03 | 70 s: ryder was still in the Start wake until 21:13:04; $0.24 |
+| **Claimed-work wake** | woke 21:15:29 | `derivation: work_order`, `edge: dispatch_continuation`, lane `01M5GD23HK`; $0.36. ryder closed both its claimed lanes in this wake |
+| Out of work | 21:26:04 | `shift.recommended`: a question to nick naming three open lanes to pick up |
+| Wake for nick's answer (app) | answered 21:26:28, woke 21:26:55 | **27 s**; $0.32 |
+| Wake for nick's answer (app) | answered 21:57:03, woke 21:57:30 | **27 s**; $0.33 |
+| Stop | 21:57:47 | `shift.stopped` `reason: no_work`, `lanes_claimed: 0`, day `spent_usd: 2.72` |
+
+- **The claimed-work wake fires.** With no question of its own open, ryder was woken for its claimed lane (`work_order`) two minutes after the Start wake ended, and closed the work. Run 1 never reached this. (2026-11-04; falsify: no `residency.wake_leased` with `derivation: work_order` for ryder between 21:13 and 21:16 UTC.) <!-- claim: other -->
+- **Out of work, the shift asks, then stops.** With nothing claimed, the daemon asked nick which lane ryder should take (`shift.recommended`). After his answers it stopped the shift with `no_work`, an hour before working hours end. (2026-11-04; falsify: the `shift.stopped` row above reads another reason.) <!-- claim: other -->
+- **Answer → woke from the phone: 26–27 s** for the two answers that found ryder idle, the same as /live. The 70 s one waited for the wake already running.
+- Cost: $1.80 for 47 minutes over five wakes. The day's shift spend was $2.72 against the $10 budget.
+
 ## What the runs showed besides the numbers
 
 - **A typed answer from the phone works.** nick did not pick an option on Q1. He typed "What do you mean which colour?" in the iOS app, and it arrived as `answer.text` with `answer_proof {channel: app, verified: true}` and woke the seat. (2026-11-03.)
@@ -49,7 +67,7 @@ Q2's answer waited behind ryder's hourly wake cap (2 per hour): the cap was chec
 
 ## Not yet measured
 
-- A seat on shift (ADR 792) that is not waiting on its own question: a claimed-work wake, and the `hours_end` stop at 15:00 Pacific with its board line. Shift run 1 measured Start → wake and a person's stop only. Follows-up: lane `01M6HSKWBZ76EJ714VHDHKF8XA`.
+- The `hours_end` stop at 15:00 Pacific with its board line, and a `budget` stop. Shift runs 1 and 2 measured Start → wake, a claimed-work wake, a person's stop and the `no_work` stop. Follows-up: lane `01M6HSKWBZ76EJ714VHDHKF8XA`.
 - A lock-screen answer with the question key (no app open), and answer → woke over more than two samples.
 
 ## How to re-run it
