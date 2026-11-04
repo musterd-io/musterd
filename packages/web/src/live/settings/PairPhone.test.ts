@@ -5,6 +5,7 @@ import {
   countdown,
   pairedLine,
   pairingRefusal,
+  stagedToAdopt,
   qrSvg,
   recallDaemonFingerprint,
   rememberDaemonFingerprint,
@@ -66,5 +67,20 @@ describe('pairing a phone from /live (lane 01M64DSBQV)', () => {
     rememberDaemonFingerprint('revive', 'ab12 cd34', store);
     expect(recallDaemonFingerprint('revive', store)).toBe('ab12 cd34');
     expect(recallDaemonFingerprint('other', store)).toBeNull();
+  });
+
+  it('an ended pairing is never adopted again from a stale waiting list (izzo, review of #3820)', () => {
+    const app = { fingerprint: 'f', environment: 'production', device_name: null, enroll_payload: { action: 'enroll' as const, public_key: 'k', kind: 'phone' as const } };
+    const p1 = { id: 'p1', channel: 'app', check_code: '00', state: 'awaiting_confirmation', provider_tenant_id: null, provider_user_id: null, expires_at: 9, created_at: 1, app };
+    const ended = new Set<string>();
+    // The panel shows p1, the daemon refuses it (or the person rejects it): the panel ends p1.
+    expect(stagedToAdopt([p1], ended)?.id).toBe('p1');
+    ended.add('p1');
+    // The parent's refresh is still in flight, so the waiting list still holds p1: not adopted.
+    expect(stagedToAdopt([p1], ended)).toBeUndefined();
+    // The refresh lands without it: still nothing.
+    expect(stagedToAdopt([], ended)).toBeUndefined();
+    // A new phone's request is adopted as before.
+    expect(stagedToAdopt([p1, { ...p1, id: 'p2' }], ended)?.id).toBe('p2');
   });
 });

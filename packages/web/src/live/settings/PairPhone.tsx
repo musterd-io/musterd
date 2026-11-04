@@ -83,6 +83,19 @@ export function pairingRefusal(e: unknown): { text: string; restart: true } | nu
     : null;
 }
 
+/**
+ * The staged pairing the panel should take up: the first app pairing this panel has not already
+ * ended. The parent's waiting list refreshes asynchronously, so for a moment after a reject or a
+ * refusal it still holds the pairing just ended — and adopting it again put the panel back on a
+ * stage nothing can finish (izzo, review of #3820).
+ */
+export function stagedToAdopt(
+  waiting: readonly ChannelPairing[],
+  ended: ReadonlySet<string>,
+): ChannelPairing | undefined {
+  return waiting.find((p) => p.app && !ended.has(p.id));
+}
+
 type Store = Pick<Storage, 'getItem' | 'setItem'> | null;
 const fpKey = (team: string) => `musterd.pairFp.${team}`;
 const local = (): Store => (typeof localStorage === 'undefined' ? null : localStorage);
@@ -146,7 +159,9 @@ export function PairPhone({
   }, [loadPaired]);
 
   // A phone that sent its request before this panel opened (or from a CLI-started code).
-  const staged = waiting.find((p) => p.app);
+  const [ended, setEnded] = useState<ReadonlySet<string>>(() => new Set());
+  const end = (id: string) => setEnded((prev) => new Set(prev).add(id));
+  const staged = stagedToAdopt(waiting, ended);
   useEffect(() => {
     if (staged && (stage.kind === 'idle' || stage.kind === 'code')) {
       setStage({ kind: 'phone', pairing: staged });
@@ -196,9 +211,10 @@ export function PairPhone({
   }, [stage, now, busy, newCode]);
 
   // A refusal that ended the pairing goes back to the start (lane 01M6KYZ1SM); anything else waits.
-  const failed = (e: unknown) => {
+  const failed = (e: unknown, p: ChannelPairing) => {
     const refused = pairingRefusal(e);
     if (refused) {
+      end(p.id);
       setStage({ kind: 'idle' });
       onChanged();
     }
@@ -221,7 +237,7 @@ export function PairPhone({
       void loadPaired();
       onChanged();
     } catch (e) {
-      failed(e);
+      failed(e, p);
     } finally {
       setBusy(false);
     }
@@ -249,11 +265,12 @@ export function PairPhone({
     setNote(null);
     try {
       await rejectChannelPairing(cfg, p.id);
+      end(p.id);
       setStage({ kind: 'idle' });
       setNote({ tone: 'ok', text: 'rejected — nothing was paired' });
       onChanged();
     } catch (e) {
-      failed(e);
+      failed(e, p);
     } finally {
       setBusy(false);
     }
