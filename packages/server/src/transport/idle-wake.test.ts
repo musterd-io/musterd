@@ -4,6 +4,8 @@ import { WebSocket } from 'ws';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { openLane } from '../store/lanes.js';
+import { insertMessage } from '../store/messages.js';
+import { claimAnswer } from '../store/questions.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
 
 withDrivers('idle-wake', (_o, kind) => {
@@ -161,6 +163,78 @@ withDrivers('idle-wake', (_o, kind) => {
       expect(await audits('interrupt.raised')).toHaveLength(0);
       // The boundary seam (hook output, never a user turn) still carries the act.
       expect((await check()).raised).toBe(true);
+    });
+
+    it('a question answer stops ringing once its inject is reported — ADR 773 §8, lane 01M6HCD4YF', async () => {
+      // A seat whose read cursor never passes the answer (a deep unread backlog) was re-offered the
+      // same answer at every idle check: nothing but the cursor or a reply discharged it.
+      const team = (await server.store.get<{ id: string }>(`SELECT id FROM teams WHERE slug = ?`, [
+        'dawn',
+      ]))!;
+      const idOf = async (name: string) =>
+        (await server.store.get<{ id: string }>(
+          `SELECT id FROM members WHERE team_id = ? AND name = ?`,
+          [team.id, name],
+        ))!.id;
+      const [adaId, nickId] = [await idOf('Ada'), await idOf('nick')];
+      const put = (env: ReturnType<typeof makeEnvelope>, from: string, to: string) =>
+        insertMessage(server.store, team.id, from, to, env);
+      await put(
+        makeEnvelope({
+          id: 'q-1',
+          team: 'dawn',
+          from: 'Ada',
+          ts: (clock += 100),
+          to: { kind: 'member', name: 'nick' },
+          act: 'ask',
+          body: 'x',
+          meta: {
+            species: 'consult',
+            question: { text: 'Ship it?', options: [{ label: 'Yes' }, { label: 'No' }] },
+          },
+        }),
+        adaId,
+        nickId,
+      );
+      const at = (clock += 100);
+      await put(
+        makeEnvelope({
+          id: 'a-1',
+          team: 'dawn',
+          from: 'nick',
+          ts: at,
+          to: { kind: 'member', name: 'Ada' },
+          act: 'accept',
+          body: 'Yes',
+          meta: {
+            in_reply_to: 'q-1',
+            answer: { choice: 0 },
+            answer_proof: { channel: 'live', verified: true, by: 'nick' },
+          },
+        }),
+        nickId,
+        adaId,
+      );
+      await claimAnswer(server.store, team.id, {
+        questionId: 'q-1',
+        answerId: 'a-1',
+        asker: 'Ada',
+        by: 'nick',
+        channel: 'live',
+        verified: true,
+        late: false,
+        at,
+      });
+      const first = await check('?seam=idle');
+      expect(first).toMatchObject({ raised: true, act: { id: 'a-1' } });
+      expect(first.line).toContain('nick answered your question q-1');
+      const report = await post(
+        '/teams/dawn/inbox/idle-wake',
+        { act: 'a-1', outcome: 'injected', harness: 'claude-code' },
+        ada,
+      );
+      expect(report.status).toBe(200);
+      expect(await check('?seam=idle')).toEqual({ raised: false, seam: 'idle' });
     });
 
     it('writes one interrupt.raised per (seat, act) across both seams', async () => {
