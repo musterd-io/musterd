@@ -23,12 +23,15 @@ beforeEach(() => {
   origCwd = process.cwd();
   cwd = mkdtempSync(join(tmpdir(), 'musterd-grok-'));
   process.env['MUSTERD_GROK_HOOKS_HOME'] = join(cwd, 'grok-user-hooks');
+  // detect() reads the machine-global config; keep it out of the machine's real ~/.grok.
+  process.env['GROK_HOME'] = join(cwd, 'grok-home');
   process.chdir(cwd);
   cwd = process.cwd();
 });
 afterEach(() => {
   process.chdir(origCwd);
   delete process.env['MUSTERD_GROK_HOOKS_HOME'];
+  delete process.env['GROK_HOME'];
   rmSync(cwd, { recursive: true, force: true });
 });
 
