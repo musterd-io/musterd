@@ -80,7 +80,7 @@ FRONT_DESK = dict(lx=165, ly=742, long=92, deep=50, high=DESK_UP)
 WAIT_CHAIR = 42
 # The reading nook by the corner bookshelf and the floor display pieces (lane 01M6FXBBHM): layout.ts
 # READING_NOOK and DECOR, mirrored (layout.test.ts holds them equal).
-READING_NOOK = dict(chair=(58, 44, "S"), lamp=(22, 18), table=(98, 52))
+READING_NOOK = dict(chair=(58, 44, "S"), lamp=(22, 18), table=(92, 58))
 DECOR = [("decor/bronze", 30, 720, 16, 16), ("decor/cairn", 876, 690, 18, 18)]
 END_TABLE = 26
 ENTRANCE = (47, 815)

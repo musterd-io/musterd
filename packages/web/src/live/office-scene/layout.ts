@@ -643,7 +643,7 @@ export const END_TABLE = 26;
 export const READING_NOOK = {
   chair: { lx: 58, ly: 44, dir: 'S' as Dir },
   lamp: { lx: 22, ly: 18 },
-  table: { lx: 98, ly: 52 },
+  table: { lx: 92, ly: 58 },
 };
 /** The floor lamp's footprint and the side table's, logical units. */
 export const NOOK_LAMP = 12;
