@@ -2933,3 +2933,11 @@ table) and two floor sculptures: their depth items in `receptionItems`, nav bloc
 leisure zone and the floor lamp's glow in `drawInteriorLight`. CI read 402.8 KB against the 402.3 KB
 ceiling (`static` job, run 41760691020). Raised by 1 KB.
 
+## 2026-11-04 — the phone pairing panel recovers: total JS RAISED 413,000 → 414,000 B (lane 01M6KYZ1SMRC3E1T4GAD2CQYNN)
+
+nick re-paired his phone after an app-channel key rotation and hit a stuck panel. `PairPhone.tsx` now
+maps a refused confirm or reject to plain words and returns to "Pair a phone" (`pairingRefusal`),
+offers one fingerprint to compare and remembers it per team across a reload. The helpers were
+compacted first (one pattern, one message). main itself read exactly 403.3 KB against the 403.3 KB
+ceiling, so any web addition failed. CI read 403.6 KB with this change (`static` job, run
+41897808595). Raised by 1 KB.
