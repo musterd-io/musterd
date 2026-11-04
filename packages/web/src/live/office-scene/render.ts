@@ -3920,9 +3920,15 @@ function drawInteriorLight(
   // toward white. Two changes, and only one of them is the opacity: the core drops 0.25 → 0.09, and it
   // drops DOWN the body (30 → 16) so its bright centre sits at the torso and the face catches only the
   // falloff. Light on someone is fine; a light source centred on their face is not.
+  //
+  // Raised 2026-11-03 (nick: "what happened to the slight glow around avatars on /live when its night
+  // time?"): the halo was tuned at 0.1 against the old painted floor and all but vanished on the rendered
+  // room, so it doubles on the floor; the core, the part that bleached faces, stays where #1291 put it.
+  // A member who is in the room but away keeps a dimmer halo, so a body at a desk is never left dark.
   for (const [name, pose] of poses) {
     const node = byName.get(name);
-    if (!node || node.presence !== 'online') continue;
+    if (!node || node.presence === 'offline') continue;
+    const away = node.presence !== 'online';
     const b = project(pose.lx, pose.ly, fit);
     const scale = pose.small ? 0.7 : 1;
     run(() => {
@@ -3935,17 +3941,19 @@ function drawInteriorLight(
         88 * fit.scale * scale,
         0.6,
         '255, 206, 140',
-        0.1 * night,
+        (away ? 0.11 : 0.2) * night,
       );
       // the core: the member's own presence, at a tenth of the alpha it used to bleach them with.
-      warmPool(
-        ctx,
-        { x: b.x, y: b.y - 16 * fit.scale * scale },
-        50 * fit.scale * scale,
-        0.8,
-        '255, 214, 158',
-        0.09 * night,
-      );
+      if (!away) {
+        warmPool(
+          ctx,
+          { x: b.x, y: b.y - 16 * fit.scale * scale },
+          50 * fit.scale * scale,
+          0.8,
+          '255, 214, 158',
+          0.09 * night,
+        );
+      }
       ctx.restore();
     });
   }
