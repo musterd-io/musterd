@@ -1,4 +1,4 @@
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 import { font, usePalette } from './theme';
 
 /** "just now", "4m ago", "2h ago", "yesterday", then a date. */
@@ -13,8 +13,27 @@ export function ago(ts: number, now: number): string {
 }
 
 /** A member's seat: the mark's sand and teal for an agent, the warm tint for a person. */
-export function Seat({ name, agent, size = 36 }: { name: string; agent: boolean; size?: number }) {
+export function Seat({
+  name,
+  agent,
+  size = 36,
+  portrait,
+}: {
+  name: string;
+  agent: boolean;
+  size?: number;
+  /** ADR 797: the member's rendered portrait (a `data:` URI), as /live shows it. The letter until then. */
+  portrait?: string | null;
+}) {
   const p = usePalette();
+  if (portrait)
+    return (
+      <Image
+        source={{ uri: portrait }}
+        accessibilityIgnoresInvertColors
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: p.sand }}
+      />
+    );
   return (
     <View
       style={{

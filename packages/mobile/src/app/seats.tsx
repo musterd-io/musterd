@@ -121,6 +121,25 @@ export default function SeatsScreen() {
 
 function SeatCard({ pin, seat }: { pin: PairingPin; seat: RosterSeat }) {
   const p = usePalette();
+  // ADR 797: the seat's face as /live paints it, fetched once per picture; the letter until then.
+  const [portrait, setPortrait] = useState<string | null>(null);
+  const digest = seat.portrait ?? null;
+  useEffect(() => {
+    if (!digest) return;
+    let live = true;
+    void (async () => {
+      try {
+        const { fetchPortrait } = await import('../native/quickAction');
+        const uri = await fetchPortrait({ pin, digest });
+        if (live && uri) setPortrait(uri);
+      } catch {
+        // Expo Go has no native module: keep the letter.
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [pin, digest]);
   const actions = seatActions(seat);
   // After a press, the line under the name says what happened, then goes back to the lane.
   const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null);
@@ -148,7 +167,7 @@ function SeatCard({ pin, seat }: { pin: PairingPin; seat: RosterSeat }) {
     <Glass style={styles.card}>
       <View style={styles.top}>
         <View>
-          <Seat name={seat.seat} agent size={32} />
+          <Seat name={seat.seat} agent size={32} portrait={digest ? portrait : null} />
           <View
             style={[
               styles.dot,

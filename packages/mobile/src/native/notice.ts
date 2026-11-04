@@ -194,7 +194,8 @@ export function noticeFor(
       body: quickResultText(delivery.seat, delivery.action, delivery.result),
       sound: false,
     };
-  if (delivery.kind === 'roster') return { title: NOTICE_TITLE, body: ROSTER_TEXT, sound: false };
+  if (delivery.kind === 'roster' || delivery.kind === 'portrait')
+    return { title: NOTICE_TITLE, body: ROSTER_TEXT, sound: false };
   if (delivery.member === '')
     return { title: NOTICE_TITLE, body: LOCK_SCREEN_FALLBACK_TEXT, sound: false };
   return { title: NOTICE_TITLE, body: `Paired as ${delivery.member}.`, sound: true };

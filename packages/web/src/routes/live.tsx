@@ -55,6 +55,7 @@ import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
 import { useReport } from '../live/useReport';
 import { roomEntries } from '../live/workingOn';
+import { usePortraitUpload } from '../live/portraitUpload';
 
 const LazySeedsTray = lazy(() =>
   import('../live/SeedsTray').then((module) => ({ default: module.SeedsTray })),
@@ -262,6 +263,8 @@ function LivePage() {
   // ADR 692: this page's socket says it is /live, which is what the "who is here" row reads; the
   // poll takes a closed tab out of that row when its member is still online elsewhere.
   const liveCfg = useMemo(() => (cfg ? { ...cfg, page: 'live' as const } : null), [cfg]);
+  // ADR 797: the portraits the office paints go to the daemon for the phone's Seats screen.
+  usePortraitUpload(cfg);
   const stream = useLiveStream(liveCfg, {
     onCredentialInvalid: recoverObserver,
     rosterPollMs: HERE_POLL_MS,
