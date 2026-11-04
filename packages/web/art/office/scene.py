@@ -1252,9 +1252,9 @@ CLOCK = (1, 0.52, 0.62, 25.0)  # wall, tc, uc, R
 HANGER = (0, 0.52, 0.76)  # wall, tc, uTop
 BELL = (1, 0.79, 0.915, 6, 6.5, 15)  # bell.ts BELL: wall, tc, pivotU, out, r, h
 SIGNS = {  # signs.ts SIGNS: name -> (wall, tc, uc, w, h, text, lamp)
-    "wiki": (0, 0.205, 0.53, 26, 16, "wiki", True),
-    "settings": (1, 0.52, 0.1185, 70, 16, "settings", False),
-    "board": (1, 0.8922, 0.875, 64, 17, "work board", True),
+    "wiki": (0, 0.1985, 0.54, 42, 20, "wiki", True),
+    "settings": (1, 0.52, 0.1005, 96, 22, "settings", False),
+    "board": (1, 0.8922, 0.8617, 104, 22, "work board", True),
 }
 BOARD = (1, 0.8922, 0.4787, 170, 120)  # layout.ts WALL_BOARD
 BOARD_GUTTER = 26  # render.ts BOARD_GUTTER: the goal tabs hang left of the columns (ADR 751)
@@ -1413,6 +1413,9 @@ def wall_sign(asset_id: str, name: str, zs: float, col) -> bpy.types.Object:
     tx.data.extrude = 0.35
     tx.data.bevel_depth = 0.08
     tx.data.space_character = 1.06
+    # Heavier strokes: Blender's default face is thin, and at /live's default scale the letters are
+    # a few pixels tall (izzo's review of lane 01M6M0SJR2), so the outline grows a little.
+    tx.data.offset = H * 0.02
     bpy.ops.object.convert(target="MESH")
     tx = bpy.context.active_object
     tx.name = f"{asset_id}/letters"

@@ -29,14 +29,14 @@ export interface Sign {
 export const SIGN_NAMES: readonly SignName[] = ['wiki', 'settings', 'board'];
 
 export const SIGNS: Record<SignName, Sign> = {
-  // Over the wiki shelf's left end, the one stretch of plaster above it clear of the near window's
-  // drape (the shelf runs t 0.201–0.266; the drape starts at 0.225). Its bottom clears the shelf top
-  // and whatever stands on it (66 + 22).
-  wiki: { wall: 0, tc: 0.205, uc: 0.53, w: 26, h: 16, text: 'wiki', lamp: true },
-  // Flush under the working-hours calendar (its bottom edge is at u 0.3 − 26/188), across its middle.
-  settings: { wall: 1, tc: 0.52, uc: 0.1185, w: 70, h: 16, text: 'settings', lamp: false },
-  // Centred over the board.
-  board: { wall: 1, tc: 0.8922, uc: 0.875, w: 64, h: 17, text: 'work board', lamp: true },
+  // Over the wiki shelf's left end: the plaster between the river painting (ends t 0.17) and the near
+  // window's drape (starts t 0.225). Its bottom clears the shelf top and whatever stands on it (66 + 22).
+  wiki: { wall: 0, tc: 0.1985, uc: 0.54, w: 42, h: 20, text: 'wiki', lamp: true },
+  // Flush under the working-hours calendar (its bottom edge is at u 0.3 − 26/188), across its middle,
+  // as wide as the bay between the windows allows.
+  settings: { wall: 1, tc: 0.52, uc: 0.1005, w: 96, h: 22, text: 'settings', lamp: false },
+  // Centred over the board, just above its top edge (u 0.798), its picture light under the ceiling.
+  board: { wall: 1, tc: 0.8922, uc: 0.8617, w: 104, h: 22, text: 'work board', lamp: true },
 };
 
 /**
