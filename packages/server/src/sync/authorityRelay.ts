@@ -478,6 +478,12 @@ export async function handleAuthorityRelay(
       response = { op: request.op, ok: true, archived_at: archived.archived_at };
       break;
     }
+    case 'poll.open': {
+      // ADR 807: the op is on the wire so the hub and its joiners agree on its shape; the hub opens
+      // polls once Twitch polls increment 2 builds them (lane 01M6ME50JK). Until then it refuses
+      // plainly rather than half-opening one.
+      relayError('validation', 'polls are not open on this hub yet (ADR 807)');
+    }
   }
   return AuthorityRelayResponseSchema.parse(response);
 }
