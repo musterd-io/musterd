@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
 import type { AskView } from './asks';
+import type { Waiting } from './questions';
 import { CaptionPill } from './CaptionPill';
 import type { Caption } from './captions';
 import type { LiveConfig } from './client';
@@ -58,6 +59,7 @@ export function TeamColumn({
   unreadable = 0,
   stale = false,
   asks = [],
+  waiting,
   still = false,
   you = null,
   teamName = null,
@@ -71,6 +73,8 @@ export function TeamColumn({
   /** The derived asks, clock applied (ADR 464 §4): an open one to a human makes a card say
    *  "asking nick". */
   asks?: readonly AskView[];
+  /** Each seat's open question to a person (`waitingOn`), for "waiting on nick" (lane 01M6M6G228). */
+  waiting?: ReadonlyMap<string, Waiting> | undefined;
   collapsed?: boolean;
   /** Absent on a phone (spec §2): one full-width column, nothing to fold. */
   onCollapse?: (() => void) | undefined;
@@ -102,7 +106,7 @@ export function TeamColumn({
 }) {
   // A signed-in person may send the seats quick actions (seats ask 2c); an observer or a seat may not.
   const canAct = you != null && roster.some((m) => m.name === you && m.kind === 'human');
-  const { cards, offline } = teamCards(roster, board, goals, asks);
+  const { cards, offline } = teamCards(roster, board, goals, asks, waiting);
   const working = cards.filter((c) => c.state === 'working').length;
   const dated = loading ? [] : experimentEntries(board, now);
   // ADR 701: the charts' live points — polled only while some read has a chart to move.
@@ -221,7 +225,7 @@ export function TeamColumn({
           <p className="lc-team__offline">+ {offline} offline</p>
         ) : (
           <Suspense fallback={<p className="lc-team__offline">{offline} offline</p>}>
-            <OfflineFold roster={roster} cfg={cfg ?? null} canAct={canAct} />
+            <OfflineFold roster={roster} cfg={cfg ?? null} canAct={canAct} waiting={waiting} />
           </Suspense>
         ))}
       {board && !loading && <Experiments entries={reads} now={now} avatarOf={avatarOf} still={still} stale={stale} />}

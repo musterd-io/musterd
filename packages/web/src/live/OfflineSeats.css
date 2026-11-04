@@ -61,6 +61,10 @@
   font-size: 11.5px;
   color: var(--lc-muted);
 }
+/* Held on its own question (lane 01M6M6G228): the warm ink of an ask waiting on a person. */
+.ofs__row.is-waiting .ofs__out {
+  color: var(--lc-warn-ink);
+}
 .ofs__act {
   flex: none;
 }

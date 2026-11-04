@@ -28,7 +28,7 @@ describe('OfflineSeats (lane 01M6KZZ5WH)', () => {
   });
 
   it('says why each seat is out, plainly', () => {
-    expect(members.map(outWord)).toEqual(['can’t be woken from here', 'away', 'asleep', 'its machine is quiet']);
+    expect(members.map((x) => outWord(x))).toEqual(['can’t be woken from here', 'away', 'asleep', 'its machine is quiet']);
   });
 
   it('lists the wakeable seats first, then other agents, then people', () => {
@@ -57,5 +57,17 @@ describe('OfflineFold', () => {
   });
   it('never says "can start" to someone who may not act', () => {
     expect(fold(false)).not.toContain('can start');
+  });
+});
+
+describe('an offline seat held on its own question (lane 01M6M6G228)', () => {
+  it('says who it waits on, not "asleep", and keeps its Start', () => {
+    const waiting = new Map([['ryder', { to: 'nick', waitedMs: 42 * 60_000 }]]);
+    const html = renderToStaticMarkup(
+      createElement(OfflineSeats, { members, roster, cfg: {} as LiveConfig, canAct: true, waiting }),
+    );
+    expect(html).toContain('waiting on nick · 42m');
+    expect(html).toMatch(/class="ofs__row is-asleep is-waiting"/);
+    expect(html.match(/qa__btn--start/g)?.length).toBe(1);
   });
 });

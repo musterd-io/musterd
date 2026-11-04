@@ -2,7 +2,9 @@ import type { MemberSummary } from '@musterd/protocol';
 import { useState } from 'react';
 import type { LiveConfig } from './client';
 import { MemberFace } from './MemberFace';
+import type { Waiting } from './questions';
 import { QuickButton, useQuickSend } from './quickActions';
+import { waitingLabelOf } from './teamCards';
 import './OfflineSeats.css';
 
 /**
@@ -16,11 +18,13 @@ export function OfflineSeats({
   roster,
   cfg,
   canAct,
+  waiting,
 }: {
   members: readonly MemberSummary[];
   roster: Map<string, MemberSummary>;
   cfg: LiveConfig | null;
   canAct: boolean;
+  waiting?: ReadonlyMap<string, Waiting> | undefined;
 }) {
   return (
     <ul className="ofs" aria-label="Offline seats">
@@ -30,6 +34,7 @@ export function OfflineSeats({
           m={m}
           roster={roster}
           cfg={canAct ? cfg : null}
+          wait={waiting?.get(m.name)}
           i={i}
         />
       ))}
@@ -48,9 +53,11 @@ export function canWake(m: MemberSummary): boolean {
   return m.kind !== 'human' && m.wakeable === true && (m.wakeability ?? 'wakeable') === 'wakeable';
 }
 
-/** Why it is out, in a word or two — the roster chip's reasons, said plainly. */
-export function outWord(m: MemberSummary): string {
+/** Why it is out, in a word or two — the roster chip's reasons, said plainly. A seat held on its own
+ *  open question says who it waits on: that, not "asleep", is why it is idle (ADR 792). */
+export function outWord(m: MemberSummary, wait?: Waiting): string {
   if (m.kind === 'human') return 'away';
+  if (wait) return waitingLabelOf(wait);
   if (canWake(m)) return 'asleep';
   switch (m.wakeability) {
     case 'enrolled_host_stale':
@@ -68,22 +75,24 @@ function OfflineRow({
   m,
   roster,
   cfg,
+  wait,
   i,
 }: {
   m: MemberSummary;
   roster: Map<string, MemberSummary>;
   cfg: LiveConfig | null;
+  wait: Waiting | undefined;
   i: number;
 }) {
   const wake = cfg !== null && canWake(m);
   return (
-    <li className={`ofs__row${canWake(m) ? ' is-asleep' : ''}`} style={{ '--i': i } as React.CSSProperties}>
+    <li className={`ofs__row${canWake(m) ? ' is-asleep' : ''}${wait ? ' is-waiting' : ''}`} style={{ '--i': i } as React.CSSProperties}>
       <span className="ofs__face">
         <MemberFace name={m.name} roster={roster} size={22} />
       </span>
       <span className="ofs__who">
         <span className="ofs__name">{m.name}</span>
-        <span className="ofs__out">{outWord(m)}</span>
+        <span className="ofs__out">{outWord(m, wait)}</span>
       </span>
       {wake && <StartChip cfg={cfg} seat={m.name} />}
     </li>
@@ -108,10 +117,12 @@ export function OfflineFold({
   roster,
   cfg,
   canAct,
+  waiting,
 }: {
   roster: MemberSummary[];
   cfg: LiveConfig | null;
   canAct: boolean;
+  waiting?: ReadonlyMap<string, Waiting> | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const out = roster.filter((m) => m.presence === 'offline');
@@ -135,7 +146,7 @@ export function OfflineFold({
         {canAct && asleep > 0 && <span className="lc-team__out-wake">{asleep} can start</span>}
         <i className="lc-team__out-chev" aria-hidden="true" />
       </button>
-      {open && <OfflineSeats members={out} roster={byName} cfg={cfg} canAct={canAct} />}
+      {open && <OfflineSeats members={out} roster={byName} cfg={cfg} canAct={canAct} waiting={waiting} />}
     </section>
   );
 }

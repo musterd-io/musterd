@@ -206,3 +206,17 @@ describe('elapsed', () => {
     expect(elapsed(dt === null ? null : 1_000, 1_000 + (dt ?? 0))).toBe(out);
   });
 });
+
+describe('a seat waiting on its own question (lane 01M6M6G228)', () => {
+  it('reads "waiting on nick · 42m" and outranks the lane it is on', () => {
+    const waiting = new Map([['a', { to: 'nick', waitedMs: 42 * 60_000 }]]);
+    const { cards } = teamCards([m('a')], board(lane('a')), [], [], waiting);
+    expect(cards[0]!.state).toBe('asking');
+    expect(cards[0]!.stateLabel).toBe('waiting on nick · 42m');
+    expect(cards[0]!.title).not.toBeNull();
+  });
+  it('says the team when the question was put to everyone', () => {
+    const { cards } = teamCards([m('a')], null, [], [], new Map([['a', { to: null, waitedMs: 0 }]]));
+    expect(cards[0]!.stateLabel).toBe('waiting on the team · now');
+  });
+});
