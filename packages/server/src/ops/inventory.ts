@@ -185,7 +185,8 @@ export function rowsOnlyIn(a: Database.Database, b: Database.Database, table: st
   return keysOf(a).filter((k) => !inB.has(JSON.stringify(k)));
 }
 
-/** Non-ephemeral tables of `a` that hold rows `b` does not, each with those rows' keys. */
+/** Non-ephemeral tables of `a` that hold rows `b` does not, each with those rows' keys — including
+ *  every row of a table `b` lacks entirely. */
 export function rowsOnlyInAny(
   a: Database.Database,
   b: Database.Database,
@@ -193,8 +194,14 @@ export function rowsOnlyInAny(
   const inB = new Set(tables(b));
   const out: Array<{ table: string; keys: unknown[][] }> = [];
   for (const table of tables(a)) {
-    if (isEphemeral(table) || !inB.has(table)) continue;
-    const keys = rowsOnlyIn(a, b, table);
+    if (isEphemeral(table)) continue;
+    // A table `b` does not have at all: every row of it is held only by `a` (big-body, 2026-11-03).
+    const keys = inB.has(table)
+      ? rowsOnlyIn(a, b, table)
+      : (a
+          .prepare(`SELECT ${primaryKey(a, table).map(q).join(', ')} FROM ${q(table)}`)
+          .raw()
+          .all() as unknown[][]);
     if (keys.length > 0) out.push({ table, keys });
   }
   return out;

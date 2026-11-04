@@ -1,7 +1,13 @@
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { runMigrations } from '../db/migrations.js';
-import { compareInventories, EPHEMERAL_TABLES, rowsOnlyIn, takeInventory } from './inventory.js';
+import {
+  compareInventories,
+  EPHEMERAL_TABLES,
+  rowsOnlyIn,
+  rowsOnlyInAny,
+  takeInventory,
+} from './inventory.js';
 
 /** A migrated store with a few rows in the tables the move cares about. */
 function seeded(): Database.Database {
@@ -87,6 +93,17 @@ describe('the hub inventory (ADR 796)', () => {
     const only = rowsOnlyIn(replica, hub, 'audit');
     expect(only).toHaveLength(1);
     expect(rowsOnlyIn(hub, replica, 'audit')).toEqual([]);
+  });
+
+  it('reports every row of a table the hub lacks entirely', () => {
+    const hub = seeded();
+    const replica = copyOf(hub);
+    replica.exec('CREATE TABLE box_only (id TEXT PRIMARY KEY, v TEXT)');
+    replica.prepare("INSERT INTO box_only (id, v) VALUES ('k1', 'x'), ('k2', 'y')").run();
+    expect(rowsOnlyInAny(replica, hub)).toEqual([{ table: 'box_only', keys: [['k1'], ['k2']] }]);
+    // An empty table the hub lacks holds nothing to lose.
+    replica.exec('DELETE FROM box_only');
+    expect(rowsOnlyInAny(replica, hub)).toEqual([]);
   });
 
   it('ignoresEphemeralTables', () => {
