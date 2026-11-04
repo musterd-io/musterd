@@ -87,10 +87,24 @@ describe('TeamColumn', () => {
     expect(html).toMatch(/declared/);
   });
 
-  it('offline seats fold into one line', () => {
-    const html = render({ roster: [m('a'), m('b', { presence: 'offline', posture: 'offline' })] });
-    expect(html).toContain('+ 1 offline');
-    expect(html).not.toContain('>b<');
+  it('offline seats fold into one closed control on /live, and stay one line on a stream', () => {
+    const roster = [m('a'), m('b', { presence: 'offline', posture: 'offline' })];
+    const html = render({ roster });
+    expect(html).toMatch(/<button type="button" class="lc-team__offline" aria-expanded="false"/);
+    expect(html).toContain('1 offline');
+    expect(html).not.toContain('lc-team-card__name">b<');
+    expect(render({ roster, still: true })).toContain('+ 1 offline');
+  });
+
+  it('says how many offline seats a signed-in person could start (lane 01M6KZZ5WH)', () => {
+    const roster = [
+      m('nick', { kind: 'human' }),
+      m('ryder', { presence: 'offline', posture: 'offline', wakeable: true }),
+      m('sloane', { presence: 'offline', posture: 'offline', wakeable: true, wakeability: 'enrolled_host_stale' }),
+      m('dolly', { presence: 'offline', posture: 'offline' }),
+    ];
+    expect(render({ roster, you: 'nick' })).toContain('1 can start');
+    expect(render({ roster })).not.toContain('can start');
   });
 
   it('collapsed: a rail of avatars, each carrying its provider logo and a labelled state', () => {

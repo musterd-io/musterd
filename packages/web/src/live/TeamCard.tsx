@@ -189,7 +189,7 @@ export function TeamCard({
         <div className="lc-team-card__detail">
           {meta && <p className="lc-team-card__detail-meta">{meta}</p>}
           <Suspense fallback={null}>
-            <SeatDetail m={card.member} cfg={cfg} canAct={canAct} />
+            <SeatDetail m={card.member} cfg={cfg} canAct={canAct} lane={card.source === 'lane'} />
           </Suspense>
         </div>
       )}

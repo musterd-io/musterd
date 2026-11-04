@@ -1,0 +1,84 @@
+/* The offline seats, opened from the team column's fold (lane 01M6KZZ5WH). Lazy, with OfflineSeats. */
+.ofs {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--lc-5) var(--lc-4);
+  display: grid;
+  gap: 2px;
+}
+.ofs__row {
+  display: flex;
+  align-items: center;
+  /* Face and name on the cards' columns: 12 + 12 in, a 6px gap after the face. */
+  gap: var(--lc-3);
+  min-height: 36px;
+  padding: 4px var(--lc-4) 4px var(--lc-5);
+  border-radius: 10px;
+  transition: background-color var(--lc-dur-1) var(--lc-ease-out);
+  animation: ofs-in var(--lc-dur-3) var(--lc-ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 8) * 24ms);
+}
+@media (hover: hover) and (pointer: fine) {
+  .ofs__row:hover {
+    background: var(--lc-surface);
+  }
+}
+/* Dim the face, never the words (2026-08-13: opacity on a row took its text to 2.34:1). */
+.ofs__face {
+  flex: none;
+  display: inline-flex;
+  opacity: 0.55;
+  filter: saturate(0.4);
+  transition:
+    opacity var(--lc-dur-2) var(--lc-ease-out),
+    filter var(--lc-dur-2) var(--lc-ease-out);
+}
+.ofs__row.is-asleep .ofs__face {
+  opacity: 0.8;
+  filter: saturate(0.75);
+}
+@media (hover: hover) and (pointer: fine) {
+  .ofs__row:hover .ofs__face {
+    opacity: 1;
+    filter: none;
+  }
+}
+.ofs__who {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.25;
+}
+.ofs__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ofs__out {
+  font-size: 11.5px;
+  color: var(--lc-muted);
+}
+.ofs__act {
+  flex: none;
+}
+@keyframes ofs-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ofs__row {
+    animation: none;
+  }
+  .ofs__face {
+    transition-duration: 0s;
+  }
+}

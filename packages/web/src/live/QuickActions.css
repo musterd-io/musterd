@@ -9,9 +9,13 @@
   gap: 6px;
 }
 .qa__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
   font: inherit;
   font-size: 12px;
-  padding: 4px 10px;
+  padding: 4px 11px 4px 9px;
   border: 1px solid var(--lc-border);
   border-radius: 999px;
   background: var(--lc-surface-2);
@@ -20,7 +24,63 @@
   transition:
     transform var(--lc-dur-1) var(--lc-ease-out),
     border-color var(--lc-dur-1) var(--lc-ease-out),
-    color var(--lc-dur-1) var(--lc-ease-out);
+    color var(--lc-dur-1) var(--lc-ease-out),
+    background-color var(--lc-dur-2) var(--lc-ease-out);
+}
+.qa__label {
+  white-space: nowrap;
+}
+.qa__glyph {
+  flex: none;
+  opacity: 0.8;
+}
+/* Start is the one this seat is waiting for: the accent, as a tint (brand.md §2: mustard is a fill
+   behind dark text; the ink shade carries the word). */
+.qa__btn--start {
+  border-color: color-mix(in srgb, var(--lc-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--lc-accent) 14%, var(--lc-surface-2));
+  color: var(--lc-accent-ink);
+  font-weight: 600;
+}
+.qa__btn--stop {
+  color: var(--lc-danger-ink);
+}
+/* After a press the pill says what happened, in place, then settles back (the phone's 4 s). */
+.qa__btn.is-sending {
+  cursor: progress;
+  color: var(--lc-dim);
+}
+.qa__btn.is-sending .qa__glyph {
+  animation: qa-breathe var(--lc-dur-5) var(--lc-ease-in-out) infinite alternate;
+}
+.qa__btn.is-sent {
+  border-color: color-mix(in srgb, var(--lc-success) 45%, transparent);
+  background: color-mix(in srgb, var(--lc-success) 12%, var(--lc-surface-2));
+  color: var(--lc-success-ink);
+}
+.qa__btn.is-sent .qa__glyph {
+  opacity: 1;
+  animation: qa-pop var(--lc-dur-3) var(--lc-ease-pop);
+}
+.qa__btn.is-failed {
+  border-color: color-mix(in srgb, var(--lc-danger) 40%, transparent);
+  color: var(--lc-danger-ink);
+}
+@keyframes qa-breathe {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes qa-pop {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: none;
+  }
 }
 @media (hover: hover) and (pointer: fine) {
   .qa__btn:hover:not(:disabled) {
@@ -39,16 +99,18 @@
   outline: 2px solid var(--lc-focus);
   outline-offset: 2px;
 }
-.qa__said {
-  margin: 0;
-  font-size: 12px;
-  color: var(--lc-success-ink);
-}
-.qa__said.is-error {
-  color: var(--lc-danger-ink);
+/* What a press did, for a screen reader: the pill's own words change in place, which is not announced. */
+.qa__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .qa--compact .qa__btn {
-  padding: 3px 9px;
+  min-height: 24px;
+  padding: 3px 10px 3px 8px;
 }
 .qa-all {
   display: grid;
@@ -76,6 +138,9 @@
 @media (prefers-reduced-motion: reduce) {
   .qa__btn {
     transition-duration: 0s;
+  }
+  .qa__btn .qa__glyph {
+    animation: none;
   }
   .qa__btn:active:not(:disabled) {
     transform: none;

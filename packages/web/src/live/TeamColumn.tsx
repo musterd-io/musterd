@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
 import type { AskView } from './asks';
 import { CaptionPill } from './CaptionPill';
@@ -14,6 +14,7 @@ import { experimentEntries, withLivePoints } from './experimentReads';
 import { MusterdWordmark } from '../brand/MusterdWord';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { VersionBadge, type DaemonInfo } from './VersionBadge';
+import { MemberFace } from './MemberFace';
 import { TeamCard } from './TeamCard';
 import { teamCards, type TeamCard as TeamCardModel } from './teamCards';
 
@@ -216,10 +217,69 @@ export function TeamColumn({
         ))}
       </ul>
       {still && <IdleStrip cards={cards.filter((c) => IDLE.has(c.state))} />}
-      {offline > 0 && <p className="lc-team__offline">+ {offline} offline</p>}
+      {offline > 0 &&
+        (still ? (
+          <p className="lc-team__offline">+ {offline} offline</p>
+        ) : (
+          <OfflineFold roster={roster} cfg={cfg ?? null} canAct={canAct} />
+        ))}
       {board && !loading && <Experiments entries={reads} now={now} avatarOf={avatarOf} still={still} stale={stale} />}
       {!still && <TeamColumnNotes roster={roster} unreadable={unreadable} stale={stale} />}
     </aside>
+  );
+}
+
+const OfflineSeats = lazy(() => import('./OfflineSeats').then((m) => ({ default: m.OfflineSeats })));
+const preloadOffline = () => void import('./OfflineSeats');
+
+/**
+ * The seats not in the room, folded (lane 01M6KZZ5WH): a few faces, the count, and how many could be
+ * started now. Open, it lists them with the phone's Start (`OfflineSeats`, loaded on first open — a
+ * hover or focus fetches it early, so the open feels instant).
+ */
+function OfflineFold({
+  roster,
+  cfg,
+  canAct,
+}: {
+  roster: MemberSummary[];
+  cfg: LiveConfig | null;
+  canAct: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const out = useMemo(() => roster.filter((m) => m.presence === 'offline'), [roster]);
+  const byName = useMemo(() => new Map(roster.map((m) => [m.name, m])), [roster]);
+  const asleep = out.filter(
+    (m) => m.kind !== 'human' && m.wakeable === true && (m.wakeability ?? 'wakeable') === 'wakeable',
+  ).length;
+  if (out.length === 0) return null;
+  return (
+    <section className="lc-team__out" data-open={open || undefined}>
+      <button
+        type="button"
+        className="lc-team__offline"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onPointerEnter={preloadOffline}
+        onFocus={preloadOffline}
+      >
+        <span className="lc-team__out-faces" aria-hidden="true">
+          {out.slice(0, 4).map((m) => (
+            <MemberFace key={m.name} name={m.name} roster={byName} size={18} />
+          ))}
+        </span>
+        <span className="lc-team__out-n">{out.length} offline</span>
+        {canAct && asleep > 0 && <span className="lc-team__out-wake">{asleep} can start</span>}
+        <svg className="lc-team__out-chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+          <path d="M4.5 3 7.5 6l-3 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <Suspense fallback={null}>
+          <OfflineSeats members={out} roster={byName} cfg={cfg} canAct={canAct} />
+        </Suspense>
+      )}
+    </section>
   );
 }
 
