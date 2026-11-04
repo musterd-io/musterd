@@ -532,4 +532,23 @@ export const CONTROLS: Control[] = [
     staleAfterDays: 90,
     refs: ['ADR 505', 'lane 01M44BVD88Z9T12Z4RHGC4EG28', 'docs/claims/README.md', 'scripts/check-ledger.test.ts'],
   },
+  {
+    id: 'corpus-backup-freshness',
+    kind: 'guard',
+    claim:
+      'The private research corpus is never more than 14 days from a verified off-machine copy: the weekly launchd job snapshots and uploads it, and `pnpm corpus:check` exits 1 when the newest snapshot or the last verified upload passes the bound (ADR 798).',
+    where:
+      'scripts/corpus/backup.ts + scripts/corpus/check.ts; launchd studio.sandrise.musterd-corpus-backup (Sundays 04:00); private bucket corpus-backups on exn-corpus-backup',
+    exercise:
+      'Run `pnpm corpus:check` — it must pass within a week of a backup. Then run `node scripts/corpus/check.ts --max-age-days 0` semantics via checkFreshness on the 2026-09-05 stamps (pinned in scripts/corpus/check.test.ts): the September-to-November lapse must report both the snapshot and the upload stale. `launchctl kickstart gui/$(id -u)/studio.sandrise.musterd-corpus-backup` must advance ~/.musterd/corpus-backups/LAST.json.',
+    motivatedBy:
+      '2026-11-04: the newest corpus snapshot was 2026-09-05 while the corpus grew 184 MB -> 1,635 MB raw. The cadence was explicit-manual with a named owner and no staleness check, so it read as backed up for two months while backing up nothing. Lane 01M6JGWHFH.',
+    counterfactual:
+      'Yes: at a 14-day bound the check would have gone red on 2026-09-19, six weeks before a human noticed by asking. The check.test.ts case named for this lapse fails on exactly the pre-fix dates.',
+    lastExercised: '2026-11-04',
+    everTripped: true,
+    lastTripped: '2026-11-04',
+    staleAfterDays: 30,
+    refs: ['ADR 798', 'ADR 280', 'lane 01M6JGWHFHQP8178DSX6ZZ1DJ0', 'scripts/corpus/check.test.ts'],
+  },
 ];

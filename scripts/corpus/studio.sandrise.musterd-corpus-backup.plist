@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Weekly corpus backup (ADR 798). Install:
+       sed -e "s|__NODE__|$(command -v node)|" -e "s|__REPO__|$PWD|" -e "s|__HOME__|$HOME|" \
+         scripts/corpus/studio.sandrise.musterd-corpus-backup.plist \
+         > ~/Library/LaunchAgents/studio.sandrise.musterd-corpus-backup.plist
+       launchctl load ~/Library/LaunchAgents/studio.sandrise.musterd-corpus-backup.plist
+     Credentials come from ~/.musterd/corpus-backup.env (chmod 600), never from this file. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>studio.sandrise.musterd-corpus-backup</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>--disable-warning=ExperimentalWarning</string>
+    <string>__REPO__/scripts/corpus/backup.ts</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>0</integer>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__HOME__/.musterd/corpus-backups/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.musterd/corpus-backups/backup.log</string>
+</dict>
+</plist>
