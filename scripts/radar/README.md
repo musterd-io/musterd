@@ -23,7 +23,7 @@ written; with it, successfully triaged canonical and episode IDs enter `seen.jso
 reads remain in its metadata-only pending queue. Full source bodies are not saved. A same-week
 digest on `main` is immutable.
 
-GitHub Actions runs this full-text path every Monday at 08:00 UTC and supports manual dispatch. It
+GitHub Actions runs this full-text path every Monday 18:00 and Thursday 08:00 Pacific standard time (Tuesday 02:00 and Thursday 16:00 UTC) and supports manual dispatch. It
 checks for `ANTHROPIC_API_KEY`, `EXA_API_KEY`, `EXPLORING_API_KEY`, and `STEWARD_TOKEN` before
 processing. The workflow opens or updates one unreviewed weekly **draft PR** containing the digest
 and ledger; it never merges. Review the source links and triage before merging.
