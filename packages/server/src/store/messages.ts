@@ -337,6 +337,19 @@ export interface InboxOpts {
 export const PINNED_DEFAULT_LIMIT = 50;
 
 /**
+ * "After the `(created_at, id)` read cursor", in a form SQLite can seek on. Binds four values:
+ * the cursor's `created_at` three times, then its id.
+ *
+ * The `created_at >= ?` is redundant: the OR already implies it. It is there for the planner, which
+ * cannot turn `created_at > ? OR (created_at = ? AND id > ?)` into a range, so without it
+ * idx_messages_inbox_cover stopped at `team_id` and every unread first page walked the team's whole
+ * history from its oldest row (lane 01M6J3ERC4: 854 slow runs, 669 s, max 3.6 s on the laptop hub
+ * in 8 h). With it the same index seeks `(team_id, created_at)`. Same rows either way.
+ */
+export const INBOX_AFTER_CURSOR_SQL =
+  '(created_at >= ? AND (created_at > ? OR (created_at = ? AND id > ?)))';
+
+/**
  * A member's inbox: messages in their team addressed to them or to team/broadcast,
  * excluding their own sends. unreadOnly filters by the caller-supplied cursor position (receipt order).
  */
@@ -368,8 +381,8 @@ export async function listInbox(
     // forms select exactly the same rows.
     const cursorTs = opts.cursorTs ?? 0;
     if (opts.cursorId) {
-      where += ' AND (created_at > ? OR (created_at = ? AND id > ?))';
-      params.push(cursorTs, cursorTs, opts.cursorId);
+      where += ` AND ${INBOX_AFTER_CURSOR_SQL}`;
+      params.push(cursorTs, cursorTs, cursorTs, opts.cursorId);
     } else {
       where += ' AND created_at > ?';
       params.push(cursorTs);
@@ -528,8 +541,8 @@ export async function countUnread(
           WHERE team_id = ?
             AND (to_member = ? OR to_kind IN ('team','broadcast'))
             AND from_member != ?
-            AND (created_at > ? OR (created_at = ? AND id > ?))`,
-      [member.team_id, member.id, member.id, cursorTs, cursorTs, cursorId],
+            AND ${INBOX_AFTER_CURSOR_SQL}`,
+      [member.team_id, member.id, member.id, cursorTs, cursorTs, cursorTs, cursorId],
     );
     return row?.n ?? 0;
   }
