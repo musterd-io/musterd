@@ -185,7 +185,57 @@ interface TokenRow {
   required_assurance: string;
   expires_at: number;
   consumed_at: number | null;
+  created_at: number;
 }
+
+/**
+ * A token a re-issue replaced is not an answered one (lane 01M6DBJD8Y, fifty's call). Every re-delivery
+ * and body fetch re-issues the ask and spends the token it replaces, so an answer the phone kept
+ * offline, signed over the older token, used to come back `consumed` after the relay had already
+ * taken it. The older token stays good while its ask has a live successor on the same binding and
+ * generation: a token issued no earlier, unconsumed and unexpired. The answer that redeems it burns
+ * that successor, so the first answer wins and every later one, on either token, is refused.
+ */
+async function liveSuccessor(t: Driver, teamId: string, row: TokenRow, now: number) {
+  const next = await t.get<{ token_hash: string }>(
+    `SELECT token_hash FROM ask_channel_tokens
+      WHERE team_id = ? AND ask_id = ? AND binding_id = ? AND binding_generation = ?
+        AND consumed_at IS NULL AND expires_at > ? AND created_at >= ? AND token_hash <> ?
+      ORDER BY created_at DESC LIMIT 1`,
+    [
+      teamId,
+      row.ask_id,
+      row.binding_id,
+      row.binding_generation,
+      now,
+      row.created_at,
+      row.token_hash,
+    ],
+  );
+  return next?.token_hash ?? null;
+}
+
+/** Burn the live successors of a replaced token: the compare-and-set for an answer that redeems it. */
+async function burnSuccessors(t: Driver, teamId: string, row: TokenRow, now: number) {
+  return t.run(
+    `UPDATE ask_channel_tokens SET consumed_at = ?
+      WHERE team_id = ? AND ask_id = ? AND binding_id = ? AND binding_generation = ?
+        AND consumed_at IS NULL AND expires_at > ? AND created_at >= ? AND token_hash <> ?`,
+    [
+      now,
+      teamId,
+      row.ask_id,
+      row.binding_id,
+      row.binding_generation,
+      now,
+      row.created_at,
+      row.token_hash,
+    ],
+  );
+}
+
+const TOKEN_COLUMNS = `token_hash, ask_id, ask_digest, action_class, channel, binding_id,
+                binding_generation, required_assurance, expires_at, consumed_at, created_at`;
 
 /** Thrown inside the transaction to roll it back with a reason. */
 class Refuse extends Error {
@@ -217,8 +267,8 @@ function auditDetail(
 }
 
 /**
- * Redeem a token (ADR 623 §6). In ONE transaction: the token exists for this team, is unconsumed and
- * unexpired; the presented assurance is one the token allows; the ask is still open with the same
+ * Redeem a token (ADR 623 §6). In ONE transaction: the token exists for this team, is unconsumed (or
+ * was spent only by a re-issue whose live successor still stands — lane 01M6DBJD8Y) and unexpired; the presented assurance is one the token allows; the ask is still open with the same
  * digest and the same class as recomputed now; the binding's generation is current. Then the decision
  * row is inserted (the per-ask primary key is the compare-and-set), the answer is written, and the
  * token is consumed. Any refusal or throw leaves nothing behind except the refusal's audit row.
@@ -232,14 +282,16 @@ export async function redeemAskChannelToken(
   try {
     const result = await db.tx(async (t): Promise<RedeemResult> => {
       const row = await t.get<TokenRow>(
-        `SELECT token_hash, ask_id, ask_digest, action_class, channel, binding_id,
-                binding_generation, required_assurance, expires_at, consumed_at
-           FROM ask_channel_tokens WHERE token_hash = ? AND team_id = ?`,
+        `SELECT ${TOKEN_COLUMNS} FROM ask_channel_tokens WHERE token_hash = ? AND team_id = ?`,
         [hash, input.teamId],
       );
       if (!row) throw new Refuse('unknown_token');
-      if (row.consumed_at !== null) throw new Refuse('consumed', row);
+      // Expiry first: past its ask's lifetime a token is expired, whoever spent it.
       if (input.now >= row.expires_at) throw new Refuse('expired', row);
+      // Spent by a re-issue, not by an answer: still good while a live successor stands.
+      const successor =
+        row.consumed_at === null ? null : await liveSuccessor(t, input.teamId, row, input.now);
+      if (row.consumed_at !== null && !successor) throw new Refuse('consumed', row);
       // The presented assurance must be the token's own: A1 never redeems an A2 token, and an A2
       // answer never redeems an advisory one (ADR 694). Issue pins A2 ⇔ privileged; re-checked here.
       if (
@@ -298,18 +350,24 @@ export async function redeemAskChannelToken(
 
       await input.writeAnswer(t, authorizer);
 
-      const consumed = await t.run(
-        'UPDATE ask_channel_tokens SET consumed_at = ? WHERE token_hash = ? AND consumed_at IS NULL',
-        [input.now, hash],
-      );
-      if (consumed.changes !== 1) throw new Refuse('consumed', row);
+      const consumed = successor
+        ? await burnSuccessors(t, input.teamId, row, input.now)
+        : await t.run(
+            'UPDATE ask_channel_tokens SET consumed_at = ? WHERE token_hash = ? AND consumed_at IS NULL',
+            [input.now, hash],
+          );
+      if (consumed.changes < 1) throw new Refuse('consumed', row);
 
       await appendAudit(t, input.teamId, {
         actor: null,
         action: input.assurance === 'A2' ? 'channel.answer.a2' : 'channel.answer.advisory',
         target: row.ask_id,
         result: 'allow',
-        detail: auditDetail(row, input, authorizer, { decision: input.decision }),
+        detail: auditDetail(row, input, authorizer, {
+          decision: input.decision,
+          // The token this answer outlived (a hash prefix, never the token: hard rule 5).
+          ...(successor ? { superseded_by: successor.slice(0, 12) } : {}),
+        }),
       });
       return { ok: true, decision: input.decision, messageId: input.answerMessageId };
     });
@@ -333,7 +391,8 @@ export async function redeemAskChannelToken(
 /**
  * Burn a token whose answer went through the act path instead of {@link redeemAskChannelToken}'s
  * own write — a question's answer (ADR 773), which the send route claims, stamps and wakes on.
- * Checked first with `preflight`; this is the one write that follows. False when already burned.
+ * Checked first with `preflight`; this is the one write that follows. False when already burned —
+ * unless a re-issue burned it and its live successor still stands, which this answer burns instead.
  */
 export async function consumeAskChannelToken(
   db: Driver,
@@ -341,9 +400,19 @@ export async function consumeAskChannelToken(
   token: string,
   now: number,
 ): Promise<boolean> {
-  const res = await db.run(
-    'UPDATE ask_channel_tokens SET consumed_at = ? WHERE token_hash = ? AND team_id = ? AND consumed_at IS NULL',
-    [now, sha256(token), teamId],
-  );
-  return res.changes === 1;
+  const hash = sha256(token);
+  return db.tx(async (t) => {
+    const res = await t.run(
+      'UPDATE ask_channel_tokens SET consumed_at = ? WHERE token_hash = ? AND team_id = ? AND consumed_at IS NULL',
+      [now, hash, teamId],
+    );
+    if (res.changes === 1) return true;
+    // A token a re-issue replaced: the answer burns its live successor instead (lane 01M6DBJD8Y).
+    const row = await t.get<TokenRow>(
+      `SELECT ${TOKEN_COLUMNS} FROM ask_channel_tokens WHERE token_hash = ? AND team_id = ?`,
+      [hash, teamId],
+    );
+    if (!row || now >= row.expires_at) return false;
+    return (await burnSuccessors(t, teamId, row, now)).changes >= 1;
+  });
 }

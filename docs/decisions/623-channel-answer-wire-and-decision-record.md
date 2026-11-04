@@ -98,7 +98,7 @@ there so a future route cannot be reached by a channel by accident, and it is te
 
 ### 6. Redemption rechecks current state
 
-On an answer, in the same transaction: the token exists and is unconsumed and unexpired; the ask is still
+On an answer, in the same transaction: the token exists and is unconsumed and unexpired _(Amended 2026-11-04: a token spent only by a re-issue still redeems while its live successor stands; see the lane 01M6DBJD8Y note under Consequences.)_; the ask is still
 open and its digest still matches `ask_digest`; the class **recomputed from current state** is still
 `advisory` (an ask that became privileged after delivery refuses the answer); the binding's current
 generation equals the token's and the binding is not revoked; the team and daemon authority match. The
@@ -163,6 +163,17 @@ rows are added to the audit action map.
   same way it verifies a passkey verdict. `answerAuthority` is unchanged: a `channel_answer` is still
   advisory whatever its assurance, and no channel stamps `A2`. Redemption is checked before the act
   (a `preflight` that writes nothing) and settled after it.
+- 2026-11-04, lane 01M6DBJD8Y (fifty's call: "superseded ≠ answered"): a token a re-issue replaced is
+  no longer refused as `consumed`. Each re-delivery and body fetch re-issues the ask and spends the
+  token it replaces. A phone's offline answer, signed over the older token and kept in its outbox,
+  was refused `consumed` after the relay had already taken it (build 40, 2026-11-01). Now a spent
+  token redeems while its ask has a live successor on the same binding and generation: issued no
+  earlier, unconsumed and unexpired. The answer burns that successor instead of the token, so the
+  first answer wins and every later one, on either token, is refused. A revoke, an answer elsewhere
+  or a closed question burns every live token, so there is no successor and the old token stays
+  refused. Expiry is now checked before consumption. No schema change was needed. The accept audits
+  `superseded_by` as a 12-character prefix of the successor's hash (never a token). A question's
+  `consumeAskChannelToken` follows the same rule.
 
 ## Observability & Evaluation
 

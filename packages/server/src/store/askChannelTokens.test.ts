@@ -1,11 +1,13 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import {
+  type AskStanding,
+  consumeAskChannelToken,
   issueAskChannelToken,
   NO_BINDING_STORE,
   redeemAskChannelToken,
-  type AskStanding,
   type RedemptionChecks,
 } from './askChannelTokens.js';
 import { listAudit } from './audit.js';
@@ -186,6 +188,82 @@ withDrivers('ask channel tokens and the decision record (ADR 623 §5-§7)', (ope
       expect(first.ok).toBe(true);
       expect(second).toEqual({ ok: false, reason: 'consumed' });
       expect(await decisionRows(db, team.id)).toHaveLength(1);
+    });
+
+    describe('a token a re-issue replaced (lane 01M6DBJD8Y)', () => {
+      /** What a re-delivery or body fetch does: issue a new token, spend the one it replaces. */
+      async function reissue(db: Driver, teamId: string, old: string, at: number) {
+        const next = await issueAskChannelToken(db, issueInput(teamId, { now: at }));
+        await db.run('UPDATE ask_channel_tokens SET consumed_at = ? WHERE token_hash = ?', [
+          at,
+          createHash('sha256').update(old).digest('hex'),
+        ]);
+        return next.token;
+      }
+
+      it('still redeems while its successor is live, and the answer burns the successor', async () => {
+        const { db, team } = await seed();
+        const { token: kept } = await issueAskChannelToken(db, issueInput(team.id));
+        const fresh = await reissue(db, team.id, kept, NOW + 10);
+        const { c } = checks();
+        const first = await redeemAskChannelToken(db, redeemInput(team.id, kept).input, c);
+        expect(first).toEqual({ ok: true, decision: 'approve', messageId: 'msg-1' });
+        // First answer wins: the fresh token and a replay of the kept one are both refused.
+        const later = await redeemAskChannelToken(
+          db,
+          redeemInput(team.id, fresh, { answerMessageId: 'msg-2' }).input,
+          c,
+        );
+        const replay = await redeemAskChannelToken(
+          db,
+          redeemInput(team.id, kept, { answerMessageId: 'msg-3' }).input,
+          c,
+        );
+        expect(later).toEqual({ ok: false, reason: 'consumed' });
+        expect(replay).toEqual({ ok: false, reason: 'consumed' });
+        expect(await decisionRows(db, team.id)).toHaveLength(1);
+        const audit = (await listAudit(db, team.id)).find(
+          (r) => r.action === 'channel.answer.advisory',
+        );
+        const detail = JSON.parse(audit!.detail!);
+        expect(detail.superseded_by).toMatch(/^[0-9a-f]{12}$/);
+        expect(JSON.stringify(detail)).not.toContain(fresh);
+      });
+
+      it('is refused once nothing live replaced it: answered elsewhere, expired, or a revoke', async () => {
+        const { db, team } = await seed();
+        const { token: kept } = await issueAskChannelToken(db, issueInput(team.id));
+        await reissue(db, team.id, kept, NOW + 10);
+        // A revoke (or an answer) burns every live token on the binding.
+        await db.run('UPDATE ask_channel_tokens SET consumed_at = ? WHERE consumed_at IS NULL', [
+          NOW + 20,
+        ]);
+        const { c } = checks();
+        await expect(
+          redeemAskChannelToken(db, redeemInput(team.id, kept).input, c),
+        ).resolves.toEqual({ ok: false, reason: 'consumed' });
+        const { token: late } = await issueAskChannelToken(
+          db,
+          issueInput(team.id, { askId: 'ask-2' }),
+        );
+        await reissue(db, team.id, late, NOW + 10);
+        await expect(
+          redeemAskChannelToken(
+            db,
+            redeemInput(team.id, late, { askId: 'ask-2', now: NOW + 6 * MINUTE }).input,
+            c,
+          ),
+        ).resolves.toEqual({ ok: false, reason: 'expired' });
+      });
+
+      it('a question answer consumes it by burning the successor, once', async () => {
+        const { db, team } = await seed();
+        const { token: kept } = await issueAskChannelToken(db, issueInput(team.id));
+        const fresh = await reissue(db, team.id, kept, NOW + 10);
+        await expect(consumeAskChannelToken(db, team.id, kept, NOW + MINUTE)).resolves.toBe(true);
+        await expect(consumeAskChannelToken(db, team.id, kept, NOW + MINUTE)).resolves.toBe(false);
+        await expect(consumeAskChannelToken(db, team.id, fresh, NOW + MINUTE)).resolves.toBe(false);
+      });
     });
 
     it('two channels racing opposite buttons on one ask yield exactly one decision', async () => {
