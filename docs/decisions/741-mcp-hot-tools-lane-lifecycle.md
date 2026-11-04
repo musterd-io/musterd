@@ -92,3 +92,13 @@ deferral is tool-selection accuracy with hundreds of tools, which 13 of 31 does 
 - **Experiment:** none; the baseline is observational and the change is uniform. Falsifier: a
   week-after read where the median calls per session has not fallen, or a session cost comparison
   where per-turn cost rose by more than the schema tokens predict, puts the four-tool set back.
+
+_(Read 2026-11-04, by dolly: `toolsearch.py --since 2026-10-27` on mac.lan, baseline 10-14..26
+re-run the same day.)_ Sessions with a musterd ToolSearch 32 of 426 (was 73 of 581); calls 70
+(was 244); median calls per session 1 (was 3). Calls naming one of the nine new hot tools: 10
+(was ~340 — lane_open 3, lane_submit 2, lane_claim 2, team_next 1, lane_update 1). What remains
+is deferred tools: team_wake_context 19, team_insight_save 12, team_question 10. Detour median
+4.4s (was 4.1s); $/turn median 0.31 (was 0.27). The falsifier did not trigger. One leak:
+team_join was looked up 6 times although hot — the dead-lease hook in
+`packages/cli/src/commands/inbox.ts` prescribed `ToolSearch select:mcp__musterd__team_join`;
+dolly's lane 01M6KZYRTK removed that line.
