@@ -2,8 +2,8 @@ name: research-radar
 
 on:
   schedule:
-    - cron: '0 8 * * 1'
-    - cron: '0 8 * * 4'
+    - cron: '0 2 * * 2' # Monday 18:00 PST (19:00 PDT); GitHub cron is UTC only
+    - cron: '0 16 * * 4' # Thursday 08:00 PST (09:00 PDT)
   workflow_dispatch:
 
 concurrency:

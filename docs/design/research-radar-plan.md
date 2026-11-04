@@ -83,7 +83,7 @@ Model ids live in one config constant; recorded per-run. Avoid amprealize's "Opu
 
 **Prior deferral (2026-08-24, nick).** With Exploring Next as a read-side source there was nothing to couple to its crons, so the digest was hand-run while the rail was exercised. The weekly cloud-runner decision was reopened when full-text automation was approved on 2026-10-09.
 
-**Weekly full-text workflow (2026-10-09, lane `01M4GR4A7NNXFC3FY6ZN8YY52W`).** `.github/workflows/research-radar.yml` runs Monday and Thursday at 08:00 UTC and supports `workflow_dispatch`. It reads full article text and every attached Exploring Next script, triages the complete reads, reconciles metadata-only retries, then opens or updates one unreviewed weekly draft PR with the digest and ledger. It never merges. If any required repository secret is missing, it reports the secret names and leaves repository files untouched. The workflow summary contains counts, read failures, truncation, and the draft PR link; source bodies are not included. Operator details and local commands are in [`scripts/radar/README.md`](../../scripts/radar/README.md).
+**Weekly full-text workflow (2026-10-09, lane `01M4GR4A7NNXFC3FY6ZN8YY52W`).** `.github/workflows/research-radar.yml` runs Monday 18:00 and Thursday 08:00 Pacific standard time (Tuesday 02:00 and Thursday 16:00 UTC; an hour later in daylight time; 08:00 UTC Monday and Thursday until 2026-11-04) and supports `workflow_dispatch`. It reads full article text and every attached Exploring Next script, triages the complete reads, reconciles metadata-only retries, then opens or updates one unreviewed weekly draft PR with the digest and ledger. It never merges. If any required repository secret is missing, it reports the secret names and leaves repository files untouched. The workflow summary contains counts, read failures, truncation, and the draft PR link; source bodies are not included. Operator details and local commands are in [`scripts/radar/README.md`](../../scripts/radar/README.md).
 
 **Weekly tick (2026-10-02, lane `01M3TAKHQ4HRNDJX0TQGESYZJ6`).** The ADR 166 sweep LaunchAgent
 continues to run `pnpm radar:sweep --weekly --post` (`scripts/radar/weekly.ts`): a no-key dry sweep
@@ -112,7 +112,7 @@ amprealize's *core* research_service stayed lean and worked; the platform around
 - **M2 — ingestion:** arXiv + HF fetchers (port the Exploring Next slices) + dedup against `seen.json`; verify a dry sweep returns sane candidates. **Done** (`pnpm radar:sweep`).
 - **M3 — triage:** tier-1 filter + tier-2 honest-score + verdict ladder; verify on a hand-picked week. **Done** (`pnpm radar:sweep --triage`).
 - **M4 — emit:** digest writer (frontmatter + verdict grouping) + `seen.json` update + notify. **Done** (`pnpm radar:sweep --triage --emit`; the Exploring Next source landed with it).
-- **M5 — schedule:** Monday 08:00 UTC GitHub Actions full-text run + manual dispatch, draft PR only — see §8.
+- **M5 — schedule:** Monday evening and Thursday morning Pacific GitHub Actions full-text run + manual dispatch, draft PR only — see §8.
 
 Each of M1–M5 is a complete, runnable step (run the radar by hand through M4 before automating in M5).
 

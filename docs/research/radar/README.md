@@ -2,7 +2,7 @@
 
 > Hand-run scan/triage of new multi-agent-coordination research (ADR 056 ingest half). Design:
 > [`docs/design/research-radar-plan.md`](../../design/research-radar-plan.md).
-> M1–M5 live (sweep + triage + digest emit; Exploring Next feed added as a third source 2026-08-24; M5 = weekly GitHub Actions full-text run, Monday 08:00 UTC, added 2026-10-09). Hand-run weekly is no longer the only path — the workflow runs automatically and opens a draft PR.
+> M1–M5 live (sweep + triage + digest emit; Exploring Next feed added as a third source 2026-08-24; M5 = GitHub Actions full-text run, added 2026-10-09; Monday 18:00 and Thursday 08:00 Pacific standard time since 2026-11-04). Hand-run weekly is no longer the only path — the workflow runs automatically and opens a draft PR.
 
 ## Layout
 
