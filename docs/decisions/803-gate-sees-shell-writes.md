@@ -1,6 +1,6 @@
 # 803 — The path gate sees files a shell command writes
 
-- Status: proposed
+- Status: accepted (nick, 2026-11-04, opaque writes caught after the call as proposed)
 - Date: 2026-11-04
 
 ## Context
