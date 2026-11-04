@@ -10,6 +10,7 @@ import {
   type EnforcementPolicy,
   EnforcementPolicySchema,
   extractUlid,
+  GATE_ALSO_MAX,
   type GateToolCall,
   isMergeShapedCommand,
   type LanePushOutcome,
@@ -33,6 +34,15 @@ import { findBinding } from '../config.js';
 import { CliError, isConnRefused } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
 import { yieldDenyReason } from '../launcher/yield.js';
+import {
+  blockSurfaces,
+  freshlyWritten,
+  payloadCwd,
+  shellPathMatches,
+  shellSnapshotKey,
+  shellWritePaths,
+  takeShellSnapshot,
+} from '../shellWrites.js';
 import { inferPayloadHarness, tapHook } from '../trace/hook.js';
 import {
   isStageShaped,
@@ -90,6 +100,7 @@ export const GATE_FLAGS = [
   '-a',
   'a',
   'command',
+  'cwd',
   'data',
   'end',
   'error',
@@ -611,12 +622,18 @@ function commandFailed(raw: string): boolean {
   }
 }
 
-/** PostToolUse `Bash` one-shot (ADR 730). Always exits 0 — a missed push must not break the command. */
+/** PostToolUse `Bash` one-shot: the push report (ADR 730) and the after-call shell-write check (ADR
+ *  803 §3). Always exits 0 — a missed push or check must not break the command. */
 async function recordPushCommand(): Promise<number> {
+  const lines: string[] = [];
   try {
     const stdin = await readStdin();
     const report = pushReportFor(stdin, process.cwd());
-    if (!report) return 0;
+    // ADR 803 §3: the after-call check of an opaque shell write, when the PreToolUse hook took a
+    // snapshot for this call. Purely local until a `block` path turns up changed.
+    const key = shellSnapshotKey(stdin);
+    const written = key ? freshlyWritten(stateDir(), key, process.cwd()) : null;
+    if (!report && !written?.length) return 0;
     // Hook one-shot, so never reclaim the seat; awaited, because a floated request dies with the
     // process. The daemon decides which lane this is (the seat's contending lane on that branch).
     const { http, team, identity, explicit } = resolveRead(
@@ -624,15 +641,34 @@ async function recordPushCommand(): Promise<number> {
       { claimSeatPerRequest: false, timeoutMs: HOOK_HTTP_TIMEOUT_MS },
     );
     if (!explicit || !identity) return 0;
-    const outcome = await http.reportPush(team, report);
-    // ADR 731 §2: the pusher hears what the daemon did — who was told, or that nobody needed to
-    // be — so a holder does not announce by hand what the partner has already read. Nothing when
-    // no lane of the seat was on that branch: there is nothing to say.
-    const line = pushContextLine(report, outcome);
-    if (line) emitPostToolUseContext(line);
+    for (const m of written ?? []) {
+      try {
+        const verdict = await http.gateCheck(team, {
+          kind: 'contended-surface',
+          class: m.cls.class,
+          fingerprint: m.fingerprint,
+          posture: m.cls.posture,
+          tool: 'Bash',
+          target: m.target,
+          after: true,
+        });
+        if (verdict.outcome === 'written_unowned' && verdict.reason) lines.push(verdict.reason);
+      } catch {
+        // An unreachable daemon cannot say whose lane covers it; say nothing rather than guess.
+      }
+    }
+    if (report) {
+      const outcome = await http.reportPush(team, report);
+      // ADR 731 §2: the pusher hears what the daemon did — who was told, or that nobody needed to
+      // be — so a holder does not announce by hand what the partner has already read. Nothing when
+      // no lane of the seat was on that branch: there is nothing to say.
+      const line = pushContextLine(report, outcome);
+      if (line) lines.push(line);
+    }
   } catch {
     // Always exit 0.
   }
+  if (lines.length > 0) emitPostToolUseContext(lines.join('\n'));
   return 0;
 }
 
@@ -811,6 +847,18 @@ export function gitHere(cwd: string): { git_branch?: string; git_head?: string }
   };
 }
 
+/**
+ * ADR 803 §3 — the advisory before an opaque shell write while `block` surfaces are declared. It never
+ * denies on a guess; it says what the gate will check once the command has run.
+ */
+export function opaqueWriteAdvisory(classes: readonly string[]): string {
+  return (
+    `heads-up: musterd cannot tell which files this command writes. If it changes a file in ` +
+    `${classes.map((c) => `'${c}'`).join(', ')} that no lane of yours covers, you will be told right ` +
+    `after it runs (ADR 803).`
+  );
+}
+
 async function gateCheck(parsed: Parsed): Promise<number> {
   if (parsed.flags['stdin'] !== true) {
     throw new CliError(
@@ -846,6 +894,11 @@ async function gateCheck(parsed: Parsed): Promise<number> {
     }
     // Normalize the target path to repo-relative BEFORE matching, so class + lane globs compare cleanly.
     const call: GateToolCall = raw.path ? { ...raw, path: repoRelativePath(raw.path) } : raw;
+    // ADR 803 §1: the paths a shell call writes, made repo-relative like a file tool's path.
+    const shell =
+      call.tool === 'Bash' && call.command
+        ? shellWritePaths(call.command, payloadCwd(stdin, process.cwd()), process.cwd())
+        : undefined;
     // ADR 442 — the wall is decided here, before the working-tree check and before any daemon
     // round trip. A throw below must not be what opens it.
     const sessionIdEarly = parseEnvelopeSessionId(stdin);
@@ -943,7 +996,13 @@ async function gateCheck(parsed: Parsed): Promise<number> {
     // ADR 801: the seat's own open blocking ask comes first — it holds whatever the class table says.
     // On outage a cached withhold still denies (§5); otherwise the daemon re-checks the ask, so an
     // accept since the cache was filled releases on this very call and the table below decides.
-    const held = matchWithhold(withholds, call, now);
+    // ADR 803 §4: a path withhold holds a shell write to that path, as it holds a file-tool write.
+    const held =
+      matchWithhold(withholds, call, now) ??
+      (shell?.paths ?? [])
+        .map((path) => matchWithhold(withholds, { tool: 'Write', path }, now))
+        .find((m) => m !== null) ??
+      null;
     if (held) {
       const askId = held.withhold.ask_id;
       if (serverOutage) {
@@ -983,8 +1042,15 @@ async function gateCheck(parsed: Parsed): Promise<number> {
       }
     }
     const match = enforcement ? matchEnforcement(enforcement, call) : null;
+    // ADR 803 §2: each path the shell call names goes through Gate A as a file-tool write would.
+    const paths = enforcement && shell ? shellPathMatches(enforcement, shell.paths) : [];
+    // ADR 803 §3: a write the gate cannot read, while a `block` surface is declared.
+    const surfaces = enforcement && shell?.opaque ? blockSurfaces(enforcement) : [];
     if (serverOutage) {
-      const outage = outageVerdictForMatch(match);
+      const strictest = [match, ...paths].find(
+        (m) => m !== null && outageVerdictForMatch(m).decision === 'deny',
+      );
+      const outage = outageVerdictForMatch(strictest ?? match ?? paths[0] ?? null);
       if (outage.decision === 'deny') {
         emitDeny(outage.reason);
         emitted = true;
@@ -997,43 +1063,90 @@ async function gateCheck(parsed: Parsed): Promise<number> {
       }
       return;
     }
-    if (!match) {
+    if (!match && paths.length === 0 && surfaces.length === 0) {
       if (serverReachable) flushUnenforcedCounter(http, team, state, call.tool);
       return; // undeclared call → allow, no daemon round-trip (the common case)
     }
-    try {
-      const verdict = await http.gateCheck(team, {
-        kind: match.cls.kind,
-        class: match.cls.class,
-        fingerprint: match.fingerprint,
-        posture: match.cls.posture,
-        tool: call.tool,
-        target: match.target,
-        ...(match.cls.kind === 'contended-surface' ? gitHere(process.cwd()) : {}),
-      });
-      flushUnenforcedCounter(http, team, state, call.tool);
-      if (verdict.decision === 'deny') {
-        emitDeny(verdict.reason);
-        emitted = true;
-        decision = 'deny';
-      } else if (verdict.outcome === 'warned' && verdict.reason) {
-        emitWarn(verdict.reason);
-        emitted = true;
-        decision = 'warn';
-      }
-    } catch (err) {
-      if (!isGateServerUnreachable(err)) throw err;
-      const outage = outageVerdictForMatch(match);
-      if (outage.decision === 'deny') {
-        emitDeny(outage.reason);
-        emitted = true;
-        decision = 'deny';
-      } else {
+    const advisories: string[] = [];
+    // One POST per gate: the command's own class, then every path of the shell write in one Gate A
+    // request (the strictest first; the daemon stops at the first deny and records one row).
+    const requests = [
+      ...(match
+        ? [
+            {
+              kind: match.cls.kind,
+              class: match.cls.class,
+              fingerprint: match.fingerprint,
+              posture: match.cls.posture,
+              tool: call.tool,
+              target: match.target,
+              ...(match.cls.kind === 'contended-surface' ? gitHere(process.cwd()) : {}),
+            },
+          ]
+        : []),
+      ...(paths[0]
+        ? [
+            {
+              kind: 'contended-surface' as const,
+              class: paths[0].cls.class,
+              fingerprint: paths[0].fingerprint,
+              posture: paths[0].cls.posture,
+              tool: call.tool,
+              target: paths[0].target,
+              ...(paths.length > 1
+                ? {
+                    also: paths.slice(1, GATE_ALSO_MAX + 1).map((m) => ({
+                      class: m.cls.class,
+                      fingerprint: m.fingerprint,
+                      posture: m.cls.posture,
+                      target: m.target,
+                    })),
+                  }
+                : {}),
+              ...gitHere(process.cwd()),
+            },
+          ]
+        : []),
+    ];
+    for (const req of requests) {
+      try {
+        const verdict = await http.gateCheck(team, req);
+        flushUnenforcedCounter(http, team, state, call.tool);
+        if (verdict.decision === 'deny') {
+          emitDeny(verdict.reason);
+          emitted = true;
+          decision = 'deny';
+          return;
+        }
+        if (verdict.outcome === 'warned' && verdict.reason) advisories.push(verdict.reason);
+      } catch (err) {
+        if (!isGateServerUnreachable(err)) throw err;
+        const outage = outageVerdictForMatch(
+          (req === requests[0] && match) || paths.find((m) => m.target === req.target) || null,
+        );
+        if (outage.decision === 'deny') {
+          emitDeny(outage.reason);
+          emitted = true;
+          decision = 'deny';
+          return;
+        }
         recordUnenforcedCall(state, now);
         emitWarn(outage.reason);
         emitted = true;
         decision = 'unenforced';
+        return;
       }
+    }
+    if (surfaces.length > 0) {
+      const key = shellSnapshotKey(stdin);
+      if (key && takeShellSnapshot(state, key, process.cwd(), surfaces, now)) {
+        advisories.push(opaqueWriteAdvisory(surfaces.map((c) => c.class)));
+      }
+    }
+    if (advisories.length > 0) {
+      emitWarn(advisories.join('\n'));
+      emitted = true;
+      decision = 'warn';
     }
   };
   try {

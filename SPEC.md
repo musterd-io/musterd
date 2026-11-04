@@ -1286,6 +1286,25 @@ answer's text.
   or substitution. When the server is
   unreachable, a client MUST deny a call a cached, unexpired withhold matches.
 
+## A.36 The path gate sees files a shell command writes (unreleased — ADR 803)
+
+- A client SHOULD read the paths a `Bash` call plainly names as written (redirect files; the file
+  operands of `tee`, `sed -i`, `perl -i`, `truncate`, `touch`, `rm`; the last operand of `cp`, `mv`,
+  `install`, `ln` and the sources of `mv`; the paths of `git checkout -- …`, `git restore`, `git rm`,
+  `git mv`) and match each, repo-relative, against the `contended-surface` classes as a file-tool
+  write. A path withhold (A.35) holds such a write too.
+- `POST /teams/:slug/gate` with `kind: 'contended-surface'` MAY carry
+  `also: [{class, fingerprint, posture, target}]` (at most 16): the call's other matched paths. A
+  server MUST weigh each like `target`, decide by the first deny (else the strictest allow), and
+  write one audit row for the deciding path, with `detail.targets` the number of paths.
+- A request MAY carry `after: true`: the call already ran and changed `target`. A server answers
+  `allow` with `outcome: 'written_unowned'` when no contending lane of the caller covers `target`
+  (and writes one `lane.gate` row), else `allowed` with no row. It MUST NOT refuse, hold, hand over
+  or learn a branch from it.
+- For a call it cannot read while a `block` contended-surface class is declared, a client SHOULD
+  proceed with an advisory, compare the work tree's changed paths before and after the call, and
+  send each newly changed `block` path with `after: true`.
+
 ## A.37 Twitch polls (unreleased — ADR 807)
 
 - A **poll** is a human admin's question with 2–4 options and a 1–15 minute limit (default 5),
