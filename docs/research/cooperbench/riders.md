@@ -248,7 +248,8 @@ the 2026-11-04 amendment: [cooperbench-act-lane-wake.md](../../design/cooperbenc
 Decided by nick, 2026-11-04, in session ("go with the third, amend the gate and run it"). **Run 2026-11-04 → [finding 031](../031-cooperbench-rider7-smoke.md): stopped at the smoke
 pair, no rule read** — the wiring worked (15 wakes, 0 failed) but one pair cost $17.80 of the $25 stop
 (resumed wakes $0.17 → $1.64 each) and waits grew to 5m42s on the `reclaimable` hold; nick chose to
-stop and write it up.
+stop and write it up. **Re-run pre-registered 2026-11-04** on the ADR 804/805 build, rules unchanged:
+[rider7-rerun-manifest.md](./rider7-rerun-manifest.md) (spend pending nick; finding 032).
 
 **What changes.** Nothing in the product. The arm runs its seats on [ADR 735](../../decisions/735-act-lane-the-seat-ends-its-turn.md)'s
 act lane, which every team has: the pair's team sets `lane: act`, `tool_policy: seat-policy`,
