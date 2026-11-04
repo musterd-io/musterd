@@ -224,10 +224,12 @@ withDrivers('integration · ws-supersede', (_o, kind) => {
         if (derivation === 'dream') {
           await h.server.store.run(
             `INSERT INTO audit (id, team_id, actor, action, target, result, ts, created_at, detail)
-             VALUES (?, ?, 'dream', 'residency.wake_leased', NULL, 'allow', ?, ?, ?)`,
+             VALUES (?, ?, 'dream', 'residency.wake_leased', (SELECT name FROM members WHERE id = ?), 'allow', ?, ?, ?)`,
+            // The target is the seat's name, as the real mint writes it (residency.ts, plan.kind 'dream').
             [
               `aud-${id}`,
               teamId,
+              memberId,
               createdAt,
               createdAt,
               JSON.stringify({ lease_id: id, derivation: 'dream' }),

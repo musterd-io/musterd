@@ -1207,15 +1207,30 @@ export async function acceptanceWaits(
   // Asks an accept/decline replied to, with the latest reply's SERVER receive time per ask.
   // created_at, not ts: ts is the sender's clock, and comparing it with an audit ts lets a
   // device running ahead look like it answered after its own refusal.
-  const answered = new Map<string, number>();
-  for (const r of await db.all<{ ref: string | null; ts: number }>(
-    `SELECT in_reply_to AS ref, MAX(created_at) AS ts FROM messages
-      WHERE team_id = ? AND act IN ('accept','decline') AND meta IS NOT NULL
-      GROUP BY in_reply_to`,
+  const asks = await db.all<{ id: string; holder: string | null; lane: string | null }>(
+    `SELECT m.id AS id, mem.name AS holder, json_extract(m.meta, '$.lane_review.lane') AS lane
+         FROM messages m
+         LEFT JOIN members mem ON mem.id = m.to_member
+        WHERE m.team_id = ? AND m.act = 'ask' AND m.meta LIKE '%lane_review%'
+          AND ${bindingAskSql('m')}
+        ORDER BY m.ts, m.id`,
     [teamId],
-  )) {
-    if (typeof r.ref === 'string') answered.set(r.ref, r.ts);
-  }
+  );
+  // Only the replies to these lanes' review asks are read (lane 01M6J3ERC4). Grouping every
+  // accept/decline the team ever sent walked the team's messages by idx_messages_in_reply_to —
+  // 68 slow runs, 60 s, max 4.1 s on the laptop hub in 8 h — to answer a handful of asks.
+  const askIds = asks.filter((a) => a.lane !== null && awaiting.has(a.lane)).map((a) => a.id);
+  const answered = new Map<string, number>();
+  if (askIds.length > 0)
+    for (const r of await db.all<{ ref: string | null; ts: number }>(
+      `SELECT in_reply_to AS ref, MAX(created_at) AS ts FROM messages
+        WHERE team_id = ? AND in_reply_to IN (${askIds.map(() => '?').join(',')})
+          AND act IN ('accept','decline') AND meta IS NOT NULL
+        GROUP BY in_reply_to`,
+      [teamId, ...askIds],
+    )) {
+      if (typeof r.ref === 'string') answered.set(r.ref, r.ts);
+    }
   // A human verdict refused by the ADR 662 authority gate lands as a message but binds nothing
   // (lane 01M5DTPMXN): its refusal is audited as `authority.refused` (target = lane, result
   // 'deny'). A reply that was refused does not answer the ask — the lane still awaits a verdict,
@@ -1253,15 +1268,6 @@ export async function acceptanceWaits(
       /* an unparseable row supersedes nothing */
     }
   }
-  const asks = await db.all<{ id: string; holder: string | null; lane: string | null }>(
-    `SELECT m.id AS id, mem.name AS holder, json_extract(m.meta, '$.lane_review.lane') AS lane
-         FROM messages m
-         LEFT JOIN members mem ON mem.id = m.to_member
-        WHERE m.team_id = ? AND m.act = 'ask' AND m.meta LIKE '%lane_review%'
-          AND ${bindingAskSql('m')}
-        ORDER BY m.ts, m.id`,
-    [teamId],
-  );
   const newest = new Map<string, { id: string; holder: string | null }>();
   for (const a of asks) {
     if (!a.lane || !awaiting.has(a.lane)) continue;
