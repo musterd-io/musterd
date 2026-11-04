@@ -98,7 +98,7 @@ there so a future route cannot be reached by a channel by accident, and it is te
 
 ### 6. Redemption rechecks current state
 
-On an answer, in the same transaction: the token exists and is unconsumed and unexpired _(Amended 2026-11-04: a token spent only by a re-issue still redeems while its live successor stands; see the lane 01M6DBJD8Y note under Consequences.)_; the ask is still
+On an answer, in the same transaction: the token exists and is unconsumed and unexpired; _(Amended 2026-11-04: a token spent only by a re-issue still redeems while its live successor stands; see the lane 01M6DBJD8Y note under Consequences.)_ the ask is still
 open and its digest still matches `ask_digest`; the class **recomputed from current state** is still
 `advisory` (an ask that became privileged after delivery refuses the answer); the binding's current
 generation equals the token's and the binding is not revoked; the team and daemon authority match. The
