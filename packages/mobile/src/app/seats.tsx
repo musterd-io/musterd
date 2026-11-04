@@ -6,6 +6,7 @@ import type { PairingPin } from '../native/pairingPin';
 import type { QuickAction, QuickOutcome, Roster, RosterSeat } from '../native/quickAction';
 import { Backdrop, Glass } from '../ui/glass';
 import { Rise } from '../ui/motion';
+import { NAV_HEIGHT } from '../ui/nav';
 import { Notice, SectionLabel } from '../ui/notice';
 import { QuickActions } from '../ui/quickActions';
 import { Seat } from '../ui/seat';
@@ -108,7 +109,12 @@ export default function SeatsScreen() {
           ) : undefined
         }
         refreshControl={
-          <RefreshControl refreshing={loading} tintColor={p.accent} onRefresh={() => void load()} />
+          <RefreshControl
+            refreshing={loading}
+            tintColor={p.accent}
+            progressViewOffset={NAV_HEIGHT}
+            onRefresh={() => void load()}
+          />
         }
         renderItem={({ item, index }) =>
           pin ? (
@@ -203,7 +209,12 @@ function SeatCard({ pin, seat }: { pin: PairingPin; seat: RosterSeat }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  list: { padding: space.lg, paddingTop: space.md, gap: space.sm, paddingBottom: space.xl * 2 },
+  list: {
+    padding: space.lg,
+    paddingTop: NAV_HEIGHT + space.md,
+    gap: space.sm,
+    paddingBottom: space.xl * 2,
+  },
   header: { gap: space.sm + 2, marginBottom: space.xs },
   empty: { fontFamily: font.regular, fontSize: 15, textAlign: 'center', marginTop: space.xl },
   card: { paddingVertical: space.sm + 2, paddingHorizontal: space.md, gap: space.sm },

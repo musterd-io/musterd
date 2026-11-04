@@ -15,6 +15,7 @@ import { success } from '../ui/haptics';
 import { Icon } from '../ui/icon';
 import { Moment } from '../ui/moment';
 import { Breathe, Rise } from '../ui/motion';
+import { NAV_HEIGHT } from '../ui/nav';
 import { font, radius, space, usePalette } from '../ui/theme';
 
 /**
@@ -419,7 +420,12 @@ const CORNERS = [
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  page: { padding: space.lg, paddingTop: space.md, gap: space.lg, paddingBottom: space.xl * 2 },
+  page: {
+    padding: space.lg,
+    paddingTop: NAV_HEIGHT + space.md,
+    gap: space.lg,
+    paddingBottom: space.xl * 2,
+  },
   head: { gap: space.sm },
   stepper: { flexDirection: 'row', alignItems: 'center' },
   stepItem: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },

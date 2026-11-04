@@ -143,6 +143,13 @@ small change.
 
 ## Screens
 
+Every screen sits under the app's own navigation bar (`src/ui/nav.tsx`), not the stock iOS one
+(nick, 2026-11-04: the "< Asks" bar "looks extremely generic and huge"). It floats over the
+screen's glow as two small pieces of glass: a round back button with only a chevron, and the
+screen's name in a capsule beside a mustard dot. Home has no back, so the wordmark heads it. The
+edge-swipe back still works. Each screen pads its content, and its pull-to-refresh spinner, by
+`NAV_HEIGHT` so nothing starts behind the bar.
+
 | Route | What it is |
 | --- | --- |
 | `/` | Home. No headline (nick, 2026-11-03: "No big text, heros, headers"): the wordmark heads it, a row of pills says where the phone stands (the team, waiting for approval, not paired) with **Seats** beside it, notes are compact cards (`Notice`), and a small **Needs you** label carries the count. Below it, every open ask that reached this phone, newest first, with who asked, the app's own wording for a listed act, a Face ID chip, and "N more waiting"; or, with none, an **All clear** card with **Check**; or, unpaired, three pairing steps and Scan. With a pin stored, a footer **Pair again** forgets it behind a confirm. A held summary shows as a banner while its hour lasts. Pull to refresh re-delivers. An advisory notification action is answered from here, and the screen says so only when the answer did not leave. |
@@ -402,7 +409,7 @@ src/
 The screens are `.tsx` and outside the drift check; kept honest by hand:
 
 ```
-src/app/_layout.tsx   // the Stack, themed from the palette; the nameplate wordmark heads Asks
+src/app/_layout.tsx   // the Stack, themed from the palette, every screen under the app's own NavBar
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
 src/app/seats.tsx     // the team's agent seats, pulled on focus, each with its quick actions
@@ -415,6 +422,7 @@ src/ui/moment.tsx     // one moment — on its way, done, or stopped — as a co
 src/ui/questionCard.tsx // a question: its text, why, options to tap, and a typed answer
 src/ui/quickActions.tsx // one seat's five quick-action buttons, each saying Sending…, Sent or Try again
 src/ui/motion.tsx     // Rise, Squish, Breathe, Pop, Halo — RN Animated, off under Reduce Motion
+src/ui/nav.tsx        // NavBar: a round glass back chevron and the screen's name in a glass capsule; the wordmark on home
 src/ui/notice.tsx     // Notice (a short note: symbol tile, title, a line) and SectionLabel (a label with a count)
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```
