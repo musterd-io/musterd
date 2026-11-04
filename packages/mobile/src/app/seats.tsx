@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { QUICK_ACTION_LABELS, seatActions } from '../native/notice';
+import { QUICK_ACTION_LABELS, seatActions, waitingLine } from '../native/notice';
 import { endedNote, type PairingEnded } from '../native/pairingEnded';
 import type { PairingPin } from '../native/pairingPin';
 import type { QuickAction, QuickOutcome, Roster, RosterSeat } from '../native/quickAction';
@@ -188,8 +188,11 @@ function SeatCard({ pin, seat }: { pin: PairingPin; seat: RosterSeat }) {
     clear.current = setTimeout(() => setSaid(null), 6_000);
   };
   const state = seat.online ? 'online' : seat.wakeable ? 'asleep' : 'offline';
+  // ADR 806 §3: what just happened, then who it waits on (the daemon's fact), then its lane.
+  const waiting = seat.waiting ? waitingLine(seat.waiting, Date.now()) : null;
   const line =
     said?.text ??
+    waiting ??
     seat.lane?.title ??
     (seat.online || seat.wakeable
       ? null
@@ -214,8 +217,13 @@ function SeatCard({ pin, seat }: { pin: PairingPin; seat: RosterSeat }) {
           {line ? (
             <Text
               numberOfLines={1}
-              accessibilityLabel={said || !seat.lane ? line : `Their lane: ${line}`}
-              style={[styles.meta, { color: said?.bad ? p.danger : said ? p.accentText : p.muted }]}
+              accessibilityLabel={said || waiting || !seat.lane ? line : `Their lane: ${line}`}
+              style={[
+                styles.meta,
+                {
+                  color: said?.bad ? p.danger : said || waiting ? p.accentText : p.muted,
+                },
+              ]}
             >
               {line}
             </Text>
