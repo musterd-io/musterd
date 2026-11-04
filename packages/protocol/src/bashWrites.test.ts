@@ -38,6 +38,10 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     ['echo x 2>err.txt>a.ts', ['err.txt', 'a.ts']],
     ['cat <<<word > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
     ['echo "<<EOF" > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
+    ['echo x # <<EOF\necho y > b.ts', ['b.ts']],
+    ["echo $'it\\'s <<EOF' > a.ts\necho y > b.ts", ['a.ts', 'b.ts']],
+    ["cat <<'EOF' > a.ts\nrm -rf x\nEOF\necho y > b.ts", ['a.ts', 'b.ts']],
+    ['cat <<-EOF > a.ts\n\tbody\n\tEOF\ntouch b.ts', ['a.ts', 'b.ts']],
   ])('%s → %j', (command, paths) => {
     expect(t(command)).toEqual({ paths, opaque: false });
   });
@@ -101,6 +105,11 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     'echo x > "$(pwd)/a.ts"',
     'cd $DIR && touch a.ts',
     'cat <<EOF > a.ts\nnever closed',
+    'cat <<E"OF" > a.ts\nEOF\ntouch b.ts',
+    "cat <<'EOF'x > a.ts\nEOF\ntouch b.ts",
+    'cat <<$X > a.ts\nbody',
+    "echo 'unclosed > a.ts",
+    'echo $(touch a.ts > b.ts',
   ])('opaque: %s', (command) => {
     expect(t(command).opaque).toBe(true);
   });

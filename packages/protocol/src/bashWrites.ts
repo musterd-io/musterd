@@ -42,37 +42,82 @@ type Piece = { kind: 'word'; word: Word } | { kind: 'op'; op: string };
 
 const SEPARATORS = new Set([';', '|', '&', '\n', '(', ')']);
 
-/** The heredoc tags a line opens: an unquoted `<<` or `<<-` (not `<<<`, a here-string). */
-function heredocTags(line: string): { tag: string; dash: boolean }[] {
+/** Where a word ends, unquoted. */
+const METACHAR = /[\s;&|()<>]/;
+
+/**
+ * The heredoc tags a line opens: an unquoted `<<` or `<<-`, never `<<<` (a here-string) and never
+ * inside a comment. The delimiter is read as bash reads it — the whole word up to an unquoted
+ * metacharacter, quotes removed. `ambiguous` when it is not a plain name, quoted wholly or not at
+ * all (`<<E"OF"`, `<<'EOF'x`, `<<$X`): then where the body ends is a guess, and the caller treats
+ * the command as unread (security review, 2026-11-04).
+ */
+function heredocTags(line: string): { tags: { tag: string; dash: boolean }[]; ambiguous: boolean } {
   const tags: { tag: string; dash: boolean }[] = [];
+  let ambiguous = false;
   let quote: string | null = null;
   for (let i = 0; i < line.length; i++) {
     const c = line[i]!;
     if (quote) {
-      if (c === '\\' && quote === '"') i++;
-      else if (c === quote) quote = null;
+      // `"…"` and `$'…'` take backslash escapes; `'…'` does not.
+      if (c === '\\' && quote !== "'") i++;
+      else if (c === quote || (quote === "$'" && c === "'")) quote = null;
       continue;
     }
     if (c === '\\') {
       i++;
+    } else if (c === '$' && line[i + 1] === "'") {
+      quote = "$'";
+      i++;
     } else if (c === "'" || c === '"') {
       quote = c;
-    } else if (c === '<' && line[i + 1] === '<' && line[i + 2] !== '<') {
-      const m = /^<<(-?)\s*(['"]?)([A-Za-z_][\w-]*)\2/.exec(line.slice(i));
-      if (m) tags.push({ tag: m[3]!, dash: m[1] === '-' });
-      i += m ? m[0].length - 1 : 1;
-    } else if (c === '<' && line[i + 1] === '<') {
+    } else if (c === '#' && (i === 0 || /\s|[;&|()]/.test(line[i - 1]!))) {
+      break; // a comment: nothing after it opens a heredoc
+    } else if (c === '<' && line[i + 1] === '<' && line[i + 2] === '<') {
       i += 2; // `<<<`: a here-string, no body follows
+    } else if (c === '<' && line[i + 1] === '<') {
+      let j = i + 2;
+      const dash = line[j] === '-';
+      if (dash) j++;
+      while (line[j] === ' ' || line[j] === '\t') j++;
+      let word = '';
+      let quotedParts = 0;
+      let plainParts = 0;
+      while (j < line.length && !METACHAR.test(line[j]!)) {
+        const q = line[j]!;
+        if (q === "'" || q === '"') {
+          const close = line.indexOf(q, j + 1);
+          if (close < 0) {
+            ambiguous = true;
+            j = line.length;
+            break;
+          }
+          word += line.slice(j + 1, close);
+          quotedParts++;
+          j = close + 1;
+        } else {
+          if (q === '\\' || q === '$' || q === '`') ambiguous = true;
+          word += q;
+          plainParts++;
+          j++;
+        }
+      }
+      const clean = quotedParts + (plainParts > 0 ? 1 : 0) === 1;
+      if (/^[A-Za-z_][\w-]*$/.test(word) && clean) tags.push({ tag: word, dash });
+      else ambiguous = true;
+      i = j - 1;
     }
   }
-  return tags;
+  return { tags, ambiguous };
 }
 
 /** Heredoc bodies are data, not commands: drop them (the line with the `<<` stays). `open` when a
- *  body never reaches its tag — then the rest of the command is unread, and the caller treats it so. */
+ *  body never reaches its tag, or a delimiter is not a plain name — then where the body ends is a
+ *  guess, and the caller treats the command as unread. */
 function stripHeredocs(command: string): { text: string; open: boolean } {
   const out: string[] = [];
   const pending: { tag: string; dash: boolean }[] = [];
+  let ambiguous = false;
   for (const line of command.split('\n')) {
     const head = pending[0];
     if (head) {
@@ -80,9 +125,11 @@ function stripHeredocs(command: string): { text: string; open: boolean } {
       continue;
     }
     out.push(line);
-    pending.push(...heredocTags(line));
+    const opened = heredocTags(line);
+    if (opened.ambiguous) ambiguous = true;
+    pending.push(...opened.tags);
   }
-  return { text: out.join('\n'), open: pending.length > 0 };
+  return { text: out.join('\n'), open: ambiguous || pending.length > 0 };
 }
 
 /** A redirect operator, read from its first `<`, `>` or `&>` (an fd's digits are the word before it). */
@@ -93,8 +140,10 @@ const REDIRECT = /^(?:&>>?|>>?\|?&?|<<<|<<-?|<&?)/;
  * What it does not model — an unclosed quote, `$(…)`, backticks — marks the word dynamic, so a target
  * holding it is opaque rather than wrong.
  */
-function tokenize(command: string): Piece[] {
+function tokenize(command: string): { pieces: Piece[]; unclosed: boolean } {
   const pieces: Piece[] = [];
+  // An unclosed quote, substitution or backtick: the rest of the line is not read as written.
+  let unclosed = false;
   const n = command.length;
   let i = 0;
   let text = '';
@@ -115,10 +164,21 @@ function tokenize(command: string): Piece[] {
       i += 2;
     } else if (c === '#' && !inWord) {
       while (i < n && command[i] !== '\n') i++;
+    } else if (c === '$' && command[i + 1] === "'") {
+      // ANSI-C quoting `$'…'`: backslash escapes, closed by an unescaped `'`.
+      inWord = true;
+      let j = i + 2;
+      while (j < n && command[j] !== "'") {
+        if (command[j] === '\\' && j + 1 < n) j++;
+        text += command[j];
+        j++;
+      }
+      if (j >= n) unclosed = true;
+      i = j + 1;
     } else if (c === "'") {
       inWord = true;
       const end = command.indexOf("'", i + 1);
-      if (end < 0) dynamic = true;
+      if (end < 0) unclosed = true;
       text += command.slice(i + 1, end < 0 ? n : end);
       i = end < 0 ? n : end + 1;
     } else if (c === '"') {
@@ -134,7 +194,7 @@ function tokenize(command: string): Piece[] {
         text += command[j];
         j++;
       }
-      if (j >= n) dynamic = true;
+      if (j >= n) unclosed = true;
       i = j + 1;
     } else if (c === '\\') {
       inWord = true;
@@ -150,12 +210,14 @@ function tokenize(command: string): Piece[] {
         if (command[j] === '(') depth++;
         else if (command[j] === ')' && --depth === 0) break;
       }
+      if (j >= n) unclosed = true;
       text += command.slice(i, j + 1);
       i = j + 1;
     } else if (c === '`') {
       inWord = true;
       dynamic = true;
       const end = command.indexOf('`', i + 1);
+      if (end < 0) unclosed = true;
       text += command.slice(i, end < 0 ? n : end + 1);
       i = end < 0 ? n : end + 1;
     } else {
@@ -190,7 +252,7 @@ function tokenize(command: string): Piece[] {
     }
   }
   flush();
-  return pieces;
+  return { pieces, unclosed };
 }
 
 /** Interpreters whose program text the gate cannot read. */
@@ -492,7 +554,8 @@ function readGit(reader: Reader, args: readonly Word[], dir: string | undefined)
 function readLine(reader: Reader, command: string, dir: string | undefined, depth: number): void {
   const stripped = stripHeredocs(command);
   if (stripped.open) reader.opaque = true;
-  const pieces = tokenize(stripped.text);
+  const { pieces, unclosed } = tokenize(stripped.text);
+  if (unclosed) reader.opaque = true;
   let cwd = dir;
   let words: Word[] = [];
   let redirects: Word[] = [];
