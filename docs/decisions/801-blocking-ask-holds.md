@@ -82,6 +82,9 @@ message, meets nothing but its own instructions.
   lane`, decided from the raw command (an env prefix can swap the binary); every other `musterd` call
   counts as mutating under a seat-wide hold. The
   first means a declined seat-wide ask freezes the seat's writes until its 12h end.
+- 2026-11-04, follow-up (lane 01M6M9EKSZ): the build named the withhold only in the send reply, to
+  avoid a guidance version bump. The skill's blocking-tier playbook now says it too, as
+  `GUIDANCE_CONTENT_VERSION` 62.
 
 ## Observability & Evaluation
 
