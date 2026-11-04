@@ -75,6 +75,7 @@ run every row.
 | App-channel key (after the switch) | `~/.musterd/app-channel.key` | the daemon's identity to every paired phone | set the file aside, restart the daemon, re-pair each phone ("Pair again") |
 | Relay credential (after the switch) | inside `~/.musterd/musterd.db`, team policy `away_relay_token` | revive's relay object only | new hash in `TEAM_CREDENTIALS_JSON` (`wrangler secret put` on `workers/away-relay`), new value in revive's policy |
 | OpenCode service password | `~/.config/opencode/service.json` | the box's OpenCode service | rotate it in OpenCode; it was shown in a session transcript on 2026-11-04, so rotate before the switch |
+| Fly deploy token | `~/.fly/token` (mode 600), written 2026-11-04 for lane `01M6M3YG37` (Rider 7) | deploy to the `musterd-cooperbench` Fly app only; expires 2026-11-06 | `fly tokens list -a musterd-cooperbench`, then `fly tokens revoke <id>`, and delete the file |
 | Box SSH access | `~/.ssh/authorized_keys` for `musterd` and `root` (the laptop's `~/.ssh/musterd-joiner`) | shell on the box | remove the line from both `authorized_keys`, or the Hetzner firewall rule for 22 |
 
 Never on the box (design §"What never moves"): member credentials (`mskey_`, `msgr_`, `mscr_`), the
