@@ -689,6 +689,7 @@ import { isReloadOf } from './hub.js';
 import { handleMcpRoute } from './mcpHttp.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 import { checkRateLimit, handleOAuthRoutes } from './oauth.js';
+import { putPortrait } from './portraits.js';
 import {
   agentConnectUrl,
   issueAgentConnect,
@@ -11677,6 +11678,14 @@ export async function handleHttp(
           member: me,
           ...(sharedWith !== null ? { hue_shared_with: sharedWith } : {}),
         });
+      }
+
+      // ADR 797 — a member's portrait, painted by /live and kept for the phone's Seats screen.
+      const portraitMatch = rest.match(/^\/members\/([^/]+)\/portrait$/);
+      if (method === 'PUT' && portraitMatch) {
+        const auth = await authTouch(ctx, slug, req);
+        const out = await putPortrait(ctx, auth, decodeURIComponent(portraitMatch[1]!), req);
+        return sendJson(res, 200, out);
       }
 
       const reclaimMatch = rest.match(/^\/members\/([^/]+)\/reclaim$/);

@@ -10,12 +10,21 @@ import { useSyncExternalStore } from 'react';
 
 const portraits = new Map<string, string>();
 const listeners = new Set<() => void>();
+const painted = new Set<(name: string, url: string) => void>();
 
 /** Publish (or replace) a member's portrait, as an image URL. */
 export function setPortrait(name: string, url: string): void {
   if (portraits.get(name) === url) return;
   portraits.set(name, url);
   for (const l of listeners) l();
+  for (const l of painted) l(name, url);
+}
+
+/** Every portrait held now, then each new one as it is painted (ADR 797: /live hands them on). */
+export function onPortrait(listener: (name: string, url: string) => void): () => void {
+  painted.add(listener);
+  for (const [name, url] of portraits) listener(name, url);
+  return () => painted.delete(listener);
 }
 
 export function portraitOf(name: string): string | undefined {

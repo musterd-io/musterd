@@ -105,6 +105,11 @@ small change.
   press is not kept for the next open. The result comes back as a `quick_action_result` push. The
   extension shows it quietly ("Check inbox reached cider." or "cider is offline. Check inbox waits
   in its inbox."), and a roster pushed by mistake lands quietly as "Seats updated."
+- **Seat portraits** (2026-11-03, lane `01M6JG7AX1`, ADR 797). Each seat on **Seats** shows the face
+  /live paints for it, not a letter. The roster names each seat's picture by digest. The phone pulls
+  `body/<binding>/portrait-<digest>` once and keeps the opened PNG for the life of the app, keyed by
+  digest. The seat shows its letter until the picture arrives, and keeps it when the daemon has none
+  (nobody has had /live open since that seat's look last changed).
 - **A settled ask's notifications clear.** When a fetch says gone (a relay 404: answered in the
   app, on /live or in Slack, or expired), and when the app sends an answer, every notification for
   that ask is removed from Notification Center (`clearDelivered`) and from the phone's record. A
@@ -386,7 +391,7 @@ src/
     phoneKeys.ts           // the typed TS contract of the native module modules/musterd-keys
     push.ts                // the musterd block on an APNs payload, and a fetched body
     questionKey.ts         // the question key: enrollment (question_key callback), and answering a question in the app
-    quickAction.ts         // quick actions (ADR 791): sign, seal and send one; pull the seat roster by ref
+    quickAction.ts         // quick actions (ADR 791): sign, seal and send one; pull the seat roster by ref; pull a seat portrait by digest (ADR 797)
     readable.ts            // an ask's text cleaned for a phone: one-line summary, or paragraphs and bullets
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/

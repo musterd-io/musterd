@@ -62,6 +62,7 @@ import {
 } from './appQuestion.js';
 import {
   APP_QUICK_DELIVERY_TTL_MS,
+  fetchPortrait,
   fetchRoster,
   quickResultRef,
   runAppQuickAction,
@@ -1447,8 +1448,10 @@ export async function handleAppFetch(
   );
   const keys = binding ? await appBindingKeys(ctx.db, team.id, binding.id) : null;
   if (!binding || !keys) return null;
-  // ADR 791: a roster too big to push.
-  const quick = await fetchRoster(ctx, team, binding, frame.ask_ref, now);
+  // ADR 791: a roster too big to push. ADR 797: a member portrait, fetched by digest.
+  const quick =
+    (await fetchRoster(ctx, team, binding, frame.ask_ref, now)) ??
+    fetchPortrait(ctx, team, binding, frame.ask_ref, now);
   if (quick) {
     const input = {
       binding,

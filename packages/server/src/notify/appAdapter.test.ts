@@ -1811,9 +1811,16 @@ withDrivers('app channel quick actions and roster (ADR 791)', (o) => {
     expect(roster).toMatchObject({ kind: 'roster' });
     if (roster?.kind !== 'roster') throw new Error('expected a roster');
     expect(roster.seats).toEqual([
-      { seat: 'ada', online: true, wakeable: false, lane: null },
-      { seat: 'bo', online: false, wakeable: true, lane: { id: lane.id, title: 'Fix the flake' } },
-      { seat: 'cy', online: false, wakeable: false, lane: null },
+      // ADR 797: no /live has painted these seats, so none has a portrait yet.
+      { seat: 'ada', online: true, wakeable: false, lane: null, portrait: null },
+      {
+        seat: 'bo',
+        online: false,
+        wakeable: true,
+        lane: { id: lane.id, title: 'Fix the flake' },
+        portrait: null,
+      },
+      { seat: 'cy', online: false, wakeable: false, lane: null, portrait: null },
     ]);
   });
 

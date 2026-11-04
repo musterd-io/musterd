@@ -15,6 +15,7 @@ import { appendAudit } from '../store/audit.js';
 import type { ChannelBinding } from '../store/channelBindings.js';
 import { listLanes } from '../store/lanes.js';
 import { getMemberById, listMembers } from '../store/members.js';
+import { portraitsOf } from '../store/portraits.js';
 import { hasLivePresence } from '../store/presence.js';
 import { getResidency } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
@@ -147,6 +148,34 @@ export async function fetchRoster(
 }
 
 /**
+ * One member portrait the phone fetches by `portrait-<digest>` (ADR 797) — any digest this team holds,
+ * fresh. Null for any other ref or a digest the daemon does not have.
+ */
+export function fetchPortrait(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  binding: ChannelBinding,
+  ref: string,
+  now: number,
+): { delivery: AppDelivery; expiresAt: number } | null {
+  if (!ref.startsWith('portrait-')) return null;
+  const digest = ref.slice('portrait-'.length);
+  const png = portraitsOf(ctx.config.dbPath).get(team.id, digest);
+  if (!png) return null;
+  return {
+    delivery: {
+      v: 1,
+      kind: 'portrait',
+      team: team.slug,
+      binding: binding.id,
+      digest,
+      png: png.toString('base64url'),
+    },
+    expiresAt: now + APP_QUICK_DELIVERY_TTL_MS,
+  };
+}
+
+/**
  * The roster delivery (ADR 791): every standing agent seat, whether a session is live in it,
  * whether a host can wake it, and its one live lane (none when it holds zero or several, as the
  * quick-action line reads it). Seats sort by name, so the phone's list does not reshuffle.
@@ -170,6 +199,7 @@ export async function buildAppRoster(
     held.push({ id: lane.id, title: lane.title });
     lanesByOwner.set(lane.owner_seat, held);
   }
+  const portraits = portraitsOf(ctx.config.dbPath).digests(team.id);
   const seats = [];
   for (const agent of agents) {
     const held = lanesByOwner.get(agent.name) ?? [];
@@ -179,6 +209,8 @@ export async function buildAppRoster(
       online: await hasLivePresence(ctx.db, agent.id, ctx.config.presenceTimeoutMs),
       wakeable: residency !== null && (agent.halted_at === null || agent.halted_at === undefined),
       lane: held.length === 1 ? held[0]! : null,
+      // ADR 797: the phone fetches the picture by this digest and caches it.
+      portrait: portraits.get(agent.name) ?? null,
     });
   }
   return { v: 1, kind: 'roster', team: team.slug, binding: binding.id, ts: now, seats };

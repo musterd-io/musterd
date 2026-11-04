@@ -262,6 +262,22 @@ function LivePage() {
   // ADR 692: this page's socket says it is /live, which is what the "who is here" row reads; the
   // poll takes a closed tab out of that row when its member is still online elsewhere.
   const liveCfg = useMemo(() => (cfg ? { ...cfg, page: 'live' as const } : null), [cfg]);
+  // ADR 797: the portraits the office paints go to the daemon for the phone's Seats screen. The
+  // uploader loads lazily, so the first paint carries none of it.
+  const portraitTeam = cfg?.team;
+  const portraitToken = cfg?.token;
+  useEffect(() => {
+    if (!portraitTeam || !portraitToken) return;
+    let stop: (() => void) | undefined;
+    let live = true;
+    void import('../live/portraitUpload').then((m) => {
+      if (live) stop = m.startPortraitUpload(portraitTeam, portraitToken);
+    });
+    return () => {
+      live = false;
+      stop?.();
+    };
+  }, [portraitTeam, portraitToken]);
   const stream = useLiveStream(liveCfg, {
     onCredentialInvalid: recoverObserver,
     rosterPollMs: HERE_POLL_MS,

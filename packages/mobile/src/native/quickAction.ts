@@ -17,6 +17,7 @@ import {
   AppCallbackSchema,
   AppQuickActionSchema,
   appQuickActionSigningBytes,
+  portraitRef,
   type AppDelivery,
   type AppQuickAction,
 } from '@musterd/protocol/app-channel';
@@ -67,6 +68,50 @@ export async function fetchRoster(input: {
     return delivery.kind === 'roster' ? delivery : { miss: 'gone' };
   } catch {
     return { miss: 'gone' };
+  }
+}
+
+/** ADR 797: portraits this app has opened, by digest, for the life of the app. */
+const portraits = new Map<string, string>();
+
+/**
+ * A seat's portrait (ADR 797) as a `data:` URI, fetched once per digest through the relay and kept
+ * for the life of the app. Null when the daemon has no such picture or it could not be fetched; the
+ * seat keeps its letter.
+ */
+export async function fetchPortrait(input: {
+  pin: PairingPin;
+  digest: string;
+  now?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<string | null> {
+  const held = portraits.get(input.digest);
+  if (held) return held;
+  const { pin } = input;
+  if (!pin.binding) return null;
+  const ref = portraitRef(input.digest);
+  const fetched = await fetchBody(
+    pin.relay,
+    { team: pin.team, binding: pin.binding, ref, expires_at: 0 },
+    input.fetchImpl ?? fetch,
+  );
+  if ('miss' in fetched || !fetched.sealed) return null;
+  const { route, sealed } = fetched;
+  if (route.team !== pin.team || route.binding !== pin.binding || route.ref !== ref) return null;
+  try {
+    const delivery = await openDelivery({
+      sealed,
+      route,
+      pinnedIdentity: pin.identity,
+      now: input.now ?? Date.now(),
+    });
+    if (delivery.kind !== 'portrait' || delivery.digest !== input.digest) return null;
+    const b64 = delivery.png.replace(/-/g, '+').replace(/_/g, '/');
+    const uri = `data:image/png;base64,${b64}${'='.repeat((4 - (b64.length % 4)) % 4)}`;
+    portraits.set(input.digest, uri);
+    return uri;
+  } catch {
+    return null;
   }
 }
 

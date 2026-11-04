@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QUICK_ACTION_ORDER, quickResultText, seatActions } from './notice';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys } from './phoneKeys';
-import { fetchRoster, ROSTER_SKEW_MS, sendQuickAction } from './quickAction';
+import { fetchPortrait, fetchRoster, ROSTER_SKEW_MS, sendQuickAction } from './quickAction';
 
 const KEY = `B${'Q'.repeat(86)}`;
 
@@ -234,6 +234,76 @@ describe('fetchRoster', () => {
       async () => new Response('x', { status: 503 }),
     ) as unknown as typeof fetch;
     expect(await fetchRoster({ pin, now: NOW, fetchImpl })).toEqual({ miss: 'unreachable' });
+  });
+});
+
+describe('fetchPortrait (ADR 797)', () => {
+  const digest = '0123456789abcdef';
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]).toString('base64url');
+  const r = { team: 'revive', binding: 'bind-1', ref: `portrait-${digest}`, expires_at: 0 };
+
+  function served(body: unknown) {
+    vi.mocked(phoneKeys.open).mockImplementation(async () => {
+      const payload = Buffer.from(JSON.stringify(body), 'utf8');
+      const signed = Buffer.concat([
+        Buffer.from(`musterd-app/v1 signed\n${canonicalJson(r)}\n`, 'utf8'),
+        payload,
+      ]);
+      return JSON.stringify({
+        p: payload.toString('base64url'),
+        s: cryptoSign(null, signed, identity.privateKey).toString('base64url'),
+      });
+    });
+    vi.mocked(phoneKeys.verifyEd25519).mockImplementation(
+      async ({ publicKey, message, signature }) =>
+        cryptoVerify(
+          null,
+          Buffer.from(message, 'base64url'),
+          createPublicKey({
+            key: Buffer.concat([
+              Buffer.from('302a300506032b6570032100', 'hex'),
+              Buffer.from(publicKey, 'base64url'),
+            ]),
+            format: 'der',
+            type: 'spki',
+          }),
+          Buffer.from(signature, 'base64url'),
+        ),
+    );
+    return vi.fn(async (url: string) =>
+      String(url).endsWith(`/app/revive/body/bind-1/portrait-${digest}`)
+        ? Response.json({ ...r, sealed: { v: 1, enc: 'AA', ct: 'BB' } })
+        : new Response('no', { status: 404 }),
+    ) as unknown as typeof fetch;
+  }
+
+  it('pulls portrait-<digest>, opens it, and answers a PNG data URI; the second ask is cached', async () => {
+    const delivery = { v: 1, kind: 'portrait', team: 'revive', binding: 'bind-1', digest, png };
+    const fetchImpl = served(delivery);
+    const uri = await fetchPortrait({ pin, digest, now: NOW, fetchImpl });
+    expect(uri).toBe(`data:image/png;base64,${Buffer.from(png, 'base64url').toString('base64')}`);
+    expect(await fetchPortrait({ pin, digest, now: NOW, fetchImpl })).toBe(uri);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a delivery for another digest', async () => {
+    const other = {
+      v: 1,
+      kind: 'portrait',
+      team: 'revive',
+      binding: 'bind-1',
+      digest: 'ffffffffffffffff',
+      png,
+    };
+    const fresh = { ...pin, binding: 'bind-1' };
+    expect(
+      await fetchPortrait({
+        pin: fresh,
+        digest: 'fedcba9876543210',
+        now: NOW,
+        fetchImpl: served(other),
+      }),
+    ).toBeNull();
   });
 });
 

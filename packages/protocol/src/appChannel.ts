@@ -175,6 +175,21 @@ export const QUICK_ACTION_RESULTS = ['started', 'offline'] as const;
 export type QuickActionResult = (typeof QUICK_ACTION_RESULTS)[number];
 /** The most seats one roster carries. */
 export const APP_ROSTER_MAX = 64;
+
+/** ADR 797: a member portrait is a 64×64 PNG of at most this many bytes. */
+export const PORTRAIT_MAX_BYTES = 16 * 1024;
+/** ADR 797: a portrait's side, in pixels. */
+export const PORTRAIT_SIZE = 64;
+/** ADR 797: a portrait's digest — the first 16 hex characters of the PNG's sha256. */
+export const PortraitDigestSchema = z.string().regex(/^[0-9a-f]{16}$/);
+/** ADR 797: the relay ref a phone fetches one portrait by. */
+export const portraitRef = (digest: string) => `portrait-${digest}`;
+/** ADR 797: the PNG bytes, base64url, at most `PORTRAIT_MAX_BYTES` once decoded. */
+const portraitPng = b64url.max(Math.ceil((PORTRAIT_MAX_BYTES * 4) / 3));
+
+/** ADR 797: what /live sends to store a member's portrait (`PUT …/members/:name/portrait`). */
+export const PortraitUploadSchema = z.object({ png: portraitPng });
+export type PortraitUpload = z.infer<typeof PortraitUploadSchema>;
 /** A quick action's seal must expire within this window of the daemon's clock (replay bound). */
 export const APP_QUICK_ACTION_WINDOW_MS = 10 * 60_000;
 
@@ -280,9 +295,20 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
           online: z.boolean(),
           wakeable: z.boolean(),
           lane: z.object({ id: z.string(), title: z.string() }).nullable(),
+          /** ADR 797: the seat's portrait digest; the phone fetches the PNG by `portraitRef`. */
+          portrait: PortraitDigestSchema.nullable().optional(),
         }),
       )
       .max(APP_ROSTER_MAX),
+  }),
+  /** ADR 797: one member portrait, fetched by `portraitRef(digest)` and cached by digest. */
+  z.object({
+    v: z.literal(1),
+    kind: z.literal('portrait'),
+    team: z.string(),
+    binding: z.string(),
+    digest: PortraitDigestSchema,
+    png: portraitPng,
   }),
 ]);
 export type AppDelivery = z.infer<typeof AppDeliverySchema>;
