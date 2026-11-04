@@ -89,3 +89,21 @@ export function saveNodeEnrollment(
   // a hand edit — would stay world-readable through every later write.
   chmodSync(path, 0o600);
 }
+
+/**
+ * ADR 796: point this machine's enrollment for `team` at a new hub, keeping its node id, credential
+ * and enrollment time — the relocated hub holds the same credential hash, so nothing is re-minted.
+ * Throws when this machine has no enrollment for the team. The caller verifies the new hub accepts
+ * the credential BEFORE calling this; a refused hub must never get written here.
+ */
+export function repointNodeEnrollment(
+  team: string,
+  hubUrl: string,
+  env: NodeJS.ProcessEnv = process.env,
+): NodeEnrollment {
+  const current = readNodeState(env).nodes[team];
+  if (!current) throw new Error(`this machine has no enrollment for team "${team}"`);
+  const next: NodeEnrollment = { ...current, hub_url: hubUrl };
+  saveNodeEnrollment({ team, ...next }, env);
+  return next;
+}

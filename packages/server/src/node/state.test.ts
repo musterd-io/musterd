@@ -2,7 +2,12 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { nodeStatePath, readNodeState, saveNodeEnrollment } from './state.js';
+import {
+  nodeStatePath,
+  readNodeState,
+  repointNodeEnrollment,
+  saveNodeEnrollment,
+} from './state.js';
 
 /**
  * `~/.musterd/node.json` (ADR 328 §2) — the machine's node credentials, one entry per enrolled
@@ -122,6 +127,34 @@ describe('node.json', () => {
     writeFileSync(nodeStatePath(), 'not json at all');
     expect(readNodeState().nodes).toEqual({});
     writeFileSync(nodeStatePath(), '{"nodes":{"revive":{"credential":42}}}');
+    expect(readNodeState().nodes).toEqual({});
+  });
+});
+
+describe('repointing an enrollment (ADR 796)', () => {
+  it('moves only hub_url; node id, credential and enrolled_at stay', () => {
+    saveNodeEnrollment({
+      team: 'revive',
+      hub_url: 'http://old-hub:4849',
+      node_id: '01M',
+      credential: 'msnode_aaa',
+      enrolled_at: 7,
+    });
+    const next = repointNodeEnrollment('revive', 'http://new-hub:4849');
+    expect(next).toEqual({
+      hub_url: 'http://new-hub:4849',
+      node_id: '01M',
+      credential: 'msnode_aaa',
+      enrolled_at: 7,
+    });
+    expect(readNodeState().nodes['revive']).toEqual(next);
+    expect(statSync(nodeStatePath()).mode & 0o777).toBe(0o600);
+  });
+
+  it('refuses a team this machine never enrolled in, and writes nothing', () => {
+    expect(() => repointNodeEnrollment('ghost-team', 'http://new-hub:4849')).toThrow(
+      /no enrollment/,
+    );
     expect(readNodeState().nodes).toEqual({});
   });
 });

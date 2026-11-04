@@ -175,6 +175,29 @@ export async function revokeNode(
 }
 
 /**
+ * ADR 796: rename a node. After a hub relocation the hub's own identity keeps the old machine's
+ * hostname as its label while it runs on the new one, and `musterd move --to` resolves by label, so
+ * the label is corrected by hand. Only a live node of this team; the label is trimmed and 1–64 chars.
+ */
+export async function relabelNode(
+  db: Driver,
+  teamId: string,
+  nodeId: string,
+  label: string,
+): Promise<boolean> {
+  const clean = label.trim();
+  if (clean.length === 0 || clean.length > 64) return false;
+  return (
+    (
+      await db.run(
+        'UPDATE nodes SET label = ? WHERE id = ? AND team_id = ? AND revoked_at IS NULL',
+        [clean, nodeId, teamId],
+      )
+    ).changes > 0
+  );
+}
+
+/**
  * Authenticate a presented `msnode_`. Null unless the credential is bound, unrevoked, and belongs
  * to *this* team — a node speaks for the team it was admitted to and no other (ADR 325's one team,
  * one authority).
