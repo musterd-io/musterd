@@ -582,7 +582,7 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
         callback('ask-f', await answerBody(s, first)),
         NOW + 2_000,
       ),
-    ).resolves.toEqual({ ok: false, reason: 'consumed' });
+    ).resolves.toEqual({ ok: true });
     await expect(
       handleRelayCallback(
         s.ctx,
@@ -590,7 +590,7 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
         callback('ask-f', await answerBody(s, second)),
         NOW + 2_000,
       ),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: false, reason: 'consumed' });
     // Decided now, so nothing is live for it; nor for an unknown ask or binding.
     await expect(
       handleAppFetch(s.ctx, s.team, { ask_ref: 'ask-f', binding: s.binding.id }, NOW + 3_000),
@@ -607,7 +607,7 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
     );
   });
 
-  it('redeliver re-sends a pending ask with a fresh token and spends the old one', async () => {
+  it('redeliver re-sends a pending ask with a fresh token; the old one still takes the first answer', async () => {
     const s = await seed();
     await deliverAskToAppChannels(
       s.ctx,
@@ -630,7 +630,7 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
         callback('ask-3', await answerBody(s, first)),
         NOW + 2_000,
       ),
-    ).resolves.toEqual({ ok: false, reason: 'consumed' });
+    ).resolves.toEqual({ ok: true });
     await expect(
       handleRelayCallback(
         s.ctx,
@@ -638,7 +638,7 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
         callback('ask-3', await answerBody(s, second)),
         NOW + 2_000,
       ),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: false, reason: 'consumed' });
   });
 
   it('the paired delivery is signed and names the device key', async () => {
@@ -896,7 +896,7 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
       });
     });
 
-    it('a re-delivery re-issues fresh descriptors, and a spent token’s answer is refused', async () => {
+    it('a re-delivery re-issues fresh descriptors, and the replaced token still takes the first answer (lane 01M6DBJD8Y)', async () => {
       const s = await seed();
       const { env } = await raiseVerdictAsk(s);
       await deliverAskToAppChannels(s.ctx, s.team, env);
@@ -920,7 +920,19 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
           ),
           NOW + 2_000,
         ),
-      ).resolves.toEqual({ ok: false, reason: 'consumed' });
+      ).resolves.toEqual({ ok: true });
+      // The first answer won; the fresh descriptor's answer is refused.
+      await expect(
+        handleRelayCallback(
+          s.ctx,
+          s.team,
+          callback(
+            'ask-v',
+            await answerBody(s, second, { approval: phoneSigns(s, second.approval.approve) }),
+          ),
+          NOW + 3_000,
+        ),
+      ).resolves.toMatchObject({ ok: false });
     });
 
     describe('the fatigue ceiling (ADR 676 §8)', () => {
