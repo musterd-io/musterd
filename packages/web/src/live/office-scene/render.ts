@@ -3787,13 +3787,21 @@ function warmPool(
   color: string,
   peak: number,
 ): void {
-  const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+  // Squash the space, not the shape: a round gradient filled into a flattened ellipse was cut off at
+  // the ellipse's top and bottom while still ~40% bright, and that cut read as a hard ring round every
+  // member once their glow was raised (nick, 2026-11-03). Scaled, the gradient reaches zero exactly
+  // at the ellipse's edge all the way round.
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.scale(1, flatten);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
   g.addColorStop(0, `rgba(${color}, ${peak})`);
   g.addColorStop(1, `rgba(${color}, 0)`);
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.ellipse(p.x, p.y, r, r * flatten, 0, 0, Math.PI * 2);
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
 }
 
 /**
