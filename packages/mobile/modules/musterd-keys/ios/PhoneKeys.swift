@@ -88,6 +88,8 @@ enum PhoneKeys {
   private static let questionAccount = "question"
   /// `appQuestionAnswerSigningBytes`' first line (`@musterd/protocol` appChannel.ts).
   private static let questionAnswerTag = "musterd-app-question-answer/v1\n"
+  /// `appQuickActionSigningBytes`' first line: ADR 791 has the question key sign quick actions too.
+  private static let quickActionTag = "musterd-app-quick-action/v1\n"
 
   /// Serializes key creation: two concurrent first calls must produce one keypair, not two.
   private static let createLock = NSLock()
@@ -172,11 +174,12 @@ enum PhoneKeys {
   }
 
   /// Sign `message` (UTF-8) with the question key: no Face ID, no prompt (ADR 774 §5). The caller
-  /// passes only `appQuestionAnswerSigningBytes`; the daemon refuses this key on anything else, and
-  /// so does this function: a message without the question-answer domain tag is never signed.
+  /// passes only `appQuestionAnswerSigningBytes` or `appQuickActionSigningBytes` (ADR 791); the
+  /// daemon refuses this key on anything else, and so does this function: a message without one of
+  /// those two domain tags is never signed.
   static func signQuestion(_ message: String) throws -> String {
-    guard message.hasPrefix(questionAnswerTag) else {
-      throw PhoneKeysError.unavailable("the question key signs only answers to questions")
+    guard message.hasPrefix(questionAnswerTag) || message.hasPrefix(quickActionTag) else {
+      throw PhoneKeysError.unavailable("the question key signs only answers and quick actions")
     }
     guard let reference = loadReference(account: questionAccount) else {
       throw PhoneKeysError.keyInvalidated("no question key on this phone; enroll it again")
