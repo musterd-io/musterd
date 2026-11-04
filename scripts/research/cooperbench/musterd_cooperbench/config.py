@@ -38,6 +38,24 @@ PUSH_HOOK = (
     "command -v musterd >/dev/null 2>&1 && musterd gate record-push --stdin 2>/dev/null || true "
     "# musterd-push-hook"
 )
+# Rider 7 (the act lane): the project-local session-capture and session-end hooks (ADR 131 §5), as
+# claudeCode.ts writes them, so a wake can `claude --resume` the agent's own transcript instead of
+# starting cold. Pinned to claudeCode.ts by test_config.py like the three above.
+SESSION_CAPTURE_HOOK = (
+    'd="${CLAUDE_PROJECT_DIR:-.}"; cd "$d" 2>/dev/null; '
+    "command -v musterd >/dev/null 2>&1 && musterd session start --stdin 2>/dev/null || true "
+    "# musterd-session-capture-hook"
+)
+SESSION_END_HOOK = (
+    'd="${CLAUDE_PROJECT_DIR:-.}"; cd "$d" 2>/dev/null; '
+    "command -v musterd >/dev/null 2>&1 && musterd session end --stdin >/dev/null 2>&1 || true "
+    "# musterd-session-end-hook"
+)
+# Rider 7: the ADR 261 permission floor a real workspace carries. The first `claude -p` runs under
+# CooperBench's own skip-permissions flag; a wake never passes that flag (ADR 131 §6), so under
+# `seat-policy` the workspace's settings must let the woken run read, edit and run git and tests.
+PERMISSION_FLOOR = ["Read", "Edit", "Write", "MultiEdit", "Glob", "Grep", "Bash", "mcp__musterd"]
+
 # musterd's own matcher is "Edit|Write|MultiEdit|NotebookEdit|Bash". The arm leaves Bash out on purpose.
 # It gates every path with one `**` class (agents declare their own scopes), and the gate matches a
 # Bash call by its whole command string, so `**` matched every command: `git diff`, `git status` and
@@ -51,6 +69,9 @@ GATE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
 # Excluding it in .git/info/exclude keeps it out of `git diff` and `git add -A`, so it can never
 # reach the patch CooperBench scores; nothing the agent can see in the repo changes.
 GIT_EXCLUDE = ".musterd/\n"
+# Rider 7 writes the seat's settings to `.claude/settings.local.json` in the repo (a wake reads
+# `--setting-sources project,local`, never a `--settings` file); it stays out of the patch the same way.
+GIT_EXCLUDE_ACT = ".musterd/\n.claude/\n"
 
 # The smoke scripts run Claude on the CooperBench VM itself, outside the arm's task containers.
 # Pass only its model credential, per-seat musterd wiring, and stable runtime paths. The VM's other
@@ -158,8 +179,13 @@ def mcp_config(env: dict[str, str], *, command: str, args: list[str] | None = No
 # front. The coop arm has no MCP tools, so this changes nothing there.
 
 
-def claude_settings(extra_env: dict[str, str] | None = None) -> dict[str, Any]:
-    """`--settings` JSON: musterd's gate, interrupt and push hooks, CooperBench's own env."""
+def claude_settings(extra_env: dict[str, str] | None = None, *, lane: str = "launch") -> dict[str, Any]:
+    """`--settings` JSON: musterd's gate, interrupt and push hooks, CooperBench's own env.
+
+    On the act lane (rider 7) the same JSON also carries the session-capture and session-end hooks
+    and the permission floor, and is written to the repo's `.claude/settings.local.json` so the first
+    call and every wake read one posture.
+    """
     settings: dict[str, Any] = {
         "hooks": {
             "PreToolUse": [{"matcher": GATE_MATCHER, "hooks": [{"type": "command", "command": GATE_HOOK}]}],
@@ -169,6 +195,10 @@ def claude_settings(extra_env: dict[str, str] | None = None) -> dict[str, Any]:
             ],
         }
     }
+    if lane == "act":
+        settings["hooks"]["SessionStart"] = [{"hooks": [{"type": "command", "command": SESSION_CAPTURE_HOOK}]}]
+        settings["hooks"]["SessionEnd"] = [{"hooks": [{"type": "command", "command": SESSION_END_HOOK}]}]
+        settings["permissions"] = {"allow": list(PERMISSION_FLOOR)}
     if extra_env:
         settings["env"] = dict(extra_env)
     return settings

@@ -12,8 +12,24 @@ from __future__ import annotations
 from cooperbench.agents._coop.prompt import _SUBMISSION_BLOCK, _git_block
 
 
-def musterd_block(agent_id: str, partners: list[str]) -> str:
+# The two waiting sentences the arm added (finding 019 fix B). On the act lane (rider 7) they are
+# replaced by the product's own guidance: end the turn, the host resumes the seat on the next act.
+_WAIT_LAUNCH = """   When you must wait for a partner, wait in ONE call —
+   `team_inbox_check` with `wait: 45` blocks until a directed act arrives
+   (repeat it if it times out). Never poll with repeated checks or `sleep`."""
+_WAIT_ACT = """   When you must wait for a partner, end your turn: the host resumes
+   you on the next directed act, and the wake carries it. Never poll with
+   repeated checks or `sleep`."""
+_HELD_LAUNCH = """the file, wait on that lane in one call (`team_inbox_check` with
+   `wait: 45, until_lane: <holder lane id>`) — do not message for an ETA."""
+_HELD_ACT = """the file, end your turn — the host resumes you when the lane frees the
+   file, and the act says so — do not message for an ETA."""
+
+
+def musterd_block(agent_id: str, partners: list[str], *, lane: str = "launch") -> str:
     partner_str = ", ".join(partners)
+    wait = _WAIT_ACT if lane == "act" else _WAIT_LAUNCH
+    held = _HELD_ACT if lane == "act" else _HELD_LAUNCH
     return f"""## Cooperation protocol
 
 You are **{agent_id}**, working alongside: **{partner_str}**.
@@ -42,14 +58,11 @@ Recommended workflow:
    and your lane.
 2. Check `team_inbox_check` at minimum after major edits and before
    submitting. Acts addressed to you also appear after your tool calls.
-   When you must wait for a partner, wait in ONE call —
-   `team_inbox_check` with `wait: 45` blocks until a directed act arrives
-   (repeat it if it times out). Never poll with repeated checks or `sleep`.
+{wait}
 3. If two agents need to modify the same file, coordinate explicitly
    (split the file, agree on one owner and hand off, or ask the owner to
    make the change). If an edit is refused because a partner's lane holds
-   the file, wait on that lane in one call (`team_inbox_check` with
-   `wait: 45, until_lane: <holder lane id>`) — do not message for an ETA.
+   {held}
 4. Keep messages short and focused: file names, function names, and
    one-sentence intents are usually enough.
 
@@ -105,10 +118,12 @@ Teammates' branches are at `team/<name>` (e.g., `team/{teammate_name}`).
     return section
 
 
-def build_instruction(task: str, *, agents: list[str], agent_id: str, git_enabled: bool) -> str:
+def build_instruction(
+    task: str, *, agents: list[str], agent_id: str, git_enabled: bool, lane: str = "launch"
+) -> str:
     """CooperBench's coop instruction with the musterd block in the coop block's place."""
     partners = [a for a in agents if a != agent_id]
-    sections = [task, _SUBMISSION_BLOCK, musterd_block(agent_id, partners)]
+    sections = [task, _SUBMISSION_BLOCK, musterd_block(agent_id, partners, lane=lane)]
     if git_enabled:
         sections.append(_git_block(agent_id, partners))
     return "\n\n---\n\n".join(sections)
