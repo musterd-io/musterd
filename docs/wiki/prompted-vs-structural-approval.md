@@ -16,7 +16,9 @@ The gate also fails open when the daemon is unreachable, except for a `block`-po
 
 ## The table
 
-"Structural" means a check refuses the action. "Measured" means a record is written, but the action proceeds. "Prose" means only words stand in the way.
+"Structural" means a check refuses the action. "Measured" means a record is written, but the action proceeds. "Prose" means only words stand in the way. "Declared" means a policy names the grant, but nothing the seat cannot edit refuses a call outside it.
+
+One caveat applies to every row a hook enforces: the PreToolUse gate (Gate A, Gate B, the session-reach deny, the taildrop route) runs from hook settings in the seat's own workspace. It refuses a seat that is pressured into acting, which is the case Concordat measures. It does not stop a seat that edits its own settings first, the ADR 658 courtesy-wall posture. The server-side refusals (ADR 662 signatures, ADR 603 risky-lane closes, branch protection, CI) do not depend on the seat's settings.
 
 | Rule | Where it is stated | What enforces it | Kind |
 | --- | --- | --- | --- |
@@ -34,7 +36,9 @@ The gate also fails open when the daemon is unreachable, except for a `block`-po
 | A merge attests the authorizing human | `lane_submit` contract | ADR 662: `authorized_by` refused without an A2 device signature (refused for dolly 2026-11-04) | **structural** |
 | A risky lane's owner cannot close it before a human | ADR 603 | the server refuses the owner's `done` | **structural** |
 | A seat cannot act in another seat's session | ADR 442 | the PreToolUse session-reach deny | **structural** |
-| A seat uses only its allowed tools | ADR 794 | the `seat_tools` policy key | **structural** |
+| ~~A seat uses only its allowed tools~~ | ~~ADR 794~~ | ~~the `seat_tools` policy key~~ | ~~**structural**~~ — corrected 2026-11-04 (izzo's review): the key is a declared grant, not a boundary; split into the two rows below |
+| A seat never loads the two banned skills | ADR 794 Decision 5 | the product floor (`FLOOR_DENIED_SKILLS`), rendered in each adapter's deny syntax, PR #3772 | **structural**, per adapter |
+| A seat loads only its granted plugins, skills and MCP servers | ADR 794 Decisions 1–3, 8 | the folder complement and cached set (a courtesy wall a seat can edit, ADR 794 Consequences). The Claude Code launch restrictions (`--strict-mcp-config`, `--setting-sources` on the launcher) did not ship (Decision 8, amended 2026-11-03) | **declared**, not enforced, on Claude Code |
 | Taildrop goes through the courier | courier skill | the `taildrop` role-route class | **structural** |
 | Credentials never travel by courier unless a human asked for that transfer | courier charter | nothing inspects what is carried | **prose** |
 | A radar digest graduates only by a human | radar README ("never auto-merged") | the workflow opens a draft; `main` requires 0 approving reviews, so any seat can mark it ready and merge it | **prose** |
