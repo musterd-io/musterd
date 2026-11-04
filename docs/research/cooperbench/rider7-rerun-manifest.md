@@ -2,7 +2,7 @@
 
 **Lane:** `01M6MDRD86` (this page and the wake guard), goal `coordination-cost`, asked by nick ("write
 the manifest for the re-run", 2026-11-04 in session). The run is its own lane once spend is approved.
-**Status:** pre-registered 2026-11-04, before any pair ran on the ADR 804/805 build. Nothing below
+**Status:** pre-registered 2026-11-04, before any pair ran on the ADR 804/805 build; spend decided the same evening (A: 10 pairs, hard stop $110). Nothing below
 changes once a measured pair has run. **CooperBench:** `63b9d44`. **Before this:** [rider 7
 manifest](./rider7-manifest.md) → [finding 031](../031-cooperbench-rider7-smoke.md), stopped at the
 smoke pair; [ADR 804](../../decisions/804-wake-report-releases-the-reclaim-hold.md) and
@@ -109,5 +109,5 @@ On `musterd-cooperbench`, in one session, the deploy token already on `musterd-j
 | Re-run under rider 7's rules, unchanged | this manifest; the rules are the pre-registered ones |
 | ADR 804 + 805 on the build; `resume_max_usd 0.25` | the two lanes finding 031 opened, landed 2026-11-04 |
 | A live wake guard, $6 a pair | this manifest, from finding 031's $14.34 unseen by the spend guard |
-| Pairs and hard stop (A: 10 / $110, B: 5 / $55) | **nick — pending** |
+| Pairs and hard stop (A: 10 / $110, B: 5 / $55) | **A — nick, 2026-11-04, via the app (question 01M6MDX3PW): 10 `core` pairs, hard stop $110** |
 | Finding number | 032 |
