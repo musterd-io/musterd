@@ -1,7 +1,7 @@
 import type { Envelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { deriveAsks } from './asks';
-import { deriveQuestions, waitedLabel } from './questions';
+import { deriveQuestions, waitedLabel, waitingOn } from './questions';
 
 const T0 = 1_800_000_000_000;
 let n = 0;
@@ -63,5 +63,27 @@ describe('deriveQuestions (seats ask 1e)', () => {
 
   it('reads waits the way the list prints them', () => {
     expect([30_000, 120_000, 3_600_000, 2 * 86_400_000].map(waitedLabel)).toEqual(['now', '2m', '1h', '2d']);
+  });
+});
+
+describe('waitingOn — who each seat is waiting on (lane 01M6M6G228)', () => {
+  it("names the person and the oldest open wait, whoever is reading", () => {
+    const first = question('ryder', 'nick');
+    const second = question('ryder', 'swetha');
+    const w = waitingOn([first, second], T0 + 42 * 60_000);
+    expect(w.get('ryder')).toEqual({ to: 'nick', waitedMs: T0 + 42 * 60_000 - first.ts });
+  });
+  it('forgets a question once it is answered or withdrawn', () => {
+    const q = question('ryder', 'nick');
+    const answer = env({ act: 'accept', from: 'nick', meta: { in_reply_to: q.id, answer: { choice: 0 } } });
+    expect(waitingOn([q, answer], T0 + 60_000).has('ryder')).toBe(false);
+    const q2 = question('dolly', 'nick');
+    const withdraw = env({ act: 'resolve', from: 'dolly', meta: { in_reply_to: q2.id } });
+    expect(waitingOn([q2, withdraw], T0 + 60_000).has('dolly')).toBe(false);
+  });
+  it('says the team for a question put to everyone', () => {
+    const q = question('ryder', 'nick', { audience: 'team' });
+    const team = { ...q, to: { kind: 'team' } } as Envelope;
+    expect(waitingOn([team], T0 + 60_000).get('ryder')?.to).toBeNull();
   });
 });

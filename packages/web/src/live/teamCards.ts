@@ -1,6 +1,7 @@
 import type { Lane, LaneBoard, LaneState, MemberSummary } from '@musterd/protocol';
 import { askIsLoud, type AskView } from './asks';
 import { memberColor, memberPosture } from './format';
+import { waitedLabel, type Waiting } from './questions';
 
 /**
  * The team column's pure view-model (ADR 464, spec §4). One card per PRESENT member, ordered by
@@ -54,7 +55,12 @@ const LABEL: Record<CardState, string> = {
 
 const recency = (l: Lane) => l.claimed_at ?? l.updated_at;
 
-function stateOf(m: MemberSummary, lane: Lane | undefined, asking: AskView | undefined): CardState {
+/** "waiting on nick · 42m" — a seat's open question, as its card and offline row both say it. */
+export function waitingLabelOf(w: Waiting): string {
+  return `waiting on ${w.to ?? 'the team'} · ${waitedLabel(w.waitedMs)}`;
+}
+
+function stateOf(m: MemberSummary, lane: Lane | undefined, asking: unknown): CardState {
   if (memberPosture(m) === 'away') return 'away';
   if (lane?.state === 'awaiting_acceptance') return 'review';
   if (lane?.state === 'blocked') return 'blocked';
@@ -72,6 +78,8 @@ export function teamCards(
   /** The derived asks (with the tier clock applied) — an open one to a human makes the asker's card
    *  say "asking nick". Optional: without them no card ever says it. */
   asks: readonly AskView[] = [],
+  /** Each seat's open question to a person (`waitingOn`): its card reads "waiting on nick · 42m". */
+  waiting: ReadonlyMap<string, Waiting> | undefined = undefined,
 ): { cards: TeamCard[]; offline: number } {
   // The freshest open ask per asker that is addressed to a HUMAN (or the team). An agent-routed
   // review ask is a review, not a room moment — the same line the banner draws.
@@ -102,14 +110,20 @@ export function teamCards(
     const lane = lanes[0];
     const status = m.state?.trim() ? m.state.trim() : null;
     const asking = askingBy.get(m.name);
-    const state = stateOf(m, lane, asking);
+    const wait = waiting?.get(m.name);
+    const state = stateOf(m, lane, asking ?? wait);
     return {
       name: m.name,
       kind,
       color: memberColor(m.name, kind, m.hue),
       member: m,
       state,
-      stateLabel: state === 'asking' ? `asking ${asking?.to ?? 'the team'}` : LABEL[state],
+      stateLabel:
+        state !== 'asking'
+          ? LABEL[state]
+          : wait && !asking
+            ? waitingLabelOf(wait)
+            : `asking ${asking?.to ?? 'the team'}`,
       title: lane ? lane.title : status,
       source: lane ? 'lane' : status ? 'status' : null,
       goal: lane?.goal_id ? (goalTitle.get(lane.goal_id) ?? null) : null,

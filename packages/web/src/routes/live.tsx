@@ -22,6 +22,7 @@ import { OfficeScene } from '../live/OfficeScene';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
 import type { Caption } from '../live/captions';
 import { applyTierClock, deriveAsks } from '../live/asks';
+import type { Waiting } from '../live/questions';
 import { logOpenMode } from '../live/stillMode';
 import { promptBarFlag, promptBarVisible } from '../live/promptGate';
 import { revealWhenMounted } from '../live/reveal';
@@ -327,6 +328,19 @@ function LivePage() {
   // column's "asking nick" and the room's ask moment. The strip keeps its own derivation because it
   // folds in the answers this browser just sent; a second copy here costs one pass over the buffer.
   const derivedAsks = useMemo(() => deriveAsks(envelopes), [envelopes]);
+  // Who each seat is waiting on (lane 01M6M6G228): its open question, whoever it was put to. The
+  // derivation module loads on its own, after first paint — imported eagerly it cost 1.7 KB of
+  // initial JS — so a card reads "waiting on nick" a beat after the room appears.
+  const [waiting, setWaiting] = useState<ReadonlyMap<string, Waiting> | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void import('../live/questions').then((m) => {
+      if (alive) setWaiting(m.waitingOn(envelopes, Date.now()));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [envelopes]);
   const asks = useMemo(() => applyTierClock(derivedAsks, Date.now()), [derivedAsks]);
   // The briefing (live-briefing spec): the topbar's sentence and the column's Now tab read ONE
   // derivation, so a count cannot disagree with the list under it. Pending seat claims are admin-only
@@ -895,6 +909,7 @@ function LivePage() {
               unreadable={rosterUnreadable}
               stale={rosterStale}
               asks={asks}
+              waiting={waiting}
               you={signedIn ? (cfg?.as ?? null) : null}
             />
             <Suspense fallback={null}>

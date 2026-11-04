@@ -2952,3 +2952,14 @@ eager in `TeamColumn`. Made lazy, it read 150.7 KB on this laptop, so the initia
 raised. Total JS read 404.9 KB on this laptop against 404.3 KB. CI's first run of the eager
 version read 405.4 KB (`static` job, run 41912031552). Lazy-loading cannot move this total, only
 less code can. Raised by 1.5 KB.
+
+## 2026-11-04 — "waiting on nick" on a held seat: total JS RAISED 415,500 → 417,000 B (lane 01M6M6G228K7X0RF159C2SN098)
+
+In nick's first shift run, ryder's open question held its wakes for an hour (ADR 792), and /live
+said only "on shift". A seat's open question now puts its card in the asking state, reading
+"waiting on nick · 42m", and its offline row says the same. `waitingOn` (questions.ts) is new.
+Imported eagerly from `live.tsx` it put the questions module on /live's first paint: initial JS
+read 151.4 KB against 150.9. live.tsx now loads it lazily after paint, and initial reads 149.7 KB.
+The split costs two more chunks. Total JS read 406.1 KB on this laptop against 405.8, and CI read
+406.8 KB (`static` job, run 41916138596). Lazy-loading cannot move that total. Raised by 1.5 KB to
+clear CI's read.
