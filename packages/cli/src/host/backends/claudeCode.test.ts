@@ -8,6 +8,7 @@ import {
   buildWakeArgs,
   claudeCodeBackend,
   parseRunSummary,
+  priceRung,
   RESUME_TRANSCRIPT_MAX_BYTES,
   type ClaudeCodeDeps,
 } from './claudeCode.js';
@@ -231,6 +232,45 @@ describe('claudeCodeBackend.wake', () => {
     expect(actuation.outcome).toEqual({ occupied: true, session: 'fresh' });
     child.exit(0);
     await actuation.settled;
+  });
+
+  it('ADR 805: a resume the bytes admit is priced; over the bound, or unpriceable, it spawns fresh', async () => {
+    // The capture is 4096 bytes ≈ 1,024 tokens: on claude-sonnet-5-5 ($2/MTok input) about $0.002.
+    const run = async (bound: number, model: string | undefined) => {
+      const child = new FakeChild();
+      const { backend, calls } = harness(child, {
+        readSession: () => resumable(),
+        seatModel: () => model,
+      });
+      const actuation = await backend.wake(
+        spec({ bounds: { timeout_ms: 60_000, resume_max_usd: bound } }),
+        ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+      );
+      child.exit(0);
+      await actuation.settled;
+      return { args: calls[0]!.args, outcome: actuation.outcome };
+    };
+    const under = await run(1, 'claude-sonnet-5-5');
+    expect(under.args).toContain('--resume');
+    expect(under.outcome).toEqual({ occupied: true, session: 'resumed' });
+    const over = await run(0.001, 'claude-sonnet-5-5');
+    expect(over.args).not.toContain('--resume');
+    expect(over.outcome).toEqual({ occupied: true, session: 'fresh' });
+    // Never a guess: a model with no price row, or none attested, cannot be shown under the bound.
+    const unpriced = await run(1, 'no-such-model');
+    expect(unpriced.args).not.toContain('--resume');
+    const unattested = await run(1, undefined);
+    expect(unattested.args).not.toContain('--resume');
+  });
+
+  it('ADR 805: priceRung estimates from bytes/4 tokens at the model input rate', () => {
+    expect(priceRung(4_000_000, 'claude-sonnet-5-5', 10)).toEqual({ ok: true, estimateUsd: 2 });
+    expect(priceRung(4_000_000, 'claude-sonnet-5-5', 1)).toMatchObject({ ok: false });
+    expect((priceRung(4_000_000, 'claude-sonnet-5-5', 1) as { skip: string }).skip).toContain(
+      '$2.00',
+    );
+    expect(priceRung(undefined, 'claude-sonnet-5-5', 1)).toMatchObject({ ok: false });
+    expect(priceRung(10, 'no-such-model', 1)).toMatchObject({ ok: false });
   });
 
   it('spawns in the seat workspace with MUSTERD_PROVENANCE=wake in the env, detached', async () => {

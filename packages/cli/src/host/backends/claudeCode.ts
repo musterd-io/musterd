@@ -10,6 +10,7 @@ import {
   type WakeLeaseFile,
 } from '@musterd/protocol';
 import { fmtBytes } from '../../args.js';
+import { findBinding } from '../../config.js';
 import { invalidateClaudeBinCache, resolveClaudeBin } from '../../claudeBin.js';
 import { readRegistry, type RegistryOwner } from '../../session/continuity.js';
 import {
@@ -26,6 +27,7 @@ import type {
   WakeSpec,
 } from '../backend.js';
 import { ensurePinnedMusterd, expectedProvenance, wakeEnv } from '../pinnedBin.js';
+import { priceRowFor } from '../prices.js';
 import { clearWakeLeaseFile, takeYieldFile, writeWakeLeaseFile } from '../wakeLeaseFile.js';
 
 /**
@@ -153,6 +155,56 @@ export interface ClaudeCodeDeps {
   clearWakeLease?: (workspace: string, leaseId: string) => void;
   /** Injectable yield-marker take (default: {@link takeYieldFile}) — ADR 546. */
   takeYield?: (workspace: string, leaseId: string) => boolean;
+  /** Injectable seat-model read for the ADR 805 price rung (default: {@link seatModelOf}). */
+  seatModel?: (workspace: string) => string | undefined;
+}
+
+/** The model a resumed run would re-ingest on: the seat's binding (`model`, ADR 158), else the
+ *  harness's own model variable, else unknown — never a guess (ADR 583's posture on prices). */
+export function seatModelOf(workspace: string): string | undefined {
+  try {
+    const b = findBinding(workspace, {});
+    if (b?.model) return b.model;
+  } catch {
+    // No binding to read: fall through to the environment.
+  }
+  return process.env['ANTHROPIC_MODEL'] ?? process.env['MUSTERD_MODEL'] ?? undefined;
+}
+
+/**
+ * ADR 805: the price rung. A resume re-ingests the transcript's conversation at the model's input
+ * rate, and the byte bound alone says nothing about dollars once a team raises it (finding 031:
+ * $0.17 → $1.64 a wake with the bound at 256 MiB). When the order carries `resume_max_usd`, the
+ * ladder's chosen target is priced before `--resume` is spawned: conversation weight when judged,
+ * else the transcript's bytes (an upper bound), at bytes/4 tokens × the model's input price. Over
+ * the bound, or unpriceable — no transcript size, no model, no price row — the wake is fresh and the
+ * host log says why. Fresh is always valid; the rung only ever refuses a resume.
+ */
+export function priceRung(
+  bytes: number | undefined,
+  model: string | undefined,
+  boundUsd: number,
+): { ok: true; estimateUsd: number } | { ok: false; skip: string } {
+  if (bytes === undefined)
+    return { ok: false, skip: `resume price unknown: no transcript size (bound $${boundUsd})` };
+  if (!model)
+    return {
+      ok: false,
+      skip: `resume price unknown: the seat attests no model (bound $${boundUsd})`,
+    };
+  const row = priceRowFor(model);
+  if (!row)
+    return {
+      ok: false,
+      skip: `resume price unknown: no price row for ${model} (bound $${boundUsd})`,
+    };
+  const estimateUsd = ((bytes / 4) * row.input) / 1_000_000;
+  if (estimateUsd > boundUsd)
+    return {
+      ok: false,
+      skip: `resume would re-ingest ${fmtBytes(bytes)} on ${model} for about $${estimateUsd.toFixed(2)} (bound $${boundUsd})`,
+    };
+  return { ok: true, estimateUsd };
 }
 
 /** Claude Code writes `~/.claude/projects/<workspace slug>/<session id>.jsonl`. The slug is lossy,
@@ -801,11 +853,31 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
       const wantsResume = spec.order.intended_delivery !== 'fresh';
       // The resume decision itself (increment 4) — taken here so the ADR 427 conversation weight it
       // judged can ride `deliveryMetadata` on every outcome; the branch on it is below.
-      const rung = exactEligible
+      const ladder = exactEligible
         ? exact
         : wantsResume
           ? resumeLadder(deps, liveness, bound)
           : { skip: null as string | null };
+      // ADR 805: a target the ladder admitted on bytes is priced before it is resumed.
+      const priceBound = spec.bounds.resume_max_usd;
+      const priced =
+        'id' in ladder && priceBound !== undefined
+          ? priceRung(
+              ladder.weight ?? liveness.transcriptBytes,
+              (deps.seatModel ?? seatModelOf)(spec.workspace),
+              priceBound,
+            )
+          : null;
+      const rung: typeof ladder =
+        priced !== null && !priced.ok
+          ? {
+              skip: priced.skip,
+              ...('weight' in ladder && ladder.weight !== undefined
+                ? { weight: ladder.weight }
+                : {}),
+              ...('result' in ladder ? { result: ladder.result } : {}),
+            }
+          : ladder;
       const judgedWeight = 'weight' in rung ? rung.weight : undefined;
       const deliveryMetadata = () => ({
         ...('result' in exact ? { exact_match: exact.result } : {}),

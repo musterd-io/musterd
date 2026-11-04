@@ -860,6 +860,9 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
             ...(order.bounds?.budget_usd !== undefined
               ? { budget_usd: order.bounds.budget_usd }
               : {}),
+            ...(order.bounds?.resume_max_usd !== undefined
+              ? { resume_max_usd: order.bounds.resume_max_usd }
+              : {}),
           },
           ...(gateway ? { gateway: { env: gateway.env, origin: gateway.origin } } : {}),
           ...(entry.key_env !== undefined ? { key_env: entry.key_env } : {}),

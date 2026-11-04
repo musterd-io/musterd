@@ -68,7 +68,7 @@ const POLICY_FLAGS_USAGE =
   '[--tool-policy reply-only|seat-policy] [--timeout <5m>] [--work-timeout <30m>] ' +
   '[--flow manual|auto] [--convene-huddles on|off] [--idle-wake on|off] [--max-turns <n>] ' +
   '[--budget <usd>] ' +
-  '[--transcript-max <MiB, fractions OK>] [--dream on|off] [--dream-nightly <1-3>] ' +
+  '[--transcript-max <MiB, fractions OK>] [--resume-max <USD>] [--dream on|off] [--dream-nightly <1-3>] ' +
   '[--dream-budget <usd>] [--shift-budget <usd>] [--shift-start manual|auto] ' +
   '[--autonomy ask|claim|free] [--autonomy-goals <goal,goal>]';
 
@@ -270,6 +270,7 @@ export const RESIDENCY_FLAGS = [
   'pipe',
   'remote',
   'residency',
+  'resume-max',
   'rev-parse',
   'run',
   'seat',
@@ -365,6 +366,14 @@ export function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | un
     out['budget_usd'] = n;
   }
   num('transcript-max', 'transcript_max_bytes', 1_048_576); // MiB → bytes
+  // ADR 805: the most one resume may cost to re-ingest; over it (or unpriceable) the wake is fresh.
+  const resumeMax = flagStr(parsed.flags, 'resume-max');
+  if (resumeMax !== undefined) {
+    const n = Number(resumeMax);
+    if (!Number.isFinite(n) || n <= 0)
+      throw new CliError(`--resume-max wants dollars above 0 (got "${resumeMax}")`, 2);
+    out['resume_max_usd'] = n;
+  }
   // ADR 494: may an idle seat dream outside working hours, how often a night, at what ceiling.
   const dream = flagStr(parsed.flags, 'dream');
   if (dream !== undefined) {
@@ -461,6 +470,7 @@ export function policyFlags(policy: ResidencyPolicyOverride): string[] {
       ? undefined
       : String(policy.transcript_max_bytes / 1_048_576),
   );
+  add('resume-max', policy.resume_max_usd?.toString());
   add('dream', policy.dream_enabled === undefined ? undefined : onOff(policy.dream_enabled));
   add('dream-nightly', policy.dream_nightly_wakes?.toString());
   add('dream-budget', policy.dream_budget_usd?.toString());
@@ -503,6 +513,8 @@ export function renderPolicy(
   if (policy.budget_usd !== undefined)
     bits.push(`budget $${policy.budget_usd}${star('budget_usd')}`);
   bits.push(`transcript ${fmtBytes(policy.transcript_max_bytes)}${star('transcript_max_bytes')}`);
+  if (policy.resume_max_usd !== undefined)
+    bits.push(`resume ≤ $${policy.resume_max_usd}${star('resume_max_usd')}`);
   // ADR 792: the shift knobs only when they differ from the defaults ($10, manual, ask).
   if (policy.shift_budget_usd !== 10 || star('shift_budget_usd'))
     bits.push(`shift $${policy.shift_budget_usd}/day${star('shift_budget_usd')}`);

@@ -58,6 +58,12 @@ export const ResidencyPolicySchema = z.object({
    *  ADR 131 "Observability & Evaluation"). The previous 10MiB counted lives, not dollars, and sat
    *  ~23x past the point where resume stops being the cheap option. */
   transcript_max_bytes: z.number().int().min(65_536).max(268_435_456).default(262_144),
+  /** ADR 805: the most a single resume may cost to re-ingest, in USD, estimated by the host from
+   *  the transcript's conversation weight and the seat's model price before `--resume` is chosen.
+   *  Over it — or unpriceable (no price row for the model) — the wake spawns fresh and the host
+   *  says so. Unset ⇒ bytes alone bound the resume, as before. Finding 031: with the byte bound
+   *  lifted to 256 MiB, fourteen act-lane resumes cost $0.17 → $1.64 each. */
+  resume_max_usd: z.number().positive().max(10).optional(),
   /** ADR 209 rollout gate. Off preserves the legacy resume ladder for ordinary inbox wakes; when
    * enabled, those wakes receive portable context and intentionally start fresh. Typed handoffs,
    * reviews, and work-orders are portable regardless of this cohort flag. */
@@ -635,6 +641,8 @@ export const WakeOrderSchema = z
         timeout_ms: z.number().int(),
         max_turns: z.number().int().optional(),
         budget_usd: z.number().optional(),
+        /** ADR 805: the effective per-resume price bound; the host judges the ladder on it. */
+        resume_max_usd: z.number().positive().optional(),
       })
       .optional(),
     /** ADR 672: the team's spend-approval threshold (ADR 635) for this wake — present only when the
