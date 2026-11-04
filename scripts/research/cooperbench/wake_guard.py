@@ -98,6 +98,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--on-stop", help="shell command to run once on a breach")
     ap.add_argument("--once", action="store_true", help="one read, printed as JSON, no stop")
     a = ap.parse_args(argv)
+    # The guard starts before the first pair's daemon exists (the arm stands it up after the task
+    # image is pulled), so an empty glob means "not yet", not "done" — until a pair has been seen.
+    # The first smoke pair of the re-run (2026-11-04 23:46Z) lost its guard to exactly that: one
+    # empty read, exit 0, and the pair ran unguarded.
+    seen_pairs = False
     while True:
         finished = (
             spend_guard.check(a.finished, a.runs, a.total_cap)["spent"] if a.finished and a.runs else 0.0
@@ -110,7 +115,9 @@ def main(argv: list[str] | None = None) -> int:
             if a.on_stop:
                 subprocess.run(a.on_stop, shell=True, check=False)
             return 3
-        if not out["pairs"] and not glob.glob(a.pairs):
+        if out["pairs"]:
+            seen_pairs = True
+        elif seen_pairs and not glob.glob(a.pairs):
             return 0
         time.sleep(a.every)
 
