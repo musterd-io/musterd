@@ -2870,10 +2870,10 @@ export function mountOffice(
     // else in the room (pet, lights, bubbles) keeps real time, so only the catch-up is fast.
     drainReplay();
     const walking = actors.step(dt * tempo);
-    pumpCeremony();
     flourishFreshPins();
     playBoardMoves();
     flyTosses();
+    pumpCeremony();
     // Sound tied to motion (lane 01M5XS6KAD): what the floor just earned, panned to the body.
     for (const m of actors.takeMotionSounds()) {
       // Footsteps and the chair creak were cut on 2026-10-30 (nick, lane 01M67C125R): a sound on every
