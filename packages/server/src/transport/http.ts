@@ -220,7 +220,12 @@ import {
 } from '../errors.js';
 import { reapOrphans } from '../footprint/reap.js';
 import { log, noteRequestFailure, redactPath } from '../log.js';
-import { readNodeState, repointNodeEnrollment, saveNodeEnrollment } from '../node/state.js';
+import {
+  readNodeState,
+  repointNodeEnrollment,
+  repointTargetRefusal,
+  saveNodeEnrollment,
+} from '../node/state.js';
 import { sendAppPaired } from '../notify/appAdapter.js';
 import { loadAppChannelKeys } from '../notify/appSeal.js';
 import { flushHeldRings } from '../notify/doorbell.js';
@@ -3258,7 +3263,14 @@ export async function handleHttp(
       // already holds (the relocated hub carries its hash). Probe first; on any refusal nothing is
       // written, so a typo or the wrong box can never strand this machine's enrollment.
       requireLocalPeer(ctx, req, 'pointing this machine at a relocated hub');
+      // The probe below sends this machine's credential, so a browser page on this machine must not
+      // be able to aim it: a browser always sends Origin on a cross-site POST, the CLI never does.
+      if (req.headers.origin !== undefined)
+        throw new MusterdError('forbidden', 'repointing is a CLI verb — a browser cannot call it');
       const body = parseOrBadRequest(NodeRepointRequestSchema, await readJson(req));
+      const refusal = repointTargetRefusal(body.hub_url);
+      if (refusal)
+        throw new MusterdError('bad_request', `${body.hub_url}: ${refusal} — nothing was sent`);
       const current = readNodeState().nodes[body.team];
       if (!current)
         throw new MusterdError(
@@ -3274,6 +3286,8 @@ export async function handleHttp(
       probe.searchParams.set('limit', '1');
       const probed = await fetch(probe, {
         headers: { authorization: `Bearer ${current.credential}` },
+        // A redirect would carry the credential on to a host nobody named.
+        redirect: 'error',
         signal: AbortSignal.timeout(10_000),
       }).catch(() => null);
       if (!probed || !probed.ok)

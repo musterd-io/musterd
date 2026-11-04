@@ -6,6 +6,7 @@ import {
   nodeStatePath,
   readNodeState,
   repointNodeEnrollment,
+  repointTargetRefusal,
   saveNodeEnrollment,
 } from './state.js';
 
@@ -128,6 +129,31 @@ describe('node.json', () => {
     expect(readNodeState().nodes).toEqual({});
     writeFileSync(nodeStatePath(), '{"nodes":{"revive":{"credential":42}}}');
     expect(readNodeState().nodes).toEqual({});
+  });
+});
+
+describe('where a repoint may send the credential (ADR 796)', () => {
+  it.each([
+    'https://hub.example.com',
+    'http://localhost:4849',
+    'http://127.0.0.1:4849',
+    'http://[::1]:4849',
+    'http://100.101.102.103:4849',
+    'http://musterd-joiner-1.tail1234.ts.net:4849',
+  ])('allows %s', (url) => {
+    expect(repointTargetRefusal(url)).toBeNull();
+  });
+
+  it.each([
+    'http://hub.example.com:4849',
+    'http://192.168.1.10:4849',
+    'http://100.128.0.1:4849',
+    'http://100.63.0.1:4849',
+    'ftp://hub.example.com',
+    'https://user:pw@hub.example.com',
+    'not a url',
+  ])('refuses %s', (url) => {
+    expect(repointTargetRefusal(url)).toEqual(expect.any(String));
   });
 });
 

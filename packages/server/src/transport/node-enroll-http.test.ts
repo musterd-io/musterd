@@ -1,4 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
@@ -32,12 +34,19 @@ withDrivers('node-enroll-http', (_o, kind) => {
   let joinerCredential: string;
   let dir: string;
 
-  async function post(base: string, path: string, body?: unknown, auth?: string) {
+  async function post(
+    base: string,
+    path: string,
+    body?: unknown,
+    auth?: string,
+    extra: Record<string, string> = {},
+  ) {
     const response = await fetch(base + path, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         ...(auth ? { authorization: `Bearer ${auth}` } : {}),
+        ...extra,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -325,6 +334,50 @@ withDrivers('node-enroll-http', (_o, kind) => {
         expect(JSON.stringify(readNodeState())).toBe(before);
       } finally {
         await other.close();
+      }
+    });
+
+    it('refusesPlainHttpOffTheTailnet before the credential leaves the machine', async () => {
+      await enroll();
+      const before = JSON.stringify(readNodeState());
+      const res = await post(joinerBase, '/node/repoint', {
+        hub_url: 'http://hub.example.com:4849',
+        team: 'bravo',
+      });
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(readNodeState())).toBe(before);
+    });
+
+    it('refusesABrowserCaller: a request with an Origin header', async () => {
+      await enroll();
+      const res = await post(
+        joinerBase,
+        '/node/repoint',
+        { hub_url: hubBase, team: 'bravo' },
+        undefined,
+        { origin: 'https://evil.example' },
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it('refusesARedirect: the credential is never carried to a host nobody named', async () => {
+      await enroll();
+      const bouncer = createHttpServer((_req, res) => {
+        res.writeHead(302, { location: `${hubBase}/teams/bravo/sync/pull?after=0&limit=1` });
+        res.end();
+      });
+      await new Promise<void>((done) => bouncer.listen(0, '127.0.0.1', done));
+      const port = (bouncer.address() as AddressInfo).port;
+      try {
+        const before = JSON.stringify(readNodeState());
+        const res = await post(joinerBase, '/node/repoint', {
+          hub_url: `http://127.0.0.1:${port}`,
+          team: 'bravo',
+        });
+        expect(res.status).toBe(409);
+        expect(JSON.stringify(readNodeState())).toBe(before);
+      } finally {
+        await new Promise<void>((done) => bouncer.close(() => done()));
       }
     });
 

@@ -96,6 +96,31 @@ export function saveNodeEnrollment(
  * Throws when this machine has no enrollment for the team. The caller verifies the new hub accepts
  * the credential BEFORE calling this; a refused hub must never get written here.
  */
+/**
+ * Where `/node/repoint` may send this machine's credential (ADR 796). The probe presents the stored
+ * credential to the new hub, so the address is checked before anything leaves the machine: `https`
+ * anywhere, plain `http` only to this machine or a tailnet address (100.64.0.0/10, `*.ts.net`),
+ * where WireGuard already encrypts the hop. A URL carrying a user or password is refused too.
+ * Returns the reason for a refusal, or null for an address it may probe.
+ */
+export function repointTargetRefusal(hubUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(hubUrl);
+  } catch {
+    return 'not a URL';
+  }
+  if (url.username || url.password) return 'the address carries a user or password';
+  if (url.protocol === 'https:') return null;
+  if (url.protocol !== 'http:') return `${url.protocol} is not http or https`;
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)) return null;
+  if (host.endsWith('.ts.net')) return null;
+  const v4 = host.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+  if (v4 && Number(v4[1]) === 100 && Number(v4[2]) >= 64 && Number(v4[2]) <= 127) return null;
+  return 'plain http is allowed only to this machine or a tailnet address — use https';
+}
+
 export function repointNodeEnrollment(
   team: string,
   hubUrl: string,
