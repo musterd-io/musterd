@@ -237,6 +237,79 @@ withDrivers('idle-wake', (_o, kind) => {
       expect(await check('?seam=idle')).toEqual({ raised: false, seam: 'idle' });
     });
 
+    it('an answer from the phone (a 44-character id) stops ringing once its inject is reported — ADR 800', async () => {
+      const team = (await server.store.get<{ id: string }>(`SELECT id FROM teams WHERE slug = ?`, [
+        'dawn',
+      ]))!;
+      const idOf = async (name: string) =>
+        (await server.store.get<{ id: string }>(
+          `SELECT id FROM members WHERE team_id = ? AND name = ?`,
+          [team.id, name],
+        ))!.id;
+      const [adaId, nickId] = [await idOf('Ada'), await idOf('nick')];
+      const askId = '01M6M2HQRYT9J7Y08HF6CA26VS';
+      await insertMessage(
+        server.store,
+        team.id,
+        adaId,
+        nickId,
+        makeEnvelope({
+          id: askId,
+          team: 'dawn',
+          from: 'Ada',
+          ts: (clock += 100),
+          to: { kind: 'member', name: 'nick' },
+          act: 'ask',
+          body: 'x',
+          meta: {
+            species: 'consult',
+            question: { text: 'Stop it?', options: [{ label: 'Yes' }, { label: 'No' }] },
+          },
+        }),
+      );
+      const at = (clock += 100);
+      const answerId = `app-${askId}-1793822665231`;
+      await insertMessage(
+        server.store,
+        team.id,
+        nickId,
+        adaId,
+        makeEnvelope({
+          id: answerId,
+          team: 'dawn',
+          from: 'nick',
+          ts: at,
+          to: { kind: 'member', name: 'Ada' },
+          act: 'accept',
+          body: '',
+          thread: askId,
+          meta: {
+            in_reply_to: askId,
+            answer: { choice: 0 },
+            answer_proof: { channel: 'app', verified: true, by: 'nick' },
+          },
+        }),
+      );
+      await claimAnswer(server.store, team.id, {
+        questionId: askId,
+        answerId,
+        asker: 'Ada',
+        by: 'nick',
+        channel: 'app',
+        verified: true,
+        late: false,
+        at,
+      });
+      expect(await check('?seam=idle')).toMatchObject({ raised: true, act: { id: answerId } });
+      const report = await post(
+        '/teams/dawn/inbox/idle-wake',
+        { act: answerId, outcome: 'injected', harness: 'claude-code' },
+        ada,
+      );
+      expect(report.status).toBe(200);
+      expect(await check('?seam=idle')).toEqual({ raised: false, seam: 'idle' });
+    });
+
     it('writes one interrupt.raised per (seat, act) across both seams', async () => {
       await toAda('steer');
       await check();

@@ -929,7 +929,7 @@ daemon decides what rings; the adapter decides when (ADR 558 §2).
 - `POST /teams/:slug/inbox/idle-wake` takes a strict `IdleWakeReport`
   `{act, outcome: 'injected'|'failed'|'capped', harness, reason?, cap?: 'sender'|'session'}` and
   records `idle_wake.injected` or `idle_wake.capped`. It MUST refuse any other field (no line, no
-  body).
+  body). `act` is any act id of up to 128 characters (ADR 800); a phone answer's id is 44.
 
 ## A.23 Read dates on Lanes (unreleased — ADR 644)
 

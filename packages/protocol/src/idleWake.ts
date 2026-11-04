@@ -25,7 +25,8 @@ export function deafRecipientNotice(recipient: string, reason?: string | null): 
 /** The adapter's outcome report (`POST …/inbox/idle-wake`). Structured fields only — never the line. */
 export const IdleWakeReportSchema = z
   .object({
-    act: z.string().min(1).max(40),
+    // ADR 800: any act id a report may name — an app answer's is 44 characters; 40 refused them all.
+    act: z.string().min(1).max(128),
     outcome: z.enum(['injected', 'failed', 'capped']),
     harness: z.string().min(1).max(40),
     reason: HearingReasonSchema.optional(),
