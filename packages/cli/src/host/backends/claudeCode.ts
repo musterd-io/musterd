@@ -10,8 +10,8 @@ import {
   type WakeLeaseFile,
 } from '@musterd/protocol';
 import { fmtBytes } from '../../args.js';
-import { findBinding } from '../../config.js';
 import { invalidateClaudeBinCache, resolveClaudeBin } from '../../claudeBin.js';
+import { findBinding } from '../../config.js';
 import { readRegistry, type RegistryOwner } from '../../session/continuity.js';
 import {
   localSessionLiveness,
