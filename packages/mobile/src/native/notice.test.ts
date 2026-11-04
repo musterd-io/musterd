@@ -1,15 +1,16 @@
 import type { AppDelivery } from '@musterd/protocol/app-channel';
 import { describe, expect, it } from 'vitest';
 import {
-  refusalLine,
   ADVISORY_CATEGORY,
   gateBeforeNonce,
-  noticeFor,
-  staleNotice,
-  unverifiedNotice,
   LOCK_SCREEN_FALLBACK_TEXT,
+  noticeFor,
   QUESTION_OPTIONS_CATEGORY_PREFIX,
   QUESTION_REPLY_CATEGORY,
+  refusalLine,
+  staleNotice,
+  unverifiedNotice,
+  waitingLine,
 } from './notice';
 
 const ask = (over: Partial<AppDelivery & { kind: 'ask' }> = {}): AppDelivery => ({
@@ -157,5 +158,22 @@ describe('refusalLine', () => {
   it('says nothing when there were none today', () => {
     expect(refusalLine([], now)).toBeNull();
     expect(refusalLine([{ reason: 'check', at: now - 30 * 3_600_000 }], now)).toBeNull();
+  });
+});
+
+describe('a seat waiting on a question (ADR 806)', () => {
+  const NOW = 1_800_000_000_000;
+  it('names the person, or the team, and how long', () => {
+    expect(waitingLine({ to: 'nick', since: NOW - 42 * 60_000 }, NOW)).toBe(
+      'Waiting on nick · 42m',
+    );
+    expect(waitingLine({ to: null, since: NOW - 10_000 }, NOW)).toBe('Waiting on the team · now');
+    expect(waitingLine({ to: 'nick', since: NOW - 3 * 3_600_000 }, NOW)).toBe(
+      'Waiting on nick · 3h',
+    );
+    expect(waitingLine({ to: 'nick', since: NOW - 2 * 86_400_000 }, NOW)).toBe(
+      'Waiting on nick · 2d',
+    );
+    expect(waitingLine({ to: 'nick', since: NOW + 5_000 }, NOW)).toBe('Waiting on nick · now');
   });
 });

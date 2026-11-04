@@ -118,6 +118,11 @@ small change.
   `body/<binding>/portrait-<digest>` once and keeps the opened PNG for the life of the app, keyed by
   digest. The seat shows its letter until the picture arrives, and keeps it when the daemon has none
   (nobody has had /live open since that seat's look last changed).
+- **Waiting on** (2026-11-04, lane `01M6M84GPJ`, ADR 806). A seat with an open question says so
+  under its name, as /live's card does: "Waiting on nick · 42m", or "Waiting on the team · now"
+  (`waitingLine`), from the roster seat's `waiting {to, since}`. The line under the name reads, in
+  order: a quick action's outcome right after a press, then the wait, then the seat's lane. The wait
+  is the daemon's fact, so it is not labelled "their lane".
 - **A settled ask's notifications clear.** When a fetch says gone (a relay 404: answered in the
   app, on /live or in Slack, or expired), and when the app sends an answer, every notification for
   that ask is removed from Notification Center (`clearDelivered`) and from the phone's record. A

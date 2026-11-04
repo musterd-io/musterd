@@ -75,6 +75,23 @@ export const QUICK_ACTION_LABELS: Record<QuickAction, string> = {
 export const QUICK_ACTION_ORDER = Object.keys(QUICK_ACTION_LABELS) as QuickAction[];
 
 /**
+ * ADR 806: "Waiting on nick · 42m" — a seat's open question, as /live's card says it. `to` null is
+ * a question to the team. The wait reads `now`, `2m`, `1h`, `3d`, the same steps as /live.
+ */
+export function waitingLine(waiting: { to: string | null; since: number }, now: number): string {
+  const m = Math.floor(Math.max(0, now - waiting.since) / 60_000);
+  const waited =
+    m < 1
+      ? 'now'
+      : m < 60
+        ? `${m}m`
+        : m < 1440
+          ? `${Math.floor(m / 60)}h`
+          : `${Math.floor(m / 1440)}d`;
+  return `Waiting on ${waiting.to ?? 'the team'} · ${waited}`;
+}
+
+/**
  * The actions that make sense for a seat as the roster shows it (nick, build 44: "shouldn't all
  * the buttons be contextual?"; build 45: "what happened to the check inbox and other actions?").
  * Check inbox and Resume are always there: a sleeping seat reads them when it wakes or comes back.
