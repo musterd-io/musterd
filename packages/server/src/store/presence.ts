@@ -751,18 +751,15 @@ export async function listLiveDrivers(
   teamId: string,
   timeoutMs: number,
 ): Promise<Set<string>> {
+  // Steering (ADR 155) stays the explicit hello label only: a lease-derived driver (ADR 799)
+  // names who is signed in on the node, not proof they steer every seat there — co-presence
+  // alone must not mark a merely-present human working.
   const [l, r] = liveCutoffs(timeoutMs);
-  const leases = await liveNodeDrivers(db, teamId, timeoutMs);
-  const rows = await db.all<{ driver: string | null; node: string | null }>(
-    `SELECT p.driver AS driver, p.node AS node FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND m.kind != 'human' AND ${LIVE_PRESENCE_SQL}`,
+  const rows = await db.all<{ driver: string }>(
+    `SELECT DISTINCT p.driver AS driver FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND p.driver IS NOT NULL AND ${LIVE_PRESENCE_SQL}`,
     [teamId, l, r],
   );
-  const out = new Set<string>();
-  for (const row of rows) {
-    const d = effectiveDriver(row.driver, row.node, leases);
-    if (d) out.add(d);
-  }
-  return out;
+  return new Set(rows.map((r) => r.driver));
 }
 
 /** One live presence row as the roster reads it: the row, its node's label, and its wake's why. */

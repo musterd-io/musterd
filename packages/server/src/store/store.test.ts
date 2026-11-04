@@ -828,7 +828,8 @@ withDrivers('store', (o) => {
       // swetha signs in on the same (local) node via her own CLI presence → she drives.
       await attach(db, swetha.id, 'cli', 'c2', {});
       expect(await driverOfAda()).toBe('swetha');
-      expect([...(await listLiveDrivers(db, team.id, 60_000))]).toEqual(['swetha']);
+      // Steering (ADR 155) is unchanged: only the explicit hello label counts there.
+      expect([...(await listLiveDrivers(db, team.id, 60_000))]).toEqual(['nick']);
 
       // nick then signs in more recently → most recent lease wins.
       await new Promise((r) => setTimeout(r, 2));
