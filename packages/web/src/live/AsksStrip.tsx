@@ -608,9 +608,14 @@ export function AsksStrip({
               />
             ))}
             {/* The lead is on the bar with its buttons (lane 01M6ETDT29): "+N" means N besides it, so
-                the sheet lists the others. A question lead keeps its row — its options live here. */}
+                the sheet lists the others. A question lead keeps its row — its options live here — and
+                so does a choice lead: its bar has only Choose…, which opens this sheet to its card
+                (lane 01M6HSRAQ7: without it Choose… opened onto the counters alone). */}
             {cards
-              .filter((ask) => !(!leadQuestion && lead && askIsLoud(lead.state) && ask.env.id === lead.env.id))
+              .filter(
+                (ask) =>
+                  !(!leadQuestion && !leadChoices && lead && askIsLoud(lead.state) && ask.env.id === lead.env.id),
+              )
               .map((ask, i) => {
               const aud = askAudience(ask, ctx);
               return (
