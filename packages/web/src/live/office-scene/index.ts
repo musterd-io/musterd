@@ -6,7 +6,8 @@ import { roomTone, screenPan, type LifeContext } from '../sound';
 import type { Moment } from '../soundLife';
 import { gestureFor } from '../soundVoice';
 import { DESK_GLOW_S } from './deskGlow';
-import { BELL_SWING_S, bellSwing } from './bell';
+import { BELL, BELL_SWING_S, bellSwing } from './bell';
+import { createCeremonies } from './ceremony';
 import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { HUMAN_GLYPH_SVG, providerIconHtml } from '../modelProviderIcon';
@@ -1137,6 +1138,52 @@ export function mountOffice(
     bellRungAt = clock;
     ensureLoop();
   };
+  /**
+   * The goal bell's ceremony (lane 01M6HHHA96): the member who recorded the goal walks to the bell and
+   * pulls the rope; everyone else in the room turns to it and claps when it rings. One at a time
+   * (`ceremony.ts`). Under reduced motion nobody walks or claps: the bell rings at once.
+   */
+  const ceremonies = createCeremonies();
+  let ceremony: { ringer: string; since: number; rang: boolean; until: number } | null = null;
+  const BELL_AT = { lx: BELL.tc * 900, ly: 6 };
+  const applaud = (except: string | null): void => {
+    for (const name of actors.poses().keys()) if (name !== except) actors.clap(name, 2.2);
+  };
+  const pumpCeremony = (): void => {
+    const now = Date.now();
+    if (ceremony) {
+      const late = now - ceremony.since > 20_000; // a walk that never reaches the rope still rings
+      if (!ceremony.rang && (late || actors.rung().includes(ceremony.ringer) || !actors.walking(ceremony.ringer))) {
+        ringTheBell();
+        if (!reduced) applaud(ceremony.ringer);
+        ceremony.rang = true;
+        ceremony.until = now + 2_600;
+      }
+      if (ceremony.rang && now >= ceremony.until) {
+        ceremony = null;
+        ceremonies.done();
+      }
+    }
+    const next = ceremonies.next(now);
+    if (next === 'strike') ringTheBell();
+    else if (next) {
+      const walks = !reduced && actors.ringBell(next.ringer);
+      ceremony = { ringer: next.ringer, since: now, rang: false, until: 0 };
+      if (walks) {
+        // the room turns to the bell as the ringer gets up, and holds there through the applause
+        let i = 0;
+        for (const name of actors.poses().keys())
+          if (name !== next.ringer) actors.lookAt(name, BELL_AT, { delay: 0.1 + (i++ % 6) * 0.08, hold: 12 });
+      } else {
+        // nobody to walk (not in the room, or reduced motion): the bell rings by itself
+        ringTheBell();
+        if (!reduced) applaud(null);
+        ceremony.rang = true;
+        ceremony.until = now + 2_600;
+      }
+    }
+  };
+  const ceremonyActive = (): boolean => ceremony !== null;
   /** Where the work board hangs, as a stereo pan: the goal bell rings from there. */
   const boardPan = (): number => screenPan(boardAnchor(fit).x + boardAnchor(fit).w / 2, width);
   let seededOwners: ReadonlyMap<string, string> | undefined; // the board map last handed to `laneOwners.seed`
@@ -2826,6 +2873,7 @@ export function mountOffice(
     flourishFreshPins();
     playBoardMoves();
     flyTosses();
+    pumpCeremony();
     // Sound tied to motion (lane 01M5XS6KAD): what the floor just earned, panned to the body.
     for (const m of actors.takeMotionSounds()) {
       // Footsteps and the chair creak were cut on 2026-10-30 (nick, lane 01M67C125R): a sound on every
@@ -2928,7 +2976,7 @@ export function mountOffice(
 
   /** Is anything actually happening right now? One home — two doors used to spell this out separately. */
   const alive = () =>
-    living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active()) || desksGlowing() || bellSwinging();
+    living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active()) || desksGlowing() || bellSwinging() || ceremonyActive();
   /*
    * Coming back to a room that stopped being watched. There are two doors — the tab becoming visible
    * again and the panel re-expanding — and they ask the SAME question: the loop if the room is alive,
@@ -3686,10 +3734,14 @@ export function mountOffice(
       ensureLoop();
     }
     if (ev.kind === 'goal-done' && !replaying) {
-      // A goal's last lane dings first; the bell waits out the gap rather than landing on it.
+      // A goal's last lane dings first; the ceremony waits out the gap rather than landing on it.
+      const push = () => {
+        ceremonies.push({ id: ev.goal, who: ev.who, at: Date.now() });
+        ensureLoop();
+      };
       const wait = Math.max(0, 420 - (Date.now() - lastLaneDoneAt));
-      if (wait === 0) ringTheBell();
-      else setTimeout(ringTheBell, wait);
+      if (wait === 0) push();
+      else setTimeout(push, wait);
     }
     if (ev.kind === 'walk-handoff') {
       // Passing hands (§2.3): one note at the sender's desk, the answer a third up at the receiver's.

@@ -435,7 +435,9 @@ describe('the musterd voice at its objects (sound identity spec §2.2–2.3, lan
   });
   it('rings the goal bell for a goal shipped, waiting out the gate behind its last lane', () => {
     expect(emitBody).toContain("ev.kind === 'goal-done' && !replaying");
-    expect(emitBody).toContain('setTimeout(ringTheBell, wait)');
+    expect(emitBody).toContain('ceremonies.push({ id: ev.goal, who: ev.who, at: Date.now() })');
+    expect(emitBody).toContain('setTimeout(push, wait)');
+    expect(index).toContain('pumpCeremony();');
     expect(emitBody).toContain('420 - (Date.now() - lastLaneDoneAt)');
     const ring = index.slice(index.indexOf('const ringTheBell ='), index.indexOf('};', index.indexOf('const ringTheBell =')));
     expect(ring).toContain("roomTone.moment('goalDone', boardPan())");

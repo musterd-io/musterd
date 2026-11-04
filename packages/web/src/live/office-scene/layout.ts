@@ -710,6 +710,10 @@ export const WAGON_PICKUP = { lx: 240, ly: 772 };
  * the floor under the board's middle (lx ≈ 796, its centre at tc 0.885), clear of the counter's padded
  * footprint. Pinned walkable and reachable from every desk by `nav.test.ts`. */
 export const BOARD_STAND = { lx: 796, ly: 34 };
+/** Where the ringer stands to pull the goal bell's rope (lane 01M6HHHA96): under the rope (`bell.ts`,
+ * t 0.79 on the board wall → lx 711), close enough to the wall for the hands to reach it. Pinned
+ * walkable and reachable from every desk by `nav.test.ts`. */
+export const BELL_STAND = { lx: 711, ly: 22 };
 
 /**
  * The wall board's wastebasket (ADR 751, lane 01M61T09MQ): out on the café tile between the island and

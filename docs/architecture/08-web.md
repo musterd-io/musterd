@@ -357,6 +357,9 @@ live/
     index.ts                    // the imperative scene handle {update, emit, dispose}; the emit switch
     viewSetting.ts              // the three window views and the default, import-free so the eager header can name them
     paintings.ts                // the painting in each frame (ADR 789): its opening, its quad on the wall (mirrored on the back-left wall), and the draw under the room's light tint
+    bell.ts                     // the goal bell over the work board: where it hangs, its swing (`bellSwing`) turned in the wall's plane, and its rope
+    ceremony.ts                 // the goal bell's queue: one ceremony at a time, a lone strike past three waiting, stale goals dropped
+    deskGlow.ts                 // a lane done's short warm glow over the closer's desk
     signs.ts                    // the wiki, settings and work-board signs (rendered oak and gold, `wall/sign-<name>`): where each hangs, and `signRect`, the box of its invisible DOM door
     portrait.ts                 // paints each member's head and shoulders from their rendered figure (idle, facing the camera) into a 64px PNG and publishes it to portraits.ts; repainted only when the look, colour or loaded sheets change
     laneOwners.ts               // who owns each lane the room has watched (claim / pin walks) — the deliver walk's carrier when the ask was re-routed (lane 01M4V774MK); bounded

@@ -3,6 +3,7 @@ import {
   CHECK_IN_S,
   COFFEE_STAND,
   BIN,
+  BELL_STAND,
   BOARD_STAND,
   COOLER_STAND,
   DESK_SLOTS,
@@ -418,6 +419,8 @@ interface Walk {
   drop?: { to: string; leg: number };
   /** Back from the water cooler (lane 01M67J1YDR): once seated again, take a sip from the bottle. */
   sipAfter?: true;
+  /** The goal bell (lane 01M6HHHA96): the leg at the rope that plays the pull. */
+  ring?: { leg: number };
   /** Giving way (lane 01M67AVF78): the world-space sidestep currently applied, and how long this walker
    *  has been held up by someone in its way. */
   off?: { x: number; y: number };
@@ -652,6 +655,14 @@ export interface Actors {
   ): void;
   /** Enqueue a walk to a teammate. Returns false if it can't play (mover or target not present). */
   walk(from: string, req: WalkReq): boolean;
+  /** The goal bell (lane 01M6HHHA96): `from` drops whatever they are doing, walks to the bell, pulls
+   *  the rope once and walks home. False when they are not in the room. */
+  ringBell(from: string): boolean;
+  /** Who is at the bell with the rope pulled down right now: the moment the bell rings. */
+  rung(): string[];
+  /** Applause while the bell rings: `name` claps for `dur` seconds, seated or standing. False when they
+   *  are walking or not in the room. */
+  clap(name: string, dur: number): boolean;
   /** Claiming a lane (nick, 2026-10-09): walk to the wall board, stand and think, reach up and take the
    *  card (`seed` = `laneSeed(lane id)`), carry it home, set it down. A real act — it preempts an errand
    *  and queues behind other act walks. False when the member is not in the room. */
@@ -1184,6 +1195,29 @@ export function createActors(): Actors {
   }
 
   /**
+   * The bell trip (lane 01M6HHHA96): from wherever they are, at an act-walk's pace, to the rope; a beat
+   * facing it, the pull (`GESTURE.ring`, whose rope comes down 40% of the way through), and home.
+   */
+  function buildRing(from: string, origin?: { lx: number; ly: number }): Walk | null {
+    const home = homes.get(from);
+    if (!home) return null;
+    const start = origin ?? home;
+    const avoid = othersAt(from);
+    const out = legsAlong(findPath({ lx: start.lx, ly: start.ly }, BELL_STAND, avoid), 100, 1.2, 4.5, null);
+    const stand = out.length ? endOf(out) : { lx: start.lx, ly: start.ly };
+    const face = travelDir(stand.lx, stand.ly, stand.lx, 0); // the bell hangs on the ly=0 wall
+    const back = legsAlong(findPath(stand, { lx: home.lx, ly: home.ly }, avoid), 100, 1.2, 4.5, null);
+    const legs: Leg[] = [
+      ...out,
+      hold(stand, face, 0.3, {}),
+      hold(stand, face, 1.4, { overlay: GESTURE.ring }),
+      hold(stand, face, 0.8, {}),
+      ...back,
+    ];
+    return { legs, i: 0, t: 0, small: home.small, act: true, ring: { leg: out.length + 1 } };
+  }
+
+  /**
    * The pin trip — the claim, reversed (nick, 2026-10-12: "when they finish a lane they go stick the card
    * back on the board"). A short pick-up at the desk (the card appears in the hand), out carrying it, at
    * the board the reach and the pin — the card leaves the hand for the cork — then a beat looking at it,
@@ -1510,6 +1544,26 @@ export function createActors(): Actors {
       q.push({ kind: 'claim', seed });
       pending.set(from, q);
       if (!walks.has(from)) startNext(from);
+      return true;
+    },
+    ringBell(from) {
+      if (!homes.has(from) || exiting.has(from)) return false;
+      const w = buildRing(from, posesNow().get(from));
+      if (!w) return false;
+      // the bell outranks any walk in flight: the errand is dropped, the queue behind it waits
+      gestures.delete(from);
+      walks.set(from, w);
+      return true;
+    },
+    rung() {
+      const out: string[] = [];
+      for (const [who, w] of walks) if (w.ring && (w.i > w.ring.leg || (w.i === w.ring.leg && w.t >= 0.4))) out.push(who);
+      return out;
+    },
+    clap(name, dur) {
+      const home = homes.get(name);
+      if (!home || home.small || exiting.has(name) || walks.has(name)) return false;
+      gestures.set(name, { kind: home.sit > 0 ? GESTURE.clap : GESTURE.clapUp, t: 0, dur });
       return true;
     },
     pin(from, seed, state) {
