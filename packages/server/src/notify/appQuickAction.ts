@@ -17,6 +17,7 @@ import { listLanes } from '../store/lanes.js';
 import { getMemberById, listMembers } from '../store/members.js';
 import { portraitsOf } from '../store/portraits.js';
 import { hasLivePresence } from '../store/presence.js';
+import { openQuestions } from '../store/questions.js';
 import { getResidency } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { verifyPhoneSigned } from './appQuestion.js';
@@ -200,6 +201,11 @@ export async function buildAppRoster(
     lanesByOwner.set(lane.owner_seat, held);
   }
   const portraits = portraitsOf(ctx.config.dbPath).digests(team.id);
+  // ADR 806: each seat's oldest open question (oldest first, so the first one per asker wins) —
+  // the same rule as /live's waitingOn.
+  const waiting = new Map<string, { to: string | null; since: number }>();
+  for (const q of await openQuestions(ctx.db, team.id))
+    if (!waiting.has(q.asker)) waiting.set(q.asker, { to: q.to, since: q.asked_at });
   const seats = [];
   for (const agent of agents) {
     const held = lanesByOwner.get(agent.name) ?? [];
@@ -211,6 +217,7 @@ export async function buildAppRoster(
       lane: held.length === 1 ? held[0]! : null,
       // ADR 797: the phone fetches the picture by this digest and caches it.
       portrait: portraits.get(agent.name) ?? null,
+      ...(waiting.has(agent.name) ? { waiting: waiting.get(agent.name)! } : {}),
     });
   }
   return { v: 1, kind: 'roster', team: team.slug, binding: binding.id, ts: now, seats };
