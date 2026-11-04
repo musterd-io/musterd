@@ -1390,8 +1390,10 @@ def wall_sign(asset_id: str, name: str, zs: float, col) -> bpy.types.Object:
     which, tc, uc, W, H, text, lamp = SIGNS[name]
     oak = wood("sign-oak", srgb("#7E5030"), grain=0.14)
     edge_oak = wood("sign-oak-edge", srgb("#4E301B"), grain=0.1)
-    gold = metal("sign-gold", srgb("#F4CF72"), 0.32)
-    gold.node_tree.nodes.get("Principled BSDF").inputs["Metallic"].default_value = 0.55
+    # Pale gilt, barely metallic (nick 2026-11-04, lane 01M6M0SJR2): at metallic 0.55 the #F4CF72
+    # letters mirrored the dim room and rendered about as dark as the oak, so the words didn't read.
+    gold = metal("sign-gold", srgb("#FFF8E4"), 0.6)
+    gold.node_tree.nodes.get("Principled BSDF").inputs["Metallic"].default_value = 0.05
     brass = metal("sign-brass", srgb("#B8893E"), 0.4)
     parts = []
     # the board: a darker back plate, the carved face proud of it
