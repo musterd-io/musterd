@@ -554,3 +554,41 @@ describe('meta.about on ask (ADR 407)', () => {
     ).toThrow(/about/);
   });
 });
+
+describe('ask meta.withhold (ADR 801)', () => {
+  const ask = (meta: Record<string, unknown>) => () =>
+    makeEnvelope({ ...base, act: 'ask', body: 'may I release?', meta });
+
+  it('is accepted on a blocking approve ask with at least one glob', () => {
+    expect(
+      ask({
+        species: 'approve',
+        tier: 'blocking',
+        withhold: { commands: ['gh release create *'] },
+      }),
+    ).not.toThrow();
+    expect(
+      ask({
+        species: 'approve',
+        tier: 'blocking',
+        withhold: { paths: ['packages/protocol/src/**'] },
+      }),
+    ).not.toThrow();
+  });
+
+  it('is refused on any other species or tier, so a lower tier never pretends to hold', () => {
+    expect(ask({ species: 'approve', tier: 'standard', withhold: { commands: ['x *'] } })).toThrow(
+      /meta\.withhold is for a blocking approve ask only/,
+    );
+    expect(ask({ species: 'escalate', tier: 'blocking', withhold: { commands: ['x *'] } })).toThrow(
+      /meta\.withhold/,
+    );
+  });
+
+  it('must name a glob, and only commands/paths', () => {
+    expect(ask({ species: 'approve', tier: 'blocking', withhold: {} })).toThrow(/at least one/);
+    expect(
+      ask({ species: 'approve', tier: 'blocking', withhold: { commands: ['x'], files: ['y'] } }),
+    ).toThrow(/meta\.withhold/);
+  });
+});

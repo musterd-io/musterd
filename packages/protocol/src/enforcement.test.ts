@@ -10,6 +10,7 @@ import {
   LanePushOutcomeSchema,
   LanePushReportSchema,
   matchEnforcement,
+  matchWithhold,
   normalizeCommand,
   SESSION_REACH_TOOLS,
   SUBAGENT_CHANNEL_TOOLS,
@@ -427,5 +428,59 @@ describe('LanePushOutcomeSchema (ADR 731)', () => {
     expect(LanePushOutcomeSchema.safeParse({ lanes: -1, acts: 0, told: [] }).success).toBe(false);
     expect(LanePushOutcomeSchema.safeParse({ lanes: 1, acts: 1, told: [''] }).success).toBe(false);
     expect(LanePushOutcomeSchema.safeParse({ lanes: 1, acts: 1 }).success).toBe(false);
+  });
+});
+
+describe('matchWithhold (ADR 801)', () => {
+  const NOW = 1_800_000_000_000;
+  const scoped = {
+    ask_id: 'a1',
+    commands: ['gh release create *'],
+    paths: ['packages/protocol/src/**'],
+    seat_wide: false,
+    declined: false,
+    expires_at: NOW + 60_000,
+  };
+  const wide = { ...scoped, ask_id: 'a2', commands: [], paths: [], seat_wide: true };
+
+  it('a scoped withhold matches its command and path globs, and nothing else', () => {
+    expect(
+      matchWithhold([scoped], { tool: 'Bash', command: 'gh release create v1 --notes x' }, NOW)
+        ?.withhold.ask_id,
+    ).toBe('a1');
+    expect(
+      matchWithhold([scoped], { tool: 'Edit', path: 'packages/protocol/src/ask.ts' }, NOW)?.target,
+    ).toBe('packages/protocol/src/ask.ts');
+    expect(matchWithhold([scoped], { tool: 'Bash', command: 'gh pr list' }, NOW)).toBeNull();
+    expect(matchWithhold([scoped], { tool: 'Edit', path: 'docs/x.md' }, NOW)).toBeNull();
+    expect(
+      matchWithhold([scoped], { tool: 'Read', path: 'packages/protocol/src/ask.ts' }, NOW),
+    ).toBeNull();
+  });
+
+  it('a seat-wide withhold holds writes but leaves reads and musterd itself open', () => {
+    expect(matchWithhold([wide], { tool: 'Edit', path: 'docs/x.md' }, NOW)).not.toBeNull();
+    expect(matchWithhold([wide], { tool: 'Bash', command: 'rm -rf build' }, NOW)).not.toBeNull();
+    expect(matchWithhold([wide], { tool: 'Bash', command: 'git status' }, NOW)).toBeNull();
+    expect(matchWithhold([wide], { tool: 'Read', path: 'docs/x.md' }, NOW)).toBeNull();
+    expect(
+      matchWithhold(
+        [wide],
+        { tool: 'Bash', command: 'musterd send --act resolve --thread a2' },
+        NOW,
+      ),
+    ).toBeNull();
+  });
+
+  it('an expired withhold never matches, whatever a cache still holds', () => {
+    const expired = { ...wide, expires_at: NOW };
+    expect(matchWithhold([expired], { tool: 'Edit', path: 'docs/x.md' }, NOW)).toBeNull();
+  });
+
+  it('fingerprints per ask, so two asks holding one call are told apart', () => {
+    const call = { tool: 'Edit', path: 'docs/x.md' };
+    const a = matchWithhold([wide], call, NOW)!.fingerprint;
+    const b = matchWithhold([{ ...wide, ask_id: 'a3' }], call, NOW)!.fingerprint;
+    expect(a).not.toBe(b);
   });
 });

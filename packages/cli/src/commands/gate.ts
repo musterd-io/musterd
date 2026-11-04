@@ -1,6 +1,9 @@
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import {
+  type ActiveWithhold,
+  ActiveWithholdSchema,
+  ASK_WITHHOLD_KIND,
   type ActorAttestation,
   CCD_SEND_MESSAGE_TOOL,
   type EnforcementMatch,
@@ -14,6 +17,7 @@ import {
   isSessionReachTool,
   isWriteShaped,
   matchEnforcement,
+  matchWithhold,
   pushSpec,
   SUBAGENT_CHANNEL_TOOLS,
   textFingerprint,
@@ -297,6 +301,9 @@ export interface CachedEnforcement {
   server: string;
   fetched_at: number;
   enforcement: EnforcementPolicy;
+  /** ADR 801: this seat's open withholds at `fetched_at`. Kept with the table so an outage still
+   *  holds what the seat's own blocking ask withholds (fail closed from cache, §5). */
+  withholds: ActiveWithhold[];
 }
 
 export interface UnenforcedCounter {
@@ -317,6 +324,7 @@ export function readEnforcementCache(
       server?: unknown;
       fetched_at?: unknown;
       enforcement?: unknown;
+      withholds?: unknown;
     };
     if (raw.team !== team) return null;
     if (server !== undefined && typeof raw.server === 'string' && raw.server !== server) {
@@ -330,6 +338,7 @@ export function readEnforcementCache(
       server: typeof raw.server === 'string' ? raw.server : (server ?? ''),
       fetched_at: raw.fetched_at,
       enforcement: parsed.data,
+      withholds: ActiveWithholdSchema.array().safeParse(raw.withholds ?? []).data ?? [],
     };
   } catch {
     return null;
@@ -342,12 +351,14 @@ export function writeEnforcementCache(
   server: string | undefined,
   enforcement: EnforcementPolicy,
   now: number = Date.now(),
+  withholds: ActiveWithhold[] = [],
 ): void {
   try {
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, ENFORCEMENT_CACHE_FILE),
-      JSON.stringify({ team, server: server ?? '', fetched_at: now, enforcement }) + '\n',
+      JSON.stringify({ team, server: server ?? '', fetched_at: now, enforcement, withholds }) +
+        '\n',
     );
   } catch {
     /* best-effort cache */
@@ -905,6 +916,7 @@ async function gateCheck(parsed: Parsed): Promise<number> {
     const now = Date.now();
     const cached = readEnforcementCache(state, team, server);
     let enforcement: EnforcementPolicy | undefined;
+    let withholds: ActiveWithhold[] = [];
     let serverReachable = false;
     let serverOutage = false;
     if (
@@ -913,16 +925,61 @@ async function gateCheck(parsed: Parsed): Promise<number> {
       !readUnenforcedCounter(state)
     ) {
       enforcement = cached.enforcement;
+      withholds = cached.withholds;
     } else {
       try {
         const res = await http.getEnforcement(team);
         enforcement = res.enforcement;
+        withholds = res.withholds ?? [];
         serverReachable = true;
-        writeEnforcementCache(state, team, server, enforcement, now);
+        writeEnforcementCache(state, team, server, enforcement, now, withholds);
       } catch (err) {
         if (!isGateServerUnreachable(err)) throw err;
         serverOutage = true;
         enforcement = cached?.enforcement;
+        withholds = cached?.withholds ?? [];
+      }
+    }
+    // ADR 801: the seat's own open blocking ask comes first — it holds whatever the class table says.
+    // On outage a cached withhold still denies (§5); otherwise the daemon re-checks the ask, so an
+    // accept since the cache was filled releases on this very call and the table below decides.
+    const held = matchWithhold(withholds, call, now);
+    if (held) {
+      const askId = held.withhold.ask_id;
+      if (serverOutage) {
+        emitDeny(
+          `gate unreachable — your blocking ask ${askId} withholds this call (ADR 801); wait for ` +
+            'the team server or a human answer.',
+        );
+        emitted = true;
+        decision = 'deny';
+        return;
+      }
+      try {
+        const verdict = await http.gateCheck(team, {
+          kind: ASK_WITHHOLD_KIND,
+          class: ASK_WITHHOLD_KIND,
+          fingerprint: held.fingerprint,
+          posture: 'block',
+          tool: call.tool,
+          target: held.target,
+          ask_ref: askId,
+        });
+        if (verdict.decision === 'deny') {
+          emitDeny(verdict.reason);
+          emitted = true;
+          decision = 'deny';
+          return;
+        }
+      } catch (err) {
+        if (!isGateServerUnreachable(err)) throw err;
+        emitDeny(
+          `gate unreachable — your blocking ask ${askId} withholds this call (ADR 801); wait for ` +
+            'the team server or a human answer.',
+        );
+        emitted = true;
+        decision = 'deny';
+        return;
       }
     }
     const match = enforcement ? matchEnforcement(enforcement, call) : null;

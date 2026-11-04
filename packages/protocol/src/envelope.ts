@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ActSchema, type Act } from './acts.js';
-import { AskSpeciesSchema, AskTierSchema, AskOutcomeSchema } from './ask.js';
+import { AskSpeciesSchema, AskTierSchema, AskOutcomeSchema, AskWithholdSchema } from './ask.js';
 import {
   ELIGIBLE_ACTS,
   MAX_ELIGIBLE,
@@ -327,6 +327,27 @@ export function actMetaRules(
     // member-directed — a confidential ask to the whole team is "hidden from everybody who can see
     // it", which is not a thing; (3) it is a consult or an escalate — an `approve` is about an
     // action, and ADR 407 names only the two species that can be about a seat's conduct.
+    // ADR 801 §1, §6: `meta.withhold` names the action a blocking approve ask holds at the gate. Only
+    // that species and tier withhold — the lower tiers proceed with a recorded risk — so it is refused
+    // anywhere else rather than silently ignored, and its globs parse at the boundary (hard rule 4).
+    if (meta['withhold'] !== undefined) {
+      if (meta['species'] !== 'approve' || meta['tier'] !== 'blocking') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['meta', 'withhold'],
+          message: 'meta.withhold is for a blocking approve ask only (ADR 801)',
+        });
+      } else {
+        const withhold = AskWithholdSchema.safeParse(meta['withhold']);
+        if (!withhold.success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['meta', 'withhold'],
+            message: `meta.withhold: ${withhold.error.issues[0]?.message ?? 'invalid'}`,
+          });
+        }
+      }
+    }
     if (meta['about'] !== undefined) {
       const about = meta['about'];
       if (typeof about !== 'string' || about.trim().length === 0) {
