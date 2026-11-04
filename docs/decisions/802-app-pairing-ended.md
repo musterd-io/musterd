@@ -94,6 +94,7 @@ weakening decision 3: the phone never trusts, and never distinguishes, anything 
   paired after this ADR carry the exact key.
 - Hub relocation (ADR 796) inherits this. On switch day every laptop pairing reads superseded on
   the box's /live, and every phone says to pair again on its next fetch.
+- 2026-11-04 (lane `01M6M9JMME`, fifty): decisions 4 and 6, wire half. `RelayAppBodyFrameSchema` gains `ended`, and `AskSkipReason` gains `binding_superseded` ("your phone was paired under this daemon's old key — pair again"). The relay keeps `ended` only with `sealed: null` (wallow) and answers the body fetch with `410 {ended}`, `no-store`. It goes live with the next relay deploy, which is nick's to run.
 
 ## Observability & Evaluation
 

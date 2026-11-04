@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   reconcileRelayPending,
+  RelayAppBodyFrameSchema,
   RelayDaemonFrameSchema,
   RelayServerFrameSchema,
   RELAY_PING,
@@ -81,5 +82,15 @@ describe('away relay frames (ADR 659)', () => {
       kept: ['live'],
       dropped: ['gone', 'stale'],
     });
+  });
+});
+
+describe('app_body ended (ADR 802)', () => {
+  it('an app_body may say the binding ended; an unknown value is refused', () => {
+    const base = { protocol: 1, type: 'app_body', request_id: 'r', sealed: null };
+    expect(RelayAppBodyFrameSchema.safeParse({ ...base, ended: 'superseded' }).success).toBe(true);
+    expect(RelayAppBodyFrameSchema.safeParse({ ...base, ended: 'revoked' }).success).toBe(true);
+    expect(RelayAppBodyFrameSchema.safeParse(base).success).toBe(true);
+    expect(RelayAppBodyFrameSchema.safeParse({ ...base, ended: 'gone' }).success).toBe(false);
   });
 });

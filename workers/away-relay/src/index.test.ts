@@ -664,8 +664,15 @@ async function relayWithSocket(extraEnv: Partial<Env> = {}, lastPingAt: Date | n
                 protocol: 1,
                 type: 'app_body',
                 request_id: frame['request_id'],
-                sealed: frame['ask_ref'] === 'ask-1' ? { v: 1, enc: 'e', ct: 'c' } : null,
+                sealed:
+                  frame['ask_ref'] === 'ask-1' || frame['ask_ref'] === 'live-but-ended'
+                    ? { v: 1, enc: 'e', ct: 'c' }
+                    : null,
                 ...(frame['ask_ref'] === 'ask-1' ? { expires_at: 99 } : {}),
+                // ADR 802: the daemon says the binding ended; a live body never carries it.
+                ...(frame['ask_ref'] === 'ended' || frame['ask_ref'] === 'live-but-ended'
+                  ? { ended: 'superseded' }
+                  : {}),
               }),
             ),
         );
@@ -812,6 +819,19 @@ describe('TeamRelay app half (ADR 676 §2, §9)', () => {
     expect(sent[0]).toMatchObject({ type: 'app_fetch', ask_ref: 'ask-1', binding: 'b1' });
     const missing = await relay.fetch(new Request('https://relay.example/app/revive/body/b1/gone'));
     expect(missing.status).toBe(404);
+  });
+
+  it('a body the daemon says has ended answers 410 {ended}; a live body with a stray ended stays 200 (ADR 802)', async () => {
+    const { relay } = await relayWithSocket();
+    const ended = await relay.fetch(new Request('https://relay.example/app/revive/body/b1/ended'));
+    expect(ended.status).toBe(410);
+    expect(ended.headers.get('cache-control')).toBe('no-store');
+    expect(await ended.json()).toEqual({ ended: 'superseded' });
+    // wallow: a malformed frame must not turn a live body into a 410.
+    const live = await relay.fetch(
+      new Request('https://relay.example/app/revive/body/b1/live-but-ended'),
+    );
+    expect(live.status).toBe(200);
   });
 
   it('an app_deliver is pushed to APNs and reported; without APNs config it is refused', async () => {

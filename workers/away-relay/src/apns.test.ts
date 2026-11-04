@@ -201,6 +201,24 @@ describe('app frames and payload (ADR 676 §2)', () => {
     ).toEqual({ protocol: 1, type: 'app_body', request_id: 'r', sealed: null });
   });
 
+  it('keeps an app_body `ended` only when sealed is null, and only a known value (ADR 802)', () => {
+    const body = (extra: Record<string, unknown>) =>
+      parseDaemonFrame(
+        JSON.stringify({ protocol: 1, type: 'app_body', request_id: 'r', ...extra }),
+      );
+    expect(body({ sealed: null, ended: 'revoked' })).toEqual({
+      protocol: 1,
+      type: 'app_body',
+      request_id: 'r',
+      sealed: null,
+      ended: 'revoked',
+    });
+    expect(body({ sealed: { v: 1, enc: 'e', ct: 'c' }, ended: 'superseded' })).not.toHaveProperty(
+      'ended',
+    );
+    expect(body({ sealed: null, ended: 'gone-fishing' })).not.toHaveProperty('ended');
+  });
+
   it('an app callback is checked for shape only, and names the ref its frame carries', () => {
     const sealed = { v: 1, enc: 'e', ct: 'c' };
     expect(appCallbackRef(JSON.stringify({ app: 1, kind: 'redeliver', binding: 'b1' }))).toBe('b1');

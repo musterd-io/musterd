@@ -9,7 +9,9 @@ export type AskSkipReason =
   | 'below_tier_floor'
   | 'present'
   | 'no_binding'
-  | 'relay_not_connected';
+  | 'relay_not_connected'
+  // ADR 802: the binding was paired under a daemon key that has since been replaced.
+  | 'binding_superseded';
 
 export interface LastAskOutcome {
   at: number;
@@ -24,6 +26,7 @@ const WHY: Record<AskSkipReason, string> = {
   present: "you were at your desk (Only while I'm away)",
   no_binding: 'no phone is paired',
   relay_not_connected: 'the relay was not connected',
+  binding_superseded: "your phone was paired under this daemon's old key — pair again",
 };
 
 function ago(ms: number): string {

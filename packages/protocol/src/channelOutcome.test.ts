@@ -43,3 +43,14 @@ describe('lastAskLine (lane 01M64DSKT3)', () => {
     ).toMatch(/^last ask 3d ago/);
   });
 });
+
+describe('binding_superseded (ADR 802)', () => {
+  it('says the phone must pair again', () => {
+    const line = lastAskLine(
+      { at: 0, ask: 'a', outcome: 'skipped', reason: 'binding_superseded' },
+      0,
+    );
+    expect(line).toContain("paired under this daemon's old key");
+    expect(line).toContain('pair again');
+  });
+});
