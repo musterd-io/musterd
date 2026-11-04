@@ -1,13 +1,16 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { QUICK_ACTION_LABELS, seatActions } from '../native/notice';
+import { endedNote, type PairingEnded } from '../native/pairingEnded';
 import type { PairingPin } from '../native/pairingPin';
 import type { QuickAction, QuickOutcome, Roster, RosterSeat } from '../native/quickAction';
+import { Button } from '../ui/button';
 import { Backdrop, Glass } from '../ui/glass';
 import { Rise } from '../ui/motion';
 import { NAV_HEIGHT } from '../ui/nav';
 import { Notice, SectionLabel } from '../ui/notice';
+import { confirmPairAgain } from '../ui/pairAgain';
 import { QuickActions } from '../ui/quickActions';
 import { Seat } from '../ui/seat';
 import { font, radius, space, usePalette } from '../ui/theme';
@@ -23,6 +26,7 @@ export default function SeatsScreen() {
   const [pin, setPin] = useState<PairingPin | null>(null);
   const [roster, setRoster] = useState<Roster | null>(null);
   const [miss, setMiss] = useState<'gone' | 'unreachable' | null>(null);
+  const [ended, setEnded] = useState<PairingEnded | null>(null);
   const [loading, setLoading] = useState(false);
   const alive = useRef(true);
 
@@ -37,8 +41,11 @@ export default function SeatsScreen() {
       const { fetchRoster } = await import('../native/quickAction');
       const got = await fetchRoster({ pin: current });
       if (!alive.current) return;
-      if ('miss' in got) setMiss(got.miss);
-      else {
+      if ('miss' in got) {
+        setEnded(got.miss === 'ended' ? got.ended : null);
+        setMiss(got.miss === 'ended' ? null : got.miss);
+      } else {
+        setEnded(null);
         setMiss(null);
         setRoster((prev) => (prev && prev.ts > got.ts ? prev : got));
       }
@@ -85,6 +92,21 @@ export default function SeatsScreen() {
         keyExtractor={(s) => s.seat}
         ListHeaderComponent={
           <View style={styles.header}>
+            {ended ? (
+              <Rise>
+                <Notice icon="link.badge.plus" tone="alert" {...endedNote(ended)}>
+                  <Button
+                    label="Pair again"
+                    icon="qrcode.viewfinder"
+                    onPress={() =>
+                      confirmPairAgain(pin?.team ?? null, (ok) => {
+                        if (ok) router.replace('/pair');
+                      })
+                    }
+                  />
+                </Notice>
+              </Rise>
+            ) : null}
             {miss && !loading ? (
               <Rise>
                 <Notice

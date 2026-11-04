@@ -26,6 +26,7 @@ import { DeliveryExpiredError, openDelivery } from './delivery';
 import { STALE_TEXT, UNVERIFIED_TEXT } from './notice';
 import { showOffer, type ShownOffer } from './offer';
 import { RETRY_MS, sendOrKeep, type OutboxStorage } from './outbox';
+import { readEnded, type PairingEnded } from './pairingEnded';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys, phoneKeysErrorCode } from './phoneKeys';
 import { readFetchedBody, readPush, routeOf, type PushRoute } from './push';
@@ -93,7 +94,9 @@ export function relayUrl(relay: string, path: string): string | null {
  * (answered, expired, or not this phone's); anything else — a 503 or 504 while the daemon is
  * away or slow, a timeout, no network — means this phone could not reach it, and a retry may.
  */
-export type FetchMiss = { miss: 'gone' | 'unreachable' };
+/** Why a body fetch brought nothing: the ask is gone, the relay or daemon didn't answer, or the
+ *  daemon says this phone's pairing has ended (ADR 802, a 410). */
+export type FetchMiss = { miss: 'gone' | 'unreachable' } | { miss: 'ended'; ended: PairingEnded };
 
 export async function fetchBody(
   relay: string,
@@ -120,6 +123,10 @@ export async function fetchBody(
       cache: 'no-store',
       signal: controller.signal,
     });
+    if (response.status === 410) {
+      const ended = readEnded(await response.json().catch(() => null));
+      return ended ? { miss: 'ended', ended } : { miss: 'unreachable' };
+    }
     if (!response.ok) return { miss: response.status === 404 ? 'gone' : 'unreachable' };
     const body = readFetchedBody(await response.json());
     if (!body) return { miss: 'unreachable' };

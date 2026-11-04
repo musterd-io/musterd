@@ -5,6 +5,7 @@ import type { AnswerOutcome } from '../../native/answer';
 import type { AskEntry } from '../../native/asks';
 import { STALE_TEXT, UNVERIFIED_TEXT, waitingSubtitle } from '../../native/notice';
 import { showOffer, type ShownOffer } from '../../native/offer';
+import { endedNote, type PairingEnded } from '../../native/pairingEnded';
 import type { PairingPin } from '../../native/pairingPin';
 import { plain } from '../../native/readable';
 import { AskText } from '../../ui/askText';
@@ -16,6 +17,7 @@ import { Moment } from '../../ui/moment';
 import { Rise, Squish } from '../../ui/motion';
 import { NAV_HEIGHT } from '../../ui/nav';
 import { Notice, SectionLabel } from '../../ui/notice';
+import { confirmPairAgain } from '../../ui/pairAgain';
 import { QuestionCard } from '../../ui/questionCard';
 import { QuickActions } from '../../ui/quickActions';
 import { ago, Seat } from '../../ui/seat';
@@ -40,6 +42,7 @@ type Phase =
   | { kind: 'loading' }
   | { kind: 'gone' }
   | { kind: 'unreachable' }
+  | { kind: 'ended'; ended: PairingEnded }
   | { kind: 'unverified' }
   | { kind: 'ready'; entry: AskEntry; offers: { approve: ShownOffer; reject: ShownOffer } | null }
   | { kind: 'sending' }
@@ -121,7 +124,9 @@ export default function AskScreen() {
       }
       if ('miss' in entry) {
         if (entry.miss === 'gone') void clearSettled([route.ref]);
-        setPhase({ kind: entry.miss });
+        setPhase(
+          entry.miss === 'ended' ? { kind: 'ended', ended: entry.ended } : { kind: entry.miss },
+        );
         return;
       }
       if (!entry.delivery.approval) {
@@ -209,6 +214,23 @@ export default function AskScreen() {
         title="Already settled"
         copy="Answered somewhere else, or it expired."
       >
+        <Button label="Back to asks" kind="secondary" onPress={() => router.back()} />
+      </Moment>
+    );
+  }
+  if (phase.kind === 'ended') {
+    const words = endedNote(phase.ended);
+    return (
+      <Moment icon="link.badge.plus" title={words.title} copy={words.body}>
+        <Button
+          label="Pair again"
+          icon="qrcode.viewfinder"
+          onPress={() =>
+            confirmPairAgain(params.team ?? null, (ok) => {
+              if (ok) router.replace('/pair');
+            })
+          }
+        />
         <Button label="Back to asks" kind="secondary" onPress={() => router.back()} />
       </Moment>
     );

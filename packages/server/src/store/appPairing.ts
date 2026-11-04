@@ -9,7 +9,13 @@ import {
   type ApprovalProof,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
-import { openFromPhone, type AppChannelKeys, type SealedBody } from '../notify/appSeal.js';
+import {
+  appChannelKeyBornAt,
+  loadAppChannelKeys,
+  openFromPhone,
+  type AppChannelKeys,
+  type SealedBody,
+} from '../notify/appSeal.js';
 import { appPairingChallenge, verifyAppAttestation, type AppAttestRefusal } from './appAttest.js';
 import { appendAudit } from './audit.js';
 import { enrollKeyGuarded, type EnrollKeyResult } from './authority.js';
@@ -57,6 +63,10 @@ export interface AppKeys {
   question_key_nonces?: string[];
   /** The sealed `expires_at` of the last accepted enrollment — enrollments are accepted in order. */
   question_key_expires_at?: number;
+  /** ADR 802 §1: the daemon identity key the phone pinned at pairing (Ed25519 raw, base64url), or
+   *  `unknown-before-key` for a binding from before this was recorded whose key the backfill could
+   *  not vouch for. Compared with the daemon's current key to tell a pairing that ended. */
+  daemon_identity_public_key?: string;
   /** ADR 791: the quick-action nonces already used on this binding (newest last, bounded). With the
    *  ten-minute seal window this makes a replayed quick action a no-op. */
   quick_action_nonces?: string[];
@@ -244,6 +254,8 @@ export async function stageAppPairing(
     receive_public_key: request.receive_public_key,
     attest_key_id: verdict.keyId,
     environment: verdict.environment,
+    // ADR 802 §1: the seal opened with these keys, so this is the key the phone pinned.
+    daemon_identity_public_key: input.keys.identityPublic,
     ...(request.device_name ? { device_name: request.device_name } : {}),
     ...(request.push_token
       ? {
@@ -387,6 +399,58 @@ export async function appBindingKeys(
   );
   if (!row || row.channel !== APP_CHANNEL || row.status !== 'active' || !row.app_keys) return null;
   return JSON.parse(row.app_keys) as AppKeys;
+}
+
+/** A daemon key the backfill could not vouch for (ADR 802 §2): reads as superseded. */
+export const UNKNOWN_DAEMON_KEY = 'unknown-before-key';
+
+export type AppBindingEnded = 'superseded' | 'revoked';
+
+/**
+ * Has this app binding ended (ADR 802 §2)? `revoked` when it was revoked; `superseded` when the
+ * daemon key the phone pinned is not the daemon's current one; else `null`. A binding from before
+ * the key was recorded is backfilled once: the current key if it was paired after the key file was
+ * written, else {@link UNKNOWN_DAEMON_KEY}. The backfill never overwrites a recorded key.
+ */
+export async function appBindingEnded(
+  db: Driver,
+  teamId: string,
+  bindingId: string,
+  opts: { current?: string; keyBornAt?: number } = {},
+): Promise<AppBindingEnded | null> {
+  const row = await db.get<{
+    app_keys: string | null;
+    channel: string;
+    status: string;
+    created_at: number;
+  }>(
+    'SELECT app_keys, channel, status, created_at FROM channel_bindings WHERE id = ? AND team_id = ?',
+    [bindingId, teamId],
+  );
+  if (!row || row.channel !== APP_CHANNEL) return null;
+  if (row.status !== 'active') return 'revoked';
+  if (!row.app_keys) return null;
+  const current = opts.current ?? (await loadAppChannelKeys()).identityPublic;
+  let recorded = (JSON.parse(row.app_keys) as AppKeys).daemon_identity_public_key;
+  if (!recorded) {
+    const bornAt = opts.keyBornAt ?? appChannelKeyBornAt();
+    const guess = row.created_at >= bornAt ? current : UNKNOWN_DAEMON_KEY;
+    recorded = await db.tx(async (t) => {
+      const fresh = await t.get<{ app_keys: string | null }>(
+        'SELECT app_keys FROM channel_bindings WHERE id = ? AND team_id = ?',
+        [bindingId, teamId],
+      );
+      const keys = JSON.parse(fresh?.app_keys ?? '{}') as AppKeys;
+      if (keys.daemon_identity_public_key) return keys.daemon_identity_public_key;
+      await t.run('UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ?', [
+        JSON.stringify({ ...keys, daemon_identity_public_key: guess }),
+        bindingId,
+        teamId,
+      ]);
+      return guess;
+    });
+  }
+  return recorded === current ? null : 'superseded';
 }
 
 /**

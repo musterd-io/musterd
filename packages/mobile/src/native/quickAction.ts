@@ -26,6 +26,7 @@ import { fetchBody, relayUrl, type FetchMiss } from './answer';
 import { b64urlEncode, utf8Encode } from './bytes';
 import { openDelivery } from './delivery';
 import { post, RETRY_MS } from './outbox';
+import type { PairingEnded } from './pairingEnded';
 import type { PairingPin } from './pairingPin';
 import { phoneKeys, phoneKeysErrorCode } from './phoneKeys';
 
@@ -37,6 +38,31 @@ export type RosterSeat = Roster['seats'][number];
 export const ROSTER_SKEW_MS = 30_000;
 /** The daemon refuses a seal that expires more than 10 minutes out (`APP_QUICK_ACTION_WINDOW_MS`). */
 const QUICK_AHEAD_MS = 9 * 60_000;
+
+/**
+ * Ask the daemon whether this pin's pairing still stands: one body fetch for a ref no ask has.
+ * A standing pairing answers 404 (nothing there); an ended one answers 410. Anything else,
+ * including no answer at all, is "don't know", which is null: an outage is not a verdict.
+ */
+export async function checkPairing(input: {
+  pin: PairingPin;
+  now?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<PairingEnded | null> {
+  const { pin } = input;
+  if (!pin.binding) return null;
+  const got = await fetchBody(
+    pin.relay,
+    {
+      team: pin.team,
+      binding: pin.binding,
+      ref: `check-${input.now ?? Date.now()}`,
+      expires_at: 0,
+    },
+    input.fetchImpl ?? fetch,
+  );
+  return 'miss' in got && got.miss === 'ended' ? got.ended : null;
+}
 
 /** The team's agent seats as of now, or why not. */
 export async function fetchRoster(input: {
