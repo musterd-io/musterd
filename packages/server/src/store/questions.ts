@@ -153,6 +153,20 @@ export async function waitingSeats(db: Driver, teamId: string): Promise<Set<stri
   return new Set((await openQuestions(db, teamId)).map((q) => q.asker));
 }
 
+/**
+ * Whether one seat waits on a question it asked (ADR 773 §9) — the same answer as
+ * `waitingSeats(...).has(name)`, read from that seat's own asks only. The wake-lease poll asks this
+ * for every on-shift seat (ADR 792 `onShiftNow`), and the team-wide read parsed every question the
+ * team ever asked on each poll (lane 01M6M61A0E).
+ */
+export async function seatWaiting(db: Driver, teamId: string, memberId: string): Promise<boolean> {
+  const rows = await db.all<QuestionRow>(`${QUESTIONS_SQL} AND m.from_member = ?`, [
+    teamId,
+    memberId,
+  ]);
+  return rows.some((r) => toView(r)?.state === 'open');
+}
+
 /** A claim with no persisted answer behind it after this long is an orphan (a send that failed
  *  between claim and persist). Long enough that an in-flight first answer is never overtaken. */
 export const ORPHAN_CLAIM_MS = 60_000;

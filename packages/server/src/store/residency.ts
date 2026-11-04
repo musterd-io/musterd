@@ -55,7 +55,7 @@ import {
   rowToEnvelope,
 } from './messages.js';
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
-import { answerLineFor, waitingSeats } from './questions.js';
+import { answerLineFor, seatWaiting } from './questions.js';
 import { lastActionBySubject } from './quiescence.js';
 import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
 import {
@@ -1324,7 +1324,7 @@ async function onShiftNow(
   // ADR 795: plus what a person added to today's budget after a `budget` stop.
   budgetUsd += await budgetRaisedUsd(db, teamId, member.name, row.day);
   if (shiftStopDue(row, hours, spent, budgetUsd, now) !== null) return null;
-  if ((await waitingSeats(db, teamId)).has(member.name)) return null;
+  if (await seatWaiting(db, teamId, member.id)) return null;
   return {
     until: row.inside_hours === 1 && hours !== null ? workingDayEndToday(hours, now) : null,
     leftUsd: Math.max(0, budgetUsd - spent),
