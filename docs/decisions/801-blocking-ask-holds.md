@@ -1,6 +1,6 @@
 # 801 — A blocking ask holds: the gate withholds the asked-for action until a human answers
 
-- Status: proposed
+- Status: accepted (nick, 2026-11-04, both open choices as proposed)
 - Date: 2026-11-04
 
 ## Context
