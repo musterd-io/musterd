@@ -10,6 +10,7 @@ import { Button } from '../ui/button';
 import { Backdrop, Glass } from '../ui/glass';
 import { Icon } from '../ui/icon';
 import { Breathe, Rise, Squish } from '../ui/motion';
+import { NAV_HEIGHT } from '../ui/nav';
 import { Notice, SectionLabel } from '../ui/notice';
 import { ago, Seat } from '../ui/seat';
 import { font, radius, space, usePalette } from '../ui/theme';
@@ -427,6 +428,7 @@ export default function AsksScreen() {
           <RefreshControl
             refreshing={loading}
             tintColor={p.accent}
+            progressViewOffset={NAV_HEIGHT}
             onRefresh={() => void refresh(true)}
           />
         }
@@ -516,7 +518,12 @@ function AskRow({ entry }: { entry: AskEntry }) {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   footer: { gap: space.sm, alignItems: 'center', marginTop: space.md },
-  list: { padding: space.lg, paddingTop: space.sm, gap: space.sm + 2, paddingBottom: space.xl * 2 },
+  list: {
+    padding: space.lg,
+    paddingTop: NAV_HEIGHT + space.sm,
+    gap: space.sm + 2,
+    paddingBottom: space.xl * 2,
+  },
   header: { gap: space.sm + 2, marginBottom: space.xs },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   pill: {

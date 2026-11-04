@@ -14,6 +14,7 @@ import { success, warning } from '../../ui/haptics';
 import { Icon } from '../../ui/icon';
 import { Moment } from '../../ui/moment';
 import { Rise, Squish } from '../../ui/motion';
+import { NAV_HEIGHT } from '../../ui/nav';
 import { Notice, SectionLabel } from '../../ui/notice';
 import { QuestionCard } from '../../ui/questionCard';
 import { QuickActions } from '../../ui/quickActions';
@@ -407,7 +408,12 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: space.lg, paddingTop: space.md, gap: space.md, paddingBottom: space.xl * 2 },
+  page: {
+    padding: space.lg,
+    paddingTop: NAV_HEIGHT + space.md,
+    gap: space.md,
+    paddingBottom: space.xl * 2,
+  },
   who: {
     flexDirection: 'row',
     alignItems: 'center',
