@@ -1,0 +1,66 @@
+# Hub relocation — runbook
+
+Moves revive's hub from the laptop (`mac.lan`) to `musterd-joiner-1` (Hetzner hel1). The design is
+[ADR 796](../decisions/796-hub-relocation.md) and
+[the design doc](../superpowers/specs/2026-11-03-hub-relocation-design.md); the steps are
+[the plan](../superpowers/plans/2026-11-03-hub-relocation.md). This page holds what the plan's
+increment 4 checked on the box (lane `01M6HWV9E48ECHG1M77GX5HNDG`), the hardening still to do, and
+the revocation list.
+
+## The box as it stands (checked 2026-11-04)
+
+| Check | Found | Needed for the switch |
+| --- | --- | --- |
+| Daemon listener (`ss -ltnp`) | `127.0.0.1:4849` only (it is a joiner) | As the hub it must bind the tailnet address `100.115.152.1:4849`, never `0.0.0.0` |
+| Hetzner cloud firewall `joiner-ssh-only` | inbound TCP 22 from anywhere; nothing else | 4849 stays closed on the public IP: already true |
+| Host firewall | `ufw` inactive; `INPUT` policy ACCEPT (only Tailscale's `ts-input` chain) | `ufw` on: deny incoming, allow `tailscale0`, allow 22 |
+| sshd | `PasswordAuthentication yes`, `PermitRootLogin without-password` | `PasswordAuthentication no` |
+| Tailnet peers | the box, nick's phone, nicks-laptop, delta-2 (tagged), musterd-seat-delta (tagged, offline 31 d), swethas-laptop | ACL: the box's 4849 reachable only from nicks-laptop, delta-2 and nick's devices |
+| App-channel key | absent on the box | arrives with the switch (design §"The app-channel key") |
+| Relay credential (`away_relay_token`) | absent from the box's replica; team policy secrets do not replicate | arrives inside the copied store; rotate it after the switch |
+
+The tailnet ACL could not be read from the box. It lives in the Tailscale admin console
+(login.tailscale.com → Access controls), which only nick can read.
+
+## The relay credential
+
+[ADR 659 §4](../decisions/659-away-relay-protocol-and-credentials.md): there is one credential per
+team, not per hub. The Worker secret `TEAM_CREDENTIALS_JSON` maps the team slug to a sha256 hash. The
+credential lets the daemon talk to revive's relay object and nothing else; the object forwards
+callbacks and never holds ask content. A per-hub credential cannot be minted, so the copy is
+justified: the box gets the credential inside the copied store. After the switch, the operator rotates it:
+a new credential's hash in `TEAM_CREDENTIALS_JSON`, and the new value in revive's policy
+(`away_relay_token`) on the new hub. The relay then refuses the old socket's next frame, so the
+laptop's set-aside store holds a dead credential.
+
+## Rotate and re-pair (the app-channel key)
+
+Not yet run. The plan's step: stop a test daemon, set its `app-channel.key` aside, restart it (a new
+key is generated), then pair a phone again with "Pair again". It needs nick's phone, so it runs on
+nick's go-ahead.
+
+## Credentials on the box (the revocation list)
+
+Each credential that lives on `musterd-joiner-1`, and the one step that revokes it. On a compromise,
+run every row.
+
+| Credential | Where on the box | Scope | Revoke in one step |
+| --- | --- | --- | --- |
+| Roster deploy key | `~/.ssh/musterd-revive-deploy` (fingerprint `SHA256:k+NnosWmsnBDVc30KV++KCNjY+iiRx/3WHu/CWVrIT4`) | write, `SandRiseStudio/musterd-revive` only; `main` protected against deletion and force-push | GitHub → SandRiseStudio/musterd-revive → Settings → Deploy keys → delete `musterd-joiner-1 roster` |
+| GitHub token | `~/.config/musterd/github-token` (mode 600) | fine-grained, public repositories read-only, no permissions | github.com → Settings → Developer settings → Fine-grained tokens → `musterd-joiner-1 hub` → Delete |
+| Node credentials (`msnode_`) | `~/.musterd/node.json`; after the switch, hashes in the store's `nodes` | sync with revive only | today, on the hub: `musterd node revoke <node-id>`. After the switch the box is the hub: revoke each joiner's node there, then re-enroll them |
+| Host key | `~/.config/musterd/host.env` (`MUSTERD_HOST_KEY`) | hub-minted host credential (ADR 648): wake leases and provisions for the box's seats | revoke it on the hub, then restart `musterd-host` with a new one. The exact command is checked in the rehearsal (increment 5) before the switch |
+| Seat standing grants | each resident seat's `~/musterd/revive/musterd/<seat>/.musterd/binding.json` | that seat only | `musterd residency off` for that seat, from an admin folder (revokes the grant) |
+| Model provider key | `~/.config/musterd/host.env` (`MUSTERD_RESIDENT_KEY`) | the API key for seats on musterd's own engine (not a musterd credential) | revoke it in the provider's console |
+| App-channel key (after the switch) | `~/.musterd/app-channel.key` | the daemon's identity to every paired phone | set the file aside, restart the daemon, re-pair each phone ("Pair again") |
+| Relay credential (after the switch) | inside `~/.musterd/musterd.db`, team policy `away_relay_token` | revive's relay object only | new hash in `TEAM_CREDENTIALS_JSON` (`wrangler secret put` on `workers/away-relay`), new value in revive's policy |
+| OpenCode service password | `~/.config/opencode/service.json` | the box's OpenCode service | rotate it in OpenCode; it was shown in a session transcript on 2026-11-04, so rotate before the switch |
+| Box SSH access | `~/.ssh/authorized_keys` for `musterd` and `root` (the laptop's `~/.ssh/musterd-joiner`) | shell on the box | remove the line from both `authorized_keys`, or the Hetzner firewall rule for 22 |
+
+Never on the box (design §"What never moves"): member credentials (`mskey_`, `msgr_`, `mscr_`), the
+team-wide agent key, KMS or console access, `wrangler`, nick's passkeys, and `hcloud`.
+
+## Residual risk
+
+A compromise of the box exposes every credential above. The table bounds the damage and revokes it;
+it does not remove the risk (big-body, design review 2026-11-03).
