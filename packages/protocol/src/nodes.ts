@@ -318,6 +318,12 @@ export type NodeEnrollRequest = z.infer<typeof NodeEnrollRequestSchema>;
 export const NodeRepointRequestSchema = z.object({
   hub_url: z.string().url(),
   team: z.string().min(1),
+  /**
+   * This machine's current node credential, read from `~/.musterd/node.json` by the caller. Proof
+   * the caller could already read it: without it a local agent seat that cannot read the file could
+   * still aim the probe (which carries the credential) at a hub it controls.
+   */
+  node_credential: z.string().min(1),
 });
 export type NodeRepointRequest = z.infer<typeof NodeRepointRequestSchema>;
 

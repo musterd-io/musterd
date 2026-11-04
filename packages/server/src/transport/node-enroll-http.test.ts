@@ -41,6 +41,18 @@ withDrivers('node-enroll-http', (_o, kind) => {
     auth?: string,
     extra: Record<string, string> = {},
   ) {
+    // ADR 796: the operator's CLI proves it read node.json; tests do the same unless they say not to.
+    if (
+      path === '/node/repoint' &&
+      body &&
+      typeof body === 'object' &&
+      !('node_credential' in body)
+    )
+      body = {
+        ...body,
+        node_credential:
+          readNodeState().nodes[(body as { team: string }).team]?.credential ?? 'none',
+      };
     const response = await fetch(base + path, {
       method: 'POST',
       headers: {
@@ -345,6 +357,18 @@ withDrivers('node-enroll-http', (_o, kind) => {
         team: 'bravo',
       });
       expect(res.status).toBe(400);
+      expect(JSON.stringify(readNodeState())).toBe(before);
+    });
+
+    it('refusesACallerWithoutTheNodeCredential: a local seat cannot aim the probe', async () => {
+      await enroll();
+      const before = JSON.stringify(readNodeState());
+      const res = await post(joinerBase, '/node/repoint', {
+        hub_url: hubBase.replace('127.0.0.1', 'localhost'),
+        team: 'bravo',
+        node_credential: 'msnode_not-the-one',
+      });
+      expect(res.status).toBe(403);
       expect(JSON.stringify(readNodeState())).toBe(before);
     });
 

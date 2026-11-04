@@ -1,9 +1,24 @@
+import { readFileSync } from 'node:fs';
 import { describeSyncWedge, type NodeSummary } from '@musterd/protocol';
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
+import { machineStatePath } from '../machinePaths.js';
 import { theme } from '../render/theme.js';
 import { heading, success } from '../render/ui.js';
 import { resolve, resolveRead } from './helpers.js';
+
+/** This machine's node credential for a team, from the daemon-owned node.json (read only). */
+function readNodeCredential(team: string): string | null {
+  try {
+    const raw = JSON.parse(
+      readFileSync(machineStatePath('MUSTERD_NODE_STATE', 'node.json'), 'utf8'),
+    ) as { nodes?: Record<string, { credential?: unknown }> };
+    const credential = raw.nodes?.[team]?.credential;
+    return typeof credential === 'string' && credential.length > 0 ? credential : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * `musterd node <invite|join|rotate|revoke|list>` — the machine credential (ADR 328), increment 3a
@@ -125,7 +140,19 @@ export async function nodeCommand(parsed: Parsed): Promise<number> {
     const hubUrl = parsed.positionals[1];
     if (!hubUrl) throw new CliError(USAGE, 2);
     const { team, http } = resolveRead(parsed.flags, { claimSeatPerRequest: true });
-    const moved = await http.nodeRepoint({ hub_url: hubUrl, team });
+    // The daemon refuses a caller that cannot show the credential it is about to present, so a
+    // seat that cannot read node.json cannot aim the probe. Read, never written, from the CLI.
+    const nodeCredential = readNodeCredential(team);
+    if (!nodeCredential)
+      throw new CliError(
+        `this machine has no node credential for "${team}" in ${machineStatePath('MUSTERD_NODE_STATE', 'node.json')}`,
+        1,
+      );
+    const moved = await http.nodeRepoint({
+      hub_url: hubUrl,
+      team,
+      node_credential: nodeCredential,
+    });
     process.stdout.write(
       success(`this machine now syncs with ${moved.hub_url}`, {
         next: 'musterd node list  (on the new hub, to see it)',

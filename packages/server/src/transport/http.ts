@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { hostname } from 'node:os';
@@ -2463,6 +2463,13 @@ async function authClaimedAgent(
  * lets the caller record the refusal — an off-machine attempt is a product signal (someone wants
  * cross-device sign-in), not just an error.
  */
+/** Timing-safe equality for two secrets of any length (both hashed to a fixed width first). */
+function sameSecret(a: string, b: string): boolean {
+  const ha = createHash('sha256').update(a).digest();
+  const hb = createHash('sha256').update(b).digest();
+  return timingSafeEqual(ha, hb);
+}
+
 function requireLocalPeer(
   ctx: Ctx,
   req: IncomingMessage,
@@ -3276,6 +3283,12 @@ export async function handleHttp(
         throw new MusterdError(
           'not_found',
           `this machine has no enrollment for "${body.team}" — join it with \`musterd node join\``,
+        );
+      // The caller proves it can read node.json, so the route grants nothing that file does not.
+      if (!sameSecret(body.node_credential, current.credential))
+        throw new MusterdError(
+          'forbidden',
+          "repointing needs this machine's node credential — run `musterd node repoint` as the operator",
         );
       const team = await getTeamBySlug(ctx.db, body.team);
       const cursor = team ? await readPullCursor(ctx.db, team.id) : 0;
