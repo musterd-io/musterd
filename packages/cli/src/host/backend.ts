@@ -25,6 +25,8 @@ export interface WakeBounds {
   timeout_ms: number;
   max_turns?: number;
   budget_usd?: number;
+  /** ADR 805: the most one resume may cost to re-ingest; the backend's price rung reads it. */
+  resume_max_usd?: number;
 }
 
 /** Everything a backend may know about one wake: the daemon's order (structured fields only — no

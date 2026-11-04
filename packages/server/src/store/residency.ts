@@ -3051,6 +3051,8 @@ async function writeSeatPass(
         timeout_ms: timeoutMs,
         ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
         ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
+        // ADR 805: the per-resume price bound rides the order; the host judges the ladder on it.
+        ...(policy.resume_max_usd !== undefined ? { resume_max_usd: policy.resume_max_usd } : {}),
       });
       // ADR 672: the hold's threshold rides the order; the host no longer reads /report for it.
       const hold =

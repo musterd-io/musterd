@@ -45,6 +45,9 @@ ACT_LANE_POLICY = [
     "--timeout", "60m",
     "--transcript-max", "256",
     "--tool-policy", "seat-policy",
+    # ADR 805 (finding 031): one resume may re-ingest at most this much; past it a wake is fresh.
+    # Added after the 2026-11-04 smoke pair, for the next pre-registered run.
+    "--resume-max", "0.25",
 ]
 
 
