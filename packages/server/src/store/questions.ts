@@ -258,6 +258,27 @@ export async function answerLineFor(
   });
 }
 
+/**
+ * The answers among `answerIds` already delivered to `seat` (ADR 773 §8: a rail re-offers an answer
+ * only until it is delivered). The live idle seam reads this, because its other discharge — the read
+ * cursor passing the act — never comes for a seat with a deep unread backlog (lane 01M6HCD4YF).
+ */
+export async function deliveredAnswerIds(
+  db: Driver,
+  teamId: string,
+  seat: string,
+  answerIds: readonly string[],
+): Promise<Set<string>> {
+  if (answerIds.length === 0) return new Set();
+  const rows = await db.all<{ answer_id: string }>(
+    `SELECT answer_id FROM question_answers
+      WHERE team_id = ? AND asker = ? AND delivered_at IS NOT NULL
+        AND answer_id IN (${answerIds.map(() => '?').join(', ')})`,
+    [teamId, seat, ...answerIds],
+  );
+  return new Set(rows.map((r) => r.answer_id));
+}
+
 /** An answer not delivered by now is flagged on every card that shows it (ADR 773 §8). */
 export const ANSWER_UNDELIVERED_MS = 5 * 60_000;
 

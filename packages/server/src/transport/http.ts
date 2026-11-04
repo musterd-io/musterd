@@ -152,6 +152,7 @@ import {
   HarnessIdSchema,
   IdleWakeReportSchema,
   InterruptSeamSchema,
+  isQuestionAnswer,
   WIRE_ATTESTATION_SOURCES,
   SyncTracePushRequestSchema,
   SyncTracePushResponseSchema,
@@ -488,7 +489,7 @@ import {
 } from '../store/presence.js';
 import { afterPullClaim, offerPull } from '../store/pull.js';
 import { getQuestionNotify, setQuestionNotify } from '../store/questionNotify.js';
-import { answerLineFor, markAnswerDelivered } from '../store/questions.js';
+import { answerLineFor, deliveredAnswerIds, markAnswerDelivered } from '../store/questions.js';
 import {
   lastActionBySubject,
   quietestBusyMs,
@@ -10741,11 +10742,21 @@ export async function handleHttp(
         const messages = await rowsToEnvelopes(ctx.db, team.slug, rows);
         // obligations: true — this is the live rail (ADR 225). A routed acceptance belongs on it and
         // costs nothing here; the wake rail keeps its ADR 191 policy gate by NOT passing this.
-        const pending = pendingInterrupts(messages, member.name, {
+        const raisable = pendingInterrupts(messages, member.name, {
           obligations: true,
           huddles: true,
           directed: idle,
         });
+        // ADR 773 §8: an answer already delivered to this seat is not offered again. Without this
+        // only the read cursor discharged it, and a seat with a deep backlog heard the same answer at
+        // every idle check (lane 01M6HCD4YF).
+        const delivered = await deliveredAnswerIds(
+          ctx.db,
+          team.id,
+          member.name,
+          raisable.filter(isQuestionAnswer).map((m) => m.id),
+        );
+        const pending = raisable.filter((m) => !delivered.has(m.id));
         recordInterruptCheck(pending.length > 0 ? 'raised' : 'silent');
         if (pending.length === 0)
           return sendJson(res, 200, idle ? { raised: false, seam } : { raised: false });
