@@ -10,6 +10,7 @@ import {
 } from './envelope.wire.js';
 import { AnchorRefSchema, HuddleMetaSchema } from './huddle.js';
 import { BlockedBySchema } from './incident.js';
+import { PollMetaSchema } from './poll.js';
 import { AnswerSchema, QuestionSchema } from './question.js';
 import { PrEventSchema, QuickActionSchema } from './quickAction.js';
 import { ReviewPromiseReferenceSchema } from './review-promise.js';
@@ -559,6 +560,28 @@ export function actMetaRules(
         path: ['thread'],
         message: 'act "resolve" requires thread (the id of the thread it closes)',
       });
+    }
+  }
+  // A poll's record (ADR 807 §9): `open` rides the daemon's message that opens it, `closed` the
+  // resolve that ends it. The daemon strips a client-sent copy; here it is shape and act only.
+  if (meta['poll'] !== undefined) {
+    const parsed = PollMetaSchema.safeParse(meta['poll']);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['meta', 'poll', ...(issue?.path ?? [])],
+        message: `meta.poll: ${issue?.message ?? 'invalid'}`,
+      });
+    } else {
+      const want = parsed.data.state === 'open' ? 'message' : 'resolve';
+      if (env.act !== want) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['meta', 'poll', 'state'],
+          message: `a ${parsed.data.state} poll rides act "${want}" (ADR 807)`,
+        });
+      }
     }
   }
   // A huddle is a thread (ADR 378): `meta.huddle` opens one and lives on the ROOT only — a turn

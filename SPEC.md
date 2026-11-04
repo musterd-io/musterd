@@ -1285,3 +1285,20 @@ answer's text.
   `musterd send | inbox | whoami | status | next | lane` with no env prefix, shell separator, redirect
   or substitution. When the server is
   unreachable, a client MUST deny a call a cached, unexpired withhold matches.
+
+## A.37 Twitch polls (unreleased — ADR 807)
+
+- A **poll** is a human admin's question with 2–4 options and a 1–15 minute limit (default 5),
+  asked of the stream's Twitch viewers. A team has at most one open poll, held by its hub.
+- Opening a poll is `credential_mint` (ADR 662). A server MUST refuse it without A2 proof, MUST refuse
+  the `bearer_unenrolled` assurance, and MUST refuse it while Twitch has not reported the channel live
+  within 90 s. A joiner relays it to the hub as authority-relay op `poll.open`.
+- Opening mints an `mspoll_` token. A server MUST return it on `GET /teams/:slug/polls/open` only to
+  the broadcast observer seat, and MUST accept it only on `POST /teams/:slug/polls/:id/counts` for that
+  poll while it is open.
+- A counts report is `{poll_id, counts[], voters, live, post_failed}` with integer counts. A server MUST
+  refuse any other field. No viewer text, name or id crosses from chat.
+- The daemon records a poll in two acts it composes itself: a `message` with
+  `meta.poll {state: 'open', …}`, and a `resolve` on that thread with
+  `meta.poll {state: 'closed', counts, voters, end, winners, closed_at}`, where `end` is
+  `deadline | ended | cancelled | interrupted`. A server MUST strip a client-sent `meta.poll`.

@@ -40,6 +40,8 @@ export * from './model.js';
 export * from './offline.wire.js';
 // ADR 773/774: a question's shape and the answer line, for /live and the injectors.
 export * from './question.wire.js';
+// ADR 807: Twitch polls' shapes, for /broadcast's tally and the stream machine.
+export * from './poll.wire.js';
 // ADR 779: the quick-action vocabulary, for /live's buttons.
 export * from './quickAction.wire.js';
 export * from './shift.wire.js';
