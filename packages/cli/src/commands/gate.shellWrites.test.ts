@@ -161,6 +161,18 @@ describe('the gate and shell writes (ADR 803)', () => {
     ]);
   });
 
+  it('more paths than one request carries are sent in more requests, none dropped', async () => {
+    http.gateCheck.mockResolvedValue({ decision: 'allow', outcome: 'allowed', reason: '' });
+    const files = Array.from({ length: 20 }, (_, i) => `packages/protocol/src/f${i}.ts`);
+    await pre(`touch ${files.join(' ')}`);
+    const sent = http.gateCheck.mock.calls.flatMap(([, req]) => [
+      req.target,
+      ...(req.also ?? []).map((a: { target: string }) => a.target),
+    ]);
+    expect(http.gateCheck).toHaveBeenCalledTimes(2);
+    expect(sent.sort()).toEqual([...files].sort());
+  });
+
   it('a read never reaches the daemon', async () => {
     await pre('grep -n "> x" packages/protocol/src/x.ts');
     expect(http.gateCheck).not.toHaveBeenCalled();

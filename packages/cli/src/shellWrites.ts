@@ -189,12 +189,12 @@ function popSnapshot(state: string, key: string): ShellSnapshot | null {
   }
 }
 
-/** The bound on paths one after-call check sends the daemon. */
+/** The bound on paths one after-call check sends the daemon; the hook names how many more it left. */
 export const WRITTEN_CHECK_MAX = 16;
 
 /**
  * After an opaque call: the paths it changed that fall in a `block` contended surface, each with its
- * match. A path is changed by the call when `git status` shows it now but did not before, or showed
+ * match (all of them; the caller bounds what it sends). A path is changed by the call when `git status` shows it now but did not before, or showed
  * it before and its mtime moved. Null when no snapshot was taken.
  */
 export function freshlyWritten(
@@ -207,5 +207,5 @@ export function freshlyWritten(
   const now = changedPaths(root);
   if (!now) return [];
   const fresh = now.filter((p) => !(p in snap.changed) || snap.changed[p] !== mtime(root, p));
-  return shellPathMatches({ classes: snap.classes }, fresh).slice(0, WRITTEN_CHECK_MAX);
+  return shellPathMatches({ classes: snap.classes }, fresh);
 }

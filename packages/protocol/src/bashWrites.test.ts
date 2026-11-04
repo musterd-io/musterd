@@ -32,6 +32,12 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     ['git restore -s HEAD~1 a.ts', ['a.ts']],
     ['git rm -q a.ts', ['a.ts']],
     ['git mv x.ts a.ts', ['x.ts', 'a.ts']],
+    ['echo x>a.ts', ['a.ts']],
+    ['echo "x">a.ts', ['a.ts']],
+    ['echo x>>a.ts', ['a.ts']],
+    ['echo x 2>err.txt>a.ts', ['err.txt', 'a.ts']],
+    ['cat <<<word > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
+    ['echo "<<EOF" > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
   ])('%s → %j', (command, paths) => {
     expect(t(command)).toEqual({ paths, opaque: false });
   });
@@ -94,6 +100,7 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     'rm packages/*.ts',
     'echo x > "$(pwd)/a.ts"',
     'cd $DIR && touch a.ts',
+    'cat <<EOF > a.ts\nnever closed',
   ])('opaque: %s', (command) => {
     expect(t(command).opaque).toBe(true);
   });

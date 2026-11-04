@@ -42,8 +42,35 @@ type Piece = { kind: 'word'; word: Word } | { kind: 'op'; op: string };
 
 const SEPARATORS = new Set([';', '|', '&', '\n', '(', ')']);
 
-/** Heredoc bodies are data, not commands: drop them (the line with the `<<` stays). */
-function stripHeredocs(command: string): string {
+/** The heredoc tags a line opens: an unquoted `<<` or `<<-` (not `<<<`, a here-string). */
+function heredocTags(line: string): { tag: string; dash: boolean }[] {
+  const tags: { tag: string; dash: boolean }[] = [];
+  let quote: string | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (quote) {
+      if (c === '\\' && quote === '"') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '\\') {
+      i++;
+    } else if (c === "'" || c === '"') {
+      quote = c;
+    } else if (c === '<' && line[i + 1] === '<' && line[i + 2] !== '<') {
+      const m = /^<<(-?)\s*(['"]?)([A-Za-z_][\w-]*)\2/.exec(line.slice(i));
+      if (m) tags.push({ tag: m[3]!, dash: m[1] === '-' });
+      i += m ? m[0].length - 1 : 1;
+    } else if (c === '<' && line[i + 1] === '<') {
+      i += 2; // `<<<`: a here-string, no body follows
+    }
+  }
+  return tags;
+}
+
+/** Heredoc bodies are data, not commands: drop them (the line with the `<<` stays). `open` when a
+ *  body never reaches its tag — then the rest of the command is unread, and the caller treats it so. */
+function stripHeredocs(command: string): { text: string; open: boolean } {
   const out: string[] = [];
   const pending: { tag: string; dash: boolean }[] = [];
   for (const line of command.split('\n')) {
@@ -53,14 +80,13 @@ function stripHeredocs(command: string): string {
       continue;
     }
     out.push(line);
-    for (const m of line.matchAll(/<<(-?)\s*(['"]?)([A-Za-z_][\w-]*)\2/g)) {
-      pending.push({ tag: m[3]!, dash: m[1] === '-' });
-    }
+    pending.push(...heredocTags(line));
   }
-  return out.join('\n');
+  return { text: out.join('\n'), open: pending.length > 0 };
 }
 
-const REDIRECT = /^(?:&>>?|\d*>>?\|?(?:&)?|\d*<<-?|\d*<&?)/;
+/** A redirect operator, read from its first `<`, `>` or `&>` (an fd's digits are the word before it). */
+const REDIRECT = /^(?:&>>?|>>?\|?&?|<<<|<<-?|<&?)/;
 
 /**
  * A small POSIX-ish tokenizer: words (quotes removed) and operators (separators and redirects).
@@ -133,11 +159,14 @@ function tokenize(command: string): Piece[] {
       text += command.slice(i, end < 0 ? n : end + 1);
       i = end < 0 ? n : end + 1;
     } else {
-      // A redirect starts a token, or follows a word made only of digits (`2>`, the fd).
-      const m = REDIRECT.exec(command.slice(i));
-      const fdOnly = inWord && !dynamic && /^\d+$/.test(text);
-      if (m && /[<>]/.test(m[0]) && (!inWord || (fdOnly && /^[<>&]/.test(c)))) {
-        if (fdOnly) {
+      // An unquoted `<` or `>` (or `&>`) is always an operator, even inside a word: `echo x>f`
+      // writes `f`. A word made only of digits right before it is the fd (`2>f`), not an argument.
+      const m =
+        c === '<' || c === '>' || (c === '&' && command[i + 1] === '>')
+          ? REDIRECT.exec(command.slice(i))
+          : null;
+      if (m) {
+        if (inWord && !dynamic && /^\d+$/.test(text)) {
           text = '';
           inWord = false;
         }
@@ -461,7 +490,9 @@ function readGit(reader: Reader, args: readonly Word[], dir: string | undefined)
 
 /** Read one command line: split it into simple commands, follow a literal `cd`, read each. */
 function readLine(reader: Reader, command: string, dir: string | undefined, depth: number): void {
-  const pieces = tokenize(stripHeredocs(command));
+  const stripped = stripHeredocs(command);
+  if (stripped.open) reader.opaque = true;
+  const pieces = tokenize(stripped.text);
   let cwd = dir;
   let words: Word[] = [];
   let redirects: Word[] = [];

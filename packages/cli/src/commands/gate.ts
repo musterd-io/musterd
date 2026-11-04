@@ -42,6 +42,7 @@ import {
   shellSnapshotKey,
   shellWritePaths,
   takeShellSnapshot,
+  WRITTEN_CHECK_MAX,
 } from '../shellWrites.js';
 import { inferPayloadHarness, tapHook } from '../trace/hook.js';
 import {
@@ -641,7 +642,8 @@ async function recordPushCommand(): Promise<number> {
       { claimSeatPerRequest: false, timeoutMs: HOOK_HTTP_TIMEOUT_MS },
     );
     if (!explicit || !identity) return 0;
-    for (const m of written ?? []) {
+    const unchecked = (written?.length ?? 0) - WRITTEN_CHECK_MAX;
+    for (const m of (written ?? []).slice(0, WRITTEN_CHECK_MAX)) {
       try {
         const verdict = await http.gateCheck(team, {
           kind: 'contended-surface',
@@ -656,6 +658,12 @@ async function recordPushCommand(): Promise<number> {
       } catch {
         // An unreachable daemon cannot say whose lane covers it; say nothing rather than guess.
       }
+    }
+    if (unchecked > 0) {
+      lines.push(
+        `musterd: that command also changed ${unchecked} more file(s) in a declared block surface that ` +
+          'were not checked against your lanes (ADR 803); run `git status` and revert any no lane of yours covers.',
+      );
     }
     if (report) {
       const outcome = await http.reportPush(team, report);
@@ -851,6 +859,13 @@ export function gitHere(cwd: string): { git_branch?: string; git_head?: string }
  * ADR 803 §3 — the advisory before an opaque shell write while `block` surfaces are declared. It never
  * denies on a guess; it says what the gate will check once the command has run.
  */
+/** Split a list into runs of at most `size`. */
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 export function opaqueWriteAdvisory(classes: readonly string[]): string {
   return (
     `heads-up: musterd cannot tell which files this command writes. If it changes a file in ` +
@@ -1084,29 +1099,27 @@ async function gateCheck(parsed: Parsed): Promise<number> {
             },
           ]
         : []),
-      ...(paths[0]
-        ? [
-            {
-              kind: 'contended-surface' as const,
-              class: paths[0].cls.class,
-              fingerprint: paths[0].fingerprint,
-              posture: paths[0].cls.posture,
-              tool: call.tool,
-              target: paths[0].target,
-              ...(paths.length > 1
-                ? {
-                    also: paths.slice(1, GATE_ALSO_MAX + 1).map((m) => ({
-                      class: m.cls.class,
-                      fingerprint: m.fingerprint,
-                      posture: m.cls.posture,
-                      target: m.target,
-                    })),
-                  }
-                : {}),
-              ...gitHere(process.cwd()),
-            },
-          ]
-        : []),
+      // Every matched path is weighed: GATE_ALSO_MAX + 1 per request, so a long command line is
+      // several requests rather than a truncated one (security review, 2026-11-04).
+      ...chunk(paths, GATE_ALSO_MAX + 1).map(([first, ...rest]) => ({
+        kind: 'contended-surface' as const,
+        class: first!.cls.class,
+        fingerprint: first!.fingerprint,
+        posture: first!.cls.posture,
+        tool: call.tool,
+        target: first!.target,
+        ...(rest.length > 0
+          ? {
+              also: rest.map((m) => ({
+                class: m.cls.class,
+                fingerprint: m.fingerprint,
+                posture: m.cls.posture,
+                target: m.target,
+              })),
+            }
+          : {}),
+        ...gitHere(process.cwd()),
+      })),
     ];
     for (const req of requests) {
       try {
