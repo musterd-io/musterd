@@ -39,6 +39,7 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     ['cat <<<word > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
     ['echo "<<EOF" > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
     ['echo x # <<EOF\necho y > b.ts', ['b.ts']],
+    ['echo "a\n<<EOF" > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
     ["echo $'it\\'s <<EOF' > a.ts\necho y > b.ts", ['a.ts', 'b.ts']],
     ["cat <<'EOF' > a.ts\nrm -rf x\nEOF\necho y > b.ts", ['a.ts', 'b.ts']],
     ['cat <<-EOF > a.ts\n\tbody\n\tEOF\ntouch b.ts', ['a.ts', 'b.ts']],
@@ -110,6 +111,8 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     'cat <<$X > a.ts\nbody',
     "echo 'unclosed > a.ts",
     'echo $(touch a.ts > b.ts',
+    'x=$((1 << 2)) && touch a.ts',
+    '(( n << y )) && touch a.ts\ny',
   ])('opaque: %s', (command) => {
     expect(t(command).opaque).toBe(true);
   });

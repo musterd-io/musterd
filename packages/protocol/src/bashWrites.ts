@@ -52,10 +52,16 @@ const METACHAR = /[\s;&|()<>]/;
  * all (`<<E"OF"`, `<<'EOF'x`, `<<$X`): then where the body ends is a guess, and the caller treats
  * the command as unread (security review, 2026-11-04).
  */
-function heredocTags(line: string): { tags: { tag: string; dash: boolean }[]; ambiguous: boolean } {
+function heredocTags(
+  line: string,
+  quoteIn: string | null,
+): { tags: { tag: string; dash: boolean }[]; ambiguous: boolean; quote: string | null } {
   const tags: { tag: string; dash: boolean }[] = [];
-  let ambiguous = false;
-  let quote: string | null = null;
+  // A `<<` inside `((…))`, `$((…))` or `[[…]]` is a shift or a comparison, not a heredoc; telling
+  // which needs a real parser, so such a line is not read (security review, 2026-11-04).
+  let ambiguous = /\(\(|\[\[/.test(line) && line.includes('<<');
+  // The quote state carries over from the line before: a quoted string can span lines.
+  let quote: string | null = quoteIn;
   for (let i = 0; i < line.length; i++) {
     const c = line[i]!;
     if (quote) {
@@ -108,7 +114,7 @@ function heredocTags(line: string): { tags: { tag: string; dash: boolean }[]; am
       i = j - 1;
     }
   }
-  return { tags, ambiguous };
+  return { tags, ambiguous, quote };
 }
 
 /** Heredoc bodies are data, not commands: drop them (the line with the `<<` stays). `open` when a
@@ -118,6 +124,7 @@ function stripHeredocs(command: string): { text: string; open: boolean } {
   const out: string[] = [];
   const pending: { tag: string; dash: boolean }[] = [];
   let ambiguous = false;
+  let quote: string | null = null;
   for (const line of command.split('\n')) {
     const head = pending[0];
     if (head) {
@@ -125,7 +132,8 @@ function stripHeredocs(command: string): { text: string; open: boolean } {
       continue;
     }
     out.push(line);
-    const opened = heredocTags(line);
+    const opened = heredocTags(line, quote);
+    quote = opened.quote;
     if (opened.ambiguous) ambiguous = true;
     pending.push(...opened.tags);
   }
