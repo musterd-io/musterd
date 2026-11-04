@@ -326,7 +326,11 @@ export default function AsksScreen() {
     </View>
   );
 
-  const empty = paired ? (
+  // "All clear" only when nothing is waiting anywhere: an ask that couldn't load, or asks held for
+  // quiet hours, still need you, and their notice above already says so (big-body's review of lane
+  // 01M6HQ4DT4: both cards showed at once).
+  const waitingElsewhere = !!view && (view.unreachable > 0 || !!view.held);
+  const empty = waitingElsewhere ? undefined : paired ? (
     <Rise index={1}>
       <Glass style={styles.calm}>
         <View style={[styles.calmTile, { backgroundColor: p.tint }]}>
