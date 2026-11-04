@@ -1,7 +1,8 @@
 # CooperBench rider 7 run: pre-registration
 
 **Lane:** `01M6M3YG37` (this page, the arm change and the run), goal `coordination-cost`, asked by nick.
-**Status:** pre-registered 2026-11-04, before the arm change has landed and before any pair ran. Nothing
+**Status:** pre-registered 2026-11-04, before the arm change has landed and before any pair ran. Run 2026-11-04 21:04–21:39Z: pre-flight PASS, the smoke pair (step 4) stopped by the author at $17.80 of
+the $25 stop → [finding 031](../031-cooperbench-rider7-smoke.md); no measured pair ran, no rule read. Nothing
 below changes once a measured pair has run; what the run teaches goes in the finding, not here.
 **CooperBench:** `63b9d44`. **Before this:** [rider 6 run](./rider6-manifest.md) → [finding
 028](../028-cooperbench-rider6-run.md), whose R6b this run answers; the [design

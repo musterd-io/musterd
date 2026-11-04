@@ -1,0 +1,45 @@
+# CooperBench rider 7 run — run log (lane 01M6M3YG37, rider7-manifest.md)
+
+## Pre-flight, 2026-11-04 21:04–21:12Z (machine musterd-cooperbench, performance-8x)
+
+- **Spend:** nick approved the run in session (2026-11-04, "go with the third, amend the gate and run it");
+  the manifest carries about $20, hard stop $25. The pre-registration landed on main before the arm
+  change (#3831, both in the same PR, pushed as a draft first per ADR 223).
+- **Deploy** from main `7c024748` (#3832 was the head; #3831 the arm): `MUSTERD_REF=7c024748…`, musterd
+  0.7.0 on the host, Claude Code 2.1.307 on the host and in every agent container. Deployed from the
+  Hetzner joiner with a 48 h deploy token nick minted (fifty's runbook carries it for revocation).
+  After the deploy: `useradd smoke`, the swe_agent `trajectories` directory did not exist on the
+  fresh image, so `mkdir -p` then `chmod 1777` (the first smoke attempt hit `Permission denied` on
+  it, `preflight.log`), the `dataset` symlink.
+- **API check:** one `claude -p` (haiku) → `ok`.
+- **`gate_smoke.py`** as the `smoke` user: **PASS**. **`hold_smoke_697.py`**: **PASS**. Both under $0.02.
+
+## Smoke pair, 21:12:39Z → stopped 21:34:27Z (`smokepair.sh`, `MUSTERD_ARM_LANE=act`)
+
+`pallets_click` 2068, features 1 and 2, `claude-sonnet-4-5`, `--git`. Not scored, not read.
+
+- **The wiring worked.** Both seats enrolled from inside their containers (`*_musterd-enroll.log`:
+  enrollment row, standing grant, host key, host-registry entry). `musterd host` ran in each container
+  under its own label. The daemon's report (`smoke-evidence/musterd-residency.json`): **15 wakes, 13
+  resumed, 1 fresh first wake, 1 fresh for a `handoff` (portable delivery), 0 failed, 0 deferred, 15
+  answered**. Every wake occupied the roster in 9 s (resumed) or 17 s (fresh).
+- **Stopped by lazara at 21:34Z**, 22 minutes in, before any measured pair: the pair had spent about
+  $17.80 of the $25 hard stop — **14 priced wakes on agent1, $14.34**, one on agent2, $0.31, first calls
+  $0.30 (agent1) and $2.84 (agent2). `spend_guard.py` reads `result.json`, which a pair writes only
+  when it ends, so it could not see the wakes. Evidence copied out of the containers first
+  (`smoke-evidence/`), then the run process and both containers were killed; the machine was stopped
+  at 21:39Z. agent2 had written `patch.txt` (21:30Z); agent1 had not.
+- **Why it cost that:** each resumed wake re-ingests the seat's whole transcript, and the act lane
+  resumed agent1 fourteen times in 20 minutes. Per-wake cost: $0.17, 0.26, 0.42, 0.53, 0.89, 1.01,
+  1.07, 1.19, 1.30, 1.37, 1.43, 1.50, 1.57, 1.64 — rising with the transcript, most wakes under 30 s
+  of wall. The team policy's `transcript_max 256 MiB` (the design note's choice, so a resume is never
+  refused for size) removed the only bound.
+- **Why the waits grew:** act→wake 24 s, 37, 46, 56, 128, 129, 144, 187, 201, 268, 278, 317, 335, 342 s
+  (agent1), 197 s (agent2). ADR 753 holds: `reclaimable` dominates every one — the previous wake's
+  session stays reclaimable after its process has exited, and the next act waits for that window —
+  with `present` (the previous wake still on the roster) and `passed` (host poll) beside it. No
+  `hourly_cap`, no `snoozed`.
+
+Finding: [031](../../../031-cooperbench-rider7-smoke.md). Files: `preflight.log`, `smokepair.log`,
+`r7-smoke.run.log`, the three scripts, and `smoke-evidence/` (both host logs, enrollment logs, streams,
+agent2's patch, the pair daemon's log and residency report).
