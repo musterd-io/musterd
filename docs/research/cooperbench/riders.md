@@ -254,8 +254,8 @@ container. The agents' instructions lose one sentence the arm added — "wait in
 — and keep the product's own guidance, which says to end the turn. The container's settings carry the
 ADR 261 permission floor (Edit, Write, Bash) so a wake under `seat-policy` can edit and run git, and the
 project-local session-capture hook so a wake resumes the agent's own transcript. The first `claude`
-call ends at the agent's first idle turn; the adapter then waits until both seats' lanes are done and
-no directed act is unread, or 7,200 s, as today. That is the treatment, and it is a change between
+call ends at the agent's first idle turn; the adapter then waits until the seat has written its patch
+and has had nothing unread for five minutes, or 7,200 s, as today. That is the treatment, and it is a change between
 arms; the manifest names every piece.
 
 **Why these rules.** Finding 028 R6b: 90 wait-mode `team_inbox_check` calls, 94 of 98 returning an act.

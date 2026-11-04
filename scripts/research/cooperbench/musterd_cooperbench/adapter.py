@@ -39,7 +39,7 @@ from cooperbench.agents.registry import register
 
 from . import config as cfg
 from .prompt import build_instruction
-from .team import CONTAINER_NETWORK_ARGS, REGISTRY, host_reachable_git_url
+from .team import CONTAINER_NETWORK_ARGS, REGISTRY, act_lane, host_reachable_git_url
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,41 @@ CONTAINER_SETTINGS = f"{cc.CONTAINER_CLAUDE_CONFIG_DIR}/settings.json"
 # image installed Node (nodesource on Debian: /usr/lib/node_modules), so it is resolved in the
 # container. The first e2e run hard-coded /usr/local/... and the MCP server failed to start.
 MCP_ENTRY_RELATIVE = "@musterd/mcp/dist/index.js"
+
+# Rider 7 (the act lane, docs/research/cooperbench/rider7-manifest.md). The pair's admin binding is
+# copied into the container so `musterd residency on` can be authorized there (ADR 442: who
+# authorizes is the folder you run from); the seat's own binding in the repo receives the grant and
+# the host-registry entry, as on any machine. `musterd host` then runs in the container, where the
+# harness and the repo are, under its own host label so its leases are its own.
+CONTAINER_ADMIN_HOME = "/tmp/musterd-admin"
+CONTAINER_HOST_REGISTRY = f"{CONTAINER_SEAT_HOME}/host-registry.json"
+CONTAINER_HOST_LOG = "/tmp/musterd-host.log"
+CONTAINER_LOCAL_SETTINGS = f"{CONTAINER_REPO_PATH}/.claude/settings.local.json"
+# The run's wall clock (the same 7,200 s the first call has today), the poll, and how long the seat
+# must be quiet — patch written, nothing unread — before the adapter stops waiting for wakes.
+ACT_RUN_SECONDS = 7200
+ACT_POLL_SECONDS = 30
+ACT_QUIET_SECONDS = 300
+
+
+def host_label(pair: Any, agent_id: str) -> str:
+    return f"cb-{pair.run_id}-{agent_id}"
+
+
+def unread_directed(delivery_json: str, agent_id: str) -> int:
+    """Directed acts to this seat that no session has seen, from `musterd report delivery --json`."""
+    try:
+        acts = json.loads(delivery_json or "[]")
+    except json.JSONDecodeError:
+        return 0
+    if isinstance(acts, dict):
+        acts = acts.get("delivery") or acts.get("acts") or []
+    n = 0
+    for act in acts:
+        for r in act.get("recipients") or []:
+            if r.get("seat") == agent_id and r.get("state") == "logged":
+                n += 1
+    return n
 
 # musterd's CLI refuses Node under 22. CooperBench's setup.sh installs Node from apk on an Alpine
 # image, and Alpine 3.20's newest package is Node 21 (`go_chi` task 27: v20.15.1, pilot 2026-10-21,
@@ -129,6 +164,106 @@ def musterd_mcp_status(stream_text: str) -> str:
 class ClaudeCodeMusterdRunner:
     """CooperBench's coop setting on Claude Code, coordinating through musterd."""
 
+    def _wire_act_lane(
+        self,
+        env: Any,
+        pair: Any,
+        agent_id: str,
+        seat_env: dict[str, str],
+        seat_exports: str,
+        settings: dict[str, Any],
+        mcp_entry: str,
+    ) -> None:
+        """Rider 7: enroll the seat on the act lane from inside its container.
+
+        1. The settings a wake reads: `.claude/settings.local.json` in the repo (hooks, the capture
+           hooks, the permission floor), identical to the `--settings` file the first call gets.
+        2. The MCP server a wake loads: `claude mcp add -s local`, keyed by the repo root (ADR 165),
+           the same command, entry and seat env as `--mcp-config`.
+        3. The admin binding, copied from the pair's host workdir, so `residency on` is authorized.
+        4. `residency on --seat <agent> --workspace /workspace/repo --host <label>`: the enrollment
+           row on the daemon, the standing grant and host key in the seat's binding, and the
+           host-registry entry (seat → workspace) the host actuates from.
+        """
+        env.execute({"command": f"mkdir -p {CONTAINER_REPO_PATH}/.claude {CONTAINER_ADMIN_HOME}/.musterd"}, timeout=30)
+        write_file_in_container(env, CONTAINER_LOCAL_SETTINGS, json.dumps(settings))
+        mcp_env = {k: v for k, v in seat_env.items() if k != "PATH"}
+        env_args = " ".join(f"-e {shlex.quote(f'{k}={v}')}" for k, v in mcp_env.items())
+        added = env.execute(
+            {
+                "command": f'export PATH="/usr/local/bin:$PATH"; cd {CONTAINER_REPO_PATH} && '
+                f"claude mcp remove musterd -s local >/dev/null 2>&1; "
+                f"claude mcp add musterd -s local {env_args} -- node {shlex.quote(mcp_entry)}"
+            },
+            timeout=60,
+        )
+        if added.get("returncode") not in (0, None):
+            raise RuntimeError("claude mcp add failed in the container: " + (added.get("output") or "")[-500:])
+        admin_binding = (pair.workdir / ".musterd" / "binding.json").read_text()
+        admin_config = (pair.workdir / "config.json").read_text() if (pair.workdir / "config.json").exists() else "{}"
+        write_file_in_container(env, f"{CONTAINER_ADMIN_HOME}/.musterd/binding.json", admin_binding)
+        write_file_in_container(env, f"{CONTAINER_ADMIN_HOME}/config.json", admin_config)
+        admin_exports = (
+            f"export MUSTERD_CONFIG={CONTAINER_ADMIN_HOME}/config.json; "
+            f"export MUSTERD_SERVER={shlex.quote(pair.container_url)}; "
+            f"export MUSTERD_HOST_REGISTRY={CONTAINER_HOST_REGISTRY}; "
+        )
+        enrolled = env.execute(
+            {
+                "command": 'export PATH="/usr/local/bin:$PATH"; ' + admin_exports + f"cd {CONTAINER_ADMIN_HOME} && "
+                f"musterd residency on --seat {shlex.quote(agent_id)} --workspace {CONTAINER_REPO_PATH} "
+                f"--harness claude-code --host {shlex.quote(host_label(pair, agent_id))} > /tmp/musterd-enroll.log 2>&1"
+            },
+            timeout=120,
+        )
+        if enrolled.get("returncode") not in (0, None):
+            log = read_file_from_container(env, "/tmp/musterd-enroll.log")
+            raise RuntimeError(f"{agent_id}: residency on failed: {log[-800:]}")
+        probe = env.execute({"command": f"test -s {CONTAINER_HOST_REGISTRY}"}, timeout=30)
+        if probe.get("returncode") not in (0, None):
+            log = read_file_from_container(env, "/tmp/musterd-enroll.log")
+            raise RuntimeError(f"{agent_id}: residency on wrote no host-registry entry: {log[-800:]}")
+
+    def _start_host(
+        self, env: Any, pair: Any, agent_id: str, seat_exports: str, cred_exports: str, model_name: str
+    ) -> None:
+        """Rider 7: the wake actuator, in the container, under this seat's own host label.
+
+        `--no-provision` (no sponsor here), `--no-gateway` (the wake's own `total_cost_usd` is the
+        price, as the first call's is), `--interval 10` (the design note's poll), `--timeout 3600`
+        (the team policy's bound). Never a skip-permissions flag: that is the host's invariant.
+        """
+        env.execute(
+            {
+                "command": 'export PATH="/usr/local/bin:$PATH"; ' + seat_exports + cred_exports
+                + f"export MUSTERD_HOST_REGISTRY={CONTAINER_HOST_REGISTRY}; "
+                + f"export ANTHROPIC_MODEL={shlex.quote(model_name)}; "
+                + f"cd {CONTAINER_REPO_PATH} && nohup musterd host --host {shlex.quote(host_label(pair, agent_id))} "
+                f"--interval 10 --timeout 3600 --no-provision --no-gateway > {CONTAINER_HOST_LOG} 2>&1 &"
+            },
+            timeout=30,
+        )
+
+    def _wait_for_act_lane(self, env: Any, pair: Any, agent_id: str, *, deadline: float) -> None:
+        host = cfg.Cli(pair.workdir, pair.port)
+        quiet_since: float | None = None
+        while time.monotonic() < deadline:
+            patch = env.execute({"command": f"test -s {CONTAINER_REPO_PATH}/patch.txt"}, timeout=30)
+            unread = 0
+            try:
+                unread = unread_directed(host.run("report", "delivery", "--json"), agent_id)
+            except Exception:  # noqa: BLE001 — a failed read is "not quiet", never an exit
+                unread = 1
+            quiet = patch.get("returncode") in (0, None) and unread == 0
+            now = time.monotonic()
+            if quiet:
+                quiet_since = quiet_since if quiet_since is not None else now
+                if now - quiet_since >= ACT_QUIET_SECONDS:
+                    return
+            else:
+                quiet_since = None
+            time.sleep(min(ACT_POLL_SECONDS, max(0.0, deadline - now)))
+
     def run(
         self,
         task: str,
@@ -179,7 +314,7 @@ class ClaudeCodeMusterdRunner:
         )
 
         status, error_msg = "Error", None
-        stream_text = session_text = patch_text = ""
+        stream_text = session_text = patch_text = host_text = ""
         try:
             # 1. Claude Code, exactly as CooperBench installs it; then the packed musterd.
             write_file_in_container(env, CONTAINER_SETUP_PATH, cc.SETUP_SCRIPT_PATH.read_text())
@@ -199,7 +334,10 @@ class ClaudeCodeMusterdRunner:
             env.execute({"command": f"mkdir -p {CONTAINER_SEAT_HOME} {cc.CONTAINER_CLAUDE_CONFIG_DIR}"}, timeout=30)
             _admit_in_container(env, pair, agent_id, seat_exports)
             env.execute(
-                {"command": f"printf %s {shlex.quote(cfg.GIT_EXCLUDE)} >> {CONTAINER_REPO_PATH}/.git/info/exclude"},
+                {
+                    "command": f"printf %s {shlex.quote(cfg.GIT_EXCLUDE_ACT if act_lane() else cfg.GIT_EXCLUDE)} "
+                    f">> {CONTAINER_REPO_PATH}/.git/info/exclude"
+                },
                 timeout=30,
             )
             npm_root = (env.execute({"command": "npm root -g"}, timeout=60).get("output") or "").strip()
@@ -214,7 +352,11 @@ class ClaudeCodeMusterdRunner:
                 CONTAINER_MCP_CONFIG,
                 json.dumps(cfg.mcp_config(seat_env, command="node", args=[mcp_entry])),
             )
-            write_file_in_container(env, CONTAINER_SETTINGS, json.dumps(cfg.claude_settings(settings_env or None)))
+            lane = "act" if act_lane() else "launch"
+            settings = cfg.claude_settings(settings_env or None, lane=lane)
+            write_file_in_container(env, CONTAINER_SETTINGS, json.dumps(settings))
+            if lane == "act":
+                self._wire_act_lane(env, pair, agent_id, seat_env, seat_exports, settings, mcp_entry)
 
             # 3. The shared git remote, when the run uses one (CooperBench's own setup). This
             # container is on the host's network, where the git server's container name does not
@@ -239,7 +381,9 @@ class ClaudeCodeMusterdRunner:
                     )
 
             # 4. The instruction and the run.
-            instruction = build_instruction(task, agents=agents, agent_id=agent_id, git_enabled=use_git)
+            instruction = build_instruction(
+                task, agents=agents, agent_id=agent_id, git_enabled=use_git, lane="act" if act_lane() else "launch"
+            )
             write_file_in_container(env, CONTAINER_INSTRUCTION_PATH, instruction)
             cred_env = {**credentials, **endpoint_overrides}
             cred_exports = "".join(f"export {k}={shlex.quote(v)}; " for k, v in cred_env.items())
@@ -252,10 +396,21 @@ class ClaudeCodeMusterdRunner:
                 preserve_model_name=bool(endpoint_overrides),
                 settings_path=CONTAINER_SETTINGS,
             )
-            env.execute({"command": 'export PATH="/usr/local/bin:$PATH"; ' + invoke}, timeout=7200)
+            started = time.monotonic()
+            if act_lane():
+                # The host must see the model credential and the same model as the first call: a wake
+                # is its own `claude` process, spawned by the host from the host's environment.
+                self._start_host(env, pair, agent_id, seat_exports, cred_exports, model_name)
+            env.execute({"command": 'export PATH="/usr/local/bin:$PATH"; ' + invoke}, timeout=ACT_RUN_SECONDS)
+            if act_lane():
+                # The first call ended at the agent's first idle turn; the act lane carries on from
+                # here. Wait until the seat is done — patch written, nothing unread, quiet for a
+                # while — or the run's wall clock, as the first call alone had today.
+                self._wait_for_act_lane(env, pair, agent_id, deadline=started + ACT_RUN_SECONDS)
 
             # 5. CooperBench's outputs.
             stream_text = read_file_from_container(env, cc.CONTAINER_STREAM_LOG)
+            host_text = read_file_from_container(env, CONTAINER_HOST_LOG) if act_lane() else ""
             # A run whose musterd MCP server never connected is not a musterd arm: the agent had no
             # musterd tools, and the gate failed open. Fail it loudly instead of letting it score
             # (the first e2e run, 2026-10-20, scored that way).
@@ -280,6 +435,8 @@ class ClaudeCodeMusterdRunner:
             root.mkdir(parents=True, exist_ok=True)
             (root / f"{agent_id}_stream.jsonl").write_text(stream_text)
             (root / f"{agent_id}_session.jsonl").write_text(session_text)
+            if act_lane():
+                (root / f"{agent_id}_host.log").write_text(host_text)
         return AgentResult(
             status="Error" if error_msg is not None else summary.status,
             patch=patch_text,

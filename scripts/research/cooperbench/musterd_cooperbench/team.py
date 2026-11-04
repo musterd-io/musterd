@@ -35,6 +35,22 @@ ENFORCE_SURFACE_GLOB = "**"
 # agent can do in the repo, and the plain coop arm's containers are left as CooperBench builds them.
 CONTAINER_NETWORK_ARGS = ["--network=host"]
 
+# Rider 7 (docs/research/cooperbench/rider7-manifest.md): the one switch the arm reads. With
+# `MUSTERD_ARM_LANE=act` the pair's team runs ADR 735's act lane — every knob below is a team
+# residency setting any team has (`musterd residency policy`); nothing is added to the product.
+ACT_LANE_ENV = "MUSTERD_ARM_LANE"
+ACT_LANE_POLICY = [
+    "--lane", "act",
+    "--hourly-cap", "60",
+    "--timeout", "60m",
+    "--transcript-max", "256",
+    "--tool-policy", "seat-policy",
+]
+
+
+def act_lane() -> bool:
+    return os.environ.get(ACT_LANE_ENV, "") == "act"
+
 
 
 def container_ip(name: str) -> str | None:
@@ -177,6 +193,8 @@ def stand_up(run_id: str, agents: list[str]) -> PairTeam:
         wait_healthy(pair.host_url)
         cli.run("team", "create", pair.team)
         cli.run("team", "policy", "--enforce-surface", ENFORCE_SURFACE_GLOB, "--enforce-posture", "block")
+        if act_lane():
+            cli.run("residency", "policy", *ACT_LANE_POLICY)
         for agent_id in agents:
             cli.run("team", "add", agent_id, "--kind", "agent")
             minted = json.loads(cli.run("team", "bootstrap", "mint", "--seat", agent_id, "--json"))
@@ -191,6 +209,15 @@ def stand_up(run_id: str, agents: list[str]) -> PairTeam:
 
 
 def tear_down(pair: PairTeam, keep_logs_in: Path | None = None) -> None:
+    # Rider 7: the daemon's own wake report (ADR 749 `waited_ms`, ADR 753 `holds`, ADR 252 cost) is a
+    # projection the copied database does not carry; take it while the daemon is still up.
+    if keep_logs_in is not None and act_lane() and pair.process is not None and pair.process.poll() is None:
+        keep_logs_in.mkdir(parents=True, exist_ok=True)
+        try:
+            report = Cli(pair.workdir, pair.port).run("report", "residency", "--json")
+            (keep_logs_in / "musterd-residency.json").write_text(report)
+        except Exception as e:  # noqa: BLE001 — the report is research data, never a run failure
+            (keep_logs_in / "musterd-residency.json").write_text(json.dumps({"error": str(e)}))
     if pair.process is not None and pair.process.poll() is None:
         pair.process.terminate()
         try:
