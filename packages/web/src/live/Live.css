@@ -4334,10 +4334,15 @@ button.lc-team__offline:focus-visible {
 }
 .lc-team__out-chev {
   margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border: solid currentColor;
+  border-width: 1.5px 1.5px 0 0;
+  transform: rotate(45deg);
   transition: transform var(--lc-dur-2) var(--lc-ease-out);
 }
 .lc-team__out[data-open] .lc-team__out-chev {
-  transform: rotate(90deg);
+  transform: rotate(135deg);
 }
 @media (prefers-reduced-motion: reduce) {
   .lc-team__out-chev {

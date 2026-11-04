@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { LiveConfig } from './client';
-import { OfflineSeats, canWake, outWord } from './OfflineSeats';
+import { OfflineFold, OfflineSeats, canWake, outWord } from './OfflineSeats';
 
 const m = (name: string, over: Partial<MemberSummary> = {}) =>
   ({ name, kind: 'agent', presence: 'offline', ...over }) as MemberSummary;
@@ -40,5 +40,22 @@ describe('OfflineSeats (lane 01M6KZZ5WH)', () => {
     const html = render(true);
     expect(html.match(/qa__btn--start/g)?.length).toBe(1);
     expect(render(false)).not.toContain('qa__btn--start');
+  });
+});
+
+describe('OfflineFold', () => {
+  const fold = (canAct: boolean) =>
+    renderToStaticMarkup(
+      createElement(OfflineFold, { roster: [m('fifty', { presence: 'online' }), ...members], cfg: {} as LiveConfig, canAct }),
+    );
+  it('is one closed control: faces, the count, and how many can start', () => {
+    const html = fold(true);
+    expect(html).toMatch(/<button type="button" class="lc-team__offline" aria-expanded="false"/);
+    expect(html).toContain('4 offline');
+    expect(html).toContain('1 can start');
+    expect(html).not.toContain('class="ofs"');
+  });
+  it('never says "can start" to someone who may not act', () => {
+    expect(fold(false)).not.toContain('can start');
   });
 });
