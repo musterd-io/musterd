@@ -701,9 +701,6 @@ export async function countLivePresences(db: Driver, timeoutMs: number): Promise
  * ADR 722 — local node, read only when the table exists). Most recent activity wins per node.
  * Keyed by node id, with `''` for this daemon (presence.node IS NULL).
  */
-/** A node "had a human" if a connected human presence was seen there within this window (ADR 799 §3). */
-export const HAD_HUMAN_WINDOW_MS = 24 * 60 * 60 * 1000;
-
 export async function liveNodeDrivers(
   db: Driver,
   teamId: string,
@@ -731,9 +728,11 @@ export async function liveNodeDrivers(
     // No browser_sessions table yet (pre-ADR-722 daemon): CLI leases alone decide.
   }
   const leases = new Map([...best].map(([k, v]) => [k, v.name]));
+  // A node "had a human" if a non-observer human presence was ever recorded on it (ADR 799 §3,
+  // review fix 2026-11-05): no window — a stale name must not revive after any lapse.
   const had = await db.all<{ node: string | null }>(
-    "SELECT DISTINCT p.node AS node FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = 'human' AND m.observer = 0 AND p.last_seen_at > ?",
-    [teamId, Date.now() - HAD_HUMAN_WINDOW_MS],
+    "SELECT DISTINCT p.node AS node FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = 'human' AND m.observer = 0",
+    [teamId],
   );
   const hadHuman = new Set(had.map((h) => h.node ?? ''));
   for (const key of leases.keys()) hadHuman.add(key);
@@ -741,9 +740,9 @@ export async function liveNodeDrivers(
 }
 
 /**
- * ADR 799: a live lease wins; a node that had a human within the window and has none live now
- * clears to null (§3 — the stale name is the bug); only a node with no human in the window
- * keeps the static hello label (§4, headless/hosted).
+ * ADR 799: a live lease wins; a node that ever had a human and has none live now clears to
+ * null (§3 — the stale name is the bug, and it must not revive after any lapse); only a node
+ * that never had a human keeps the static hello label (§4, headless/hosted).
  */
 export function effectiveDriver(
   stored: string | null,
