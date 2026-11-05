@@ -78,7 +78,9 @@ ACT_QUIET_SECONDS = 300
 # no wake was due — and would have run to the 7,200 s cap. What is read then is whatever is there.
 ACT_IDLE_SECONDS = 600
 # A harness process is live in the container (no `ps` in the task images; /proc is read directly).
-HARNESS_LIVE_PROBE = "grep -lq claude /proc/[0-9]*/cmdline 2>/dev/null"
+# The bracketed class keeps the probe from matching its own command line, which carries the pattern —
+# without it the probe read "live" forever and the idle end never fired (smoke pair 4, 2026-11-05).
+HARNESS_LIVE_PROBE = "grep -lq '[c]laude' /proc/[0-9]*/cmdline 2>/dev/null"
 # musterd's self-heal (the interrupt hook, and the host before a wake) refreshes a workspace's hooks
 # to musterd's own set, whose gate matcher includes Bash. The arm gates the file tools only (README:
 # with `**` the gate matched every shell command), so the tombstone that turns self-heal off for one
