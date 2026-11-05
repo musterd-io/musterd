@@ -30,6 +30,7 @@ Viewers can ask from chat, and the stream cannot hear them. Hearing them adds an
 - Revoking access is deleting the bot account or the app's authorization; the stream keeps running without the reader.
 - _(2026-10-26, izzo's acceptance decline)_ Twitch may return a new refresh token on any refresh, and the old one can stop working. The reader now uses the newest token for the rest of its run and logs once that the stored secret may be behind. It cannot write the secret back: the machine is `--rm` and the token is never logged. So after a rotation, the operator re-authorizes the bot and sets `MUSTERD_TWITCH_CHAT_REFRESH_TOKEN` again before the next start; a start on a dead token logs `chat: off` and the stream runs without the reader.
 - Going live needs a human: the app registration, the bot account and its authorization are nick's to do. Until then the reader logs once that it is off.
+- _(2026-11-05, lane 01M6ME5QRW)_ The authorization step has a helper: `scripts/broadcast/twitch-bot-auth.mjs` runs the grant in the operator's browser as the bot and stages all four `MUSTERD_TWITCH_CHAT_*` secrets on the stream app without printing one ([how](../wiki/broadcast-stream.md)).
 - _(2026-11-04, [ADR 807](807-twitch-polls.md))_ A second command crosses this ADR's line, under its own
   ADR as the first bullet above requires. **Twitch polls**: a human admin's poll is posted by the same bot
   (which gains `user:write:chat` and `user:bot`), viewers vote with `!vote N`, and only integer counts reach
