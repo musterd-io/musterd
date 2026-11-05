@@ -1095,7 +1095,7 @@ advisory for every listed act.
   /teams/:slug/authority/keys/:id/revoke` retires one by a standing key's signature — a
   key never revokes itself while another stands; the sole standing key may retire
   itself (recovery is a fresh ceremony). Lifecycle writes audit
-  `device_key.enrolled|revoked|enrollment_challenge`, never a challenge or key. Kind `phone` is refused here: a phone key enrolls only by pairing the musterd app (ADR 676 §5), under the same standing-key approval.
+  `device_key.enrolled|revoked|enrollment_challenge`, never a challenge or key. Kind `phone` is refused here: a phone key enrolls only by pairing the musterd app (ADR 676 §5), under the same standing-key approval. A key records the origin and relying-party id it was made on (`GET …/authority/keys` carries `origin`, `rp_id`; null on keys from before, ADR 808). When none of a human's passkeys sign on the page they are on but a phone key stands, `POST /teams/:slug/authority/descriptors/:nonce/ask-phone` `{origin?}` (the human, for their own live `device_key_admin` enrollment descriptor) raises one privileged ask to their phone carrying that descriptor as the approve offer; the phone's signed approve is verified and parked on the nonce for `GET …/authority/approvals/:nonce` to collect, and the registration presents it as `approval` (ADR 808 inc C).
 - Authenticators (decision 5): `GET /authority/passkey` and `GET /authority/approve` are
   small pages the daemon serves from its own origin — never the relay. Passkey enrollment
   is `POST /teams/:slug/authority/passkeys` `{actor, challenge, approval?, countersign?, registration}`: a

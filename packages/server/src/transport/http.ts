@@ -284,6 +284,7 @@ import {
   standingAcceptance,
 } from '../store/audit.js';
 import {
+  activeDeviceKeys,
   buildDescriptor,
   enrollKeyGuarded,
   enrollPasskeyGuarded,
@@ -1420,6 +1421,11 @@ const ChannelSettingsChannel = z.enum(['slack', APP_CHANNEL]);
 // Human authority (ADR 662): ask the server to build an approval descriptor. The caller
 // names the act, target and payload; the server fills actor, digest, expiry and nonce, so
 // the prompt a human later approves is worded from server data, never caller arguments.
+/** ADR 808 inc C: the page's origin, named in the phone ask so the human knows where the key goes. */
+const AskPhoneBody = z.object({
+  origin: z.string().url().max(512).optional(),
+});
+
 const DescriptorRequestBody = z.object({
   act: z.enum(HIGH_AUTHORITY_ACTS),
   target: z.string().min(1),
@@ -5563,6 +5569,48 @@ export async function handleHttp(
         if (!descriptor) throw new MusterdError('not_found', 'no live descriptor for that nonce');
         const passkeys = await getPasskeysForDescriptor(ctx.db, team.id, nonce);
         return sendJson(res, 200, { descriptor, passkeys });
+      }
+      // ADR 808 inc C: /live asks the human's phone to approve a passkey enrollment when no passkey
+      // signs on its origin. The descriptor already exists (minted by /live); this raises one
+      // privileged ask from the human to themself carrying its nonce, which the app channel
+      // delivers with the descriptor as the approve offer. The phone's signed answer is parked on
+      // the nonce (notify/appAdapter.ts), and /live collects it from GET /authority/approvals/:nonce.
+      const askPhoneMatch = /^\/authority\/descriptors\/([^/]+)\/ask-phone$/.exec(rest);
+      if (method === 'POST' && askPhoneMatch) {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        if (member.kind !== 'human')
+          throw new MusterdError('forbidden', 'only a human asks their own phone');
+        const nonce = decodeURIComponent(askPhoneMatch[1]!);
+        const body = parseOrBadRequest(AskPhoneBody, await readJson(req));
+        const descriptor = await getDescriptorByNonce(ctx.db, team.id, team.slug, nonce);
+        if (
+          !descriptor ||
+          descriptor.act !== 'device_key_admin' ||
+          descriptor.actor !== member.name ||
+          descriptor.target !== member.name
+        )
+          throw new MusterdError(
+            'not_found',
+            'no live passkey-enrollment descriptor of yours for that nonce',
+          );
+        const phones = (await activeDeviceKeys(ctx.db, team.id, member.id)).filter(
+          (k) => k.kind === 'phone',
+        );
+        if (phones.length === 0)
+          throw new MusterdError('validation', 'no paired phone can approve this; pair one first');
+        const where = body.origin ? ` on ${new URL(body.origin).host}` : '';
+        const env = makeEnvelope({
+          id: ulid(),
+          team: team.slug,
+          from: member.name,
+          to: { kind: 'member', name: member.name },
+          act: 'ask',
+          body: `Approve a new passkey for ${member.name}${where}`,
+          meta: { species: 'approve', tier: 'standard', device_key_enroll: { nonce } },
+        });
+        await routeEnvelope(ctx, team, member, env, undefined, true);
+        return sendJson(res, 201, { ask_id: env.id });
       }
       if (method === 'POST' && rest === '/authority/approvals') {
         const team = await requireTeam(ctx.db, slug);

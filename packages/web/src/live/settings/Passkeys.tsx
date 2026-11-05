@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { LiveConfig } from '../client';
 import {
   enrollPasskey,
+  enrollPasskeyViaPhone,
   enrollRefusal,
   fetchMyDeviceKeys,
   revokeDeviceKey,
@@ -83,6 +84,24 @@ export function Passkeys({
     }
   };
 
+  // ADR 808 inc C: with no passkey that signs here but a paired phone, the phone approves.
+  const enrollViaPhone = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await enrollPasskeyViaPhone(cfg, me, () =>
+        setNote({ tone: 'ok', text: 'sent to your phone — approve it there, then come back here' }),
+      );
+      setNote({ tone: 'ok', text: 'passkey enrolled — it signs your high-authority acts from now on' });
+      await refresh();
+      onEnrolled?.();
+    } catch (e) {
+      setNote({ tone: 'err', text: enrollRefusal(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const enroll = async () => {
     setBusy(true);
     setNote(null);
@@ -159,6 +178,16 @@ export function Passkeys({
           {elsewhereOrigins.length > 0 ? ' on that origin' : ' elsewhere'}
           {phones > 0 ? ' or from your paired phone' : ''}; open musterd there to add one.
         </p>
+      )}
+      {noneSignHere && phones > 0 && (
+        <button
+          type="button"
+          className="lc-set__btn lc-set__btn--go"
+          disabled={busy}
+          onClick={() => void enrollViaPhone()}
+        >
+          {busy ? 'Waiting for your phone…' : 'Add a passkey here, approved on your phone'}
+        </button>
       )}
       <button
         type="button"

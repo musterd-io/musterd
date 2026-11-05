@@ -31,7 +31,13 @@ import {
   startAppPairing,
 } from '../store/appPairing.js';
 import { listAuditByAction } from '../store/audit.js';
-import { buildDescriptor, enrollDeviceKey, revokeDeviceKey } from '../store/authority.js';
+import {
+  buildDescriptor,
+  enrollDeviceKey,
+  getDescriptorByNonce,
+  getParkedProof,
+  revokeDeviceKey,
+} from '../store/authority.js';
 import type { ChannelBinding } from '../store/channelBindings.js';
 import { listChannelSettings, setChannelSettings } from '../store/channelSettings.js';
 import { getLane, openLane, updateLane } from '../store/lanes.js';
@@ -779,6 +785,117 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
     await expect(
       handleRelayCallback(s.ctx, s.team, callback('ask-d', await answerBody(s, dlv)), NOW + 1),
     ).resolves.toEqual({ ok: false, reason: 'key_revoked' });
+  });
+
+  describe('a passkey enrollment approved from the phone (ADR 808 inc C)', () => {
+    /** /live minted the enrollment descriptor and raised the ask to nick's own phone. */
+    async function raiseEnrollAsk(st: Awaited<ReturnType<typeof seed>>, id = 'ask-e') {
+      const d = await buildDescriptor(st.db, {
+        teamId: st.team.id,
+        audience: st.team.slug,
+        memberId: st.nick.id,
+        actor: 'nick',
+        act: 'device_key_admin',
+        target: 'nick',
+        payload: { action: 'enroll', kind: 'passkey' },
+        now: NOW,
+      });
+      const env = makeEnvelope({
+        id,
+        team: st.team.slug,
+        from: 'nick',
+        to: { kind: 'member', name: 'nick' },
+        act: 'ask',
+        body: 'Approve a new passkey for nick on hub.example.ts.net',
+        meta: { species: 'approve', tier: 'standard', device_key_enroll: { nonce: d.nonce } },
+        ts: NOW,
+      });
+      await insertMessage(st.db, st.team.id, st.nick.id, st.nick.id, env);
+      return { env, nonce: d.nonce };
+    }
+
+    async function delivered(st: Awaited<ReturnType<typeof seed>>) {
+      const d = await receive(st, lastAppFrame(st.sent));
+      if (d.kind !== 'ask' || !d.approval) throw new Error('expected an enrollment ask');
+      return { ...d, approval: d.approval };
+    }
+
+    it('is delivered with the minted descriptor as the approve offer and a reject that approves nothing', async () => {
+      const s = await seed();
+      const { env, nonce } = await raiseEnrollAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await delivered(s);
+      expect(d.ask.action_class).toBe('privileged');
+      expect(d.approval.approve.descriptor.nonce).toBe(nonce);
+      expect(d.approval.approve.payload).toEqual({ action: 'enroll', kind: 'passkey' });
+      expect(d.approval.reject.payload).toEqual({
+        action: 'enroll',
+        kind: 'passkey',
+        decision: 'reject',
+      });
+      expect(d.approval.reject.descriptor.nonce).not.toBe(nonce);
+      for (const offer of [d.approval.approve, d.approval.reject]) {
+        expect(offer.descriptor).toMatchObject({
+          actor: 'nick',
+          act: 'device_key_admin',
+          target: 'nick',
+          audience: 'revive',
+        });
+      }
+    });
+
+    it('an approve signed on the phone parks its proof on the nonce, unspent, once', async () => {
+      const s = await seed();
+      const { env, nonce } = await raiseEnrollAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await delivered(s);
+      expect(await getParkedProof(s.db, s.team.id, nonce)).toBeNull();
+      const body = await answerBody(s, d, { approval: phoneSigns(s, d.approval.approve) });
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('ask-e', body), NOW + 1_000),
+      ).resolves.toEqual({ ok: true });
+      const parked = await getParkedProof(s.db, s.team.id, nonce);
+      expect(parked).toMatchObject({ key_id: s.deviceKeyId, nonce });
+      expect(parked?.authenticator_data).toBeUndefined();
+      // Parked, not spent: the registration spends it through requireAuthority.
+      expect(
+        await getDescriptorByNonce(s.db, s.team.id, s.team.slug, nonce, NOW + 1_000),
+      ).not.toBeNull();
+      const answer = await s.db.get<{ meta: string }>(
+        `SELECT meta FROM messages WHERE team_id = ? AND id = ?`,
+        [s.team.id, `app-ask-e-${NOW + 1_000}`],
+      );
+      expect(answer?.meta).toContain('"device_key_enroll"');
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('ask-e', body), NOW + 2_000),
+      ).resolves.toEqual({ ok: false, reason: 'consumed' });
+    });
+
+    it('a reject parks nothing; a proof over the reject descriptor or by another key is refused', async () => {
+      const s = await seed();
+      const { env, nonce } = await raiseEnrollAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await delivered(s);
+      const wrong = await answerBody(s, d, { approval: phoneSigns(s, d.approval.reject) });
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('ask-e', wrong), NOW + 500),
+      ).resolves.toEqual({ ok: false, reason: 'descriptor_mismatch' });
+      const stranger = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+      const forged = await answerBody(s, d, {
+        approval: phoneSigns(s, d.approval.approve, stranger.privateKey),
+      });
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('ask-e', forged), NOW + 600),
+      ).resolves.toEqual({ ok: false, reason: 'bad_signature' });
+      const reject = await answerBody(s, d, {
+        decision: 'reject',
+        approval: phoneSigns(s, d.approval.reject),
+      });
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('ask-e', reject), NOW + 1_000),
+      ).resolves.toEqual({ ok: true });
+      expect(await getParkedProof(s.db, s.team.id, nonce)).toBeNull();
+    });
   });
 
   describe('a human verdict on a lane review (ADR 694)', () => {

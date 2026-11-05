@@ -730,6 +730,62 @@ export async function storePasskeyProof(
   return true;
 }
 
+/**
+ * ADR 808 inc C: park a PHONE key's proof on its nonce row, verified here the way an app answer's
+ * approval is (ECDSA P-256 / SHA-256 over the descriptor's signing bytes). Parking grants
+ * nothing; the act re-verifies the same proof through `requireAuthority` when it is presented.
+ * The key must be the human's own live phone key, and the descriptor theirs.
+ */
+export async function storePhoneProof(
+  db: Driver,
+  input: {
+    teamId: string;
+    audience: string;
+    memberId: string;
+    proof: ApprovalProof;
+    now?: number;
+  },
+): Promise<boolean> {
+  const now = input.now ?? Date.now();
+  const descriptor = await getDescriptorByNonce(
+    db,
+    input.teamId,
+    input.audience,
+    input.proof.nonce,
+    now,
+  );
+  if (!descriptor) return false;
+  const owner = await db.get<{ member_id: string }>(
+    `SELECT member_id FROM approval_nonces WHERE team_id = ? AND nonce = ?`,
+    [input.teamId, input.proof.nonce],
+  );
+  if (!owner || owner.member_id !== input.memberId) return false;
+  const key = await getDeviceKey(db, input.teamId, input.proof.key_id);
+  if (!key || key.kind !== 'phone' || key.revokedAt !== null || key.memberId !== input.memberId)
+    return false;
+  let valid = false;
+  try {
+    valid = cryptoVerify(
+      'sha256',
+      Buffer.from(descriptorSigningBytes(descriptor), 'utf8'),
+      createPublicKey({
+        key: Buffer.from(key.publicKey, 'base64url'),
+        format: 'der',
+        type: 'spki',
+      }),
+      Buffer.from(input.proof.signature, 'base64url'),
+    );
+  } catch {
+    valid = false;
+  }
+  if (!valid) return false;
+  await db.run(
+    `UPDATE approval_nonces SET proof_key_id = ?, proof_signature = ? WHERE team_id = ? AND nonce = ?`,
+    [input.proof.key_id, input.proof.signature, input.teamId, input.proof.nonce],
+  );
+  return true;
+}
+
 /** The enrolled passkeys a descriptor's human can approve it with (page allow-list). */
 export async function getPasskeysForDescriptor(
   db: Driver,

@@ -1,3 +1,4 @@
+import type { ApprovalProof } from '@musterd/protocol';
 import {
   authorityProofForKeyRevoke,
   authorityProofForPasskeyEnroll,
@@ -5,7 +6,7 @@ import {
   bytesToB64url,
   isLoopbackIp,
 } from './authorityProof';
-import { apiGet, apiPost, type LiveConfig } from './client';
+import { apiGet, apiPost, LiveFetchError, type LiveConfig } from './client';
 
 /**
  * Enrolling a passkey from /live (ADR 767): the ceremony the daemon's `/authority/passkey` page runs
@@ -79,6 +80,58 @@ export async function enrollPasskey(
       'your enrolled key is not a passkey, so this browser cannot approve another one — run `musterd authority enroll`',
     );
   }
+  return registerPasskey(cfg, member, approval);
+}
+
+/**
+ * ADR 808 inc C: enroll a passkey here with the PHONE's approval, for a human none of whose
+ * passkeys sign on this origin. Mints the enrollment descriptor, asks the daemon to send it to the
+ * paired phone as an approval ask, waits for the phone's signed proof to be parked on the nonce
+ * (up to four minutes, polled every two seconds), then runs the registration ceremony with it.
+ * `onWaiting` fires once the ask is on its way, so the page can say "check your phone".
+ */
+export async function enrollPasskeyViaPhone(
+  cfg: LiveConfig,
+  member: string,
+  onWaiting?: () => void,
+): Promise<DeviceKey> {
+  if (!navigator.credentials?.create) throw new Error('passkeys are unavailable in this browser');
+  const teamPath = `/teams/${encodeURIComponent(cfg.team)}/authority`;
+  const created = await apiPost<{ descriptor: { nonce: string } }>(cfg, `${teamPath}/descriptors`, {
+    act: 'device_key_admin',
+    target: member,
+    payload: { action: 'enroll', kind: 'passkey' },
+  });
+  const nonce = created.descriptor.nonce;
+  await apiPost<{ ask_id: string }>(
+    cfg,
+    `${teamPath}/descriptors/${encodeURIComponent(nonce)}/ask-phone`,
+    { origin: location.origin },
+  );
+  onWaiting?.();
+  const deadline = Date.now() + 4 * 60_000;
+  let approval: ApprovalProof | null = null;
+  while (!approval) {
+    if (Date.now() > deadline) throw new Error('no answer from your phone in four minutes; nothing was enrolled');
+    await new Promise((r) => setTimeout(r, 2_000));
+    try {
+      approval = (await apiGet<{ proof: ApprovalProof }>(
+        cfg,
+        `${teamPath}/approvals/${encodeURIComponent(nonce)}`,
+      )).proof;
+    } catch (e) {
+      if (!(e instanceof LiveFetchError && e.status === 404)) throw e;
+    }
+  }
+  return registerPasskey(cfg, member, approval);
+}
+
+/** The registration ceremony itself, with whatever approval the caller collected (or none). */
+async function registerPasskey(
+  cfg: LiveConfig,
+  member: string,
+  approval: ApprovalProof | null,
+): Promise<DeviceKey> {
   const teamPath = `/teams/${encodeURIComponent(cfg.team)}/authority`;
   const { challenge } = await apiPost<{ challenge: string }>(
     cfg,
