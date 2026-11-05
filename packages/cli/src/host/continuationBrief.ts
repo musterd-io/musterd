@@ -10,10 +10,12 @@ import { priceRowFor } from './prices.js';
  * said and did, newest last, trimmed from the oldest end until it prices under the same bound — no
  * model call, no summary the host would have to pay for and could not attest.
  *
- * What survives: the seat's own text turns, its tool calls (name and a clipped argument line), and
- * the person's prompts (clipped). What never does: thinking blocks, tool results (the bulk of a
- * transcript, and re-readable), attachments, API-request mirrors, and anything that looks like a
- * credential (ADR 128's rule on secrets applies to the brief as it does to a log line). The brief
+ * What survives: the seat's own text turns, its tool calls (name, and arguments by construction:
+ * path-like keys with their values, every other key by name only), and the person's prompts
+ * (clipped). What never does: thinking blocks, tool results (the bulk of a transcript, and
+ * re-readable), attachments, API-request mirrors, any tool argument that is not a path or an
+ * identifier, and anything in prose that looks like a credential (hard rule 5 applies to the brief
+ * as it does to a log line; the boundary is spelled out at {@link toolInputLine}). The brief
  * rides the `-p` line after the wake line, so it is ingested once, like a resume's history would
  * have been, at a size the bound allows.
  */
@@ -53,14 +55,53 @@ export function briefBudgetBytes(boundUsd: number, model: string | undefined): n
   return Math.max(0, Math.min(BRIEF_MAX_BYTES, bytes));
 }
 
-/** Credentials and API keys never ride a brief, whatever the transcript held (hard rule 5). */
+/**
+ * The credential boundary (hard rule 5), in two layers — because the brief rides a process argument
+ * and the next session's transcript, and a transcript holds whatever the seat read or typed.
+ *
+ * 1. **By construction, for tool calls:** a tool's arguments never ride the brief as values, except
+ *    for the keys below — paths, patterns and musterd identifiers, which name *what* was touched and
+ *    cannot carry a credential by their nature. Every other key (a Bash `command`, a Write `content`,
+ *    a `body`, a `password`, anything) is named and its value dropped. big-body's acceptance read of
+ *    2026-11-05: `{"password":"…"}` passed the first landing's regex because the closing quote sat
+ *    between the key and the colon; an allowlist does not depend on a pattern matching.
+ * 2. **Patterns, for the seat's own text and the person's prompts:** known key prefixes, bearer and
+ *    key=value forms tolerant of JSON quoting, and any long opaque token (letters and digits, no
+ *    spaces) — run on the WHOLE text before it is clipped, so a clip never splits a secret out of its
+ *    pattern's reach.
+ */
+const SAFE_INPUT_KEYS = new Set([
+  'file_path',
+  'path',
+  'notebook_path',
+  'pattern',
+  'glob',
+  'id',
+  'lane',
+  'lane_id',
+  'goal_id',
+  'act',
+  'to',
+  'state',
+  'name',
+  'seat',
+  'offset',
+  'limit',
+]);
+const SAFE_VALUE_MAX = 120;
+
 const SECRET_PATTERNS = [
   /\b(mskey|msgr|mscr|msat)_[A-Za-z0-9_-]+/g,
   /\bsk-[A-Za-z0-9_-]{8,}/g,
-  /\b(?:Bearer|token|secret|password)\s*[:=]\s*\S+/gi,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
+  // key: value / key=value / "key": "value" / "the key is value", for the usual credential key names.
+  /\b(?:token|secret|password|passwd|api[_-]?key|apikey|authorization|credential|private[_-]?key)["']?\s*(?:[:=]|\b(?:is|was)\b)\s*["']?[^\s"',}]+/gi,
+  // A long opaque run with both letters and digits: a key, a token, a hash — never prose.
+  /(?<![A-Za-z0-9_])(?=[A-Za-z0-9_+/=-]{24,}(?![A-Za-z0-9_+/=-]))(?=[^\s]*[A-Za-z])(?=[^\s]*[0-9])[A-Za-z0-9_+/=-]{24,}/g,
 ];
 
-function redact(s: string): string {
+/** Exported for the tests: the pattern layer, applied to a whole text before any clip. */
+export function redact(s: string): string {
   let out = s;
   for (const p of SECRET_PATTERNS) out = out.replace(p, '[redacted]');
   return out;
@@ -69,6 +110,21 @@ function redact(s: string): string {
 function oneLine(s: string, max: number): string {
   const flat = s.replace(/\s+/g, ' ').trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** A tool call's argument line: safe keys with their (clipped, redacted) scalar values, every other
+ *  key by name only. Exported for the tests. */
+export function toolInputLine(input: unknown): string {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return '';
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (SAFE_INPUT_KEYS.has(key) && (typeof value === 'string' || typeof value === 'number')) {
+      parts.push(`${key}=${oneLine(redact(String(value)), SAFE_VALUE_MAX)}`);
+    } else {
+      parts.push(key);
+    }
+  }
+  return parts.join(' ');
 }
 
 /** One turn of the brief, as the transcript's `user` / `assistant` records yield it. */
@@ -80,8 +136,8 @@ function turnLines(record: Record<string, unknown>): string[] {
   const content = (message as Record<string, unknown>)['content'];
   const lines: string[] = [];
   if (typeof content === 'string') {
-    // A person's (or the wake line's) prompt, as a plain string.
-    if (type === 'user' && content.trim()) lines.push(`> ${oneLine(content, PROMPT_MAX)}`);
+    // A person's (or the wake line's) prompt, as a plain string: redacted whole, then clipped.
+    if (type === 'user' && content.trim()) lines.push(`> ${oneLine(redact(content), PROMPT_MAX)}`);
     return lines;
   }
   if (!Array.isArray(content)) return [];
@@ -91,18 +147,15 @@ function turnLines(record: Record<string, unknown>): string[] {
     const kind = it['type'];
     if (type === 'assistant' && kind === 'text' && typeof it['text'] === 'string') {
       const text = it['text'].trim();
-      if (text) lines.push(oneLine(text, LINE_MAX));
+      if (text) lines.push(oneLine(redact(text), LINE_MAX));
     } else if (type === 'assistant' && kind === 'tool_use' && typeof it['name'] === 'string') {
-      let input = '';
-      try {
-        input = JSON.stringify(it['input'] ?? {});
-      } catch {
-        input = '{}';
-      }
-      lines.push(`[${it['name']}] ${oneLine(input, TOOL_INPUT_MAX)}`);
+      // Arguments by construction: safe keys with values, the rest by name (see the boundary above).
+      lines.push(
+        `[${it['name']}] ${oneLine(toolInputLine(it['input']), TOOL_INPUT_MAX)}`.trimEnd(),
+      );
     } else if (type === 'user' && kind === 'text' && typeof it['text'] === 'string') {
       const text = it['text'].trim();
-      if (text) lines.push(`> ${oneLine(text, PROMPT_MAX)}`);
+      if (text) lines.push(`> ${oneLine(redact(text), PROMPT_MAX)}`);
     }
     // thinking, tool_result, images, attachments: never.
   }
@@ -140,7 +193,7 @@ export function compactTranscript(
       continue;
     }
     if (typeof parsed !== 'object' || parsed === null) continue;
-    for (const l of turnLines(parsed as Record<string, unknown>)) lines.push(redact(l));
+    for (const l of turnLines(parsed as Record<string, unknown>)) lines.push(l);
   }
   if (lines.length === 0) return undefined;
   return fitBrief(lines, Buffer.byteLength(raw, 'utf8'), budgetBytes);

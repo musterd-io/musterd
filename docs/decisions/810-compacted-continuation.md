@@ -40,7 +40,12 @@ with no new call to a model and nothing the host cannot attest.
    clipped argument line), and the person's prompts (clipped). It never carries thinking, tool
    results, attachments, the API-request mirrors, or anything matching a credential pattern (hard
    rule 5). No model is called to write it: the brief is deterministic, free, and says only what the
-   transcript said.
+   transcript said. _(Amended 2026-11-05: a tool call's arguments ride **by construction**, not by
+   pattern — values only for an allowlist of path-like and identifier keys (`file_path`, `path`,
+   `pattern`, `id`, `lane`, `to`, `act`, …), every other key by name alone; the credential patterns
+   apply to the seat's text and the person's prompts, run on the whole text before any clip, and
+   cover JSON-quoted keys, bearer headers, "the password is …" and long opaque tokens. See
+   Consequences.)_
 3. **It is fitted to the bound by the rung's own arithmetic.** The budget is what `resume_max_usd`
    buys at bytes ÷ 4 tokens × the model's input price (`briefBudgetBytes`), capped at 48 KiB
    (`BRIEF_MAX_BYTES` — a `-p` argument stays well under Linux's per-argument ceiling, and a longer
@@ -75,6 +80,15 @@ with no new call to a model and nothing the host cannot attest.
 
 ## Consequences
 
+- _(2026-11-05, acceptance read)_ big-body declined the first landing (#3915) on the credential
+  boundary: `JSON.stringify`'d tool inputs were redacted by a pattern that expected `password` to be
+  followed directly by `:` or `=`, so `{"password":"…"}` kept its value, clipping ran before
+  redaction, and the fixed prefixes covered no arbitrary secret. The fix makes the tool-argument
+  layer structural (`toolInputLine`: safe keys with values, every other key by name — a Bash
+  `command`, a Write `content`, a `body`, a `password` never ride), runs the prose patterns on the
+  whole text before clipping, widens them (quoted keys, bearer, "is/was", 24+ character opaque
+  tokens), and adds a regression that drives a JSON password, a bearer header and a written secret
+  through the real builder into the spawned `-p` argument.
 - On the act lane with the bound set, a wake past the bound keeps the thread of its own prior
   session for the price of the brief instead of none for the price of the boot. The boot itself is
   unchanged: this ADR does not make a fresh wake cheaper, it makes it less forgetful.

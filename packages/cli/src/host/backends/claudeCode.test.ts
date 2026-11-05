@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ContinuityBinding, ContinuityRegistry, WakeOrder } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import type { LocalSessionLiveness } from '../../session/liveness.js';
@@ -261,6 +264,74 @@ describe('claudeCodeBackend.wake', () => {
     expect(unpriced.args).not.toContain('--resume');
     const unattested = await run(1, undefined);
     expect(unattested.args).not.toContain('--resume');
+  });
+
+  it("ADR 810: a sensitive tool argument never reaches the spawned prompt (big-body's acceptance read)", async () => {
+    // The REAL brief builder over a transcript on disk, through the real spawn argv: no injected
+    // brief. A JSON-encoded password, a bearer header in a Bash command and a written secret all
+    // stay out of the `-p` argument by construction; the tool names and the path do ride it.
+    const dir = mkdtempSync(join(tmpdir(), 'adr810-'));
+    const path = join(dir, 'cap-1234.jsonl');
+    const rec = (type: string, content: unknown) =>
+      JSON.stringify({ type, message: { role: type, content } });
+    writeFileSync(
+      path,
+      [
+        rec('user', 'Set up the deploy. The password is example-value.'),
+        rec('assistant', [
+          {
+            type: 'tool_use',
+            id: 'a',
+            name: 'mcp__x__login',
+            input: { password: 'example-value' },
+          },
+          {
+            type: 'tool_use',
+            id: 'b',
+            name: 'Bash',
+            input: { command: 'curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abcdef"' },
+          },
+          {
+            type: 'tool_use',
+            id: 'c',
+            name: 'Write',
+            input: { file_path: '/ws/.env', content: 'TOKEN=hunter2' },
+          },
+          { type: 'text', text: 'Logged in and wrote the env file.' },
+        ]),
+      ].join('\n') + '\n',
+    );
+    const child = new FakeChild();
+    const { backend, calls } = harness(child, {
+      readSession: () =>
+        resumable({
+          session: {
+            harness: 'claude-code',
+            id: 'cap-1234',
+            transcript_path: path,
+            started_at: Date.now() - 60_000,
+          },
+        }),
+      seatModel: () => 'claude-sonnet-5-5',
+    });
+    const actuation = await backend.wake(
+      spec({
+        order: order({ intended_delivery: 'resume' }),
+        bounds: { timeout_ms: 60_000, resume_max_usd: 0.001 },
+      }),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    child.exit(0);
+    await actuation.settled;
+    expect(actuation.outcome).toMatchObject({ session: 'compacted' });
+    const line = calls[0]!.args[calls[0]!.args.indexOf('-p') + 1]!;
+    expect(line).toContain('[mcp__x__login] password');
+    expect(line).toContain('[Bash] command');
+    expect(line).toContain('[Write] file_path=/ws/.env content');
+    expect(line).toContain('Logged in and wrote the env file.');
+    for (const leak of ['example-value', 'eyJhbGciOiJIUzI1NiJ9', 'hunter2', 'curl']) {
+      expect(line).not.toContain(leak);
+    }
   });
 
   it('ADR 810: a resume refused on price continues on a compacted brief; unpriceable stays bare fresh', async () => {

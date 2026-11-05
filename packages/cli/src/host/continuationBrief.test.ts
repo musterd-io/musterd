@@ -8,6 +8,7 @@ import {
   compactTranscript,
   composeContinuationLine,
   fitBrief,
+  redact,
 } from './continuationBrief.js';
 
 const rec = (type: string, content: unknown, extra: Record<string, unknown> = {}) =>
@@ -40,7 +41,7 @@ describe('ADR 810: the continuation brief', () => {
     expect(brief.dropped).toBe(0);
     expect(brief.text).toContain('> Implement token chunking');
     expect(brief.text).toContain('I will claim a lane first.');
-    expect(brief.text).toContain('[mcp__musterd__lane_claim] {"id":"01ABC"}');
+    expect(brief.text).toContain('[mcp__musterd__lane_claim] id=01ABC');
     expect(brief.text).toContain('Patch written to chunk.py');
     expect(brief.text).not.toContain('secret plans');
     expect(brief.text).not.toContain('xxxxx');
@@ -82,9 +83,75 @@ describe('ADR 810: the continuation brief', () => {
     expect(brief.text).not.toContain('mskey_abc');
     expect(brief.text).not.toContain('hunter2');
     expect(brief.text).not.toContain('sk-ant-abcdefghij');
+    expect(brief.text).not.toContain('curl');
+    expect(brief.text).toContain('[Bash] command');
     expect(brief.text).toContain('[redacted]');
     const longest = Math.max(...brief.text.split('\n').map((l) => l.length));
     expect(longest).toBeLessThanOrEqual(600);
+  });
+
+  it("tool arguments ride by construction: path-like keys keep values, every other key is a name (big-body's read)", () => {
+    const p = transcript([
+      rec('assistant', [
+        {
+          type: 'tool_use',
+          id: 'a',
+          name: 'Write',
+          input: { file_path: '/ws/.env', content: 'DB_PASSWORD=example-value' },
+        },
+        {
+          type: 'tool_use',
+          id: 'b',
+          name: 'mcp__x__login',
+          input: { password: 'example-value', user: 'nick' },
+        },
+        {
+          type: 'tool_use',
+          id: 'c',
+          name: 'Bash',
+          input: { command: 'export API_KEY=AKIAIOSFODNN7EXAMPLEKEY1234 && deploy' },
+        },
+        {
+          type: 'tool_use',
+          id: 'd',
+          name: 'Read',
+          input: { file_path: '/ws/src/a.ts', offset: 10, limit: 40 },
+        },
+        {
+          type: 'tool_use',
+          id: 'e',
+          name: 'mcp__musterd__team_send',
+          input: { act: 'message', to: 'agent2', body: 'the token is hunter2' },
+        },
+      ]),
+    ]);
+    const brief = compactTranscript(p, BRIEF_MAX_BYTES)!;
+    expect(brief.text).toContain('[Write] file_path=/ws/.env content');
+    expect(brief.text).toContain('[mcp__x__login] password user');
+    expect(brief.text).toContain('[Bash] command');
+    expect(brief.text).toContain('[Read] file_path=/ws/src/a.ts offset=10 limit=40');
+    expect(brief.text).toContain('[mcp__musterd__team_send] act=message to=agent2 body');
+    for (const leak of ['example-value', 'AKIAIOSFODNN7', 'hunter2', 'nick', 'deploy']) {
+      expect(brief.text).not.toContain(leak);
+    }
+  });
+
+  it('prose patterns tolerate JSON quoting, bearer headers and long opaque tokens, before clipping', () => {
+    expect(redact('{"password":"example-value"}')).toBe('{"[redacted]"}');
+    expect(redact('api_key = "abc"')).toBe('[redacted]"');
+    // The key pattern takes the whole header (authorization is a credential key); either layer does.
+    expect(redact('Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc')).toBe('[redacted]');
+    expect(redact('sent Bearer eyJhbGciOiJIUzI1NiJ9.abc along')).toBe('sent [redacted] along');
+    expect(
+      redact('the hash is 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 ok'),
+    ).toBe('the hash is [redacted] ok');
+    expect(redact('a normal sentence with words and the number 2026-11-05 in it')).toBe(
+      'a normal sentence with words and the number 2026-11-05 in it',
+    );
+    // Redaction runs on the whole text, so a clip cannot split a secret out of a pattern's reach.
+    const p = transcript([rec('user', `${'x '.repeat(195)}password: example-value and more`)]);
+    const brief = compactTranscript(p, BRIEF_MAX_BYTES)!;
+    expect(brief.text).not.toContain('example-value');
   });
 
   it('an unreadable or turnless transcript yields no brief', () => {
