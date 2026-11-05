@@ -1467,16 +1467,19 @@ function recoverySecretPath(ctx: Ctx): string {
   return join(dirname(ctx.config.dbPath), 'recovery.secret');
 }
 function recoverySecretPresented(ctx: Ctx, presented: string | undefined): boolean {
-  if (ctx.config.dbPath === ':memory:' || !presented) return false;
+  if (ctx.config.dbPath === ':memory:') return false; // no store on disk, no secret to hold
   const path = recoverySecretPath(ctx);
+  // The file is written on the FIRST ask, whatever that ask carried (big-body's review of #3910:
+  // an ask with no secret must still initialise it, or a fresh hub can never mint). An ask without
+  // the secret is refused all the same; the operator reads the file and asks again.
   let secret: string;
   try {
     secret = readFileSync(path, 'utf8').trim();
   } catch {
     secret = randomBytes(32).toString('base64url');
     writeFileSync(path, `${secret}\n`, { mode: 0o600 });
-    return false; // the first ask writes the file; the operator reads it and asks again
   }
+  if (!presented) return false;
   const a = Buffer.from(secret, 'utf8');
   const b = Buffer.from(presented.trim(), 'utf8');
   return a.length === b.length && timingSafeEqual(a, b);
