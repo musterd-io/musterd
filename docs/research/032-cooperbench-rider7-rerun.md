@@ -134,7 +134,8 @@ was that the waits were the cost; the waits were $1.75 of $18.45.
    Built as [ADR 809](../decisions/809-harness-exit-releases-the-reclaim-hold.md) (lane `01M6PA2G02`).
 2. **A fresh wake pays the boot for one act.** 24 of 26 wakes were fresh under the $0.25 bound; each
    re-read the primer and the task. A compacted continuation (ADR 805's rejected third option) is the
-   way to keep the lane's wakes cheap *and* continuous.
+   way to keep the lane's wakes cheap *and* continuous. Built as
+   [ADR 810](../decisions/810-compacted-continuation.md) (lane `01M6PA2PWX`); its read is this run again.
 3. **The arm's own faults found by smoke pairs** (run log): the self-heal rewrote the arm's hooks; the
    idle probe matched itself and then the launcher's environment; an MCP server absent at one session
    start. All but the last fixed on `main` (#3877, #3882, #3886).

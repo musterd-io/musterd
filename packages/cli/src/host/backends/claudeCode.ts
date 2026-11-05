@@ -26,6 +26,12 @@ import type {
   WakeCompletion,
   WakeSpec,
 } from '../backend.js';
+import {
+  briefBudgetBytes,
+  compactTranscript,
+  composeContinuationLine,
+  type ContinuationBrief,
+} from '../continuationBrief.js';
 import { ensurePinnedMusterd, expectedProvenance, wakeEnv } from '../pinnedBin.js';
 import { priceRowFor } from '../prices.js';
 import { clearWakeLeaseFile, takeYieldFile, writeWakeLeaseFile } from '../wakeLeaseFile.js';
@@ -157,6 +163,9 @@ export interface ClaudeCodeDeps {
   takeYield?: (workspace: string, leaseId: string) => boolean;
   /** Injectable seat-model read for the ADR 805 price rung (default: {@link seatModelOf}). */
   seatModel?: (workspace: string) => string | undefined;
+  /** Injectable brief builder for the ADR 810 compacted continuation (default:
+   *  {@link compactTranscript}); tests hand back a brief without a transcript on disk. */
+  compactTranscript?: (path: string, budgetBytes: number) => ContinuationBrief | undefined;
 }
 
 /** The model a resumed run would re-ingest on: the seat's binding (`model`, ADR 158), else the
@@ -184,7 +193,7 @@ export function priceRung(
   bytes: number | undefined,
   model: string | undefined,
   boundUsd: number,
-): { ok: true; estimateUsd: number } | { ok: false; skip: string } {
+): { ok: true; estimateUsd: number } | { ok: false; skip: string; over?: true } {
   if (bytes === undefined)
     return { ok: false, skip: `resume price unknown: no transcript size (bound $${boundUsd})` };
   if (!model)
@@ -202,6 +211,9 @@ export function priceRung(
   if (estimateUsd > boundUsd)
     return {
       ok: false,
+      // `over` is the ADR 810 signal: priced and refused, so a brief CAN be priced under the bound —
+      // an unpriceable refusal (the three above) carries no `over`, and the wake stays bare fresh.
+      over: true,
       skip: `resume would re-ingest ${fmtBytes(bytes)} on ${model} for about $${estimateUsd.toFixed(2)} (bound $${boundUsd})`,
     };
   return { ok: true, estimateUsd };
@@ -308,7 +320,7 @@ function exactMatchRung(
   transcriptMaxBytes: number,
   now: number,
 ):
-  | { id: string; result: WakeExactMatchResult; weight?: number }
+  | { id: string; result: WakeExactMatchResult; path?: string; weight?: number }
   | { skip: string; result: WakeExactMatchResult; weight?: number } {
   const threadId = spec.order.thread_id;
   // An eligible order with no thread is a daemon older than the thread_id field: nothing to look
@@ -340,7 +352,7 @@ function exactMatchRung(
     return { skip: `bound transcript is ${hygiene.skip}`, result: 'stale', ...weight };
   if (now - stat.mtimeMs > RESUME_GC_HORIZON_MS)
     return { skip: 'the bound transcript is past the GC horizon', result: 'stale', ...weight };
-  return { id: hit.session_id, result: 'bound', ...weight };
+  return { id: hit.session_id, result: 'bound', path: hit.transcript_path, ...weight };
 }
 
 /**
@@ -458,7 +470,7 @@ interface AttemptResult {
 }
 
 interface AttemptOpts {
-  label: 'fresh' | 'resumed';
+  label: 'fresh' | 'resumed' | 'compacted';
   /** The session this attempt runs — minted (`--session-id`) or resumed (`--resume`). */
   sessionId: string;
   timeoutMs: number;
@@ -697,7 +709,7 @@ function resumeLadder(
   liveness: LocalSessionLiveness,
   transcriptMaxBytes: number,
 ):
-  | { id: string; via: 'slot' | 'enumerated'; weight?: number }
+  | { id: string; via: 'slot' | 'enumerated'; path?: string; weight?: number }
   | { skip: string | null; weight?: number } {
   if (liveness.state === 'none') return { skip: null }; // the pre-capture world — quiet fresh
   const slot = slotRung(deps, liveness, transcriptMaxBytes);
@@ -712,7 +724,12 @@ function resumeLadder(
     const hygiene = judgeHygiene(deps, e.path, e.bytes, transcriptMaxBytes);
     const weight = hygiene.weight !== undefined ? { weight: hygiene.weight } : {};
     if (hygiene.over) return { skip: `newest transcript is ${hygiene.skip}`, ...weight };
-    return { id: e.id, via: 'enumerated', ...weight };
+    return {
+      id: e.id,
+      via: 'enumerated',
+      ...(e.path !== undefined ? { path: e.path } : {}),
+      ...weight,
+    };
   }
   return slot;
 }
@@ -722,7 +739,7 @@ function slotRung(
   deps: ClaudeCodeDeps,
   liveness: LocalSessionLiveness,
   transcriptMaxBytes: number,
-): { id: string; weight?: number } | { skip: string; weight?: number } {
+): { id: string; path?: string; weight?: number } | { skip: string; weight?: number } {
   const s = liveness.session;
   if (!s) return { skip: 'no captured session to resume (verdict was enumerated)' };
   if (s.harness !== 'claude-code') return { skip: `captured harness is "${s.harness}"` };
@@ -737,7 +754,7 @@ function slotRung(
   );
   const weight = hygiene.weight !== undefined ? { weight: hygiene.weight } : {};
   if (hygiene.over) return { skip: `transcript is ${hygiene.skip}`, ...weight };
-  return { id: s.id, ...weight };
+  return { id: s.id, path: s.transcript_path, ...weight };
 }
 
 /**
@@ -860,14 +877,23 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
           : { skip: null as string | null };
       // ADR 805: a target the ladder admitted on bytes is priced before it is resumed.
       const priceBound = spec.bounds.resume_max_usd;
+      const seatModel = (deps.seatModel ?? seatModelOf)(spec.workspace);
       const priced =
         'id' in ladder && priceBound !== undefined
-          ? priceRung(
-              ladder.weight ?? liveness.transcriptBytes,
-              (deps.seatModel ?? seatModelOf)(spec.workspace),
-              priceBound,
-            )
+          ? priceRung(ladder.weight ?? liveness.transcriptBytes, seatModel, priceBound)
           : null;
+      // ADR 810: a resume refused on PRICE continues on a compacted brief of the same transcript,
+      // fitted to what the bound buys at the rung's own rate. Unpriceable stays bare fresh (no model
+      // or price row means no brief can be shown under the bound either); a transcript that yields
+      // no turn, or a budget that holds none, stays bare fresh too — the fresh spawn is always valid.
+      const continuation: ContinuationBrief | undefined = (() => {
+        if (priced === null || priced.ok || priced.over !== true) return undefined;
+        if (!('id' in ladder) || ladder.path === undefined || priceBound === undefined)
+          return undefined;
+        const budget = briefBudgetBytes(priceBound, seatModel);
+        if (budget === undefined || budget <= 0) return undefined;
+        return (deps.compactTranscript ?? compactTranscript)(ladder.path, budget);
+      })();
       const rung: typeof ladder =
         priced !== null && !priced.ok
           ? {
@@ -909,7 +935,15 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
       } else if (!exactEligible && !wantsResume) {
         ctx.log(`portable delivery for ${seat}: fresh spawn (resume bypassed)`);
       } else if ('skip' in rung) {
-        if (rung.skip) ctx.log(`resume skipped for ${seat}: ${rung.skip} — fresh spawn`);
+        if (rung.skip && continuation)
+          ctx.log(
+            `resume skipped for ${seat}: ${rung.skip} — compacted continuation: ` +
+              `${continuation.turns} turn${continuation.turns === 1 ? '' : 's'} kept` +
+              (continuation.dropped > 0 ? `, ${continuation.dropped} dropped` : '') +
+              `, ${fmtBytes(Buffer.byteLength(continuation.text, 'utf8'))} of ` +
+              `${fmtBytes(continuation.source_bytes)} (budget ${fmtBytes(continuation.budget_bytes)})`,
+          );
+        else if (rung.skip) ctx.log(`resume skipped for ${seat}: ${rung.skip} — fresh spawn`);
       } else {
         resumeAttempted = true;
         if ('via' in rung && rung.via === 'enumerated')
@@ -979,23 +1013,22 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
       // the recap (the seat's own question quoted first). Every other wake has no recap line.
       const sessionId = (deps.mintSessionId ?? randomUUID)();
       const remaining = Math.max(deadline - Date.now(), Math.min(10_000, spec.bounds.timeout_ms));
-      const fresh = runAttempt(
-        deps,
-        bin,
-        buildWakeArgs(
-          spec.order.composed_recap_line ?? spec.order.composed_line,
-          sessionId,
-          argOpts,
-        ),
-        spec,
-        ctx,
-        {
-          label: 'fresh',
-          sessionId,
-          timeoutMs: remaining,
-          confirmBeatMs: deps.confirmBeatMs ?? VERIFY_CONFIRM_BEAT_MS,
-        },
-      );
+      // ADR 810: a compacted continuation IS a fresh spawn (minted session, same argv posture) whose
+      // line carries the brief after the wake line; it reports as `compacted` on the session axis.
+      const freshLine = continuation
+        ? composeContinuationLine(
+            spec.order.composed_recap_line ?? spec.order.composed_line,
+            continuation,
+          )
+        : (spec.order.composed_recap_line ?? spec.order.composed_line);
+      const freshSession = continuation ? ('compacted' as const) : ('fresh' as const);
+      const freshDelivery = () => (resumeAttempted ? ('fresh_fallback' as const) : freshSession);
+      const fresh = runAttempt(deps, bin, buildWakeArgs(freshLine, sessionId, argOpts), spec, ctx, {
+        label: freshSession,
+        sessionId,
+        timeoutMs: remaining,
+        confirmBeatMs: deps.confirmBeatMs ?? VERIFY_CONFIRM_BEAT_MS,
+      });
       if ('spawnFailure' in fresh) {
         // A resident host caches its `claude` path, and a CLI upgrade that moves the install turns
         // every later wake into ENOENT on a path that no longer exists — 8 of 14 recorded wake
@@ -1006,14 +1039,8 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
           return {
             outcome: {
               occupied: false,
-              session: 'fresh',
-              ...(deliveryTracked
-                ? {
-                    delivery_outcome: resumeAttempted
-                      ? ('fresh_fallback' as const)
-                      : ('fresh' as const),
-                  }
-                : {}),
+              session: freshSession,
+              ...(deliveryTracked ? { delivery_outcome: freshDelivery() } : {}),
               ...deliveryMetadata(),
               reason: fresh.spawnFailure,
             },
@@ -1024,15 +1051,11 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
         const retry = runAttempt(
           deps,
           healed,
-          buildWakeArgs(
-            spec.order.composed_recap_line ?? spec.order.composed_line,
-            sessionId,
-            argOpts,
-          ),
+          buildWakeArgs(freshLine, sessionId, argOpts),
           spec,
           ctx,
           {
-            label: 'fresh',
+            label: freshSession,
             sessionId,
             timeoutMs: Math.max(deadline - Date.now(), Math.min(10_000, spec.bounds.timeout_ms)),
             confirmBeatMs: deps.confirmBeatMs ?? VERIFY_CONFIRM_BEAT_MS,
@@ -1042,14 +1065,8 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
           return {
             outcome: {
               occupied: false,
-              session: 'fresh',
-              ...(deliveryTracked
-                ? {
-                    delivery_outcome: resumeAttempted
-                      ? ('fresh_fallback' as const)
-                      : ('fresh' as const),
-                  }
-                : {}),
+              session: freshSession,
+              ...(deliveryTracked ? { delivery_outcome: freshDelivery() } : {}),
               ...deliveryMetadata(),
               reason: retry.spawnFailure,
             },
@@ -1062,14 +1079,8 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
           outcome: {
             occupied: healedOutcome.occupied,
             ...(healedOutcome.deferred ? { deferred: true } : {}),
-            session: 'fresh',
-            ...(deliveryTracked
-              ? {
-                  delivery_outcome: resumeAttempted
-                    ? ('fresh_fallback' as const)
-                    : ('fresh' as const),
-                }
-              : {}),
+            session: freshSession,
+            ...(deliveryTracked ? { delivery_outcome: freshDelivery() } : {}),
             ...deliveryMetadata(),
             ...(healedOutcome.reason ? { reason: healedOutcome.reason } : {}),
           },
@@ -1082,14 +1093,8 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
         outcome: {
           occupied: outcome.occupied,
           ...(outcome.deferred ? { deferred: true } : {}),
-          session: 'fresh',
-          ...(deliveryTracked
-            ? {
-                delivery_outcome: resumeAttempted
-                  ? ('fresh_fallback' as const)
-                  : ('fresh' as const),
-              }
-            : {}),
+          session: freshSession,
+          ...(deliveryTracked ? { delivery_outcome: freshDelivery() } : {}),
           ...deliveryMetadata(),
           ...(outcome.reason ? { reason: outcome.reason } : {}),
           // Fast-fail merge: an already-settled run's summary rides the primary report.

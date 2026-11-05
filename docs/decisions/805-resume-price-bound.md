@@ -62,6 +62,11 @@ host does not have, and without touching the fresh path, which is always valid.
 
 ## Consequences
 
+- _(2026-11-05, finding 032)_ Ten pairs with the bound at $0.25 read the trade below in dollars: 24 of
+  26 wakes spawned fresh with no context, and the pair cost more, not less. The third rejected option
+  is built as [ADR 810](810-compacted-continuation.md): a refusal on price now spawns fresh with a
+  compacted brief of the transcript, fitted to the bound by this ADR's own arithmetic; an unpriceable
+  refusal (§4) still spawns bare fresh. Behind the same knob, as this note said it could be.
 - On the act lane with a sensible bound (say $0.25 on Sonnet, about 125k tokens), a seat's wakes
   stop climbing: past the bound each wake is a fresh boot at the seat-primer price, and loses the
   working context the resume carried. That trade is now the team's to set, not the ladder's to hide.

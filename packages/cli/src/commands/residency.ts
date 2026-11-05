@@ -514,7 +514,8 @@ export function renderPolicy(
     bits.push(`budget $${policy.budget_usd}${star('budget_usd')}`);
   bits.push(`transcript ${fmtBytes(policy.transcript_max_bytes)}${star('transcript_max_bytes')}`);
   if (policy.resume_max_usd !== undefined)
-    bits.push(`resume ≤ $${policy.resume_max_usd}${star('resume_max_usd')}`);
+    // ADR 810: over the bound a wake continues on a compacted brief, not a bare fresh boot.
+    bits.push(`resume ≤ $${policy.resume_max_usd}, compacted over${star('resume_max_usd')}`);
   // ADR 792: the shift knobs only when they differ from the defaults ($10, manual, ask).
   if (policy.shift_budget_usd !== 10 || star('shift_budget_usd'))
     bits.push(`shift $${policy.shift_budget_usd}/day${star('shift_budget_usd')}`);

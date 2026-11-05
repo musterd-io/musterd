@@ -1123,7 +1123,7 @@ export async function deriveWakeMetrics(
   // Counted from the classifying (last) woke row; a supplementary wake_cost row re-states the same
   // values and must not double-count. Absent fields are skipped, never defaulted: a wake that
   // reported no delivery is not a `fresh` wake, it is an unmeasured one.
-  const delivery = { fresh: 0, resumed: 0, fresh_fallback: 0 };
+  const delivery = { fresh: 0, resumed: 0, fresh_fallback: 0, compacted: 0 };
   const exact = { bound: 0, missing: 0, mismatched: 0, stale: 0 };
   let deliveryMeasured = 0;
   let exactMeasured = 0;
@@ -1144,6 +1144,8 @@ export async function deriveWakeMetrics(
     window_days: WAKE_WINDOW_DAYS,
     wakes: byAct.size,
     resumed: [...byAct.values()].filter((r) => r.detail.session === 'resumed').length,
+    // ADR 810: a fresh spawn that carried a compacted brief, the price bound having refused a resume.
+    compacted: [...byAct.values()].filter((r) => r.detail.session === 'compacted').length,
     delivery,
     delivery_measured: deliveryMeasured,
     exact_match: exact,
