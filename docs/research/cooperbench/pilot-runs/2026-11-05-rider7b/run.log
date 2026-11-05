@@ -37,3 +37,20 @@ wakes** (6 wakes, 0 resumed, 0 failed), first calls not yet reported. Evidence i
 Per the manifest, a smoke pair showing `reclaimable` tracking the grace stops the run until the cause is
 fixed on `main`. Three fixes land (#3870, #3876, the arm's tombstone + idle end); smoke pair 2 follows on a
 deploy carrying them. No measured pair has run; the rules are untouched.
+
+## Smoke pair 2, 2026-11-05 00:50:58Z → 01:03:23Z (`smokepair-b.sh`, build `3cd03696`: #3870, #3876, #3877)
+
+Not scored, not read. Ended on its own under the new idle rule (both patches written, nothing unread).
+Evidence in `smoke2/`. **$2.85 for the pair:** first calls $1.49 (agent1) + $0.91 (agent2), wakes $0.45
+(2 wakes on agent2, 0 on agent1, 0 resumed, 0 failed). Guard alive throughout.
+
+- **Bash gate errors: 0 and 0** (were 7 and 2): the `musterd:self-heal` tombstone held.
+- **ADR 805:** both resumes refused for price, both wakes fresh.
+- **ADR 804 still not clearing:** `reclaimable` **50.1 s and 82.5 s** on agent2's two waits. The pair
+  database's `wake_gate` rows: the seat read `passed` at the lease, `present` during the run, and went
+  `reclaimable` again **about 7 s after each report** (00:59:17 report → 00:59:24 reclaimable → 01:00:04
+  passed; 01:01:02 → 01:01:11 → 01:01:51). The harness runs its SessionEnd hook as the process winds
+  down, after the output the host reports on has closed, so the hook's leaseless session parks its hold
+  after the daemon's release. Fix: a per-poll sweep of leaseless holds parked after a recently reported
+  lease (#3878, ADR 804 second amendment). Run halted until it is on the build; smoke pair 3 follows.
+- Machine stopped 01:08Z.
