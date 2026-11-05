@@ -1,0 +1,4 @@
+[2026-11-04T23:45:57Z] smoke pair start (guard: pair cap $6)
+[2026-11-05T00:26:38Z] smoke pair exit=143
+{"pairs": {"/tmp/cb-musterd-f179797d-uyu6sjqu": 2.0787}, "live_wake_usd": 2.08, "finished_usd": 0.0, "total_usd": 2.08, "pair_cap": 6.0, "total_cap": 110.0, "over_pair": [], "stop": null}
+[2026-11-05T00:27:20Z] smoke pair STOPPED by lazara: reclaimable ~40 s per wait persists (ADR 804 misses hook-session holds); agent1 reported bash blocked; both idle, no unread act

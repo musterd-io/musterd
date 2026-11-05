@@ -18,6 +18,7 @@ from test_config import _ts_command
 def act(monkeypatch):
     monkeypatch.setenv(team.ACT_LANE_ENV, "act")
     monkeypatch.setattr(ad, "ACT_QUIET_SECONDS", 0)
+    monkeypatch.setattr(ad, "ACT_IDLE_SECONDS", 0)
     monkeypatch.setattr(ad, "ACT_POLL_SECONDS", 0)
 
 
@@ -89,6 +90,10 @@ def test_act_lane_enrolls_starts_the_host_and_waits_for_the_seat(wired, act, tmp
     assert "dangerously" not in host
     assert ".claude/" in cmds
     assert "test -s /workspace/repo/patch.txt" in cmds
+    # The self-heal tombstone sits beside the binding, so musterd never rewrites the arm's hooks.
+    tomb = json.loads(envs[0].files["/workspace/repo/.musterd/declined.json"])
+    assert tomb["declined"][0]["surface"] == "musterd:self-heal"
+    assert ad.HARNESS_LIVE_PROBE in cmds
     assert (tmp_path / "logs" / "agent1_host.log").exists()
 
 

@@ -1,0 +1,14 @@
+[2026-11-04T23:41:21Z] musterd 0.7.0 · MUSTERD_REF=9ad1aa8836347aac415455d5dd7b896482fcd46a · claude 2.1.307 (Claude Code)
+[2026-11-04T23:41:25Z] api check: ok
+[2026-11-04T23:41:25Z] gate_smoke start
+[2026-11-04T23:41:38Z] gate_smoke PermissionError: [Errno 13] Permission denied: '/opt/cooperbench/src/cooperbench/agents/swe_agent/trajectories'
+[2026-11-04T23:41:38Z] hold_smoke_697 start
+[2026-11-04T23:41:49Z] hold_smoke_697 PermissionError: [Errno 13] Permission denied: '/opt/cooperbench/src/cooperbench/agents/swe_agent/trajectories'
+[2026-11-04T23:41:49Z] preflight done
+[2026-11-04T23:42:03Z] musterd 0.7.0 · MUSTERD_REF=9ad1aa8836347aac415455d5dd7b896482fcd46a · claude 2.1.307 (Claude Code)
+[2026-11-04T23:42:05Z] api check: ok
+[2026-11-04T23:42:05Z] gate_smoke start
+[2026-11-04T23:42:42Z] gate_smoke PASS
+[2026-11-04T23:42:42Z] hold_smoke_697 start
+[2026-11-04T23:45:28Z] hold_smoke_697 PASS
+[2026-11-04T23:45:28Z] preflight done

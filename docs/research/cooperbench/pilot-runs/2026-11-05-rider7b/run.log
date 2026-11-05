@@ -1,0 +1,39 @@
+# CooperBench rider 7 re-run — run log (lane 01M6ME0A0N, rider7-rerun-manifest.md)
+
+## Deploy and pre-flight, 2026-11-04 23:20Z – 23:45Z
+
+- **Spend:** nick funded run A (10 `core` pairs, hard stop $110) via the app at 23:02Z.
+- **Deploy** from main `9ad1aa88` (#3863: ADR 804, ADR 805, `wake_guard.py`, `--resume-max 0.25`).
+  `fly deploy` built the image but could not swap the existing machine onto it: its host had no free
+  CPUs for a performance-8x (three retries, twice). A clone (`cb-run-2`, `8175e6b907de58`, new empty
+  80 GB volume) on another host took the image; the old machine stays stopped on its old volume.
+- After the deploy: `useradd smoke`, `mkdir -p` + `chmod 1777` the swe_agent `trajectories` directory
+  (absent on the fresh image — the first pre-flight hit `Permission denied` before the mkdir was added
+  to `preflight-b.sh`), the `dataset` symlink. **API check** ok; **`gate_smoke.py` PASS**,
+  **`hold_smoke_697.py` PASS**; `wake_guard.py --once` on an empty glob printed zeros.
+
+## Smoke pair 1, 23:45:57Z → stopped 00:30Z (`smokepair-b.sh`, `MUSTERD_ARM_LANE=act`)
+
+Not scored, not read. Stopped by the author after 44 minutes with both seats idle. **$2.08 of priced
+wakes** (6 wakes, 0 resumed, 0 failed), first calls not yet reported. Evidence in `smoke1-evidence/`.
+
+- **The wake guard died at its first read** (no pair daemon existed yet, exit 0) and the pair ran
+  unguarded for its first minutes; restarted by hand at 00:00Z with the fix later merged as #3870.
+- **ADR 805 works:** every resume was refused for price — `resume would re-ingest 570.2 KiB on
+  claude-sonnet-4-5 for about $0.44 (bound $0.25)` and larger — and every wake spawned fresh at
+  $0.15–0.88.
+- **ADR 804 did not clear the hold:** `reclaimable` ≈ 40 s on every one of six waits (`holds`). The
+  daemon log shows the SessionEnd hook's ~80 ms CLI claim closing after the wake's MCP session and
+  before the report; its row carries no lease, so the lease-only release missed it. Amended in #3876.
+- **Bash was gated** in both seats' first calls (`PreToolUse:Bash hook error: blocked: '**' …`, 7 and 2
+  refusals): musterd's self-heal refreshed the arm's hooks to its own matcher, which names Bash. Also
+  true of the 11-04 smoke pair on re-read (agent2: 5). Fixed in the arm with the `musterd:self-heal`
+  tombstone (README).
+- **Both seats ended their turns waiting for each other** — agent2 held on agent1's lane, agent1 after
+  seven refused shell commands "escalated to the human" (no human on a pair team) — with no act in
+  flight, so no wake was due, no patch written, and the adapter would have waited out the 7,200 s cap.
+  The adapter now ends a seat after 10 minutes idle (nothing unread, no harness process).
+
+Per the manifest, a smoke pair showing `reclaimable` tracking the grace stops the run until the cause is
+fixed on `main`. Three fixes land (#3870, #3876, the arm's tombstone + idle end); smoke pair 2 follows on a
+deploy carrying them. No measured pair has run; the rules are untouched.

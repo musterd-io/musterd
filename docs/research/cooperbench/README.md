@@ -120,6 +120,19 @@ In each container (`adapter.py`):
   remote the agent cannot reach is an **error**, re-run once, never a score. Findings 015 and 016
   carry dated corrections.
 
+- **musterd's self-heal put Bash back under the gate on the act lane (rider 7, both smoke pairs).** The
+  arm leaves Bash out of the gate matcher on purpose (above), but the interrupt hook's self-heal, and the
+  host's heal before a wake, refresh a workspace's hooks to musterd's own set — whose matcher names
+  Bash — once a `.claude/settings.local.json` exists, which the act lane writes. Both smoke pairs then
+  had every shell command refused against `**` (`PreToolUse:Bash hook error: blocked: '**' …`; agent1,
+  2026-11-05: "the hook blocks all bash commands"). The arm now writes the product's own tombstone for
+  that folder, `.musterd/declined.json` with `musterd:self-heal`, beside the binding. ADR 803's build
+  (Bash gated by the paths a command writes) is the real answer and lands separately.
+- **Two seats that both end their turn waiting for each other never wake again.** The act lane resumes
+  a seat on a directed act; with none in flight the pair is silent, and the adapter waited for a patch
+  that was not coming (re-run smoke pair, 2026-11-05: 25 minutes idle). The adapter now ends a seat
+  after 10 minutes with nothing unread and no harness process, patch or not.
+
 ## Verified so far
 
 - `gate_smoke.py`, a real headless Claude Code with the arm's exact wiring (`claude-haiku-5-5`): it

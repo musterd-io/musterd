@@ -52,6 +52,13 @@ names it (`MUSTERD_ARM_LANE=act`, `claude_code_musterd`, Claude Code 2.1.307, `c
 The instruction, settings, enrollment and run shape are rider 7's. Nothing is added for the
 benchmark.
 
+_(Amended 2026-11-05, before any measured pair, after smoke pair 1 — see the
+[run log](./pilot-runs/2026-11-05-rider7b/run.log): the deploy is from `main` at or after the three
+fixes smoke pair 1 forced — #3870 (the guard waits for the first pair), #3876 (ADR 804 also releases the
+wake's hook-session holds) and the arm's `musterd:self-heal` tombstone with a 10-minute idle end
+(a seat with nothing unread and no harness process ends, patch or not). The treatment table's "run
+shape" and "spend guard" rows read with those. Smoke pair 2 repeats step 4 on that build.)_
+
 ## Tasks
 
 CooperBench's 10 `core` pairs, or the first five in `core.json` order if nick funds the smaller run

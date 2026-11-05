@@ -1,0 +1,32 @@
+host — wake actuator  ◉ polling
+  1 seat(s) registered · every 10s · watchdog 3600s · Ctrl-C to stop
+  wake due: agent2 [batched] — message from agent1, waited 44s (lease 01M6MFG7TSC96Q2HHSBVBWR6HH)
+  wake self-heal: agent2 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  resume skipped for agent2: resume would re-ingest 570.2 KiB on claude-sonnet-4-5 for about $0.44 (bound $0.25) — fresh spawn
+  ⚡ woke agent2: spawn→roster 15.1s, session=fresh provenance=wake
+  run for agent2 (fresh) settled: exit=0 cost=$0.8758 wall=267.7s
+  wake cost recorded for agent2: $0.8758 (lease 01M6MFG7TSC96Q2HHSBVBWR6HH)
+  wake due: agent2 [batched] — message from board, waited 2m33s (lease 01M6MFSW3QGCKKYSMZEADZXJAM)
+  wake self-heal: agent2 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  resume skipped for agent2: resume would re-ingest 1 MiB on claude-sonnet-4-5-20250929 for about $0.79 (bound $0.25) — fresh spawn
+  ⚡ woke agent2: spawn→roster 19.1s, session=fresh provenance=wake
+  run for agent2 (fresh) settled: exit=0 cost=$0.2901 wall=104.4s
+  wake cost recorded for agent2: $0.2901 (lease 01M6MFSW3QGCKKYSMZEADZXJAM)
+  wake due: agent2 [batched] — message from agent1, waited 1m4s (lease 01M6MFYDWST3GPBRHQ3P12GRFQ)
+  wake self-heal: agent2 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  resume skipped for agent2: resume would re-ingest 568.5 KiB on claude-sonnet-4-5-20250929 for about $0.44 (bound $0.25) — fresh spawn
+  ⚡ woke agent2: spawn→roster 17.1s, session=fresh provenance=wake
+  run for agent2 (fresh) settled: exit=0 cost=$0.3233 wall=80.6s
+  wake cost recorded for agent2: $0.3233 (lease 01M6MFYDWST3GPBRHQ3P12GRFQ)
+  wake due: agent2 [batched] — message from agent1, waited 1m12s (lease 01M6MG2A4TG314DXTQZ494A2V7)
+  wake self-heal: agent2 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  resume skipped for agent2: resume would re-ingest 665.9 KiB on claude-sonnet-4-5-20250929 for about $0.51 (bound $0.25) — fresh spawn
+  ⚡ woke agent2: spawn→roster 19.1s, session=fresh provenance=wake
+  run for agent2 (fresh) settled: exit=0 cost=$0.2242 wall=70.7s
+  wake cost recorded for agent2: $0.2242 (lease 01M6MG2A4TG314DXTQZ494A2V7)
+  wake due: agent2 [batched] — message from agent1, waited 21s (lease 01M6MG5YJHGK2MRNRA2G381DV0)
+  wake self-heal: agent2 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  resume skipped for agent2: resume would re-ingest 527.4 KiB on claude-sonnet-4-5-20250929 for about $0.41 (bound $0.25) — fresh spawn
+  ⚡ woke agent2: spawn→roster 17.1s, session=fresh provenance=wake
+  run for agent2 (fresh) settled: exit=0 cost=$0.2178 wall=80.6s
+  wake cost recorded for agent2: $0.2178 (lease 01M6MG5YJHGK2MRNRA2G381DV0)
