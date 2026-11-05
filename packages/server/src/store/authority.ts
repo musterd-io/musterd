@@ -40,6 +40,12 @@ export interface DeviceKey {
   kind: AuthenticatorKind;
   /** Passkeys only: the WebAuthn credential id (base64url) this key answers to. */
   credentialId: string | null;
+  /** ADR 808: where the key was made — the registration's origin, or `app` for a phone key.
+   *  Null on a key enrolled before this was recorded. */
+  origin: string | null;
+  /** ADR 808: the relying-party id a passkey is bound to (the origin's hostname); null when
+   *  unrecorded or not a passkey. A surface compares it with its own hostname. */
+  rpId: string | null;
   createdAt: number;
   revokedAt: number | null;
 }
@@ -50,6 +56,8 @@ interface DeviceKeyRow {
   public_key: string;
   kind: string;
   credential_id: string | null;
+  origin: string | null;
+  rp_id: string | null;
   created_at: number;
   revoked_at: number | null;
 }
@@ -60,6 +68,8 @@ const toKey = (r: DeviceKeyRow): DeviceKey => ({
   publicKey: r.public_key,
   kind: r.kind as AuthenticatorKind,
   credentialId: r.credential_id,
+  origin: r.origin ?? null,
+  rpId: r.rp_id ?? null,
   createdAt: Number(r.created_at),
   revokedAt: r.revoked_at === null ? null : Number(r.revoked_at),
 });
@@ -74,6 +84,10 @@ export async function enrollDeviceKey(
     publicKey: string;
     kind: AuthenticatorKind;
     credentialId?: string | null;
+    /** ADR 808: the origin the key was made on; `app` for a phone key. */
+    origin?: string | null;
+    /** ADR 808: the passkey's relying-party id; omitted when not a passkey. */
+    rpId?: string | null;
     now?: number;
   },
 ): Promise<DeviceKey> {
@@ -84,15 +98,42 @@ export async function enrollDeviceKey(
     publicKey: input.publicKey,
     kind: input.kind,
     credentialId: input.credentialId ?? null,
+    origin: input.origin ?? null,
+    rpId: input.rpId ?? null,
     createdAt: now,
     revokedAt: null,
   };
   await db.run(
-    `INSERT INTO device_keys (id, team_id, member_id, public_key, kind, credential_id, created_at, revoked_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
-    [key.id, input.teamId, key.memberId, key.publicKey, key.kind, key.credentialId, now],
+    `INSERT INTO device_keys (id, team_id, member_id, public_key, kind, credential_id, origin, rp_id, created_at, revoked_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+    [
+      key.id,
+      input.teamId,
+      key.memberId,
+      key.publicKey,
+      key.kind,
+      key.credentialId,
+      key.origin,
+      key.rpId,
+      now,
+    ],
   );
   return key;
+}
+
+/** ADR 808: the origin a WebAuthn registration was made on, and its relying-party id, read from
+ *  the client data the verifier already checked. Null when the text is not what a browser sends. */
+export function registrationOrigin(clientDataJson: string): {
+  origin: string | null;
+  rpId: string | null;
+} {
+  try {
+    const origin = (JSON.parse(clientDataJson) as { origin?: unknown }).origin;
+    if (typeof origin !== 'string') return { origin: null, rpId: null };
+    return { origin, rpId: new URL(origin).hostname };
+  } catch {
+    return { origin: null, rpId: null };
+  }
 }
 
 export async function listDeviceKeys(
@@ -101,7 +142,7 @@ export async function listDeviceKeys(
   memberId: string,
 ): Promise<DeviceKey[]> {
   const rows = await db.all<DeviceKeyRow>(
-    `SELECT id, member_id, public_key, kind, credential_id, created_at, revoked_at FROM device_keys
+    `SELECT id, member_id, public_key, kind, credential_id, origin, rp_id, created_at, revoked_at FROM device_keys
       WHERE team_id = ? AND member_id = ? ORDER BY created_at`,
     [teamId, memberId],
   );
@@ -123,7 +164,7 @@ export async function getDeviceKey(
   keyId: string,
 ): Promise<DeviceKey | null> {
   const row = await db.get<DeviceKeyRow>(
-    `SELECT id, member_id, public_key, kind, credential_id, created_at, revoked_at FROM device_keys
+    `SELECT id, member_id, public_key, kind, credential_id, origin, rp_id, created_at, revoked_at FROM device_keys
       WHERE team_id = ? AND id = ?`,
     [teamId, keyId],
   );
@@ -286,6 +327,8 @@ export async function enrollKeyGuarded(
     memberId: input.member.id,
     publicKey: input.publicKey,
     kind: input.kind,
+    // ADR 808: a phone key is made in the app, not on a web origin.
+    ...(input.kind === 'phone' ? { origin: 'app' } : {}),
     now,
   });
   await appendAudit(db, input.teamId, {
@@ -849,6 +892,7 @@ export async function enrollPasskeyGuarded(
     publicKey: verified.publicKeySpki,
     kind: 'passkey',
     credentialId: verified.credentialId,
+    ...registrationOrigin(input.registration.clientDataJson),
     now,
   });
   await appendAudit(db, input.teamId, {

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LiveConfig } from '../client';
-import { enrollPasskey, enrollRefusal, fetchMyDeviceKeys, type DeviceKey } from '../passkeyEnroll';
+import {
+  enrollPasskey,
+  enrollRefusal,
+  fetchMyDeviceKeys,
+  signsHere,
+  type DeviceKey,
+} from '../passkeyEnroll';
 import type { SheetNote } from '../StyleSheet';
 
 /**
@@ -39,6 +45,17 @@ export function Passkeys({
   const active = keys.filter((k) => k.revoked_at === null);
   const passkeys = active.filter((k) => k.kind === 'passkey');
   const phones = active.filter((k) => k.kind === 'phone').length;
+  // ADR 808: a passkey signs only on the hostname it was made for. `null` is a key from before
+  // that was recorded — it may well work here, so it is offered, not refused.
+  const host = location.hostname;
+  const here = passkeys.filter((k) => signsHere(k, host) !== false);
+  const elsewhere = passkeys.filter((k) => signsHere(k, host) === false);
+  // No key on this page can approve a further enrollment: say so instead of starting a ceremony
+  // the browser can only answer with a QR code (2026-11-04).
+  const noneSignHere = passkeys.length > 0 && here.length === 0;
+  const elsewhereOrigins = [...new Set(elsewhere.map((k) => k.origin ?? k.rp_id ?? ''))].filter(
+    Boolean,
+  );
 
   const enroll = async () => {
     setBusy(true);
@@ -67,16 +84,31 @@ export function Passkeys({
         </p>
       ) : (
         <ul className="lc-keys__list">
-          {passkeys.map((k) => (
-            <li key={k.id} className="lc-keys__key">
-              <span className="lc-pair__tick" aria-hidden="true">
-                ✓
-              </span>
-              <span>
-                Passkey <span className="lc-set__hint">since {since(k.created_at)}</span>
-              </span>
-            </li>
-          ))}
+          {passkeys.map((k) => {
+            const signs = signsHere(k, host);
+            return (
+              <li
+                key={k.id}
+                className={`lc-keys__key${signs === false ? ' lc-keys__key--away' : ''}`}
+              >
+                <span className="lc-pair__tick" aria-hidden="true">
+                  {signs === false ? '–' : '✓'}
+                </span>
+                <span>
+                  Passkey <span className="lc-set__hint">since {since(k.created_at)}</span>
+                  {signs === false && (
+                    <span className="lc-set__hint">
+                      {' '}
+                      · made on {k.origin ?? k.rp_id}; cannot sign here
+                    </span>
+                  )}
+                  {signs === null && (
+                    <span className="lc-set__hint"> · made before its origin was recorded</span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
       {phones > 0 && (
@@ -84,10 +116,19 @@ export function Passkeys({
           {phones === 1 ? 'Your paired phone also signs.' : `Your ${phones} paired phones also sign.`}
         </p>
       )}
+      {noneSignHere && (
+        <p className="lc-set__hint" role="status">
+          None of your passkeys can sign on {host}
+          {elsewhereOrigins.length > 0 ? ` — they were made on ${elsewhereOrigins.join(', ')}` : ''}
+          . A new one here needs approval from a passkey that works
+          {elsewhereOrigins.length > 0 ? ' on that origin' : ' elsewhere'}
+          {phones > 0 ? ' or from your paired phone' : ''}; open musterd there to add one.
+        </p>
+      )}
       <button
         type="button"
         className={`lc-set__btn${passkeys.length === 0 ? ' lc-set__btn--go' : ''}`}
-        disabled={busy}
+        disabled={busy || noneSignHere}
         onClick={() => void enroll()}
       >
         {busy
@@ -96,7 +137,7 @@ export function Passkeys({
             ? 'Enroll a passkey'
             : 'Add a passkey on this device'}
       </button>
-      {active.length > 0 && !busy && (
+      {active.length > 0 && !busy && !noneSignHere && (
         <p className="lc-set__hint">
           A new passkey is approved by one you already have, so you’ll be asked twice.
         </p>

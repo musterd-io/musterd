@@ -695,6 +695,10 @@
   font: 400 12.5px/1.35 var(--font-sans);
   color: var(--lc-text);
 }
+/* ADR 808: a passkey bound to another origin is listed, not hidden — and not offered. */
+.lc-keys__key--away {
+  color: var(--lc-muted);
+}
 .lc-keys .lc-set__btn {
   justify-self: start;
 }

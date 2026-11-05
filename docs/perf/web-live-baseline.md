@@ -2963,3 +2963,14 @@ read 151.4 KB against 150.9. live.tsx now loads it lazily after paint, and initi
 The split costs two more chunks. Total JS read 406.1 KB on this laptop against 405.8, and CI read
 406.8 KB (`static` job, run 41916138596). Lazy-loading cannot move that total. Raised by 1.5 KB to
 clear CI's read.
+
+## 2026-11-05 — which passkeys sign here: total JS RAISED 417,000 → 418,000 B (lane 01M6N3XZDCCQT2RG1H76HHDJC4)
+
+ADR 808 increment A. After the hub moved origins, /live listed nick's `localhost`-bound passkeys
+as if they worked and "Add a passkey" fell to a QR code. The settings list now says which passkey
+signs on this hostname and where the others were made, and the add control refuses to start a
+ceremony no key here can approve. The code is `signsHere` (passkeyEnroll.ts) and the copy in
+Passkeys.tsx, all inside the already-lazy settings chunk, so initial JS is unchanged (149.8 KB
+against 150.9). Total JS read 406.7 KB on this laptop against 407.2, and CI read 407.3 KB
+(`static` job, run 41977109469). Lazy-loading cannot move that total. Raised by 1 KB to clear
+CI's read.
