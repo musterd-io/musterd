@@ -91,6 +91,10 @@ scripts. The gate's strongest class is the one most easily bypassed by accident.
     without the bodies, so a misplaced body can add a target but never hide one. The cost is that a
     body line which looks like a write to an unowned `block` path is refused too.
 
+- 2026-11-04 (lane 01M6N3GXC4): the snapshot directory `.musterd/shell-writes/` writes its own
+  `.gitignore` (`*`). No repo had a rule for it, so during an opaque call `git status` showed the
+  snapshot and a `git add -A` in the same command could have committed it.
+
 ## Observability & Evaluation
 
 - **Traces:** Gate A's existing `lane.gate` rows, now also for `Bash` calls, plus the new

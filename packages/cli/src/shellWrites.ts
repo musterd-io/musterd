@@ -165,7 +165,11 @@ export function takeShellSnapshot(
   const dir = join(state, SNAPSHOT_DIR);
   try {
     mkdirSync(dir, { recursive: true });
+    // The directory ignores itself, so no repo needs a rule for it: a snapshot never shows in
+    // `git status` (nor in the after-call comparison) and `git add -A` never commits one.
+    writeFileSync(join(dir, '.gitignore'), '*\n');
     for (const f of readdirSync(dir)) {
+      if (f === '.gitignore') continue;
       const at = statSync(join(dir, f)).mtimeMs;
       if (now - at > SNAPSHOT_TTL_MS) unlinkSync(join(dir, f));
     }
