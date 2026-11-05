@@ -36,7 +36,9 @@ cost compounds under load.
    (`settleWakeLease` returns the row), the daemon sets `held_until = now` on every presence row
    carrying that lease (`wake_lease = <id>`) whose hold is still in the future
    (`releaseWakeHold`, `store/wakeHold.ts`). The reaper frees the row on its next pass, as it would
-   have at the end of the grace.
+   have at the end of the grace. _(Amended 2026-11-05: and on every parked row of the seat last seen
+   since the lease was minted — the wake's own hook sessions carry no lease, and the SessionEnd
+   hook's close is the last before the report; see Consequences.)_
 2. **Only that lease's rows.** A session the seat's human holds, or another wake's, is not this
    wake's and keeps its hold. A row with no hold (a live session) is untouched: the report never
    closes a socket.
@@ -56,6 +58,14 @@ cost compounds under load.
   moment the hold stops meaning anything.
 
 ## Consequences
+
+- _(2026-11-05)_ The first smoke pair on this build (rider 7 re-run, 23:46–00:30Z) still showed
+  `reclaimable` ≈ 40 s on every wait. The daemon log says why: each wake ends with the MCP session's
+  close, then an ~80 ms CLI claim and close (the SessionEnd capture hook, `musterd session end`), then
+  the report. The hook's row carries no `wake_lease`, so the lease-only release missed it and its 45 s
+  hold stood. `releaseWakeHold` now also releases the seat's parked rows last seen since the lease was
+  minted; a row parked before the wake began, or with a live connection, is untouched (test: the
+  hook-session case and the pre-wake hold).
 
 - An act-lane seat's next wake can be leased on the host's next poll after the previous wake reports,
   instead of 45 s later. On finding 031's cycle that is roughly half the per-wake dead time; the
