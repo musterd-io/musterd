@@ -6,7 +6,7 @@ import { getCursor, setCursor } from './cursors.js';
 import { actDelivery, crossedBySeen } from './delivery.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
 import { addMember } from './members.js';
-import { countUnread, insertMessage, listInbox } from './messages.js';
+import { countUnread, insertMessage, listInbox, skipStaleUnowed } from './messages.js';
 import { slowestInboxLagMs } from './metrics.js';
 import { createTeam } from './teams.js';
 
@@ -150,5 +150,101 @@ withDrivers('cursorReceiptOrder', (o) => {
       const { db, ada } = await seed();
       await expect(setCursor(db, ada.id, 'nope')).rejects.toThrow();
     });
+  });
+});
+
+// ADR 811 (lane 01M6M95275): a deep backlog of rows nobody owed the reader is skipped as a count.
+withDrivers('skipStaleUnowed (ADR 811)', (o) => {
+  beforeEach(() => {
+    openStore = o;
+  });
+  const DAY = 24 * 60 * 60 * 1000;
+
+  async function stage() {
+    const db = await openStore();
+    const team = await createTeam(db, { slug: 'revive' });
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+    const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
+    const now = Date.now();
+    const at = async (
+      id: string,
+      ageDays: number,
+      act: string,
+      to: { kind: 'team' } | { kind: 'member'; name: string },
+      meta: Record<string, unknown> | null = null,
+    ) =>
+      await insertMessage(
+        db,
+        team.id,
+        ada.id,
+        to.kind === 'member' ? nick.id : null,
+        makeEnvelope({
+          id,
+          team: 'revive',
+          from: 'Ada',
+          to,
+          act: act as 'message',
+          body: id,
+          ts: now - ageDays * DAY,
+          ...(meta ? { meta } : {}),
+        }),
+        { now: now - ageDays * DAY },
+      );
+    return { db, team, nick, now, at };
+  }
+
+  it('jumps over stale unowed rows up to the oldest directed or owed row, and counts them', async () => {
+    const { db, team, nick, now, at } = await stage();
+    await at('s-40', 40, 'status_update', { kind: 'team' });
+    await at(
+      'l-30',
+      30,
+      'message',
+      { kind: 'team' },
+      { lane_state: { lane: 'L1', state: 'done' } },
+    );
+    await at('m-20', 20, 'message', { kind: 'team' }); // a person's team message: unowed, stale
+    await at('ask-10', 10, 'ask', { kind: 'team' }, { species: 'approve', tier: 'standard' }); // owed to the room: the stop
+    await at('s-9', 9, 'status_update', { kind: 'team' });
+    await at('s-1', 1, 'status_update', { kind: 'team' }); // fresh: never skipped
+    // A seat is owed what arrived after it existed (ADR 549): the fixture backdates rows past the
+    // member's birth, so it hands the skip the floor a long-lived seat would have.
+    const floor = { last_read_ts: 0, last_read_message_id: null };
+    const skip = await skipStaleUnowed(db, nick, floor, { now });
+    expect(skip).not.toBeNull();
+    expect(skip!.to.id).toBe('m-20');
+    expect(skip!.skipped).toBe(3);
+    expect(skip!.stopped_at?.id).toBe('ask-10');
+    // Advanced there, the unread that remain are the stop and everything after it.
+    await setCursor(db, nick.id, skip!.to.id);
+    const left = await listInbox(db, nick, {
+      unreadOnly: true,
+      cursorTs: skip!.to.created_at,
+      cursorId: skip!.to.id,
+    });
+    expect(left.map((r) => r.id)).toEqual(['ask-10', 's-9', 's-1']);
+    // Nothing stale and unowed is left before the stop: a second skip is a no-op.
+    expect(await skipStaleUnowed(db, nick, await getCursor(db, nick.id), { now })).toBeNull();
+    void team;
+  });
+
+  it('a directed row stops the jump whatever its age', async () => {
+    const { db, nick, now, at } = await stage();
+    await at('dm-60', 60, 'message', { kind: 'member', name: 'nick' });
+    await at('s-50', 50, 'status_update', { kind: 'team' });
+    const floor = { last_read_ts: 0, last_read_message_id: null };
+    expect(await skipStaleUnowed(db, nick, floor, { now })).toBeNull();
+  });
+
+  it('nothing within the window is skipped; past it, up to the newest stale row', async () => {
+    const { db, nick, now, at } = await stage();
+    await at('s-3', 3, 'status_update', { kind: 'team' });
+    await at('s-2', 2, 'status_update', { kind: 'team' });
+    const floor = { last_read_ts: 0, last_read_message_id: null };
+    expect(await skipStaleUnowed(db, nick, floor, { now })).toBeNull();
+    const wide = await skipStaleUnowed(db, nick, floor, { now, olderThanMs: DAY });
+    expect(wide?.to.id).toBe('s-2');
+    expect(wide?.skipped).toBe(2);
+    expect(wide?.stopped_at).toBeNull();
   });
 });

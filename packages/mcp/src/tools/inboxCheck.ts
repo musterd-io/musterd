@@ -711,7 +711,24 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         // Combine buffered live deliveries with the authoritative inbox fetch, dedup by id.
         const buffered = [...preBuffered, ...client.drainBuffer()];
         preBuffered = [];
-        const fetched = await client.fetchInbox(args.unread_only ?? true, args.limit ?? 50);
+        let fetched = await client.fetchInbox(args.unread_only ?? true, args.limit ?? 50);
+        // ADR 811: a seat past its limit asks the daemon to jump the cursor over STALE rows nobody
+        // owed it — older than a week, neither directed to it nor an obligation — and is told the
+        // count. Then the same tail is fetched again from the new cursor. One extra round trip,
+        // only when behind; a daemon without the route (404) changes nothing. The drain below still
+        // walks what is left one line at a time, so nothing newer than the window is ever skipped.
+        let skippedStale: { skipped: number; skipped_through?: number } | null = null;
+        if ((fetched.unread_remaining ?? 0) > (args.limit ?? 50)) {
+          // Resolved inside the promise chain: a client without the method (a test double, an
+          // older adapter) and a daemon without the route both land in the catch.
+          const skip = await Promise.resolve()
+            .then(() => client.skipStale())
+            .catch(() => null);
+          if (skip && skip.skipped > 0) {
+            skippedStale = skip;
+            fetched = await client.fetchInbox(args.unread_only ?? true, args.limit ?? 50);
+          }
+        }
         // ADR 514 inc 3: the daemon says which style epoch it resolves for this seat now. When it
         // differs from the envelope held since team_join, fetch the new block and lead with it —
         // naming the dial that moved — so the next reply is written to the current style, and the
@@ -909,8 +926,17 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         // when the BYTE budget did the cutting will raise the limit and get the same reply — the
         // advice has to match the mechanism or it sends them in a circle.
         const byBudget = plan.shown.length < Math.min(ordered.length, args.limit ?? 50);
+        const skipNotice = skippedStale
+          ? `Skipped ${skippedStale.skipped} stale unread older than a week that nobody owed you ` +
+            `(team status updates, lane broadcasts, the room's chatter${
+              skippedStale.skipped_through
+                ? `; through ${new Date(skippedStale.skipped_through).toISOString().slice(0, 10)}`
+                : ''
+            }) — counted, not shown (ADR 811). Anything directed to you or owed is still below.\n\n`
+          : '';
         const notice =
-          plan.elided > 0
+          skipNotice +
+          (plan.elided > 0
             ? `⚠ ${plan.elided} older unread not shown (${byBudget ? `reply size — a bigger limit will not help; pass full: true for a longer reply, or ids: [...] to read named acts` : `limit ${args.limit ?? 50}`}). ` +
               (plan.digested.length > 0
                 ? `The ${plan.digested.length} oldest are digested below and marked read; the rest ` +
@@ -920,7 +946,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
                   `${plan.drainLimit} to see all ${plan.drainLimit}.\n\n`)
             : plan.digested.length > 0
               ? `ℹ ${plan.digested.length} older unread digested below and marked read.\n\n`
-              : '';
+              : '');
         // The digest, after the full rows: the oldest unread this call walked the cursor over, one
         // line each. It reads as "what you missed while away", oldest first, and every id in it is
         // fetchable with `unread_only: false` if a line turns out to matter.
@@ -990,6 +1016,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
             ...(styleChanged ? { style_changed: styleChanged } : {}),
             // Structured readers get the elision as data, not only as prose in `text`.
             elided_unread: plan.elided,
+            ...(skippedStale ? { skipped_stale: skippedStale.skipped } : {}),
             // The rows the cursor walked over in digest form — ids only; the lines are in `text`.
             ...(plan.digested.length > 0
               ? { digested_unread: plan.digested.map(structuredLine) }

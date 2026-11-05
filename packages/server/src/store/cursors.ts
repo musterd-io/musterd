@@ -87,6 +87,8 @@ export async function applyCursorAdvance(
   teamId: string,
   seat: { id: string; name: string },
   lastReadMessageId: string,
+  /** ADR 811: what a skip passed over, recorded beside the id so the audit says why it moved. */
+  detail: Record<string, unknown> = {},
 ): Promise<Cursor> {
   return db.tx(async (t) => {
     const cursor = await setCursor(t, seat.id, lastReadMessageId);
@@ -95,7 +97,7 @@ export async function applyCursorAdvance(
       action: 'continuity.cursor_advanced',
       target: seat.name,
       result: 'allow',
-      detail: { last_read_message_id: lastReadMessageId },
+      detail: { last_read_message_id: lastReadMessageId, ...detail },
     });
     return cursor;
   });

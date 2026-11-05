@@ -449,6 +449,7 @@ import {
   countInbox,
   countUnread,
   listInbox,
+  skipStaleUnowed,
   listTeamMessages,
   localNodeForTeam,
   latestStatusUpdates,
@@ -1484,6 +1485,16 @@ function recoverySecretPresented(ctx: Ctx, presented: string | undefined): boole
   const b = Buffer.from(presented.trim(), 'utf8');
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+/** ADR 811: the skip's age floor, in ms; omitted means the default week. */
+const SkipStaleBody = z.object({
+  older_than_ms: z
+    .number()
+    .int()
+    .min(60_000)
+    .max(365 * 24 * 60 * 60 * 1000)
+    .optional(),
+});
 
 const PasskeyEnrollBody = z.object({
   actor: z.string().min(1),
@@ -11501,6 +11512,37 @@ export async function handleHttp(
         return sendJson(res, 200, scrubForReader(messageVisibilityOf(member), { messages }));
       }
 
+      // ADR 811: jump the read cursor over STALE rows nobody owed this seat — older than a week,
+      // neither directed to it nor an obligation act to the room — and report the count. A directed
+      // or owed row stops the jump whatever its age; the ordinary read then renders it. This is
+      // what lets a months-old backlog of lane broadcasts and status updates drain in one call
+      // instead of a hundred (lane 01M6M95275: 86% of a 22.9k backlog was exactly that).
+      if (method === 'POST' && rest === '/inbox/cursor/skip-stale') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        const body = parseOrBadRequest(SkipStaleBody, await readJson(req));
+        const prev = await getCursor(ctx.db, member.id);
+        const skip = await skipStaleUnowed(ctx.db, member, prev, {
+          ...(body.older_than_ms !== undefined ? { olderThanMs: body.older_than_ms } : {}),
+        });
+        if (!skip) return sendJson(res, 200, { skipped: 0, cursor: prev, stopped_at: null });
+        const cursor = await applyCursorAdvance(ctx.db, team.id, member, skip.to.id, {
+          skipped_stale: skip.skipped,
+          skipped_through: skip.to.created_at,
+          ...(skip.stopped_at ? { stopped_at: skip.stopped_at.id } : {}),
+        });
+        return sendJson(res, 200, {
+          skipped: skip.skipped,
+          skipped_through: skip.to.created_at,
+          cursor,
+          stopped_at: skip.stopped_at
+            ? {
+                id: skip.stopped_at.id,
+                act: skip.stopped_at.act,
+                created_at: skip.stopped_at.created_at,
+              }
+            : null,
+        });
+      }
       if (method === 'POST' && rest === '/inbox/cursor') {
         const { team, member } = await authTouch(ctx, slug, req);
         const body = (await readJson(req)) as { last_read_message_id?: string };
