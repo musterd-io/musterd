@@ -101,3 +101,8 @@ host's launcher shell whose exports carry `MUSTERD_LAUNCH_SURFACE=claude-code` (
   needed it after the machine stopped). ~17:05Z: nick ran `fly tokens revoke <id> <id> <id>` on the three
   cooperbench deploy tokens from his own login (they would have expired 2026-11-06 20:5x UTC regardless);
   reported done to lazara in chat. Manifest step 7 complete.
+- 2026-11-05 ~17:25Z: nick destroyed the original machine `865105fe907268` (billowing-wind-6868, created
+  2026-10-20) and its volume `vol_rkgdz6m6jd2zoyw4` from his own login. Nothing lost: the clone
+  `8175e6b907de58` (cb-run-2, volume `vol_vxmpy90n7y72pe84`) was made from that volume on 2026-11-04 23:37Z
+  and every pair after that ran on the clone; the clone and its volume stay, stopped, holding the
+  uncommitted agent streams. `musterd-cooperbench` now has one machine.
