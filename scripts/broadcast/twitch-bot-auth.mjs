@@ -7,7 +7,7 @@
  * signed in as the bot. This script runs that flow on the operator's machine and hands the result
  * straight to `fly secrets import --stage` — it prints digests, never a value.
  *
- *   node scripts/broadcast/twitch-bot-auth.mjs --client-id <id> [--channel musterd] [--app musterd-broadcast] [--port 3000]
+ *   node scripts/broadcast/twitch-bot-auth.mjs --client-id <id> [--channel musterd_io] [--app musterd-broadcast] [--port 3000]
  *
  * The client secret is read from the terminal with echo off (or `MUSTERD_TWITCH_CHAT_CLIENT_SECRET`).
  * The app's OAuth Redirect URL must be exactly `http://localhost:<port>` (the console refuses a path
@@ -33,14 +33,14 @@ function arg(name, fallback) {
 }
 
 const clientId = arg('client-id', process.env.MUSTERD_TWITCH_CHAT_CLIENT_ID);
-const channel = arg('channel', process.env.MUSTERD_TWITCH_CHAT_CHANNEL ?? 'musterd');
+const channel = arg('channel', process.env.MUSTERD_TWITCH_CHAT_CHANNEL ?? 'musterd_io');
 const app = arg('app', 'musterd-broadcast');
 const port = Number(arg('port', '3000'));
 const expectBot = arg('bot', 'musterdbot');
 
 if (!clientId || process.argv.includes('--help')) {
   console.error(
-    'usage: twitch-bot-auth.mjs --client-id <id> [--channel musterd] [--app musterd-broadcast] [--port 3000] [--bot musterdbot]',
+    'usage: twitch-bot-auth.mjs --client-id <id> [--channel musterd_io] [--app musterd-broadcast] [--port 3000] [--bot musterdbot]',
   );
   process.exit(clientId ? 0 : 2);
 }
