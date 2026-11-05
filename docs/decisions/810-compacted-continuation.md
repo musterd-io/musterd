@@ -45,7 +45,10 @@ with no new call to a model and nothing the host cannot attest.
    `pattern`, `id`, `lane`, `to`, `act`, …), every other key by name alone; the credential patterns
    apply to the seat's text and the person's prompts, run on the whole text before any clip, and
    cover JSON-quoted keys, bearer headers, "the password is …" and long opaque tokens. See
-   Consequences.)_
+   Consequences.)_ _(Amended 2026-11-05: later the same day — a key's NAME admits nothing; a value
+   rides only when it parses as a grammar: a path with a slash, a musterd id, an act or lane state
+   from the enum, an integer. `pattern`, `glob`, `name`, `to`, `seat` and every other argument ride
+   as the key alone. See Consequences.)_
 3. **It is fitted to the bound by the rung's own arithmetic.** The budget is what `resume_max_usd`
    buys at bytes ÷ 4 tokens × the model's input price (`briefBudgetBytes`), capped at 48 KiB
    (`BRIEF_MAX_BYTES` — a `-p` argument stays well under Linux's per-argument ceiling, and a longer
@@ -89,6 +92,13 @@ with no new call to a model and nothing the host cannot attest.
   whole text before clipping, widens them (quoted keys, bearer, "is/was", 24+ character opaque
   tokens), and adds a regression that drives a JSON password, a bearer header and a written secret
   through the real builder into the spawned `-p` argument.
+- _(2026-11-05, second acceptance read)_ big-body then showed the name-based allowlist admitting a
+  secret under an innocent key: `{pattern: 'hunter2'}` rode as `pattern=hunter2`, and so would any
+  free-form `path`, `name` or `id`. A field name is not a grammar. `constrainedValue` now admits a
+  value only when it parses as one — a path containing a slash in path characters, a Crockford
+  ULID, an act or lane state from the enum, an integer — under a key that means that thing;
+  everything else is the key alone. The regressions drive `{pattern:'hunter2'}`, `{to:'hunter2'}`,
+  `{id:'hunter2'}` and `{file_path:'hunter2'}` through the real builder and the spawned `-p`.
 - On the act lane with the bound set, a wake past the bound keeps the thread of its own prior
   session for the price of the brief instead of none for the price of the boot. The boot itself is
   unchanged: this ADR does not make a fresh wake cheaper, it makes it less forgetful.
