@@ -12,9 +12,9 @@
     "eas-build-post-install": "pnpm --filter @musterd/protocol build"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~58.0.15",
+    "@expo/metro-runtime": "~58.0.17",
     "@musterd/protocol": "workspace:*",
-    "expo": "~58.0.17",
+    "expo": "~58.0.23",
     "expo-camera": "~58.0.12",
     "expo-constants": "~58.0.13",
     "expo-font": "~58.0.9",

@@ -1,135 +1,22 @@
 import { generateKeyPairSync } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-// Resolve the actual dependencies Expo consumes, including pnpm's installed patches.
+// Resolve the actual dependencies Expo consumes, including pnpm's installed patches (patches/).
 const mobileRequire = createRequire(new URL('../packages/mobile/package.json', import.meta.url));
 const expoRequire = createRequire(mobileRequire.resolve('expo/package.json'));
-const configRequire = createRequire(expoRequire.resolve('@expo/config/package.json'));
 const cliRequire = createRequire(expoRequire.resolve('@expo/cli/package.json'));
-const merge = configRequire('deepmerge') as (
-  target: object,
-  source: object,
-) => Record<string, unknown>;
-
-type LegacySchema = {
-  safeParse(value: unknown): { success: boolean };
-  safeParseAsync(value: unknown): Promise<{ success: boolean }>;
-};
-type LegacyZod = {
-  unknown(): unknown;
-  number(): unknown;
-  preprocess(fn: (value: unknown) => unknown, schema: unknown): unknown;
-  array(
-    schema: unknown,
-  ): LegacySchema & { max(n: number): LegacySchema; length(n: number): LegacySchema };
-};
 
 describe('installed dependency guards', () => {
-  it.each(['source', 'target'] as const)(
-    'keeps %s keys from changing a merged prototype',
-    (side) => {
-      const supplied = JSON.parse(
-        '{"__proto__":{"unexpected":true},"nested":{"value":1}}',
-      ) as object;
-      const result = side === 'source' ? merge({}, supplied) : merge(supplied, {});
-      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
-      expect(result['unexpected']).toBeUndefined();
-      expect(result['nested']).toEqual({ value: 1 });
-      expect(merge({ list: [1], nested: { a: 1 } }, { list: [2], nested: { b: 2 } })).toEqual({
-        list: [1, 2],
-        nested: { a: 1, b: 2 },
-      });
-    },
-  );
-
-  it.each([false, true])(
-    'rejects oversized legacy arrays before parsing elements (async=%s)',
-    async (async) => {
-      const z = cliRequire('zod') as LegacyZod;
-      let visited = 0;
-      const schema = z
-        .array(
-          z.preprocess((value) => {
-            visited++;
-            return value;
-          }, z.unknown()),
-        )
-        .max(2);
-      const result = async
-        ? await schema.safeParseAsync(Array(1000).fill(1))
-        : schema.safeParse(Array(1000).fill(1));
-      expect(result.success).toBe(false);
-      expect(visited).toBe(0);
-      expect(schema.safeParse([1, 2]).success).toBe(true);
-    },
-  );
-
-  it.each(['cjs', 'esm'] as const)(
-    'bounds legacy array failures through the %s entry point',
-    async (entry) => {
-      const z = (
-        entry === 'cjs'
-          ? cliRequire('zod')
-          : await import(pathToFileURL(cliRequire.resolve('zod').replace(/\.cjs$/, '.js')).href)
-      ) as LegacyZod;
-      let visited = 0;
-      const schema = z.array(
-        z.preprocess((value) => {
-          visited++;
-          return value;
-        }, z.number()),
-      );
-      expect(schema.safeParse(Array(1000).fill('invalid')).success).toBe(false);
-      expect(visited).toBe(1);
-      visited = 0;
-      expect((await schema.safeParseAsync(Array(1000).fill('invalid'))).success).toBe(false);
-      expect(visited).toBe(1);
-      visited = 0;
-      expect(schema.length(2).safeParse(Array(1000).fill(1)).success).toBe(false);
-      expect(visited).toBe(0);
-      expect((await schema.safeParseAsync([1, 2])).success).toBe(true);
-    },
-  );
-
-  it('preserves safe own keys for null-prototype sources and nested targets', () => {
-    const source = Object.create(null) as Record<string, unknown>;
-    source['__proto__'] = { unexpected: true };
-    const symbol = Symbol('kept');
-    Object.defineProperty(source, symbol, { enumerable: true, value: 42 });
-    const result = merge(Object.create(null) as object, source);
-    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
-    expect(result['unexpected']).toBeUndefined();
-    expect(Reflect.get(result, symbol)).toBe(42);
-    const nested = merge({ nested: JSON.parse('{"__proto__":{"unexpected":true}}') }, {});
-    expect(Object.getPrototypeOf(nested['nested'])).toBe(Object.prototype);
-  });
-
-  it('bounds validation errors from Expo plugin command lists', () => {
-    const { PluginSchema } = cliRequire('./build/src/start/server/DevToolsPlugin.schema.js') as {
-      PluginSchema: {
-        safeParse(value: unknown): { success: boolean; error?: { issues: unknown[] } };
-      };
-    };
-    const plugin = {
-      packageName: 'dependency-control',
-      packageRoot: '/synthetic',
-      cliExtensions: {
-        description: 'control',
-        entryPoint: 'index.js',
-        commands: Array.from({ length: 1000 }, () => ({
-          name: '',
-          title: '',
-          environments: ['cli'],
-        })),
-      },
-    };
-    const result = PluginSchema.safeParse(plugin);
-    expect(result.success).toBe(false);
-    expect(result.error?.issues).toHaveLength(2);
-    plugin.cliExtensions.commands = [{ name: 'check', title: 'Check', environments: ['cli'] }];
-    expect(PluginSchema.safeParse(plugin).success).toBe(true);
+  // Expo SDK 58.0.23 dropped both packages the old local patches guarded (GHSA-mrhx-c7xc-m3w5,
+  // GHSA-gcqx-w48m-w2h4). If either comes back, it comes back unpatched: fail here first.
+  it('the lockfile resolves neither legacy zod nor deepmerge', () => {
+    // The lockfile, not module resolution: a global NODE_PATH can answer for a package the repo
+    // no longer installs.
+    const lock = readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8');
+    expect(lock).not.toMatch(/^ {2}'?zod@[0-3]\./m);
+    expect(lock).not.toMatch(/^ {2}'?deepmerge@/m);
   });
 
   it('accepts valid RSA signatures and rejects extra digest algorithm elements', () => {

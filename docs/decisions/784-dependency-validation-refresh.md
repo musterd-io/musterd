@@ -58,6 +58,16 @@ the dependency refresh. The same PR records the measurements and a narrow budget
 ADR 151 in `docs/perf/web-live-baseline.md`, and classifies Vite's separately emitted site
 prose stylesheet. The eager-JS and largest-chunk limits remain unchanged.
 
+2026-11-04 (lane 01M6N2XM0X): Expo SDK 58.0.23 brings `@expo/cli` 58.1.19, which no longer
+depends on Zod, and `@expo/config` 58.0.11, which no longer depends on deepmerge. With `expo` at
+`~58.0.23` and `@expo/metro-runtime` at `~58.0.17` (its new peer floor), the lockfile resolves
+neither Zod 3 nor deepmerge, so both local patches and their behavioral guards are removed, as
+decision 3 intends once an upstream release removes the path. `pnpm audit` reports no known
+vulnerabilities. The guard test now checks the lockfile for either package coming back: module
+resolution is not a reliable check, because a global `NODE_PATH` still found a deepmerge the
+repo no longer installs. The braces and node-forge guards are unchanged. This closes
+Dependabot alerts #116 (Zod, high) and #124 (deepmerge, low).
+
 ## Observability & Evaluation
 
 **Traces:** existing lane and coordination acts record the inventory, authorization, checks
