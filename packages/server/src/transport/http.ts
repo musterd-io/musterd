@@ -12113,7 +12113,8 @@ export async function handleHttp(
       const toHub = hubLiveRedirect(path, url.search, readNodeState().nodes);
       if (toHub) {
         res.writeHead(302, { location: toHub, 'cache-control': 'no-store' });
-        return res.end();
+        res.end();
+        return;
       }
       return serveStatic(req, ctx.config.webRoot, path, res);
     }
