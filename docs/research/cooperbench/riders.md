@@ -302,3 +302,26 @@ finding 032's $25.04 — every wake `compacted`, $4.44 for 25; the first calls $
 (46 wait calls + 25 wakes = 71, plus 22 shell sleeps). No errors. The lane is a 7 s wake with context;
 the pair's cost is its first calls, which the lane does not touch.
 
+## Rider 8: finding 033's lever — the act-lane seat ends its turn when it waits, said first and plainly, and `sleep` denied
+
+**Lane:** `01M6PZZWKY` (this pre-registration and the arm change); goal `coordination-cost`. **Status:**
+pre-registered 2026-11-05, before the arm change has run on any pair. Manifest:
+[rider8-manifest.md](./rider8-manifest.md). Decided by nick, 2026-11-05 ~23:10Z, in session, choosing
+the arm-guidance option from [finding 033](../033-cooperbench-rider7-rerun-b.md)'s decision.
+
+**What changes.** Nothing in the product. The arm's act-lane protocol leads with the turn rule (end
+your turn the moment you wait on your partner; the host wakes you), its workflow's "check" step says
+the same, and `settings.local.json` denies `Bash(sleep:*)`. Everything else is finding 033's build and
+shape.
+
+**Why these rules.** Finding 033: the lane is a 7 s wake with context and the pair still costs $22.50
+against finding 028's $18.45, because the two first calls are the pair ($18.06) and the seats waited
+inside them (46 wait-mode checks, 22 shell sleeps). R8a counts every form of waiting plus the wakes
+that replace it; R8b is the decision (can the loop beat $18.45); R8c says whether the money left the
+first calls, the only place it could come from.
+
+**Verdict rule.** R8a **≤ 55** acted / **≥ 85** did not (finding 033: 93). R8b **≤ $18.00** acted /
+**≥ $22.00** did not (finding 033: $22.50; finding 028: $18.45). R8c **≤ $12.00** acted / **≥ $17.00**
+did not (finding 033: $18.06). Between, "part of it". A pair whose seat ended its turn and was never
+woken is a coordination loss of the treatment, counted per pair; three in the first five stop the run.
+
