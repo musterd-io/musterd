@@ -82,7 +82,6 @@ describe('the gate and shell writes (ADR 803)', () => {
     git('init', '-q');
     mkdirSync(join(dir, 'packages/protocol/src'), { recursive: true });
     writeFileSync(join(dir, 'packages/protocol/src/x.ts'), 'a\n');
-    writeFileSync(join(dir, '.gitignore'), '.musterd/\n');
     git('add', '.');
     git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'init');
     vi.spyOn(process, 'cwd').mockReturnValue(dir);
@@ -183,7 +182,16 @@ describe('the gate and shell writes (ADR 803)', () => {
     expect(http.gateCheck).not.toHaveBeenCalled();
     expect(out).toContain('cannot tell which files this command writes');
     expect(out).toContain("'protocol'");
-    expect(readdirSync(join(dir, '.musterd/shell-writes'))).toHaveLength(1);
+    expect(
+      readdirSync(join(dir, '.musterd/shell-writes')).filter((f) => f.endsWith('.json')),
+    ).toHaveLength(1);
+    // The repo has no rule for `.musterd/`; the snapshot directory ignores itself.
+    expect(
+      execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
+        cwd: dir,
+        encoding: 'utf8',
+      }),
+    ).not.toContain('shell-writes');
 
     writeFileSync(join(dir, 'packages/protocol/src/x.ts'), 'changed\n');
     http.gateCheck.mockResolvedValue({
@@ -203,7 +211,9 @@ describe('the gate and shell writes (ADR 803)', () => {
     );
     expect(after).toContain('PostToolUse');
     expect(after).toContain("changed 'packages/protocol/src/x.ts'");
-    expect(readdirSync(join(dir, '.musterd/shell-writes'))).toHaveLength(0);
+    expect(
+      readdirSync(join(dir, '.musterd/shell-writes')).filter((f) => f.endsWith('.json')),
+    ).toHaveLength(0);
   });
 
   it('a path already changed before the call counts only if the call touched it again', async () => {
