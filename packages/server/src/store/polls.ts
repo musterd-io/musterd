@@ -216,7 +216,8 @@ export async function reportCounts(
     c.post_failed ? 1 : 0,
     pollId,
   ]);
-  await reportLive(db, teamId, c.live, now);
+  // Counts do not refresh liveness: only `POST /stream/live`, sent as Twitch answers, does. A report's
+  // arrival time is not when Twitch last said live, so stamping it here would stretch the grace.
   return 'ok';
 }
 
