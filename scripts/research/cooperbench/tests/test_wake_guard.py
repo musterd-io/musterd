@@ -47,3 +47,21 @@ def test_an_unreadable_db_counts_zero_never_a_guess(tmp_path):
     (tmp_path / "cb-musterd-x" / "musterd.db").write_text("not a database")
     out = wake_guard.check(str(tmp_path / "cb-musterd-*"), pair_cap=1, total_cap=1)
     assert out["live_wake_usd"] == 0.0 and out["stop"] is None
+
+
+def test_the_loop_keeps_polling_until_a_pair_has_been_seen(tmp_path, monkeypatch):
+    # Before any pair exists the glob is empty: the guard must wait, not exit (re-run smoke pair, 11-04).
+    calls = {"n": 0}
+
+    def fake_sleep(_s):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            pair_db(tmp_path, "late", [0.5])
+        elif calls["n"] == 2:
+            import shutil
+
+            shutil.rmtree(tmp_path / "cb-musterd-late")
+
+    monkeypatch.setattr(wake_guard.time, "sleep", fake_sleep)
+    code = wake_guard.main(["--pairs", str(tmp_path / "cb-musterd-*"), "--pair-cap", "6", "--total-cap", "110"])
+    assert code == 0 and calls["n"] == 2
