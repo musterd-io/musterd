@@ -6558,7 +6558,7 @@ export async function handleHttp(
         const lease = await settleWakeLease(ctx.db, team.id, body.lease_id);
         // ADR 804: the run this lease spawned is over; its parked session holds the seat's next
         // wake for nothing (finding 031), so its reclaim hold ends with the report.
-        if (lease) await releaseWakeHold(ctx.db, lease.id, Date.now());
+        if (lease) await releaseWakeHold(ctx.db, lease, Date.now());
         if (!lease) {
           const settled = await ctx.db.get<{
             member_id: string;
