@@ -65,8 +65,11 @@ export function startPollRuntime(deps: PollRuntimeDeps) {
     if (running || stopped) return;
     running = true;
     try {
+      // Until the reader is subscribed there is no bot to post through and no liveness to report:
+      // touch nothing, so a restart neither drops the announcement nor reports a guessed live=false.
       const chat = deps.chat();
-      if (chat && now() - lastLiveAt >= (deps.liveMs ?? 30_000)) {
+      if (!chat) return;
+      if (now() - lastLiveAt >= (deps.liveMs ?? 30_000)) {
         lastLiveAt = now();
         live = await chat.live();
         await seat('/stream/live', { method: 'POST', body: JSON.stringify({ live }) }).catch(
