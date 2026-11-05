@@ -1340,9 +1340,12 @@ answer's text.
 ## A.38 Stale unowed rows are skipped as a count (unreleased — ADR 811)
 
 - `POST /teams/:slug/inbox/cursor/skip-stale` `{older_than_ms?}` (default seven days; the caller's
-  own cursor) advances the read cursor to the row just before the oldest unread row that is owed
-  to the caller — directed to them, or an `ask` / `request_help` to the room — skipping only rows
-  older than the window that are owed to nobody. It answers `{skipped, skipped_through?, cursor,
+  own cursor) advances the read cursor to the row just before the oldest unread row that is still
+  owed to the caller — an obligation act (`ask` / `request_help` to anyone; `handoff` / `steer` /
+  `challenge` / `defer` to the caller, or a review dispute) that no discharge has settled (answered,
+  thread resolved, the caller's own reply, its lane moved on, or already shown to the caller) —
+  skipping only rows older than the window that are owed to nobody, a directed plain `message`
+  among them (ADR 811, amended 2026-11-05). It answers `{skipped, skipped_through?, cursor,
   stopped_at?}` and records `continuity.cursor_advanced` with `skipped_stale`, `skipped_through`
-  and `stopped_at`. A row within the window is never skipped. A server MUST NOT skip past an owed
-  row whatever its age.
+  and `stopped_at`. A row within the window is never skipped. A server MUST NOT skip past a
+  still-open owed row whatever its age.

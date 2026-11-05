@@ -352,7 +352,9 @@ describe('inbox command', () => {
       expect(await unreadCount()).toBe(209);
     });
 
-    it('a directed row older than the window stops the skip and is shown', async () => {
+    // ADR 811 amendment (2026-11-05): the stop is a still-open OBLIGATION — a steer here; a plain
+    // directed message older than the window is counted with the rest.
+    it('an open directed obligation older than the window stops the skip and is shown', async () => {
       await seed(205, 200);
       await ada.send(
         'dawn',
@@ -361,7 +363,7 @@ describe('inbox command', () => {
           team: 'dawn',
           from: 'Ada',
           to: { kind: 'member', name: 'nick' },
-          act: 'message',
+          act: 'steer',
           body: 'old but yours',
           ts: base + 300 * 60_000,
           thread: null,

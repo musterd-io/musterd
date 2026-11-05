@@ -38,9 +38,10 @@ cannot fall behind without bound, without ever passing something it was owed?
    Seven days is ADR 599's window: what it already calls stale as an obligation, this calls stale
    as chatter.
 
-2. **An owed row stops the skip whatever its age, answered or not.** The skip jumps to the row
-   just before the oldest owed row after the cursor; the ordinary read then renders that row, pins
-   it if it is still open, or shows it discharged. Discharge is not the skip's business.
+2. **An owed row stops the skip whatever its age, answered or not.** _(Amended 2026-11-05: an owed
+   row stops the skip only while it is still open — see the amendment below.)_ The skip jumps to
+   the row just before the oldest owed row after the cursor; the ordinary read then renders that
+   row, pins it if it is still open, or shows it discharged. Discharge is not the skip's business.
 
 3. **Nothing within the window is skipped.** Rows younger than seven days keep ADR 287 and ADR 433
    exactly: rendered in full, folded to a line, or digested, and the cursor walks only what was
@@ -70,6 +71,30 @@ cannot fall behind without bound, without ever passing something it was owed?
   a consuming read whose first unread page is `truncated` calls the skip before walking, prints
   `skipped N stale unread … (ADR 811)` under the header (stderr beside `--json`), and refetches from
   the new cursor; `--peek`, a lens, and `--limit 0` never skip.)_
+
+### Amendment 2026-11-05 — a discharged owed row does not stop the skip (lane 01M6PM9Z0Z)
+
+Measured the day the first increment landed, on the hub DB (read-only): the deep-backlog seats'
+oldest unread "owed" row was months old and long settled. big-body: cursor 119 d, 22,941 unread,
+21,383 older than a week — the skip would pass 584 and stop at a room `ask` from 106.9 d before,
+answered since. dolly: 22,933 unread, passes 219, stops at a directed `message` 114.9 d old.
+wanderer's first live skip passed 746 and stopped at that same ask; a second passed 0. An ordinary
+read past its limit marks nothing read (ADR 287), so decision 2 as written held every such seat at
+its stopper for good, and the Problem this ADR names was not solved for the seats it was measured
+on. Decision 2 is therefore narrowed, not reversed:
+
+- **"Owed" is the pinned set's own predicate** (ADR 429/434/505/614, `stillOwedSql` in
+  `store/messages.ts`, spelled once for both readers): an obligation act — `ask` / `request_help`
+  to anyone, `handoff` / `steer` / `challenge` / `defer` to the reader — that no discharge shape
+  has settled, a review dispute no verdict has answered, and nothing whose lane has moved on.
+- **Already shown is discharged** (doorbell contract clause 7(iv), `shownToRecipientSql` over the
+  `inbox.rendered` audit rows): a steer the seat was rendered months ago asks nothing of a skip.
+- **A plain `message` addressed to the reader is not an obligation** (ADR 429 keeps directed
+  messages newest-N for the same reason) and is counted like the room's chatter. The first increment
+  stopped at any `to_member` row, which was broader than the class the inbox itself pins.
+
+A still-open obligation stops the skip exactly as before, whatever its age. SPEC A.38 says the
+same. The before/after for the three seats above is the acceptance evidence of the follow-up lane.
 
 ## Observability & Evaluation
 
