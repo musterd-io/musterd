@@ -1,0 +1,8 @@
+host — wake actuator  ◉ polling
+  1 seat(s) registered · every 10s · watchdog 3600s · Ctrl-C to stop
+  wake due: agent1 [batched] — request_help from agent2, waited 14m8s (lease 01M6MGETHJJJZ1A391FFMGHHAZ)
+  wake self-heal: agent1 — repaired nothing; the harness permission layer is still behind — run `musterd init --refresh-permissions`.
+  resume skipped for agent1: resume would re-ingest 1.3 MiB on claude-sonnet-4-5-20250929 for about $1.05 (bound $0.25) — fresh spawn
+  ⚡ woke agent1: spawn→roster 19.1s, session=fresh provenance=wake
+  run for agent1 (fresh) settled: exit=0 cost=$0.1475 wall=51.3s
+  wake cost recorded for agent1: $0.1475 (lease 01M6MGETHJJJZ1A391FFMGHHAZ)

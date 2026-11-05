@@ -72,6 +72,21 @@ CONTAINER_LOCAL_SETTINGS = f"{CONTAINER_REPO_PATH}/.claude/settings.local.json"
 ACT_RUN_SECONDS = 7200
 ACT_POLL_SECONDS = 30
 ACT_QUIET_SECONDS = 300
+# Both seats idle with nothing unread and no harness process for this long is the end of the pair
+# whether or not a patch was written: the re-run's first smoke pair (2026-11-05) sat 25 minutes in
+# exactly that state — each agent had ended its turn waiting for the other, no act was in flight, so
+# no wake was due — and would have run to the 7,200 s cap. What is read then is whatever is there.
+ACT_IDLE_SECONDS = 600
+# A harness process is live in the container (no `ps` in the task images; /proc is read directly).
+HARNESS_LIVE_PROBE = "grep -lq claude /proc/[0-9]*/cmdline 2>/dev/null"
+# musterd's self-heal (the interrupt hook, and the host before a wake) refreshes a workspace's hooks
+# to musterd's own set, whose gate matcher includes Bash. The arm gates the file tools only (README:
+# with `**` the gate matched every shell command), so the tombstone that turns self-heal off for one
+# folder is written beside the binding. A product knob, not a bypass: `musterd:self-heal`.
+SELF_HEAL_TOMBSTONE = {
+    "version": 1,
+    "declined": [{"surface": "musterd:self-heal", "at": "2026-11-05T00:00:00Z", "by": "cooperbench arm"}],
+}
 
 
 def host_label(pair: Any, agent_id: str) -> str:
@@ -187,6 +202,7 @@ class ClaudeCodeMusterdRunner:
         """
         env.execute({"command": f"mkdir -p {CONTAINER_REPO_PATH}/.claude {CONTAINER_ADMIN_HOME}/.musterd"}, timeout=30)
         write_file_in_container(env, CONTAINER_LOCAL_SETTINGS, json.dumps(settings))
+        write_file_in_container(env, f"{CONTAINER_REPO_PATH}/.musterd/declined.json", json.dumps(SELF_HEAL_TOMBSTONE))
         mcp_env = {k: v for k, v in seat_env.items() if k != "PATH"}
         env_args = " ".join(f"-e {shlex.quote(f'{k}={v}')}" for k, v in mcp_env.items())
         added = env.execute(
@@ -247,6 +263,7 @@ class ClaudeCodeMusterdRunner:
     def _wait_for_act_lane(self, env: Any, pair: Any, agent_id: str, *, deadline: float) -> None:
         host = cfg.Cli(pair.workdir, pair.port)
         quiet_since: float | None = None
+        idle_since: float | None = None
         while time.monotonic() < deadline:
             patch = env.execute({"command": f"test -s {CONTAINER_REPO_PATH}/patch.txt"}, timeout=30)
             unread = 0
@@ -254,14 +271,16 @@ class ClaudeCodeMusterdRunner:
                 unread = unread_directed(host.run("report", "delivery", "--json"), agent_id)
             except Exception:  # noqa: BLE001 — a failed read is "not quiet", never an exit
                 unread = 1
+            live = env.execute({"command": HARNESS_LIVE_PROBE}, timeout=30).get("returncode") in (0, None)
             quiet = patch.get("returncode") in (0, None) and unread == 0
+            idle = unread == 0 and not live
             now = time.monotonic()
-            if quiet:
-                quiet_since = quiet_since if quiet_since is not None else now
-                if now - quiet_since >= ACT_QUIET_SECONDS:
-                    return
-            else:
-                quiet_since = None
+            quiet_since = (quiet_since if quiet_since is not None else now) if quiet else None
+            idle_since = (idle_since if idle_since is not None else now) if idle else None
+            if quiet_since is not None and now - quiet_since >= ACT_QUIET_SECONDS:
+                return
+            if idle_since is not None and now - idle_since >= ACT_IDLE_SECONDS:
+                return
             time.sleep(min(ACT_POLL_SECONDS, max(0.0, deadline - now)))
 
     def run(
