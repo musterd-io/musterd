@@ -1,0 +1,160 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 7b97bfb..2bc281c 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -485,11 +485,15 @@ class Editor:
+         env: cabc.Mapping[str, str] | None = None,
+         require_save: bool = True,
+         extension: str = ".txt",
++        timeout: int | None = None,
+     ) -> None:
+         self.editor = editor
+         self.env = env
+         self.require_save = require_save
+         self.extension = extension
++        if timeout is not None and timeout <= 0:
++            raise ValueError("timeout must be a positive integer")
++        self.timeout = timeout
+ 
+     def get_editor(self) -> str:
+         if self.editor is not None:
+@@ -505,7 +509,7 @@ class Editor:
+                 return editor
+         return "vi"
+ 
+-    def edit_file(self, filename: str) -> None:
++    def edit_files(self, filenames: str | cabc.Iterable[str]) -> None:
+         import subprocess
+ 
+         editor = self.get_editor()
+@@ -515,9 +519,23 @@ class Editor:
+             environ = os.environ.copy()
+             environ.update(self.env)
+ 
++        # Handle single filename or iterable of filenames
++        if isinstance(filenames, str):
++            file_args = f'"{filenames}"'
++        else:
++            file_args = " ".join(f'"{fn}"' for fn in filenames)
++
+         try:
+-            c = subprocess.Popen(f'{editor} "{filename}"', env=environ, shell=True)
+-            exit_code = c.wait()
++            c = subprocess.Popen(f'{editor} {file_args}', env=environ, shell=True)
++            try:
++                exit_code = c.wait(timeout=self.timeout)
++            except subprocess.TimeoutExpired:
++                c.terminate()
++                raise ClickException(
++                    _("{editor}: Editing timed out after {timeout} seconds").format(
++                        editor=editor, timeout=self.timeout
++                    )
++                )
+             if exit_code != 0:
+                 raise ClickException(
+                     _("{editor}: Editing failed").format(editor=editor)
+@@ -527,6 +545,10 @@ class Editor:
+                 _("{editor}: Editing failed: {e}").format(editor=editor, e=e)
+             ) from e
+ 
++    def edit_file(self, filename: str) -> None:
++        """Edit a single file. Deprecated in favor of edit_files."""
++        self.edit_files(filename)
++
+     def edit(self, text: t.AnyStr | None) -> t.AnyStr | None:
+         import tempfile
+ 
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e14e670..dcff5a6 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -643,13 +643,53 @@ def secho(
+     return echo(message, file=file, nl=nl, err=err, color=color)
+ 
+ 
++@t.overload
+ def edit(
+     text: t.AnyStr | None = None,
+     editor: str | None = None,
+     env: cabc.Mapping[str, str] | None = None,
+     require_save: bool = True,
+     extension: str = ".txt",
+-    filename: str | None = None,
++    *,
++    filename: str,
++    timeout: int | None = None,
++) -> None: ...
++
++
++@t.overload
++def edit(
++    text: t.AnyStr | None = None,
++    editor: str | None = None,
++    env: cabc.Mapping[str, str] | None = None,
++    require_save: bool = True,
++    extension: str = ".txt",
++    *,
++    filename: cabc.Iterable[str],
++    timeout: int | None = None,
++) -> None: ...
++
++
++@t.overload
++def edit(
++    text: t.AnyStr | None = None,
++    editor: str | None = None,
++    env: cabc.Mapping[str, str] | None = None,
++    require_save: bool = True,
++    extension: str = ".txt",
++    *,
++    filename: None = None,
++    timeout: int | None = None,
++) -> t.AnyStr | None: ...
++
++
++def edit(
++    text: t.AnyStr | None = None,
++    editor: str | None = None,
++    env: cabc.Mapping[str, str] | None = None,
++    require_save: bool = True,
++    extension: str = ".txt",
++    filename: str | cabc.Iterable[str] | None = None,
++    timeout: int | None = None,
+ ) -> t.AnyStr | None:
+     r"""Edits the given text in the defined editor.  If an editor is given
+     (should be the full path to the executable but the regular operating
+@@ -674,18 +714,30 @@ def edit(
+     :param extension: the extension to tell the editor about.  This defaults
+                       to `.txt` but changing this might change syntax
+                       highlighting.
+-    :param filename: if provided it will edit this file instead of the
++    :param filename: if provided it will edit this file or files instead of the
+                      provided text contents.  It will not use a temporary
+-                     file as an indirection in that case.
++                     file as an indirection in that case. Can be a single filename
++                     string or an iterable of filenames to edit multiple files
++                     simultaneously in the editor.
++    :param timeout: optional timeout in seconds for the editor process.
++                    If the editor does not complete within this time,
++                    it will be terminated and an exception will be raised.
++
++    .. versionchanged:: 8.2.0
++        The ``filename`` parameter can now accept an iterable of filenames
++        to edit multiple files simultaneously.
++
++    .. versionadded:: 8.2.0
++        The ``timeout`` parameter.
+     """
+     from ._termui_impl import Editor
+ 
+-    ed = Editor(editor=editor, env=env, require_save=require_save, extension=extension)
++    ed = Editor(editor=editor, env=env, require_save=require_save, extension=extension, timeout=timeout)
+ 
+     if filename is None:
+         return ed.edit(text)
+ 
+-    ed.edit_file(filename)
++    ed.edit_files(filename)
+     return None
+ 
+ 
