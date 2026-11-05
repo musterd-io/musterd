@@ -36,6 +36,7 @@ import { runSampleTool } from '../guardian/sample.js';
 import { collectSignals, type HealthPayload } from '../guardian/signals.js';
 import { loadHostRegistry } from '../host/registry.js';
 import { infraTouchWarning } from '../infra-gate.js';
+import { machineStatePath } from '../machinePaths.js';
 import { osNotify, type NotifyItem } from '../notify/os.js';
 import { installCodexHooks } from '../onboard/harnesses/codexHooks.js';
 import { theme } from '../render/theme.js';
@@ -2385,8 +2386,27 @@ export function serviceSeatAuth(
     seat?.team ??
     config.current;
   if (!token || !team) return null;
-  const server = at?.server ?? seat?.server ?? config.server;
+  // A joiner's service seat speaks to the team's HUB (lane 01M6MZ1888). The token is minted on the
+  // hub and lives in its store; a joiner's store never holds it, so every seat-facing call aimed at
+  // the local daemon — presence touch, bounce announcement, hold reads, the guardian's resolve —
+  // came back "invalid service token" from the day the revive hub left the laptop (2026-11-04).
+  // The daemon-facing calls (health, bounce) still go to the installed daemon: they do not use
+  // this client.
+  const server = joinerHubUrl(team) ?? at?.server ?? seat?.server ?? config.server;
   return { http: new HttpClient({ server, key: token, surface: 'cli' }), team };
+}
+
+/** The hub this machine is enrolled under for `team` (`node.json`), or null on a hub / unenrolled. */
+export function joinerHubUrl(team: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  try {
+    const raw = JSON.parse(
+      readFileSync(machineStatePath('MUSTERD_NODE_STATE', 'node.json', env), 'utf8'),
+    ) as { nodes?: Record<string, { hub_url?: unknown }> };
+    const hub = raw.nodes?.[team]?.hub_url;
+    return typeof hub === 'string' && hub.length > 0 ? hub.replace(/\/+$/, '') : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -2,7 +2,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { heldSeatAction, pickServiceTeam, SERVICE_SEAT_FILE, serviceSeatAuth } from './service.js';
+import {
+  heldSeatAction,
+  joinerHubUrl,
+  pickServiceTeam,
+  SERVICE_SEAT_FILE,
+  serviceSeatAuth,
+} from './service.js';
 
 // 2026-10-19: the operator joined revive-staging, `config.current` / `config.server` moved with
 // them, and every service tick sent its revive token to the staging cloud ("invalid service token
@@ -47,6 +53,26 @@ describe('serviceSeatAuth — the token’s own team and daemon win over the mac
     const auth = serviceSeatAuth()!;
     expect(auth.team).toBe('revive');
     expect(auth.http.server).toBe('http://localhost:4849');
+  });
+
+  // 2026-11-04: the revive hub moved to a box and the laptop became a joiner. Every service tick kept
+  // sending its hub-minted token to the local daemon, whose store has never seen it.
+  it('on a joiner machine the seat speaks to the hub named in node.json, over any local daemon', () => {
+    writeFileSync(
+      join(dir, 'autorefresh', SERVICE_SEAT_FILE),
+      JSON.stringify({ team: 'revive', server: 'http://localhost:4849' }),
+    );
+    writeFileSync(
+      join(dir, 'node.json'),
+      JSON.stringify({
+        nodes: { revive: { hub_url: 'http://100.115.152.1:4849/', node_id: 'n', credential: 'c' } },
+      }),
+    );
+    process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
+    const auth = serviceSeatAuth({ server: 'http://127.0.0.1:4849' })!;
+    expect(auth.team).toBe('revive');
+    expect(auth.http.server).toBe('http://100.115.152.1:4849');
+    expect(joinerHubUrl('other')).toBeNull();
   });
 
   it('an explicit env team and a caller-named daemon still win over seat.json', () => {
