@@ -252,18 +252,53 @@ withDrivers('skipStaleUnowed (ADR 811)', (o) => {
 
   // The hub, 2026-11-05: the deep-backlog seats' oldest unread obligation was a room ask from 107
   // days before, answered long ago — the first landing stopped there and held the cursor for good.
-  it('a room ask someone has answered no longer stops the jump; an open one still does', async () => {
+  // Then (ADR 813) four OPEN room asks from one seat, the oldest 72 days, held every such seat the
+  // same way: a room obligation is owed to whoever answers first, and the pinned set carries it
+  // into every bounded read whatever the cursor says — so it is counted, and still pinned.
+  it('a stale room ask, answered or open, no longer stops the jump; it stays pinned', async () => {
     const { db, nick, now, at } = await stage();
     await at('ask-100', 100, 'ask', { kind: 'team' }, { species: 'approve', tier: 'standard' });
     await at('acc-99', 99, 'accept', { kind: 'team' }, { in_reply_to: 'ask-100' });
     await at('s-90', 90, 'status_update', { kind: 'team' });
-    await at('ask-80', 80, 'ask', { kind: 'team' }, { species: 'approve', tier: 'standard' }); // open: the stop
+    await at('ask-80', 80, 'ask', { kind: 'team' }, { species: 'approve', tier: 'standard' }); // open: passed
+    await at('rh-75', 75, 'request_help', { kind: 'team' }); // open: passed
     await at('s-70', 70, 'status_update', { kind: 'team' });
+    await at('s-1', 1, 'status_update', { kind: 'team' });
     const floor = { last_read_ts: 0, last_read_message_id: null };
     const skip = await skipStaleUnowed(db, nick, floor, { now });
-    expect(skip?.to.id).toBe('s-90');
-    expect(skip?.skipped).toBe(3);
-    expect(skip?.stopped_at?.id).toBe('ask-80');
+    expect(skip?.to.id).toBe('s-70');
+    expect(skip?.skipped).toBe(6);
+    expect(skip?.stopped_at).toBeNull();
+    // Passed by the cursor, still owed: a bounded read after the skip pins both open room asks.
+    await setCursor(db, nick.id, skip!.to.id);
+    const page = await listInbox(db, nick, {
+      unreadOnly: true,
+      cursorTs: skip!.to.created_at,
+      cursorId: skip!.to.id,
+      limit: 5,
+    });
+    expect(page.map((r) => r.id)).toEqual(['ask-80', 'rh-75', 's-1']);
+  });
+
+  // A directed obligation is this reader's to answer: it holds the skip whatever its age (ADR 811
+  // decision 2), and a room ask between it and the window is passed along with the chatter.
+  it('an open directed ask still stops the jump; a stale room ask before it is counted', async () => {
+    const { db, nick, now, at } = await stage();
+    await at('ask-80', 80, 'ask', { kind: 'team' }, { species: 'approve', tier: 'standard' });
+    await at('s-70', 70, 'status_update', { kind: 'team' });
+    await at(
+      'ask-60',
+      60,
+      'ask',
+      { kind: 'member', name: 'nick' },
+      { species: 'approve', tier: 'standard' },
+    ); // the stop
+    await at('s-50', 50, 'status_update', { kind: 'team' });
+    const floor = { last_read_ts: 0, last_read_message_id: null };
+    const skip = await skipStaleUnowed(db, nick, floor, { now });
+    expect(skip?.to.id).toBe('s-70');
+    expect(skip?.skipped).toBe(2);
+    expect(skip?.stopped_at?.id).toBe('ask-60');
   });
 
   // Doorbell clause 7(iv): a steer the seat was already shown is discharged by having been shown.

@@ -538,14 +538,22 @@ function stillOwedParams(memberId: string): unknown[] {
 export const STALE_UNOWED_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * ADR 811: find how far a reader's cursor may jump over STALE rows nobody owed them. A row is owed
- * when it is an obligation STILL OPEN for this reader — `stillOwedSql`, the pinned set's own
- * predicate (ADR 429/434/505/614), less what the reader was already shown (doorbell clause 7(iv),
- * `shownToRecipientSql`); such a row STOPS the skip whatever its age. Everything else older than
- * `olderThanMs` (team status updates, lane broadcasts, the room's chatter, answers owed to nobody,
- * an ask someone answered, a steer this seat was shown, a plain message addressed to it — not an
- * obligation, ADR 429) is passed over as a count. Nothing newer than the window is ever skipped:
- * the fold and the drain (ADR 433, ADR 287) still render those one line at a time.
+ * ADR 811: find how far a reader's cursor may jump over STALE rows nobody owed them. A row holds
+ * the skip when it is a DIRECTED obligation STILL OPEN for this reader — `stillOwedSql`, the pinned
+ * set's own predicate (ADR 429/434/505/614), narrowed to `to_kind = 'member'`, less what the reader
+ * was already shown (doorbell clause 7(iv), `shownToRecipientSql`); such a row STOPS the skip
+ * whatever its age. Everything else older than `olderThanMs` (team status updates, lane broadcasts,
+ * the room's chatter, answers owed to nobody, an ask someone answered, a steer this seat was shown,
+ * a plain message addressed to it — not an obligation, ADR 429 — and a ROOM obligation nobody has
+ * answered, ADR 813) is passed over as a count. Nothing newer than the window is ever skipped: the
+ * fold and the drain (ADR 433, ADR 287) still render those one line at a time.
+ *
+ * A room `ask` / `request_help` is owed to whoever answers first (ADR 254), not to this reader in
+ * particular, and the pinned set carries it into every bounded read whatever the cursor says
+ * (ADR 429; folded as a stale obligation past a week, ADR 599). Holding one lagging seat's cursor
+ * at it added nothing to its chance of an answer and cost that seat its whole backlog: on the hub,
+ * 2026-11-05, four open room asks from one seat, the oldest 72 days old, stopped every
+ * deep-backlog seat's skip after the ADR 811 amendment had passed the answered ones (ADR 813).
  *
  * The first landing (2026-11-05) stopped at ANY directed row or room obligation, answered or not.
  * Measured the same day on the hub: the deep-backlog seats' oldest unread obligation was a room
@@ -584,6 +592,7 @@ export async function skipStaleUnowed(
   }>(
     `SELECT id, act, from_member, created_at FROM messages
       WHERE ${inbox}
+      AND to_kind = 'member'
       ${stillOwedSql()}
       AND NOT EXISTS (${shownToRecipientSql('messages', '?')})
       ORDER BY created_at ASC, id ASC LIMIT 1`,

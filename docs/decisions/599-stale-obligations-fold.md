@@ -27,6 +27,7 @@ Measured 2026-10-14 by alfie on their own inbox, lane 01M4YYQCAP:
 - A seat owed old asks sees them as a counted group, not a wall, and reads any one by `ids`.
 - `countOpenLoops` and the open directed ledger do not take the fifth shape in this ADR; the handler already folds lane-closed for the interrupt line and the human count, so those readers are left as they are.
 - The threshold is a constant, not team policy. If a team wants a different week, that is a policy field and a new ADR.
+- _(2026-11-05: ADR 811 lets the read cursor skip stale unowed rows as a count and stops at an open obligation; [ADR 813](813-stale-room-obligation-does-not-hold-the-skip.md) makes that stopper a DIRECTED obligation only. A stale room obligation still never expires and still folds here — the pinned set is what carries it once the cursor has passed it.)_
 
 ## Observability & Evaluation
 
