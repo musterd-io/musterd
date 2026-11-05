@@ -20,8 +20,22 @@ import { apiGet, apiPost, type LiveConfig } from './client';
 export interface DeviceKey {
   id: string;
   kind: string;
+  /** ADR 808: where the key was made (`app` for a phone); absent or null when unrecorded. */
+  origin?: string | null;
+  /** ADR 808: the hostname a passkey is bound to; it signs only on a page with that hostname. */
+  rp_id?: string | null;
   created_at: number;
   revoked_at: number | null;
+}
+
+/**
+ * ADR 808: can this passkey sign on the page we are on? `null` when unrecorded (a key from before
+ * the origin was kept), which a surface treats as "maybe" rather than refusing it.
+ */
+export function signsHere(key: DeviceKey, hostname: string): boolean | null {
+  if (key.kind !== 'passkey') return null;
+  if (key.rp_id === undefined || key.rp_id === null) return null;
+  return key.rp_id === hostname;
 }
 
 /** This human's device keys (passkeys and phones), revoked ones included. */
@@ -109,5 +123,12 @@ export async function enrollPasskey(
       client_data_json: new TextDecoder().decode(resp.clientDataJSON),
     },
   });
-  return { id: key.id, kind: key.kind, created_at: Date.now(), revoked_at: null };
+  return {
+    id: key.id,
+    kind: key.kind,
+    origin: location.origin,
+    rp_id: location.hostname,
+    created_at: Date.now(),
+    revoked_at: null,
+  };
 }

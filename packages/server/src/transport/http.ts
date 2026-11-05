@@ -5643,6 +5643,8 @@ export async function handleHttp(
             keys: keys.map((k) => ({
               id: k.id,
               kind: k.kind,
+              origin: k.origin,
+              rp_id: k.rpId,
               created_at: k.createdAt,
               revoked_at: k.revokedAt,
             })),

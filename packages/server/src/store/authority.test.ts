@@ -7,6 +7,8 @@ import { listAudit } from './audit.js';
 import {
   buildDescriptor,
   enrollDeviceKey,
+  listDeviceKeys,
+  registrationOrigin,
   requireAuthority,
   revokeDeviceKey,
 } from './authority.js';
@@ -65,6 +67,40 @@ withDrivers('human authority (ADR 662)', (o) => {
         ...act,
       }),
     ).resolves.toEqual({ ok: false, reason: 'agent_credential' });
+  });
+
+  it('ADR 808: a key remembers the origin and rp_id it was made on; older rows read null', async () => {
+    const db = await openStore();
+    const { team, nick } = await seed(db);
+    const made = await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: nick.id,
+      publicKey: keypair().publicKey,
+      kind: 'passkey',
+      origin: 'https://hub.example.ts.net',
+      rpId: 'hub.example.ts.net',
+    });
+    const older = await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: nick.id,
+      publicKey: keypair().publicKey,
+      kind: 'platform',
+    });
+    const listed = await listDeviceKeys(db, team.id, nick.id);
+    expect(listed.find((k) => k.id === made.id)).toMatchObject({
+      origin: 'https://hub.example.ts.net',
+      rpId: 'hub.example.ts.net',
+    });
+    expect(listed.find((k) => k.id === older.id)).toMatchObject({ origin: null, rpId: null });
+    expect(
+      registrationOrigin(
+        JSON.stringify({ type: 'webauthn.create', origin: 'http://localhost:4849' }),
+      ),
+    ).toEqual({
+      origin: 'http://localhost:4849',
+      rpId: 'localhost',
+    });
+    expect(registrationOrigin('not json')).toEqual({ origin: null, rpId: null });
   });
 
   it('once enrolled, a listed act needs a fresh signature over the server descriptor', async () => {

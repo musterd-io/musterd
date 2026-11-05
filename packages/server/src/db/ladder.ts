@@ -1277,6 +1277,22 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       for (const sql of POLLS_SQL) await d.exec(sql);
     },
   },
+  {
+    // v142 — ADR 808 (lane 01M6N3XZDC): a device key records where it was made. `origin` is the
+    // registration's client-data origin (a passkey) or `app` (a phone key); `rp_id` is the
+    // relying-party id the browser bound the passkey to, so a surface can say which keys sign on
+    // ITS origin. Rows from before stay null: "made before this was recorded", never guessed.
+    version: 142,
+    sqlite: (db) => {
+      const cols = db.prepare(`SELECT name FROM pragma_table_info('device_keys')`).pluck().all();
+      if (!cols.includes('origin')) db.exec(`ALTER TABLE device_keys ADD COLUMN origin TEXT`);
+      if (!cols.includes('rp_id')) db.exec(`ALTER TABLE device_keys ADD COLUMN rp_id TEXT`);
+    },
+    postgres: async (d) => {
+      await d.exec(`ALTER TABLE device_keys ADD COLUMN IF NOT EXISTS origin TEXT`);
+      await d.exec(`ALTER TABLE device_keys ADD COLUMN IF NOT EXISTS rp_id TEXT`);
+    },
+  },
 ];
 
 /** The interrupt window's text guard (interruptCandidates.ts): a necessary condition for a row to
