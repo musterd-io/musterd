@@ -14,8 +14,9 @@ const POLL = {
   post_failed: false,
 };
 
-function rig(t0 = 2_000) {
+function rig(t0 = 2_000, ready = true) {
   let t = t0;
+  let chatReady = ready;
   let reply: unknown = { live: true, poll: null };
   let tokens = 0;
   const calls: { path: string; auth: string; body?: unknown }[] = [];
@@ -37,7 +38,8 @@ function rig(t0 = 2_000) {
     server: 'http://hub',
     team: 'revive',
     seatToken: 'mscr_seat',
-    chat: () => ({ post: async (l) => (posted.push(l), true), live: async () => true }),
+    chat: () =>
+      chatReady ? { post: async (l) => (posted.push(l), true), live: async () => true } : null,
     log: () => {},
     fetch: fetchFn as unknown as typeof fetch,
     now: () => t,
@@ -49,6 +51,7 @@ function rig(t0 = 2_000) {
     posted,
     set: (r: unknown) => (reply = r),
     advance: (ms: number) => (t += ms),
+    ready: () => (chatReady = true),
   };
 }
 
@@ -104,6 +107,30 @@ describe('startPollRuntime (ADR 807)', () => {
     expect(r.posted.filter((l) => l.startsWith('🗳️'))).toEqual([
       '🗳️ Poll closed — 1 vote. Winner: 2 · Ask the team (100%). Thanks for voting!',
     ]);
+    r.rt.stop();
+  });
+
+  it('waits for the chat reader: no poll read, count or live report until chat is ready, then announces', async () => {
+    const r = rig(2_000, false);
+    r.set({ live: true, poll: POLL });
+    await r.rt.tick();
+    await r.rt.tick();
+    await settle();
+    // Nothing reaches the daemon on a guess: no live=false, no counts, not even the open-poll read.
+    expect(r.calls).toEqual([]);
+    expect(r.posted).toEqual([]);
+    r.ready();
+    r.advance(5_000);
+    await r.rt.tick();
+    await settle();
+    expect(r.calls.map((c) => c.path)).toEqual([
+      '/stream/live',
+      '/polls/open',
+      `/polls/${POLL.id}/counts`,
+    ]);
+    expect(r.calls[0]!.body).toEqual({ live: true });
+    expect(r.calls[2]!.body).toMatchObject({ live: true, post_failed: false });
+    expect(r.posted[0]).toContain('nick wants to ask you: What next?');
     r.rt.stop();
   });
 
