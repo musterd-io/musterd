@@ -7,7 +7,7 @@ ADR 753 `holds`, ADR 252 priced wakes) and the pair's first-call cost from `read
 - `wakes`: wake leases over the run (R7a's second term; the first is mtools.py's wait-mode line);
 - `first_call_usd`, `wake_usd`, `cost_usd_total`: R7b, the first call plus every priced wake;
 - `waited_median_s`, `waited_n`: R7c, over every wake that carries a `waited_ms`;
-- beside them: wakes per pair, resumed vs fresh, each wake's wait split by gate state, pairs with
+- beside them: wakes per pair, resumed vs compacted vs fresh, each wake's wait split by gate state, pairs with
   an unpriced wake (a wake that spawned and died unreported is paid but unknown — reported, never
   silently zero).
 
@@ -77,6 +77,7 @@ def read_pair(pair_dir: Path, readout: dict) -> dict | None:
         "pair": str(pair_dir),
         "wakes": wakes,
         "resumed": report.get("resumed"),
+        "compacted": report.get("compacted"),
         "failed": report.get("failed"),
         "deferred": report.get("deferred"),
         "exhausted": report.get("exhausted"),
@@ -104,6 +105,7 @@ def main() -> None:
         "pairs_read": len(pairs),
         "wakes": sum(p["wakes"] for p in pairs),
         "resumed": sum(int(p["resumed"] or 0) for p in pairs),
+        "compacted": sum(int(p.get("compacted") or 0) for p in pairs),
         "failed": sum(int(p["failed"] or 0) for p in pairs),
         "unpriced_wakes": sum(p["unpriced_wakes"] for p in pairs),
         "first_call_usd": round(sum(first), 2),

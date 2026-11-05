@@ -263,6 +263,69 @@ describe('claudeCodeBackend.wake', () => {
     expect(unattested.args).not.toContain('--resume');
   });
 
+  it('ADR 810: a resume refused on price continues on a compacted brief; unpriceable stays bare fresh', async () => {
+    const brief = {
+      text: '--- Continuation brief (ADR 810) ---\nclaimed lane 01ABC\nwrote chunk.py',
+      turns: 2,
+      dropped: 3,
+      source_bytes: 4096,
+      budget_bytes: 2_000,
+    };
+    const run = async (bound: number, model: string | undefined, compact = () => brief) => {
+      const child = new FakeChild();
+      const asked: { path: string; budget: number }[] = [];
+      const { backend, calls } = harness(child, {
+        readSession: () => resumable(),
+        seatModel: () => model,
+        compactTranscript: (path, budget) => {
+          asked.push({ path, budget });
+          return compact();
+        },
+      });
+      const c = ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true }));
+      const actuation = await backend.wake(
+        spec({
+          order: order({ intended_delivery: 'resume' }),
+          bounds: { timeout_ms: 60_000, resume_max_usd: bound },
+        }),
+        c,
+      );
+      child.exit(0);
+      await actuation.settled;
+      return { args: calls[0]!.args, outcome: actuation.outcome, asked, lines: c.lines };
+    };
+    // $0.001 on claude-sonnet-5-5 ($2/MTok) refuses a 4096-byte resume (~$0.002) and buys a
+    // 2,000-byte brief: the fresh spawn carries the wake line first, then the brief.
+    const over = await run(0.001, 'claude-sonnet-5-5');
+    expect(over.args).not.toContain('--resume');
+    expect(over.args).toContain('--session-id');
+    const line = over.args[over.args.indexOf('-p') + 1]!;
+    expect(line.startsWith(order().composed_line)).toBe(true);
+    expect(line).toContain('--- Continuation brief (ADR 810) ---');
+    expect(line.endsWith('wrote chunk.py')).toBe(true);
+    expect(over.asked).toEqual([{ path: '/ws/scout/.claude/t.jsonl', budget: 2_000 }]);
+    expect(over.outcome).toMatchObject({
+      occupied: true,
+      session: 'compacted',
+      delivery_outcome: 'compacted',
+    });
+    expect(over.lines.some((l) => /compacted continuation: 2 turns kept, 3 dropped/.test(l))).toBe(
+      true,
+    );
+    // Unpriceable: no model, or no price row — no brief can be shown under the bound either.
+    const noModel = await run(0.001, undefined);
+    expect(noModel.asked).toEqual([]);
+    expect(noModel.outcome).toMatchObject({ session: 'fresh', delivery_outcome: 'fresh' });
+    // A transcript that yields no brief (no turn, or none fits) is a bare fresh spawn too.
+    const empty = await run(0.001, 'claude-sonnet-5-5', () => undefined);
+    expect(empty.outcome).toMatchObject({ session: 'fresh', delivery_outcome: 'fresh' });
+    expect(empty.args[empty.args.indexOf('-p') + 1]).toBe(order().composed_line);
+    // Under the bound nothing changes: the resume runs and no brief is asked for.
+    const under = await run(1, 'claude-sonnet-5-5');
+    expect(under.args).toContain('--resume');
+    expect(under.asked).toEqual([]);
+  });
+
   it('ADR 805: priceRung estimates from bytes/4 tokens at the model input rate', () => {
     expect(priceRung(4_000_000, 'claude-sonnet-5-5', 10)).toEqual({ ok: true, estimateUsd: 2 });
     expect(priceRung(4_000_000, 'claude-sonnet-5-5', 1)).toMatchObject({ ok: false });

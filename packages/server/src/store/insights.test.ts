@@ -1735,7 +1735,7 @@ withDrivers('insights', (o) => {
 
       const k = await deriveWakeMetrics(db, team.id, NOW);
       expect(k.wakes).toBe(3);
-      expect(k.delivery).toEqual({ fresh: 1, resumed: 1, fresh_fallback: 1 });
+      expect(k.delivery).toEqual({ fresh: 1, resumed: 1, fresh_fallback: 1, compacted: 0 });
       expect(k.delivery_measured).toBe(3);
       expect(k.exact_match).toEqual({ bound: 1, missing: 1, mismatched: 0, stale: 1 });
       expect(k.exact_match_measured).toBe(3);
@@ -1757,7 +1757,7 @@ withDrivers('insights', (o) => {
       const k = await deriveWakeMetrics(db, team.id, NOW);
       expect(k.wakes).toBe(1);
       // The counts are zero AND the denominator is zero — the pair is what says "no data".
-      expect(k.delivery).toEqual({ fresh: 0, resumed: 0, fresh_fallback: 0 });
+      expect(k.delivery).toEqual({ fresh: 0, resumed: 0, fresh_fallback: 0, compacted: 0 });
       expect(k.delivery_measured).toBe(0);
       expect(k.exact_match_measured).toBe(0);
     });

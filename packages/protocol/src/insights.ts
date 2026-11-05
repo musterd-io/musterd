@@ -482,6 +482,9 @@ export const WakeMetricsSchema = z.object({
   wakes: z.number().int(),
   /** Of those, resumed sessions (the fresh-first doctrine's upgrade axis). */
   resumed: z.number().int(),
+  /** ADR 810: of those, fresh spawns that carried a compacted brief (the price bound refused a
+   *  resume). Optional on the wire: a daemon from before the ADR reports none. */
+  compacted: z.number().int().optional(),
   /** Failed actuations (`residency.wake_failed` rows — attempts, not distinct acts). */
   failed: z.number().int(),
   /** Deferred actuations (the local-session guard) — budget-neutral by construction. */
@@ -562,6 +565,8 @@ export const WakeMetricsSchema = z.object({
     fresh: z.number().int(),
     resumed: z.number().int(),
     fresh_fallback: z.number().int(),
+    /** ADR 810. Optional on the wire for the same reason as `compacted` above. */
+    compacted: z.number().int().optional(),
   }),
   /** Woken acts whose report carried a `delivery_outcome` at all. */
   delivery_measured: z.number().int(),

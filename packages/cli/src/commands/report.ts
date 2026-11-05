@@ -386,7 +386,11 @@ function renderWake(k: NonNullable<Report['wake']>, w: (s: string) => void): voi
     k.latency_median_ms === null
       ? theme.meta('—')
       : `median ${ago(k.latency_median_ms)} · p95 ${ago(k.latency_p95_ms!)}`;
-  const resumed = k.resumed > 0 ? ` (${k.resumed} resumed)` : '';
+  const kinds = [
+    ...(k.resumed > 0 ? [`${k.resumed} resumed`] : []),
+    ...((k.compacted ?? 0) > 0 ? [`${k.compacted} compacted`] : []),
+  ];
+  const resumed = kinds.length > 0 ? ` (${kinds.join(', ')})` : '';
   w(
     `  ${k.wakes} wake${k.wakes === 1 ? '' : 's'}${resumed} · ${k.answered} answered${rate} · latency ${lat} ${theme.meta(`(${k.window_days}d)`)}\n`,
   );
@@ -429,7 +433,9 @@ function renderWake(k: NonNullable<Report['wake']>, w: (s: string) => void): voi
   if (k.delivery_measured > 0) {
     const d = k.delivery;
     w(
-      `  delivery: ${d.fresh} fresh · ${d.resumed} resumed · ${d.fresh_fallback} fresh-fallback ` +
+      `  delivery: ${d.fresh} fresh · ${d.resumed} resumed · ${d.fresh_fallback} fresh-fallback` +
+        ((d.compacted ?? 0) > 0 ? ` · ${d.compacted} compacted` : '') +
+        ' ' +
         theme.meta(`(${k.delivery_measured} of ${k.wakes} measured)`) +
         '\n',
     );

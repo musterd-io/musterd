@@ -362,8 +362,9 @@ export const WAKE_DELIVERIES = ['fresh', 'resume'] as const;
 export type WakeDelivery = (typeof WAKE_DELIVERIES)[number];
 export const WakeDeliverySchema = z.enum(WAKE_DELIVERIES);
 
-/** The host-observed outcome, including a resume that fell through to a fresh occupant. */
-export const WAKE_DELIVERY_OUTCOMES = ['fresh', 'resumed', 'fresh_fallback'] as const;
+/** The host-observed outcome, including a resume that fell through to a fresh occupant — and, ADR
+ *  810, a fresh spawn that carried a compacted brief of the transcript the price bound refused. */
+export const WAKE_DELIVERY_OUTCOMES = ['fresh', 'resumed', 'fresh_fallback', 'compacted'] as const;
 export type WakeDeliveryOutcome = (typeof WAKE_DELIVERY_OUTCOMES)[number];
 export const WakeDeliveryOutcomeSchema = z.enum(WAKE_DELIVERY_OUTCOMES);
 
@@ -859,8 +860,9 @@ export const WakeReportBodySchema = z.object({
   occupied: z.boolean(),
   /** Did it answer the triggering act (the ADR 090 ledger's `answered`)? Often unknown at report. */
   answered: z.boolean().optional(),
-  /** Fresh spawn or resumed session (the fresh-first doctrine's outcome axis). */
-  session: z.enum(['fresh', 'resumed']).optional(),
+  /** Fresh spawn or resumed session (the fresh-first doctrine's outcome axis); `compacted` (ADR
+   *  810) is a fresh spawn carrying a brief of the transcript the resume price bound refused. */
+  session: z.enum(['fresh', 'resumed', 'compacted']).optional(),
   /** ADR 209: actual delivery, distinguishing an initial fresh spawn from a failed-resume fallback. */
   delivery_outcome: WakeDeliveryOutcomeSchema.optional(),
   /** ADR 210: why the exact-match rung resolved as it did. Set only when the order was
