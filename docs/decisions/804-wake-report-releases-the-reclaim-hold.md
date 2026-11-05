@@ -59,6 +59,13 @@ cost compounds under load.
 
 ## Consequences
 
+- _(2026-11-05, later)_ Smoke pair 2 of the rider 7 re-run (00:52–01:03Z, its run log) still read `reclaimable`
+  50 s and 82 s: the pair database's gate rows show the seat going reclaimable about 7 s AFTER each
+  report. The harness runs its SessionEnd hook as the process winds down, after the output the host
+  reports on has closed, so the hook's session parks after the release. `releaseLateWakeHolds`, run
+  each poll before the reclaimable gate, releases a leaseless hold on a seat whose newest lease was
+  reported within five minutes and minted before the row was last seen. Decision §1's "ends with the
+  report" now reads: at the report, and on the next poll for anything the run parks after it.
 - _(2026-11-05)_ The first smoke pair on this build (rider 7 re-run, 23:46–00:30Z) still showed
   `reclaimable` ≈ 40 s on every wait. The daemon log says why: each wake ends with the MCP session's
   close, then an ~80 ms CLI claim and close (the SessionEnd capture hook, `musterd session end`), then

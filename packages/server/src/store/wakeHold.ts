@@ -33,3 +33,33 @@ export async function releaseWakeHold(
   );
   return res.changes ?? 0;
 }
+
+/**
+ * ADR 804, second amendment (2026-11-05): a hold that parks AFTER the report. The harness runs its
+ * SessionEnd hook as the process winds down, and the host reports the wake the moment the run's
+ * output closes — so the hook's own short session (no lease on its row) can park its reclaim hold a
+ * few seconds after the daemon released everything it could see (smoke pair 2 of the rider 7 re-run:
+ * `reclaimable` resumed ~7 s after each report and held 40–80 s). Each poll, before the reclaimable
+ * gate is read, a leaseless hold on a seat whose newest lease was reported within `windowMs` and
+ * minted before the row was last seen is released: it belongs to a run the host has already said
+ * is over. A hold with a lease, a live connection, or a seat with no recent reported lease is untouched.
+ */
+export async function releaseLateWakeHolds(
+  db: Driver,
+  teamId: string,
+  now = Date.now(),
+  windowMs = 5 * 60_000,
+): Promise<number> {
+  const res = await db.run(
+    `UPDATE presence SET held_until = ?
+       WHERE id IN (
+         SELECT p.id FROM presence p
+           JOIN wake_leases l ON l.member_id = p.member_id AND l.team_id = ?
+          WHERE p.conn_id IS NULL AND p.held_until IS NOT NULL AND p.held_until > ?
+            AND p.wake_lease IS NULL
+            AND l.status = 'reported' AND l.created_at >= ? AND l.created_at <= p.last_seen_at
+       )`,
+    [now, teamId, now, now - windowMs],
+  );
+  return res.changes ?? 0;
+}

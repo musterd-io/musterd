@@ -69,6 +69,7 @@ import {
 } from './shift.js';
 import { getPolicy, getTeamById, spendApprovalUsd } from './teams.js';
 import { deriveContext } from './wakeContextBody.js';
+import { releaseLateWakeHolds } from './wakeHold.js';
 
 /**
  * The wake ledger (ADR 131, increment 2). The daemon side of harness residency: enrollment rows
@@ -2543,6 +2544,8 @@ async function deriveSeatPasses(
   gates: { seat: string; state: WakeGateState }[] = [],
 ): Promise<SeatPass[]> {
   const passes: SeatPass[] = [];
+  // ADR 804 (amended 2026-11-05): a hook session that parks after its wake's report holds nothing.
+  await releaseLateWakeHolds(db, teamId, now);
   const reclaimable = await listReclaimableMemberIds(db, teamId, now);
   const enrollments = (await listResidency(db, teamId)).filter((r) => r.host === host);
   const teamPolicy = await getPolicy(db, teamId);
