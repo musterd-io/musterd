@@ -249,15 +249,47 @@ export async function inboxCommand(parsed: Parsed): Promise<number> {
     return out;
   };
 
+  // ADR 811: an unread backlog deeper than one daemon page is walked page by page, and a seat that
+  // fell a month behind walks thousands of rows it will never act on (measured: 4.5 s a read, lane
+  // 01M6M95275). Before walking, a CONSUMING read asks the daemon to jump the cursor over the stale
+  // rows nobody owed this seat — older than a week, neither directed to it nor an obligation — and is
+  // told how many went by; a directed or owed row stops the jump and is rendered next as before.
+  // A peek or a lens never skips (a read that must not consume cannot move the cursor), and an older
+  // daemon (404) changes nothing. The first page is then fetched again from the new cursor.
+  const consuming = !parsed.flags['peek'] && !filtering;
+  // Held in a box: assigned inside the closure below, and tsc narrows a plain `let` to `null`.
+  const stale: { skip: { skipped: number; skipped_through?: number } | null } = { skip: null };
+  const unreadFirstPage = async () => {
+    let first = await http.inbox(team, { unread: true });
+    if (first.truncated && consuming) {
+      const skip = await http.skipStale(team).catch(() => null);
+      if (skip && skip.skipped > 0) {
+        stale.skip = skip;
+        first = await http.inbox(team, { unread: true });
+      }
+    }
+    return first;
+  };
+
   const bounded = window > 0 && !unread && !filtering;
   const query = unread ? { unread: true } : bounded ? { limit: window } : {};
-  const res = await http.inbox(team, query);
-  const cursorTs = res.cursor.last_read_ts;
+  const res = unread ? await unreadFirstPage() : await http.inbox(team, query);
+  let cursorTs = res.cursor.last_read_ts;
   const total = res.total ?? res.messages.length;
   let rows = await drain(query, res);
   if (bounded && rows.length > 0 && envelopePosition(rows[0]!) > cursorTs) {
-    rows = await drain({ unread: true }, await http.inbox(team, { unread: true }));
+    const first = await unreadFirstPage();
+    // The skip moved the cursor: count unread, and mark read, from where it stands now.
+    cursorTs = first.cursor.last_read_ts;
+    rows = await drain({ unread: true }, first);
   }
+  const skipLine = stale.skip
+    ? `skipped ${stale.skip.skipped} stale unread older than a week that nobody owed you` +
+      (stale.skip.skipped_through
+        ? ` (through ${new Date(stale.skip.skipped_through).toISOString().slice(0, 10)})`
+        : '') +
+      ' — counted, not shown (ADR 811)'
+    : null;
   const messages = rows.filter((m) => matchesFilter(m, filter));
 
   // Both output formats are reads. Lenses and explicit peeks must never consume the window.
@@ -269,6 +301,8 @@ export async function inboxCommand(parsed: Parsed): Promise<number> {
 
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(messages) + '\n');
+    // The JSON body stays the array a script expects; the skip is said beside it.
+    if (skipLine) process.stderr.write(`${theme.meta(skipLine)}\n`);
     await markShownRead();
     return 0;
   }
@@ -279,6 +313,7 @@ export async function inboxCommand(parsed: Parsed): Promise<number> {
   process.stdout.write(
     `${theme.accent('inbox')} — ${team} ${theme.meta(`· ${unreadCount} unread`)}${ofTotal}\n`,
   );
+  if (skipLine) process.stdout.write(theme.meta(skipLine) + '\n');
   if (messages.length === 0) {
     const empty = filtering
       ? 'No messages match these filters.'

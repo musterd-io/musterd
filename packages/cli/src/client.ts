@@ -1211,6 +1211,19 @@ export class HttpClient {
       last_read_message_id: lastReadMessageId,
     });
   }
+  /**
+   * ADR 811: jump the read cursor over stale rows nobody owed this seat (older than a week, neither
+   * directed to it nor an obligation act) and learn how many went by. A directed or owed row stops
+   * the jump; the ordinary read renders it next. An older daemon answers 404 — callers treat that
+   * as `skipped: 0`.
+   */
+  skipStale(slug: string): Promise<{
+    skipped: number;
+    skipped_through?: number;
+    stopped_at?: { id: string; act: string; created_at: number } | null;
+  }> {
+    return this.request('POST', `/teams/${slug}/inbox/cursor/skip-stale`, {});
+  }
   presence(
     slug: string,
     surface: string,
