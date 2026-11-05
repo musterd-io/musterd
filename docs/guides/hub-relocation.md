@@ -163,8 +163,21 @@ auto-refresher, lazara's credential).
   `MUSTERD_WEBAUTHN_NODE_ORIGINS` is only for authority forwarded from a joiner. Checked from the
   laptop: `/health`, `/live` and a WebSocket upgrade with a browser `Origin` all answer on the HTTPS
   name. A laptop with MagicDNS off (`CorpDNS: false`) does not resolve the name: `tailscale set
-  --accept-dns=true` there, or the browser never reaches it. Passkeys still need re-enrolling on the
-  new origin (the old ones were `rp_id localhost`).
+  --accept-dns=true` there, or the browser never reaches it.
+- **Passkeys do not follow the origin — re-enrolment, done 2026-11-04 (lane `01M6MZ124Y` for the
+  product fix).** nick's passkeys were `rp_id localhost`, so on the HTTPS name settings listed them
+  but Chrome offered only a QR code: "Add a passkey" needs a standing key's approval first, revoking
+  needs one too, and the zero-key path needs a second human admin. The way through is that the
+  approval and the registration are two steps joined by a nonce, and the hub already trusts
+  `http://localhost:4849` as a passkey origin. On the laptop: `launchctl bootout
+  gui/501/studio.sandrise.musterd` (free the port), `ssh -i ~/.ssh/musterd-joiner -f -N -L
+  4849:127.0.0.1:4849 musterd@100.115.152.1`, then `MUSTERD_SERVER=https://musterd-joiner-1.tail400343.ts.net
+  musterd authority enroll`. Open the printed "Approve at" link with the host changed to
+  `localhost:4849` and sign with the old passkey (Touch ID); the command then opens the registration
+  page on the HTTPS host, where the new passkey is created. Leave the command running throughout: a
+  stopped command discards the parked approval. Afterwards close the tunnel, `launchctl bootstrap`
+  the joiner back, and `musterd authority revoke <id>` the old keys with the same `MUSTERD_SERVER`
+  (settings has no revoke control). The enrolment took three tries because of that last point.
 - **The laptop auto-refresher is back** (`launchctl bootstrap gui/501 …musterd-autorefresh.plist`);
   it now refreshes a joiner. Its presence touch and bounce announcement fail with
   `invalid service token`: the tick speaks to the installed daemon, a joiner with a fresh store, and
