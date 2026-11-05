@@ -116,4 +116,50 @@ describe('the hub inventory (ADR 796)', () => {
       compareInventories(takeInventory(a), takeInventory(b), { ignore: EPHEMERAL_TABLES }),
     ).toEqual([]);
   });
+
+  it('names roster rows by team slug and member name, not node-local ids (rehearsal 1, lane 01M6MG78J7)', () => {
+    // Each machine projects the roster under its own ids; a joiner's replica holds the same team and
+    // seats as the hub under different ones. Comparing ids listed every member as box-only.
+    const hub = seeded();
+    const replica = new Database(':memory:');
+    runMigrations(replica);
+    replica
+      .prepare(
+        "INSERT INTO teams (id, slug, created_at, updated_at) VALUES ('t-box', 'revive', 1, 1)",
+      )
+      .run();
+    const member = (db: Database.Database, id: string, team: string, name: string) =>
+      db
+        .prepare(
+          "INSERT INTO members (id, team_id, name, kind, created_at, updated_at) VALUES (?, ?, ?, 'agent', 1, 1)",
+        )
+        .run(id, team, name);
+    member(hub, 'm-hub-ryder', 't1', 'ryder');
+    member(replica, 'm-box-ryder', 't-box', 'ryder');
+    member(replica, 'm-box-ghost', 't-box', 'ghost'); // really only on the box
+    const memory = (db: Database.Database, memberId: string, team: string) =>
+      db
+        .prepare(
+          "INSERT INTO seat_memory (member_id, headline, body, saved_at, team_id) VALUES (?, 'h', 'b', 1, ?)",
+        )
+        .run(memberId, team);
+    memory(hub, 'm-hub-ryder', 't1');
+    memory(replica, 'm-box-ryder', 't-box');
+    const residency = (db: Database.Database, id: string, team: string, memberId: string) =>
+      db
+        .prepare(
+          "INSERT INTO residency (id, team_id, member_id, harness, host, created_at, updated_at) VALUES (?, ?, ?, 'claude-code', 'musterd-joiner-1', 1, 1)",
+        )
+        .run(id, team, memberId);
+    residency(hub, 'r-hub', 't1', 'm-hub-ryder');
+    residency(replica, 'r-box', 't-box', 'm-box-ryder');
+
+    const only = Object.fromEntries(rowsOnlyInAny(replica, hub).map((t) => [t.table, t.keys]));
+    expect(only['teams']).toBeUndefined();
+    expect(only['seat_memory']).toBeUndefined();
+    expect(only['residency']).toBeUndefined();
+    expect(only['members']).toEqual([['revive', 'ghost']]);
+    // A table node-local by design is never listed: the new hub writes its own.
+    expect(only['local_node']).toBeUndefined();
+  });
 });

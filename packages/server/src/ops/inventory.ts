@@ -47,6 +47,57 @@ export const EPHEMERAL_TABLES: readonly string[] = [
   'pull_announcements',
 ];
 const EPHEMERAL_PREFIXES = ['footprint_', 'sqlite_'];
+
+/**
+ * Node-local by design (census residence 3): the new hub writes its own, so the replica-only check
+ * never lists them. They still count in the copy compare, which reads one machine's store twice.
+ */
+export const NODE_LOCAL_TABLES: readonly string[] = ['local_node', 'host_liveness'];
+
+/**
+ * How the replica-only check names a row when the table's own id is minted per machine (rehearsal 1,
+ * lane 01M6MG78J7). Every machine projects the roster (teams, members) under its own ids, and rows
+ * that point at them inherit those ids, so a joiner's replica holds the hub's team and seats under
+ * different keys. Tables not listed are keyed by their primary key. Either way `team_id` reads as the
+ * team's slug and a member column as the member's name (`slug/name`), so the same row on two
+ * machines has the same key.
+ */
+export const NATURAL_KEYS: Readonly<Record<string, readonly string[]>> = {
+  teams: ['slug'],
+  members: ['team_id', 'name'],
+  residency: ['team_id', 'member_id', 'host', 'harness'],
+  seeds: ['team_id', 'relay_id'],
+  grants: ['team_id', 'token_hash'],
+  agent_bootstrap_credentials: ['team_id', 'key_hash'],
+};
+const MEMBER_COLUMNS = new Set(['member_id', 'migration_target_member_id']);
+
+/** The row names this store gives a table's keys: team ids as slugs, member ids as `slug/name`. */
+function namedKeys(db: Database.Database, table: string): unknown[][] {
+  const cols = NATURAL_KEYS[table] ?? primaryKey(db, table);
+  const slugs = new Map(
+    (db.prepare('SELECT id, slug FROM teams').raw().all() as [string, string][]).map(
+      ([id, slug]) => [id, slug],
+    ),
+  );
+  const names = new Map(
+    (
+      db.prepare('SELECT id, team_id, name FROM members').raw().all() as [string, string, string][]
+    ).map(([id, team, name]) => [id, `${slugs.get(team) ?? team}/${name}`]),
+  );
+  const rows = db
+    .prepare(`SELECT ${cols.map(q).join(', ')} FROM ${q(table)}`)
+    .raw()
+    .all() as unknown[][];
+  return rows.map((row) =>
+    row.map((v, i) => {
+      const col = cols[i]!;
+      if (col === 'team_id') return slugs.get(v as string) ?? v;
+      if (MEMBER_COLUMNS.has(col)) return names.get(v as string) ?? v;
+      return v;
+    }),
+  );
+}
 const VOLATILE_COLUMNS: Record<string, readonly string[]> = { nodes: ['last_seen_at', 'next_seq'] };
 
 /** Open a store file read-only; the inventory never writes. */
@@ -175,14 +226,8 @@ export function compareInventories(
  * one (rows lost).
  */
 export function rowsOnlyIn(a: Database.Database, b: Database.Database, table: string): unknown[][] {
-  const pk = primaryKey(a, table);
-  const keysOf = (db: Database.Database) =>
-    db
-      .prepare(`SELECT ${pk.map(q).join(', ')} FROM ${q(table)}`)
-      .raw()
-      .all() as unknown[][];
-  const inB = new Set(keysOf(b).map((k) => JSON.stringify(k)));
-  return keysOf(a).filter((k) => !inB.has(JSON.stringify(k)));
+  const inB = new Set(namedKeys(b, table).map((k) => JSON.stringify(k)));
+  return namedKeys(a, table).filter((k) => !inB.has(JSON.stringify(k)));
 }
 
 /** Non-ephemeral tables of `a` that hold rows `b` does not, each with those rows' keys — including
@@ -194,14 +239,9 @@ export function rowsOnlyInAny(
   const inB = new Set(tables(b));
   const out: Array<{ table: string; keys: unknown[][] }> = [];
   for (const table of tables(a)) {
-    if (isEphemeral(table)) continue;
+    if (isEphemeral(table) || NODE_LOCAL_TABLES.includes(table)) continue;
     // A table `b` does not have at all: every row of it is held only by `a` (big-body, 2026-11-03).
-    const keys = inB.has(table)
-      ? rowsOnlyIn(a, b, table)
-      : (a
-          .prepare(`SELECT ${primaryKey(a, table).map(q).join(', ')} FROM ${q(table)}`)
-          .raw()
-          .all() as unknown[][]);
+    const keys = inB.has(table) ? rowsOnlyIn(a, b, table) : namedKeys(a, table);
     if (keys.length > 0) out.push({ table, keys });
   }
   return out;

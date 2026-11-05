@@ -97,6 +97,13 @@ Findings, each to settle before the switch:
 
 Follows-up: findings 2–3 in lane `01M6MG73W5`; finding 4 in lane `01M6MG78J7`, which blocks the switch (lane `01M6HWVD5J`).
 
+Finding 4, settled the same day (lane `01M6MG78J7`): the check now names rows by team slug and member
+name. On that day's stores only three tables were box-only, and ADR 796's Consequences give each a
+rule. On the day: copy the box's standing seat grants into the new hub before the wake pause lifts
+(team id mapped; `grant.issue` audit rows with them), carry nothing else, set the box's replica aside.
+Re-run `inventory.ts --replica <box store> --hub <new hub store>` first: any table it lists that the
+ADR does not name stops the switch.
+
 ## Credentials on the box (the revocation list)
 
 Each credential that lives on `musterd-joiner-1`, and the one step that revokes it. On a compromise,
