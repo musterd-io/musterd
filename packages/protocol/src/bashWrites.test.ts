@@ -11,7 +11,6 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     ['cmd &> log.txt', ['log.txt']],
     ['cmd 2> err.txt', ['err.txt']],
     ['cmd >"spaced name.ts"', ['spaced name.ts']],
-    ['cat <<EOF > out.ts\nline > not-a-file\nEOF', ['out.ts']],
     ['echo x | tee a.ts b.ts', ['a.ts', 'b.ts']],
     ['tee -a a.ts < in', ['a.ts']],
     ["sed -i '' 's/a/b/' a.ts", ['a.ts']],
@@ -37,14 +36,25 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     ['echo x>>a.ts', ['a.ts']],
     ['echo x 2>err.txt>a.ts', ['err.txt', 'a.ts']],
     ['cat <<<word > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
+  ])('%s → %j', (command, paths) => {
+    expect(t(command)).toEqual({ paths, opaque: false });
+  });
+
+  // Any heredoc makes the command opaque (fail closed, 2026-11-04 reviews); its named targets are
+  // still read, with bodies dropped, so a deny on one of them still stands.
+  it.each([
+    ['cat <<EOF > out.ts\nline > not-a-file\nEOF', ['out.ts']],
     ['echo "<<EOF" > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
     ['echo x # <<EOF\necho y > b.ts', ['b.ts']],
     ['echo "a\n<<EOF" > a.ts\necho y > b.ts', ['a.ts', 'b.ts']],
     ["echo $'it\\'s <<EOF' > a.ts\necho y > b.ts", ['a.ts', 'b.ts']],
     ["cat <<'EOF' > a.ts\nrm -rf x\nEOF\necho y > b.ts", ['a.ts', 'b.ts']],
     ['cat <<-EOF > a.ts\n\tbody\n\tEOF\ntouch b.ts', ['a.ts', 'b.ts']],
-  ])('%s → %j', (command, paths) => {
-    expect(t(command)).toEqual({ paths, opaque: false });
+    ['cat <<EOF \\\n&& touch a.ts\nEOF', []],
+  ])('heredoc: %s → opaque, %j still named', (command, paths) => {
+    const read = t(command);
+    expect(read.opaque).toBe(true);
+    for (const p of paths) expect(read.paths).toContain(p);
   });
 
   it('a descriptor redirect and /dev/null write no file', () => {

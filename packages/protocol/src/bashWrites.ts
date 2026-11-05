@@ -121,13 +121,12 @@ function heredocTags(
  *  body never reaches its tag, or a delimiter is not a plain name — then where the body ends is a
  *  guess, and the caller treats the command as unread. */
 function stripHeredocs(command: string): { text: string; open: boolean } {
-  // Fail closed (security review, 2026-11-04): where a `<<` meets a construct that changes how bash
-  // reads it — arithmetic, a test, a parameter or command substitution, backticks — finding the
-  // body's end needs a real parser. Such a command is not read; the after-call check covers it.
+  // Fail closed (security reviews, 2026-11-04): where a heredoc's body ends depends on bash's whole
+  // grammar — continuations, arithmetic, subscripts, substitutions, quotes across lines — and four
+  // rounds of review each found another way to misplace it. So a command with any heredoc is opaque:
+  // the after-call check covers it. Bodies are still dropped below, so the named targets of the
+  // command lines are read as well as can be, and a deny on one of them still stands.
   const hasHeredoc = /<<(?!<)/.test(command.replace(/<<<+/g, ''));
-  if (hasHeredoc && /\(\(|\$\[|\[\[|\$\{|\$\(|`/.test(command)) {
-    return { text: command, open: true };
-  }
   const out: string[] = [];
   const pending: { tag: string; dash: boolean }[] = [];
   let ambiguous = false;
@@ -148,7 +147,7 @@ function stripHeredocs(command: string): { text: string; open: boolean } {
   }
   return {
     text: out.join('\n'),
-    open: ambiguous || pending.length > 0 || (hasHeredoc && quote !== null),
+    open: hasHeredoc || ambiguous || pending.length > 0 || quote !== null,
   };
 }
 

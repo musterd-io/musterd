@@ -84,6 +84,10 @@ scripts. The gate's strongest class is the one most easily bypassed by accident.
     it before and its mtime moved. It is the `after: true` request, which reads ownership only, never
     a hold or a hand-over. When the daemon is unreachable after the call, it says nothing: it cannot
     tell whose lane covers the path.
+  - Any command with a heredoc is opaque, not only one fed to an interpreter. Four automated security
+    reviews on 2026-11-04 each found another way a heredoc's body could be misplaced: quotes across
+    lines, arithmetic, substitutions, continuations. So the gate stops guessing where a body ends.
+    The named targets on its command lines are still weighed before the call.
 
 ## Observability & Evaluation
 
