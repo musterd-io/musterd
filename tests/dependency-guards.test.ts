@@ -42,17 +42,27 @@ describe('installed dependency guards', () => {
   // react-native 0.88.1 defines — the app pinned 0.88.0. expo doctor reported the mismatch, but the
   // TestFlight build does not fail on it. Every native module the SDK pins must meet its floor.
   it('the app declares every SDK-pinned native module at or above the SDK floor', () => {
+    // The floors come from the installed expo, so a stale install would judge against an old SDK:
+    // name that first (scripts/check-dist-freshness.ts gates the same thing before typecheck).
+    const lock = readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8');
+    const lockedExpo = /^ {2}expo@(\d+\.\d+\.\d+):/m.exec(lock)?.[1];
+    const installedExpo = (expoRequire('./package.json') as { version: string }).version;
+    expect(installedExpo, 'stale install: run `pnpm install`').toBe(lockedExpo);
+
     const app = JSON.parse(
       readFileSync(new URL('../packages/mobile/package.json', import.meta.url), 'utf8'),
     ) as { dependencies: Record<string, string> };
     const bundled = expoRequire('./bundledNativeModules.json') as Record<string, string>;
     const parse = (range: string) => range.replace(/^[~^]/, '').split('.').map(Number);
+    // Below the floor fails; ahead of it (a newer patch or minor) is the app's call, not a crash.
     const below = Object.entries(app.dependencies)
       .filter(([name]) => bundled[name] !== undefined)
       .filter(([name, declared]) => {
         const [want, have] = [parse(bundled[name]!), parse(declared)];
-        if (have[0] !== want[0] || have[1] !== want[1]) return true; // other major/minor line
-        return (have[2] ?? 0) < (want[2] ?? 0);
+        for (let i = 0; i < 3; i++) {
+          if ((have[i] ?? 0) !== (want[i] ?? 0)) return (have[i] ?? 0) < (want[i] ?? 0);
+        }
+        return false;
       })
       .map(([name, declared]) => `${name}: ${declared} < ${bundled[name]}`);
     expect(below).toEqual([]);

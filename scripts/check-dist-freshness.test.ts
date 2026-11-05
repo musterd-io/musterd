@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { findStaleDists, renderStaleBanner } from './check-dist-freshness.ts';
+import {
+  findStaleDists,
+  findStaleInstall,
+  renderStaleBanner,
+  renderStaleInstallBanner,
+} from './check-dist-freshness.ts';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -132,5 +137,38 @@ describe('renderStaleBanner', () => {
     expect(out).toContain('pnpm -r build');
     expect(out).toContain('running-the-gates.md');
     expect(out.toLowerCase()).toContain('a file you never touched');
+  });
+});
+
+describe('findStaleInstall: node_modules older than pnpm-lock.yaml', () => {
+  const lock = (...pkgs: string[]) =>
+    `lockfileVersion: '9.0'\n\nimporters:\n\n  packages/mobile:\n    dependencies: {}\n\npackages:\n\n${pkgs.map((p) => `  ${p}:\n    resolution: {integrity: x}\n`).join('\n')}`;
+  function root(wanted: string, installed?: string): string {
+    const r = mkdtempSync(join(tmpdir(), 'install-freshness-'));
+    dirs.push(r);
+    writeFileSync(join(r, 'pnpm-lock.yaml'), wanted);
+    if (installed !== undefined) {
+      mkdirSync(join(r, 'node_modules', '.pnpm'), { recursive: true });
+      writeFileSync(join(r, 'node_modules', '.pnpm', 'lock.yaml'), installed);
+    }
+    return r;
+  }
+
+  it('is quiet when the install resolved the same packages, formatting aside', () => {
+    const wanted = lock('expo@58.0.23', "'@expo/cli@58.1.19'");
+    expect(findStaleInstall(root(wanted, wanted.replace(/\n\n/g, '\n')))).toBeNull();
+  });
+
+  it('names what a dependency bump added and dropped (the 2026-11-05 Expo case)', () => {
+    const r = root(
+      lock('expo@58.0.23', 'react-native@0.88.1'),
+      lock('expo@58.0.17', 'react-native@0.88.1'),
+    );
+    expect(findStaleInstall(r)).toEqual({ missing: ['expo@58.0.23'], extra: ['expo@58.0.17'] });
+    expect(renderStaleInstallBanner(findStaleInstall(r)!)).toContain('pnpm install');
+  });
+
+  it('degrades to silence with no install at all', () => {
+    expect(findStaleInstall(root(lock('expo@58.0.23')))).toBeNull();
   });
 });

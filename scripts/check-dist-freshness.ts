@@ -28,6 +28,9 @@
  * nothing under its own src moved. A gate that cries wolf on every `git pull` is a gate people
  * learn to ignore, and this one has to stay believable to be worth having.
  *
+ * It checks the install first: node_modules older than pnpm-lock.yaml (a dependency bump landed
+ * since the last `pnpm install`) is the same lie one layer down — see findStaleInstall.
+ *
  * Runs on Node's native TypeScript (no build step, no deps) — a gate that guards the build must
  * not need the build.
  */
@@ -184,6 +187,60 @@ export function findStaleDists(root: string, opts: Options = {}): StaleDist[] {
   return out;
 }
 
+/** The resolved `name@version` entries a pnpm lockfile lists, one set per file. */
+function lockedPackages(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/^ {2}'?([^\s'(]+@[0-9][^\s'(:]*)/gm)) out.add(m[1]!);
+  return out;
+}
+
+export type StaleInstall = {
+  /** resolved in pnpm-lock.yaml, absent from the install */
+  missing: string[];
+  /** installed, no longer in pnpm-lock.yaml */
+  extra: string[];
+};
+
+/**
+ * node_modules older than pnpm-lock.yaml (2026-11-05): a seat whose workspace last installed before
+ * a dependency bump runs the old packages, and a guard reading installed metadata reports a false
+ * failure. pnpm keeps a copy of the lockfile it installed from at node_modules/.pnpm/lock.yaml;
+ * compare the resolved package sets rather than bytes so a formatting difference is not a lie.
+ * No install at all reads as silence — the missing modules surface on their own.
+ */
+export function findStaleInstall(root: string): StaleInstall | null {
+  let wanted: string;
+  let installed: string;
+  try {
+    wanted = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8');
+    installed = readFileSync(join(root, 'node_modules', '.pnpm', 'lock.yaml'), 'utf8');
+  } catch {
+    return null;
+  }
+  const [want, have] = [lockedPackages(wanted), lockedPackages(installed)];
+  const missing = [...want].filter((p) => !have.has(p)).sort();
+  const extra = [...have].filter((p) => !want.has(p)).sort();
+  return missing.length + extra.length > 0 ? { missing, extra } : null;
+}
+
+export function renderStaleInstallBanner(s: StaleInstall): string {
+  const shown = s.missing.slice(0, 5).join(', ');
+  const more = s.missing.length > 5 ? ` (+${s.missing.length - 5} more)` : '';
+  return [
+    '',
+    'Stale install — node_modules is older than pnpm-lock.yaml.',
+    '',
+    `  ✗ ${s.missing.length} locked package(s) not installed, ${s.extra.length} installed that the lockfile dropped`,
+    ...(s.missing.length > 0 ? [`      not installed  ${shown}${more}`] : []),
+    '',
+    '  A dependency bump landed since this workspace last installed, so tests and',
+    '  typecheck run the old packages. Refresh before reading any failure:',
+    '',
+    '      pnpm install',
+    '',
+  ].join('\n');
+}
+
 const WHY: Record<StaleReason, string> = {
   'never-built': 'never built',
   'src-newer': 'source is newer than the build',
@@ -212,10 +269,17 @@ export function renderStaleBanner(stale: StaleDist[]): string {
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  const install = findStaleInstall(repoRoot);
+  if (install) {
+    console.error(renderStaleInstallBanner(install));
+    process.exit(1);
+  }
   const stale = findStaleDists(repoRoot);
   if (stale.length > 0) {
     console.error(renderStaleBanner(stale));
     process.exit(1);
   }
-  console.log('✓ every stamped dist/ is current with its src');
+  console.log(
+    '✓ node_modules matches pnpm-lock.yaml, and every stamped dist/ is current with its src',
+  );
 }
