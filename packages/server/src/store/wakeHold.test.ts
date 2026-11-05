@@ -78,6 +78,26 @@ withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
       expect(await releaseLateWakeHolds(db, team.id, now, 30_000)).toBe(0);
     });
 
+    it('releaseLateWakeHolds never touches a live session, with or without a recent reported lease', async () => {
+      const db = await openStore();
+      const team = await createTeam(db, { slug: 'revive' });
+      const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
+      const now = Date.now();
+      await db.run(
+        `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
+         VALUES ('L1', ?, ?, 'A1', NULL, 'h', 'batched', 'reported', ?, ?, NULL, ?)`,
+        [team.id, ada.id, now - 60_000, now + 60_000, now - 50_000],
+      );
+      // A live session stamped with the reported lease (the next wake's own MCP session, say).
+      await attach(db, ada.id, 'claude-code', 'c1', { wake_lease: 'L1' });
+      expect(await releaseLateWakeHolds(db, team.id, now)).toBe(0);
+      const row = await db.get<{ held_until: number | null; conn_id: string | null }>(
+        'SELECT held_until, conn_id FROM presence WHERE member_id = ?',
+        [ada.id],
+      );
+      expect(row).toEqual({ held_until: null, conn_id: 'c1' });
+    });
+
     it('leaves a hold parked before the wake began', async () => {
       const db = await openStore();
       const team = await createTeam(db, { slug: 'revive' });
