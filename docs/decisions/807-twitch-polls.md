@@ -102,6 +102,12 @@ malicious".
   machine reports nothing and keeps counting votes locally. It stops sending counts once its last
   answered check is 90 s old, so the hub's 90 s grace runs from the moment Twitch actually answered.
 
+- _(2026-11-05, increment 4, lane 01M6ME5BFQ)_ The `/broadcast` page and the stream machine use the
+  same broadcast observer seat. The page reads `GET /polls/open` every 2 s to draw the tally, and each
+  token mint replaces the previous token. So the token is now minted only when the caller asks with
+  `?token=1`. Only the stream machine asks. A page read gets the poll without a token and mints
+  nothing, so it never cancels the token the machine is about to report on.
+
 ## Observability & Evaluation
 
 - **Traces:** the stream machine logs one line per poll state change (`poll: opened <id>`, `poll: posted`,

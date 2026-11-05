@@ -257,6 +257,11 @@ access; roster handles and Presence remain visible.
   `live/useWindDown.ts` polls `GET /teams/:slug/stream/winddown` each minute and redraws only when
   the sentence changes (every five minutes, each minute in the last five; `live/windDown.ts`); no
   animation loop runs. The deadline is the one the CLI stops the stream by, so the two cannot drift.
+- **Poll card** (`live/PollCard.tsx`, ADR 807, lane 01M6ME5BFQ) — `/broadcast` only: the open Twitch
+  poll's question, bars, time left and vote count, then the winner for 15 s. `live/usePoll.ts` reads
+  `GET /teams/:slug/polls/open` every 2 s without `?token=1`, so it never mints the poll's token on
+  the shared broadcast seat; `live/poll.ts` is the pure view. Its own lazy chunk; the 720 rung zooms
+  it to 2/3 rather than reflowing it.
 - **Shared Seeds tray** (`live/SeedsTray.tsx`) — a read-only drawer from the `/live` top bar (ADR 319).
   Active uses the protocol's shared tray rule; history reveals completed/promoted work and links a
   promoted Seed to the ordinary focused Lane view. It refetches on firehose activity so promotion

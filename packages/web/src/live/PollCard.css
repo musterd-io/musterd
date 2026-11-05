@@ -1,0 +1,177 @@
+/* The Twitch poll card (ADR 807, lane 01M6ME5BFQ). Top-left of the office on the 1920×1080 stage, on
+   the same white stock as the wind-down card and the corner notice, so it reads as the stream
+   speaking. The corner holds bottom-right and the wind-down bottom-centre; the poll takes the one
+   quiet quadrant. The lead bar is the one mustard thing on it: the accent means "winning". */
+.bc-poll {
+  /* The 720 rung sets this to 2/3: the card shrinks whole rather than reflowing. `zoom` scales the
+     offsets too, and the ask banner above does not shrink, so they are divided back out. */
+  --bc-poll-zoom: 1;
+  position: absolute;
+  zoom: var(--bc-poll-zoom);
+  left: calc(48px / var(--bc-poll-zoom));
+  /* Below the ask banner and its lane strip (topSlot, ~130px when an ask is up), so a poll and an
+     ask can share the stage without either covering the other. */
+  top: calc(150px / var(--bc-poll-zoom));
+  z-index: 5;
+  width: 620px;
+  padding: 22px 26px 20px;
+  border-radius: var(--lc-r-lg);
+  color: var(--lc-text);
+  background: var(--lc-ground-2);
+  border: 1px solid var(--lc-border-2);
+  box-shadow:
+    0 14px 36px rgba(17, 24, 39, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  animation: bc-poll-in var(--lc-dur-3) var(--lc-ease-out) both;
+}
+
+.bc-poll__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+}
+
+.bc-poll__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.bc-poll__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lc-accent-bright);
+  box-shadow: 0 0 0 3px rgba(225, 173, 1, 0.22);
+}
+.bc-poll.is-closed .bc-poll__dot {
+  background: var(--lc-muted);
+  box-shadow: none;
+}
+
+.bc-poll__left {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--lc-text);
+}
+
+.bc-poll__q {
+  margin: 0 0 18px;
+  font-size: 29px;
+  line-height: 1.22;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+/* A question near its 200-character limit steps down a size instead of being cut. */
+.bc-poll__q.is-long {
+  font-size: 24px;
+}
+
+.bc-poll__rows {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Command · label · share on one line, the bar under them. */
+.bc-poll__row {
+  --bc-poll-pct: 0%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 12px;
+  row-gap: 7px;
+  font-size: 23px;
+}
+
+.bc-poll__cmd {
+  padding: 3px 8px;
+  white-space: nowrap;
+  border-radius: var(--lc-r-sm);
+  background: var(--lc-surface-2);
+  font-family: var(--font-code);
+  font-size: 17px;
+  color: var(--lc-muted);
+}
+
+/* An option is what a viewer votes for, so it is never cut: up to 80 characters wrap to two lines. */
+.bc-poll__label {
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.bc-poll__pct {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.bc-poll__bar {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--lc-surface-2);
+  overflow: hidden;
+}
+.bc-poll__bar::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--bc-poll-pct);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--lc-muted) 70%, var(--lc-ground-2));
+  transition: width var(--lc-dur-3) var(--lc-ease-out);
+}
+
+.bc-poll__row.is-lead .bc-poll__cmd {
+  background: rgba(225, 173, 1, 0.16);
+  color: var(--lc-accent-ink);
+}
+.bc-poll__row.is-lead .bc-poll__label {
+  font-weight: 600;
+}
+.bc-poll__row.is-lead .bc-poll__bar::after {
+  background: linear-gradient(90deg, var(--lc-accent-bright), var(--lc-accent));
+  box-shadow: none;
+}
+
+.bc-poll__foot {
+  margin: 18px 0 0;
+  font-size: 19px;
+  color: var(--lc-muted);
+}
+.bc-poll.is-closed .bc-poll__foot {
+  font-size: 23px;
+  font-weight: 650;
+  color: var(--lc-text);
+}
+
+@keyframes bc-poll-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-poll {
+    animation: none;
+  }
+  .bc-poll__bar::after {
+    transition: none;
+  }
+}
