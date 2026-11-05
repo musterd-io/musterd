@@ -22,13 +22,56 @@
     "2610.41358"
   ],
   "hf": [
-    "2609.02783"
+    "2609.02783",
+    "2611.06483",
+    "2611.03178",
+    "2611.03424",
+    "2611.03634",
+    "2610.39813"
   ],
   "exn": [
     "2610.33956",
     "169ebed1-b74b-48df-a34b-fbea0668aaea",
     "2610.34467",
-    "b5c16bae-2fde-4783-825c-d0ecc36206ed"
+    "b5c16bae-2fde-4783-825c-d0ecc36206ed",
+    "08aa139f-5fa1-4aa2-9f10-0e99ddb05f9b",
+    "2503.13657",
+    "d09a18ee-fbbe-4b61-b4bb-0947aeafc96e",
+    "2610.34722",
+    "151ba9dd-305c-460f-a995-aef40997dacc"
   ],
-  "pending": []
+  "pending": [
+    {
+      "sourceIds": [
+        {
+          "source": "hf",
+          "id": "2611.05320"
+        }
+      ],
+      "canonicalId": "2611.05320",
+      "title": "PyRUA-DataFarm: LLM Agent as a Cost-Efficient Teleoperator for Real-Ready Robot Data",
+      "url": "https://huggingface.co/papers/2611.05320",
+      "published": "2026-11-03",
+      "episodeIds": [],
+      "firstAttempt": "2026-11-05",
+      "lastAttempt": "2026-11-05",
+      "failure": "evidence_processing"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "hf",
+          "id": "2611.01860"
+        }
+      ],
+      "canonicalId": "2611.01860",
+      "title": "Advances in Agentic Computer Graphics",
+      "url": "https://huggingface.co/papers/2611.01860",
+      "published": "2026-11-01",
+      "episodeIds": [],
+      "firstAttempt": "2026-11-05",
+      "lastAttempt": "2026-11-05",
+      "failure": "evidence_processing"
+    }
+  ]
 }
