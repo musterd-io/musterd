@@ -19,6 +19,24 @@ describe('installed dependency guards', () => {
     expect(lock).not.toMatch(/^ {2}'?deepmerge@/m);
   });
 
+  // TestFlight build 52 (2026-11-05) crashed on open: the expo 58.0.23 bump left expo-constants and
+  // expo-font pinned below the SDK, so the lockfile held two copies of each. CocoaPods links one
+  // native version while expo's own JS loads the other. An app native module resolves once.
+  it('the lockfile resolves each Expo native module at one version', () => {
+    const lock = readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8');
+    const versions = new Map<string, Set<string>>();
+    for (const m of lock.matchAll(/^ {2}'?(expo(?:-[a-z-]+)?)@(\d+\.\d+\.\d+)/gm)) {
+      const seen = versions.get(m[1]!) ?? new Set<string>();
+      seen.add(m[2]!);
+      versions.set(m[1]!, seen);
+    }
+    const duplicated = [...versions]
+      .filter(([, v]) => v.size > 1)
+      .map(([name, v]) => `${name}@${[...v].join('|')}`);
+    expect(versions.get('expo-constants')?.size).toBe(1);
+    expect(duplicated).toEqual([]);
+  });
+
   it('accepts valid RSA signatures and rejects extra digest algorithm elements', () => {
     // reason: node-forge ships no types; this fixture uses its public ASN.1/RSA API.
     const forge: any = cliRequire('node-forge');
