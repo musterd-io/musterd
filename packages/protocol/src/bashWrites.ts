@@ -145,15 +145,11 @@ function stripHeredocs(command: string): { text: string; open: boolean; unsure: 
     if (opened.tags.length > 0 && quote !== null) ambiguous = true;
     pending.push(...opened.tags);
   }
-  // Unsure where a body ends: then a dropped line may have been a command, so the caller also reads
-  // the command unstripped and weighs both sets of targets — a misplaced body can add a target,
-  // never hide one (security review, 2026-11-04).
-  const unsure =
-    hasHeredoc &&
-    (ambiguous ||
-      pending.length > 0 ||
-      quote !== null ||
-      /\(\(|\$\[|\[\[|\$\{|\$\(|`|\\\n|[<>]\(/.test(command));
+  // Any heredoc: a dropped line may have been a command, so the caller also reads the command
+  // unstripped and weighs both sets of targets. A misplaced body can add a target, never hide one
+  // (security reviews, 2026-11-04). The cost: a body line that looks like a write to a `block` path
+  // the seat does not own is refused too — write such a body from a file instead.
+  const unsure = hasHeredoc;
   return {
     text: out.join('\n'),
     open: hasHeredoc || ambiguous || pending.length > 0 || quote !== null,

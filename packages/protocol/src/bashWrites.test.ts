@@ -53,6 +53,7 @@ describe('bashWriteTargets (ADR 803 §1)', () => {
     ['cat <<EOF \\\n&& touch a.ts\nEOF', ['a.ts']],
     ['cat <<EOF > a.ts\n${x}\nEOF\ntouch b.ts', ['a.ts', 'b.ts']],
     ['(( n << y )) && touch a.ts\ny\ntouch b.ts', ['a.ts', 'b.ts']],
+    ['arr[1<<2]=x; cat <<EOF\nEOF\ntouch a.ts', ['a.ts']],
   ])('heredoc: %s → opaque, %j still named', (command, paths) => {
     const read = t(command);
     expect(read.opaque).toBe(true);

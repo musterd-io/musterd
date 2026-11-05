@@ -87,7 +87,9 @@ scripts. The gate's strongest class is the one most easily bypassed by accident.
   - Any command with a heredoc is opaque, not only one fed to an interpreter. Four automated security
     reviews on 2026-11-04 each found another way a heredoc's body could be misplaced: quotes across
     lines, arithmetic, substitutions, continuations. So the gate stops guessing where a body ends.
-    The named targets on its command lines are still weighed before the call.
+    The named targets on its command lines are still weighed before the call, read both with and
+    without the bodies, so a misplaced body can add a target but never hide one. The cost is that a
+    body line which looks like a write to an unowned `block` path is refused too.
 
 ## Observability & Evaluation
 
