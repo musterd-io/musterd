@@ -1,4 +1,8 @@
+import { RECLAIM_GRACE_MS } from '../config.js';
 import type { Driver } from '../db/driver.js';
+import { getMemberByName } from './members.js';
+import { effectiveWakePolicy, getResidency, seatWakeDefaults } from './residency.js';
+import { getPolicy } from './teams.js';
 
 /**
  * ADR 804: a settled wake releases its reclaim hold. When a wake's harness process exits, its
@@ -47,6 +51,9 @@ export async function releaseWakeHold(
  * SessionEnd hook's CLI claim is stamped with the wake's lease and parks at the report's own second
  * (smoke pair 3, 01:36:38Z: `cli`, lease set, created at the report, held 45 s) — the lease-only
  * release at the report ran before that row existed, and a `wake_lease IS NULL` filter here missed it.
+ *
+ * ADR 809: the same sweep releases the holds an act-lane seat's own attended session left when its
+ * harness exited (`releaseExitedSessionHolds`) — the one hold the report never speaks for.
  */
 export async function releaseLateWakeHolds(
   db: Driver,
@@ -54,6 +61,7 @@ export async function releaseLateWakeHolds(
   now = Date.now(),
   windowMs = 5 * 60_000,
 ): Promise<number> {
+  const exited = await releaseExitedSessionHolds(db, teamId, now, windowMs);
   const res = await db.run(
     `UPDATE presence SET held_until = ?
        WHERE id IN (
@@ -64,5 +72,64 @@ export async function releaseLateWakeHolds(
        )`,
     [now, teamId, now, now - windowMs],
   );
-  return res.changes ?? 0;
+  return (res.changes ?? 0) + exited;
+}
+
+/** How long after the `residency.session_ended` row the exiting run's own rows may still park: the
+ *  harness closes its MCP session before the SessionEnd hook posts, and the hook's own CLI claim
+ *  closes after it (ADR 804's second amendment measured ~7 s). A row parked later than this belongs
+ *  to a new session, and its hold stands. */
+export const EXIT_SETTLE_MS = 60_000;
+
+/**
+ * ADR 809: a harness exit releases the reclaim hold on the act lane. The seat's first session on
+ * a CooperBench pair is not a wake — the arm starts `claude -p` itself — so no lease is minted, no
+ * report arrives, and ADR 804 has nothing to release; finding 032 read `reclaimable` on every seat's
+ * first wake as exactly that session's 45 s grace (30% of the held wait time, ~40 s a wait). The
+ * daemon already learns the exit: the SessionEnd hook's `musterd session end` posts
+ * `POST /residency/session {event: 'end'}`, audited as `residency.session_ended` on the seat. A
+ * process that has run its SessionEnd hook is not coming back to reclaim its socket, and on the act
+ * lane (ADR 735) its ending IS the seat's turn ending — the next act should wake it on the host's
+ * next poll, not after the grace.
+ *
+ * Each poll: for every seat with a `residency.session_ended` row within `windowMs`, enrolled on this
+ * team with an effective `lane: act`, release the parked rows last seen between the grace before that
+ * row's `ts` (the MCP session, which closes first) and `EXIT_SETTLE_MS` after it (the hook's own CLI
+ * claim). A live connection, a row parked outside that span (a later session of the seat's own), a
+ * seat on any other lane, and an unenrolled seat are untouched: on the interrupt and batched lanes a
+ * person's exit-and-relaunch keeps the reclaim grace it has today (ADR 804's first rejected option,
+ * still rejected).
+ */
+export async function releaseExitedSessionHolds(
+  db: Driver,
+  teamId: string,
+  now = Date.now(),
+  windowMs = 5 * 60_000,
+  graceMs = RECLAIM_GRACE_MS,
+): Promise<number> {
+  const exits = await db.all<{ name: string; ts: number }>(
+    `SELECT target AS name, MAX(ts) AS ts FROM audit
+      WHERE team_id = ? AND action = 'residency.session_ended' AND ts >= ? AND target IS NOT NULL
+      GROUP BY target`,
+    [teamId, now - windowMs],
+  );
+  if (exits.length === 0) return 0;
+  const teamPolicy = await getPolicy(db, teamId);
+  let released = 0;
+  for (const exit of exits) {
+    const member = await getMemberByName(db, teamId, exit.name);
+    if (!member || member.left_at !== null) continue;
+    const enrollment = await getResidency(db, teamId, member.id);
+    if (!enrollment) continue;
+    const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
+    if (policy.lane !== 'act') continue;
+    const res = await db.run(
+      `UPDATE presence SET held_until = ?
+         WHERE member_id = ? AND conn_id IS NULL AND held_until IS NOT NULL AND held_until > ?
+           AND last_seen_at >= ? AND last_seen_at <= ?`,
+      [now, member.id, now, exit.ts - graceMs, exit.ts + EXIT_SETTLE_MS],
+    );
+    released += res.changes ?? 0;
+  }
+  return released;
 }
