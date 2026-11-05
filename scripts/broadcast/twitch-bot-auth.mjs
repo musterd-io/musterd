@@ -7,11 +7,12 @@
  * signed in as the bot. This script runs that flow on the operator's machine and hands the result
  * straight to `fly secrets import --stage` — it prints digests, never a value.
  *
- *   node scripts/broadcast/twitch-bot-auth.mjs --client-id <id> [--channel musterd] [--app musterd-broadcast] [--port 3939]
+ *   node scripts/broadcast/twitch-bot-auth.mjs --client-id <id> [--channel musterd] [--app musterd-broadcast] [--port 3000]
  *
  * The client secret is read from the terminal with echo off (or `MUSTERD_TWITCH_CHAT_CLIENT_SECRET`).
- * Before running, add `http://localhost:<port>/callback` to the app's OAuth Redirect URLs at
- * https://dev.twitch.tv/console/apps — Twitch refuses a redirect it has not seen.
+ * The app's OAuth Redirect URL must be exactly `http://localhost:<port>` (the console refuses a path
+ * on the one http origin it allows, 2026-11-05): the default port 3000 matches the musterd-chat app
+ * at https://dev.twitch.tv/console/apps. Any path on that origin is accepted as the callback.
  *
  * `--stage` is not optional (docs/wiki/broadcast-stream.md): the app has no release to deploy, so an
  * unstaged `secrets set` stores the value and then reports a failure that is not one.
@@ -34,12 +35,12 @@ function arg(name, fallback) {
 const clientId = arg('client-id', process.env.MUSTERD_TWITCH_CHAT_CLIENT_ID);
 const channel = arg('channel', process.env.MUSTERD_TWITCH_CHAT_CHANNEL ?? 'musterd');
 const app = arg('app', 'musterd-broadcast');
-const port = Number(arg('port', '3939'));
+const port = Number(arg('port', '3000'));
 const expectBot = arg('bot', 'musterdbot');
 
 if (!clientId || process.argv.includes('--help')) {
   console.error(
-    'usage: twitch-bot-auth.mjs --client-id <id> [--channel musterd] [--app musterd-broadcast] [--port 3939] [--bot musterdbot]',
+    'usage: twitch-bot-auth.mjs --client-id <id> [--channel musterd] [--app musterd-broadcast] [--port 3000] [--bot musterdbot]',
   );
   process.exit(clientId ? 0 : 2);
 }
@@ -90,7 +91,7 @@ if (!clientSecret) {
   process.exit(2);
 }
 
-const redirectUri = `http://localhost:${port}/callback`;
+const redirectUri = `http://localhost:${port}`;
 const state = randomBytes(16).toString('hex');
 
 const code = await waitForCode().catch((e) => {
@@ -102,7 +103,7 @@ function waitForCode() {
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
       const url = new URL(req.url ?? '/', redirectUri);
-      if (url.pathname !== '/callback') {
+      if (url.pathname === '/favicon.ico') {
         res.writeHead(404).end();
         return;
       }
