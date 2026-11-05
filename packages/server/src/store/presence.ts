@@ -701,11 +701,14 @@ export async function countLivePresences(db: Driver, timeoutMs: number): Promise
  * ADR 722 — local node, read only when the table exists). Most recent activity wins per node.
  * Keyed by node id, with `''` for this daemon (presence.node IS NULL).
  */
+/** A node "had a human" if a connected human presence was seen there within this window (ADR 799 §3). */
+export const HAD_HUMAN_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export async function liveNodeDrivers(
   db: Driver,
   teamId: string,
   timeoutMs: number,
-): Promise<Map<string, string>> {
+): Promise<{ leases: Map<string, string>; hadHuman: Set<string> }> {
   const [l, r] = liveCutoffs(timeoutMs);
   const best = new Map<string, { name: string; ts: number }>();
   const offer = (node: string | null, name: string, ts: number) => {
@@ -727,16 +730,31 @@ export async function liveNodeDrivers(
   } catch {
     // No browser_sessions table yet (pre-ADR-722 daemon): CLI leases alone decide.
   }
-  return new Map([...best].map(([k, v]) => [k, v.name]));
+  const leases = new Map([...best].map(([k, v]) => [k, v.name]));
+  const had = await db.all<{ node: string | null }>(
+    'SELECT DISTINCT p.node AS node FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = \'human\' AND m.observer = 0 AND p.last_seen_at > ?',
+    [teamId, Date.now() - HAD_HUMAN_WINDOW_MS],
+  );
+  const hadHuman = new Set(had.map((h) => h.node ?? ''));
+  for (const key of leases.keys()) hadHuman.add(key);
+  return { leases, hadHuman };
 }
 
-/** ADR 799: a live lease on the seat's node outranks the static hello label, which is the fallback. */
+/**
+ * ADR 799: a live lease wins; a node that had a human within the window and has none live now
+ * clears to null (§3 — the stale name is the bug); only a node with no human in the window
+ * keeps the static hello label (§4, headless/hosted).
+ */
 export function effectiveDriver(
   stored: string | null,
   node: string | null,
   leases: Map<string, string>,
+  hadHuman: Set<string> = new Set(),
 ): string | null {
-  return leases.get(node ?? '') ?? stored;
+  const key = node ?? '';
+  const lease = leases.get(key);
+  if (lease) return lease;
+  return hadHuman.has(key) ? null : stored;
 }
 
 /**
@@ -800,7 +818,7 @@ export async function listPresence(
     if (list) list.push(p);
     else byMember.set(p.member_id, [p]);
   }
-  const leases = await liveNodeDrivers(db, teamId, timeoutMs);
+  const { leases, hadHuman } = await liveNodeDrivers(db, teamId, timeoutMs);
   const hearingByMember = await latestHearingByMember(db, teamId, members, byMember);
   return members.map((member) => {
     const presences = byMember.get(member.id) ?? [];
@@ -823,7 +841,7 @@ export async function listPresence(
         driver:
           member.kind === 'human'
             ? (p.driver ?? null)
-            : effectiveDriver(p.driver ?? null, p.node ?? null, leases),
+            : effectiveDriver(p.driver ?? null, p.node ?? null, leases, hadHuman),
         model: p.model ?? null,
         // The tier rides only beside a model, and only when it is a tier this wire knows: a row
         // holding a value no client of ours ever wrote is read as "unknown", not passed through.

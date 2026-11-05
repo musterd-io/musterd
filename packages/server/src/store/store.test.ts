@@ -826,15 +826,21 @@ withDrivers('store', (o) => {
       expect(await driverOfAda()).toBe('nick');
 
       // swetha signs in on the same (local) node via her own CLI presence → she drives.
-      await attach(db, swetha.id, 'cli', 'c2', {});
+      const swethaRow = await attach(db, swetha.id, 'cli', 'c2', {});
       expect(await driverOfAda()).toBe('swetha');
       // Steering (ADR 155) is unchanged: only the explicit hello label counts there.
       expect([...(await listLiveDrivers(db, team.id, 60_000))]).toEqual(['nick']);
 
       // nick then signs in more recently → most recent lease wins.
       await new Promise((r) => setTimeout(r, 2));
-      await attach(db, nick.id, 'cli', 'c3', {});
+      const nickRow = await attach(db, nick.id, 'cli', 'c3', {});
       expect(await driverOfAda()).toBe('nick');
+
+      // Both leases end (held, not live): the node HAD a human, so §3 — the driver clears
+      // to null instead of falling back to Ada's stale static label.
+      await release(db, swethaRow.id, 60_000);
+      await release(db, nickRow.id, 60_000);
+      expect(await driverOfAda()).toBeNull();
     });
 
     it('resolveActivity: steering marks you working even without your own heartbeat (ADR 155)', () => {
