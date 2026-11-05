@@ -153,4 +153,25 @@ describe('approvalWording (ADR 676 §6)', () => {
     );
     expect(approvalWording(base, null).scope).toBe('As nick on revive');
   });
+
+  it('words a passkey enrollment and its refusal from the payload enums only (ADR 808 inc C)', () => {
+    const keys = { ...base, act: 'device_key_admin' as const, target: 'nick' };
+    expect(approvalWording(keys, { action: 'enroll', kind: 'passkey' }).headline).toBe(
+      'Add a new passkey for nick',
+    );
+    expect(
+      approvalWording(keys, { action: 'enroll', kind: 'passkey', decision: 'reject' }).headline,
+    ).toBe("Don't add a new passkey for nick");
+    // Anything else on the act — a revoke, an unknown kind, free text — keeps the generic words.
+    expect(approvalWording(keys, { action: 'revoke', kind: 'passkey' }).headline).toBe(
+      'Change the device keys of nick',
+    );
+    expect(approvalWording(keys, { action: 'enroll', kind: 'phone' }).headline).toBe(
+      'Change the device keys of nick',
+    );
+    expect(
+      approvalWording(keys, { action: 'enroll', kind: 'passkey', decision: 'yes, trust me' })
+        .headline,
+    ).toBe('Change the device keys of nick');
+  });
 });

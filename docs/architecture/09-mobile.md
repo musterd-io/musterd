@@ -153,6 +153,13 @@ small change.
   rebuilt descriptor under one Face ID (`signAll`; after the first signature the native side forbids
   a second prompt). Decline also comes as "I did not expect this" (`reported`, written by the daemon
   as `channel.answer_reported`).
+- **A new passkey, approved on the phone** (ADR 808 inc C). When /live finds no passkey that signs on
+  its origin, it asks the human's own phone. The ask is a listed act like any other: the approve
+  offer is the `device_key_admin` enrollment descriptor /live minted, the reject offer a second one
+  over the same payload plus `decision: 'reject'`. `approvalWording` reads those fixed enums, so the
+  header says "Add a new passkey for nick" and "If you decline" says "Don't add a new passkey for
+  nick"; the daemon's own ask body below the rule names the origin. Nothing else is new: the same
+  digest check, the same two signatures under one Face ID, no new key or permission.
 
 ## Screens
 
