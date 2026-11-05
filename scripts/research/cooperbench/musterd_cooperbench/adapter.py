@@ -78,9 +78,15 @@ ACT_QUIET_SECONDS = 300
 # no wake was due — and would have run to the 7,200 s cap. What is read then is whatever is there.
 ACT_IDLE_SECONDS = 600
 # A harness process is live in the container (no `ps` in the task images; /proc is read directly).
-# The bracketed class keeps the probe from matching its own command line, which carries the pattern —
-# without it the probe read "live" forever and the idle end never fired (smoke pair 4, 2026-11-05).
-HARNESS_LIVE_PROBE = "grep -lq '[c]laude' /proc/[0-9]*/cmdline 2>/dev/null"
+# A harness is live when some process's argv[0] IS the claude binary. Matching the word anywhere
+# read "live" forever twice: first the probe's own command line (smoke pair 4), then the host's
+# long-lived launcher shell, whose exports carry `MUSTERD_LAUNCH_SURFACE=claude-code` (the tenth
+# pair of the re-run ran to the 7,200 s cap on it, 2026-11-05). argv[0] alone cannot be fooled by
+# an environment or a pattern.
+HARNESS_LIVE_PROBE = (
+    "for p in /proc/[0-9]*/cmdline; do tr '\\0' ' ' < \"$p\" 2>/dev/null | "
+    "awk '$1 ~ /(^|\\/)claude$/ {found=1} END {exit found?0:1}' && exit 0; done; exit 1"
+)
 # musterd's self-heal (the interrupt hook, and the host before a wake) refreshes a workspace's hooks
 # to musterd's own set, whose gate matcher includes Bash. The arm gates the file tools only (README:
 # with `**` the gate matched every shell command), so the tombstone that turns self-heal off for one
