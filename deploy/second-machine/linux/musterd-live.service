@@ -1,0 +1,13 @@
+# The /live publisher on a Linux HUB box: builds the web bundle from the runtime checkout and publishes
+# it into the daemon's web-root (ADR 132). The Linux stand-in for `musterd service install --live`,
+# which is launchd-only. Enable the timer only where the daemon runs with `--web-root`: a joiner serves
+# no /live, so the build would be wasted. See docs/guides/hub-relocation.md.
+[Unit]
+Description=musterd /live publisher (build + publish on merge)
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/share/pnpm/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/bin/bash %h/.musterd/runtime/deploy/second-machine/linux/live.sh
+StandardOutput=append:%h/.musterd/live/build.log
+StandardError=append:%h/.musterd/live/build.log
