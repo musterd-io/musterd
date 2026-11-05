@@ -3151,7 +3151,10 @@ export async function handleHttp(
         // Where a browser should open this daemon (lane 01M6N2WJ8P): the origin its passkeys work
         // on. A joiner's /live redirects here rather than to the sync address, which is plain http
         // on a tailnet IP and can sign nothing.
-        browser_origin: browserOriginOf(ctx.config.webauthnOrigins),
+        ...(() => {
+          const origin = browserOriginOf(ctx.config.webauthnOrigins);
+          return origin ? { browser_origin: origin } : {};
+        })(),
         // The trace store (ADR 445 §3) is a separate file with its own ladder; named here so a
         // `wrong_db` diagnosis can see both halves.
         trace_db: ctx.config.traceDbPath,

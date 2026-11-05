@@ -28,6 +28,7 @@ const OPTIONAL = [
   'quietest_busy_ms',
   'build',
   'release', // the package set's release version; omitted when no package.json is found
+  'browser_origin', // the https passkey origin a joiner's /live redirects to (lane 01M6N2WJ8P, 2026-11-05); omitted when none is configured
 ] as const;
 
 describe('/health after the async Driver (plan 1A Task 23)', () => {
