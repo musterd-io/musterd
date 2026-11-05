@@ -16,7 +16,13 @@ import { StringDecoder } from 'node:string_decoder';
 import { z } from 'zod';
 import type { Parsed } from '../args.js';
 import { GLOBAL_FLAGS, rejectUnknownFlags } from '../args.js';
-import { chatCredsFromEnv, spotlightExpression, startChatReader } from '../broadcast/twitchChat.js';
+import { startPollRuntime } from '../broadcast/pollRuntime.js';
+import {
+  chatCredsFromEnv,
+  spotlightExpression,
+  startChatReader,
+  type ChatApi,
+} from '../broadcast/twitchChat.js';
 import { configPath } from '../config.js';
 import { CliError } from '../errors.js';
 import { keychainLookup } from '../keychain.js';
@@ -2379,16 +2385,33 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     // Twitch chat's `!who` (ADR 740): off unless the stream machine carries its four secrets. Its only
     // reach is one expression in whichever page is live — never the team.
     const chatCreds = chatCredsFromEnv();
-    if (chatCreds)
-      stopChat = startChatReader({
+    if (chatCreds) {
+      // Twitch polls (ADR 807): the runtime reads the open poll on this run's seat and hands the
+      // chat side only the poll and its token; the bot's API arrives once the reader subscribes.
+      let chatApi: ChatApi | null = null;
+      const say = (line: string) => process.stdout.write(theme.meta(`  ${line}\n`));
+      const polls = startPollRuntime({
+        server: opts.server,
+        team: opts.team,
+        seatToken: seat.token,
+        chat: () => chatApi,
+        log: say,
+      });
+      const stopReader = startChatReader({
         creds: chatCreds,
-        log: (line) => process.stdout.write(theme.meta(`  ${line}\n`)),
+        log: say,
         onWho: (name) =>
           void current?.cdp
             ?.send('Runtime.evaluate', { expression: spotlightExpression(name) })
             .catch(() => undefined),
+        onChat: (userId, text) => polls.onChat(userId, text),
+        onReady: (api) => (chatApi = api),
       });
-    else process.stdout.write(theme.meta('  chat: off — no MUSTERD_TWITCH_CHAT_* secrets\n'));
+      stopChat = () => {
+        polls.stop();
+        stopReader();
+      };
+    } else process.stdout.write(theme.meta('  chat: off — no MUSTERD_TWITCH_CHAT_* secrets\n'));
     // x11: the page is on screen now, so the first frame ffmpeg grabs is the office, not Xvfb's root.
     if (opts.capture === 'x11') startEncoder(display);
 

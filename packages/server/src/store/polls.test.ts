@@ -146,4 +146,21 @@ withDrivers('polls-store', (open) => {
     await reportLive(db, team.id, true, T + 30_000);
     expect(await duePolls(db, T + 10_000 + POLL_LIMITS.offlineGraceMs)).toEqual([]);
   });
+
+  it('keeps the closed poll as `last` for five minutes, so the stream can post its result', async () => {
+    const { db, team } = await seed();
+    await reportLive(db, team.id, true, T);
+    const { poll } = await openPoll(db, team.id, 'nick', SPEC, T);
+    await closePoll(db, team.id, poll.id, 'ended', T + 1000);
+    const soon = await openPollReply(db, team.id, { broadcast: true }, T + 2000);
+    expect(soon.poll).toBeNull();
+    expect(soon.last).toMatchObject({ id: poll.id, state: 'closed', end: 'ended' });
+    const later = await openPollReply(
+      db,
+      team.id,
+      { broadcast: true },
+      T + 1000 + POLL_LIMITS.lastKeptMs + 1,
+    );
+    expect(later.last).toBeNull();
+  });
 });
