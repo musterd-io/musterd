@@ -16,6 +16,7 @@ import { appendAudit } from '../store/audit.js';
 import { getMemberByName } from '../store/members.js';
 import { DUPLICATE_ENVELOPE_ID, insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
+import { hubLiveRedirect } from './http.js';
 import { integrationHarness } from './integration.helpers.js';
 
 withDrivers('integration · http', (_o, kind) => {
@@ -1020,6 +1021,30 @@ withDrivers('integration · http', (_o, kind) => {
       } finally {
         await s.close();
       }
+    });
+  });
+
+  describe('a joiner /live sends the browser to the hub (lane 01M6N2WJ8P)', () => {
+    const nodes = { revive: { hub_url: 'http://100.115.152.1:4849/' } };
+    it('redirects /live?team=<enrolled> to the hub with the same query', () => {
+      expect(hubLiveRedirect('/live', '?team=revive&x=1', nodes)).toBe(
+        'http://100.115.152.1:4849/live?team=revive&x=1',
+      );
+      expect(hubLiveRedirect('/live/', '?team=revive', nodes)).toBe(
+        'http://100.115.152.1:4849/live?team=revive',
+      );
+    });
+    it('redirects a bare /live when exactly one team is enrolled, and not otherwise', () => {
+      expect(hubLiveRedirect('/live', '', nodes)).toBe('http://100.115.152.1:4849/live');
+      expect(
+        hubLiveRedirect('/live', '', { ...nodes, other: { hub_url: 'http://h:1' } }),
+      ).toBeNull();
+      expect(hubLiveRedirect('/live', '', {})).toBeNull();
+    });
+    it('leaves an unknown team, other paths and a hub (no enrolment) alone', () => {
+      expect(hubLiveRedirect('/live', '?team=dawn', nodes)).toBeNull();
+      expect(hubLiveRedirect('/board', '?team=revive', nodes)).toBeNull();
+      expect(hubLiveRedirect('/live', '?team=revive', {})).toBeNull();
     });
   });
 
