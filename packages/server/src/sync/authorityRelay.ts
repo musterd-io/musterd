@@ -11,6 +11,7 @@ import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
 import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
+import { openAndAnnounce, requirePollAuthority } from '../protocol/pollWatch.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
 import {
@@ -479,10 +480,22 @@ export async function handleAuthorityRelay(
       break;
     }
     case 'poll.open': {
-      // ADR 807: the op is on the wire so the hub and its joiners agree on its shape; the hub opens
-      // polls once Twitch polls increment 2 builds them (lane 01M6ME50JK). Until then it refuses
-      // plainly rather than half-opening one.
-      relayError('validation', 'polls are not open on this hub yet (ADR 807)');
+      // ADR 807 §3: a joiner's admin opens the team's poll here, at the hub, with the passkey proof.
+      assertAdmin();
+      const assurance = await requirePollAuthority(
+        ctx,
+        team,
+        member!,
+        request.spec,
+        request.approval,
+        {
+          expectedOrigins: relayOrigins,
+          expectedNodeId: node.id,
+        },
+      );
+      const poll = await openAndAnnounce(ctx, team, member!, request.spec, assurance);
+      response = { op: request.op, poll };
+      break;
     }
   }
   return AuthorityRelayResponseSchema.parse(response);

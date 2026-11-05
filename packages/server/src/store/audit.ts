@@ -748,7 +748,10 @@ export type AuditAction =
   // Lane 01M5GDACC0: a queued `stream stop`'s deadline (`POST /teams/:slug/stream/winddown`), read
   // by /broadcast's wind-down card. actor = the seat that queued or cancelled it, target null,
   // detail `{ stop_at }` — epoch ms, or null when the stop was cancelled, overtaken or done.
-  | 'stream.winddown';
+  | 'stream.winddown'
+  // ADR 807: a human admin opened a Twitch poll; a poll closed (deadline, ended, cancelled, interrupted).
+  | 'poll.open'
+  | 'poll.close';
 
 /**
  * ADR 410 — whose row is this? `'actor'` and `'target'` name the column holding **the seat that
@@ -1034,6 +1037,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   // acted by the seat itself, like any self-report.
   'stream.exit': 'actor',
   'stream.winddown': 'actor',
+  'poll.open': 'actor',
+  'poll.close': 'actor',
   'governed.policy.change': 'actor',
   'governed.launch.issue': 'actor',
   'governed.launch.consume': 'actor',

@@ -21,6 +21,8 @@ export const LOOPS = [
   'pr_watch',
   // ADR 792: stops shifts on their guardrails and says so.
   'shift_watch',
+  // ADR 807: closes Twitch polls at their deadline, or when the stream has been offline 90 s.
+  'poll_watch',
 ] as const;
 export type LoopName = (typeof LOOPS)[number];
 

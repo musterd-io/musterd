@@ -1298,6 +1298,9 @@ answer's text.
   poll while it is open.
 - A counts report is `{poll_id, counts[], voters, live, post_failed}` with integer counts. A server MUST
   refuse any other field. No viewer text, name or id crosses from chat.
+- Each broadcast-seat read of `GET /teams/:slug/polls/open` mints a fresh token, and the previous one
+  MUST stop working. The broadcast seat reports `POST /teams/:slug/stream/live {live}`. A server MUST
+  refuse that report from any other seat.
 - The daemon records a poll in two acts it composes itself: a `message` with
   `meta.poll {state: 'open', …}`, and a `resolve` on that thread with
   `meta.poll {state: 'closed', counts, voters, end, winners, closed_at}`, where `end` is
