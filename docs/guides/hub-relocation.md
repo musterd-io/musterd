@@ -183,9 +183,13 @@ auto-refresher, lazara's credential).
   `invalid service token`: the tick speaks to the installed daemon, a joiner with a fresh store, and
   the token was minted on the hub. The refresh itself is unaffected. Follows-up: the tick should
   announce to the hub when the local daemon is a joiner (own lane).
-- Not scripted yet, by design: the box's `/live` publisher (`service install --live` is launchd-only;
-  the box needs a systemd timer or a post-publish copy) and a `localhost:4849/live` forward (a
-  joiner's `/live` has no hub redirect; server change, own lane).
+- **The box publishes its own `/live`** (lane `01M6N02QHJ`): `deploy/second-machine/linux/musterd-live.timer`
+  runs `live.sh` every minute, the systemd twin of the launchd build-publisher, from the box's runtime
+  checkout into `~/.musterd/live/web`. `bootstrap.sh` copies the units with the others; enable the timer
+  by hand on a hub box only (`systemctl --user enable --now musterd-live.timer`), since a joiner serves
+  no `/live`. The musterd.io site-gap ask stays with the laptop publisher: one deploy authorizer, one asker.
+- Not scripted, by design: a `localhost:4849/live` forward (a joiner's `/live` has no hub redirect;
+  server change, own lane).
 
 ## Credentials on the box (the revocation list)
 
