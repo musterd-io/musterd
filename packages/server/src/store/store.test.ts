@@ -50,6 +50,7 @@ import {
   touchAmbientPresenceRows,
 } from './presence.js';
 import { hasValidSessionLease, mintSessionLease } from './session-leases.js';
+import { driverForSeat } from './style.js';
 import {
   bootstrapCutoverReadiness,
   createTeam,
@@ -841,6 +842,17 @@ withDrivers('store', (o) => {
       await release(db, swethaRow.id, 60_000);
       await release(db, nickRow.id, 60_000);
       expect(await driverOfAda()).toBeNull();
+
+      // Still null 25h later (cider's review): "ever had a human" has no window, so the
+      // stale label never revives — on the roster read and the style read alike.
+      const aged = Date.now() - 25 * 60 * 60 * 1000;
+      await db.run('UPDATE presence SET last_seen_at = ? WHERE member_id IN (?, ?)', [
+        aged,
+        nick.id,
+        swetha.id,
+      ]);
+      expect(await driverOfAda()).toBeNull();
+      expect(await driverForSeat(db, team.id, ada.id)).toBeNull();
     });
 
     it('resolveActivity: steering marks you working even without your own heartbeat (ADR 155)', () => {
