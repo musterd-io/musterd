@@ -59,6 +59,10 @@ cost compounds under load.
 
 ## Consequences
 
+- _(2026-11-05, finding 032)_ With both amendments in place the rider 7 re-run read `passed` 0–9 s after
+  every report; the `reclaimable` share that remained was each seat's own *first* session — not a
+  wake, so no report — exiting into its grace. [ADR 809](809-harness-exit-releases-the-reclaim-hold.md)
+  releases that hold from the SessionEnd hook's `residency.session_ended` row, act lane only.
 - _(2026-11-05, later)_ Smoke pair 2 of the rider 7 re-run (00:52–01:03Z, its run log) still read `reclaimable`
   50 s and 82 s: the pair database's gate rows show the seat going reclaimable about 7 s AFTER each
   report. The harness runs its SessionEnd hook as the process winds down, after the output the host

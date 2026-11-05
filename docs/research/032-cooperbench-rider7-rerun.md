@@ -131,6 +131,7 @@ was that the waits were the cost; the waits were $1.75 of $18.45.
    reclaim grace its first call's session left. On the act lane that session is also "a run that ended"
    — the same reasoning as ADR 804 — but no report marks it. Releasing a seat's hold when its enrolled
    workspace's harness exits (the SessionEnd hook could say so) would take 40 s off every first wait.
+   Built as [ADR 809](../decisions/809-harness-exit-releases-the-reclaim-hold.md) (lane `01M6PA2G02`).
 2. **A fresh wake pays the boot for one act.** 24 of 26 wakes were fresh under the $0.25 bound; each
    re-read the primer and the task. A compacted continuation (ADR 805's rejected third option) is the
    way to keep the lane's wakes cheap *and* continuous.
