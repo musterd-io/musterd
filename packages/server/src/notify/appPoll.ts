@@ -57,26 +57,32 @@ function admin(person: MemberRow | null | undefined): person is MemberRow {
   );
 }
 
-/** Keep this binding's last poll outcome, so the phone's pull of `poll-<nonce>` can read it. */
+/**
+ * Keep this binding's last poll outcome, so the phone's pull of `poll-<nonce>` can read it. The
+ * binding's `app_keys` also holds its spent nonces (replay protection), so this is a compare-and-
+ * swap on the value just read, retried, like `spendAppQuickActionNonce`: a nonce spent between the
+ * read and the write is never overwritten.
+ */
 async function recordResult(
   ctx: Ctx,
   teamId: string,
   bindingId: string,
   result: { nonce: string; op: Op; ok: boolean; reason?: string; at: number },
 ): Promise<void> {
-  await ctx.db.tx(async (t) => {
-    const row = await t.get<{ app_keys: string | null }>(
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const row = await ctx.db.get<{ app_keys: string | null }>(
       'SELECT app_keys FROM channel_bindings WHERE id = ? AND team_id = ?',
       [bindingId, teamId],
     );
     if (!row?.app_keys) return;
     const keys = JSON.parse(row.app_keys) as AppKeys & { poll_result?: unknown };
-    await t.run('UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ?', [
-      JSON.stringify({ ...keys, poll_result: result }),
-      bindingId,
-      teamId,
-    ]);
-  });
+    const swapped = await ctx.db.run(
+      'UPDATE channel_bindings SET app_keys = ? WHERE id = ? AND team_id = ? AND app_keys = ?',
+      [JSON.stringify({ ...keys, poll_result: result }), bindingId, teamId, row.app_keys],
+    );
+    if (swapped.changes === 1) return;
+  }
+  // Still contended after five tries: the phone's pull finds no result and says "pull to refresh".
 }
 
 /**
