@@ -1,4 +1,4 @@
-# 813 — A stale room obligation does not hold the skip; the pinned set carries it
+# 813 — A stale room obligation does not hold the skip; it stays owed, not pinned
 
 - Status: accepted
 - Date: 2026-11-05
@@ -67,6 +67,13 @@ and it is open for all of them alike. What should a still-open room obligation d
 - Not decided here: whether a room obligation nobody has answered in N weeks should expire or be
   swept to its asker. ADR 599 keeps "never expires"; this ADR only stops it holding other seats'
   cursors.
+- _(2026-11-05, after landing: the first draft's title and the lane's acceptance line said "the
+  pinned set carries it". That was wrong — the pinned set is cursor-bounded (ADR 429) — and
+  Decision 2 was corrected before merge while the H1 was not; big-body's review (01M6PXJ9PW)
+  caught the mismatch and the title now says what Decision 2 says. The asker resolved the four
+  room asks that motivated this at 21:20 UTC, before #3936 merged, so the >20k live skip named
+  under Experiment cannot be demonstrated on those seats any more; the store tests are the
+  evidence that stands.)_
 
 ## Observability & Evaluation
 
