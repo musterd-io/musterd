@@ -28,7 +28,7 @@ import {
  * Meta's Muse Code CLI (ADR 619). Machine-global `~/.config/muse/settings.json` for the MCP
  * server entry (`mcpServers.musterd`, stdio — camelCase, what the binary writes; snake_case reads
  * too and our entry migrates) and project-local `.muse/hooks.json` for the
- * lifecycle hooks (SessionStart orient nudge, Stop interrupt check). Shapes verified against the
+ * lifecycle hooks (SessionStart orient nudge, PostToolUse + Stop interrupt checks). Shapes verified against the
  * installed binary (1.4.9, 2026-10-15) — the hooks nesting is Claude-style
  * `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "..."}]}]}}`, which the docs
  * never state and startup validation enforces (a wrong guess fails with a named warning, which
@@ -43,6 +43,7 @@ import {
 
 export const MUSE_SURFACE = 'muse';
 export const MUSE_START_MARKER = 'musterd-muse-start';
+export const MUSE_POSTTOOLUSE_MARKER = 'musterd-muse-posttooluse';
 export const MUSE_STOP_MARKER = 'musterd-muse-stop';
 export const MUSE_SETTINGS_VERSION = 1;
 
@@ -216,6 +217,33 @@ export const MUSE_INTERRUPT_STOP_SCRIPT = [
   'if(line)console.log(JSON.stringify({decision:"block",reason:line}))',
 ].join('');
 
+/**
+ * PostToolUse doorbell, measured on Muse 1.4.14 (2026-11-05, lane 01M6PM3V4Z): Muse dispatches
+ * PreToolUse/PostToolUse/PostToolUseFailure from `.muse/hooks.json`, and a PostToolUse hook
+ * printing `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":...}}`
+ * reaches the model mid-task — the line lands as a `context_block_updated` developer block
+ * (`hook:post_tool_use:...`, `runtime_hook`) and the model acted on it. The Stop event rejects
+ * that shape; neighbouring events disagree, so this seam is its own shape, not Stop's.
+ *
+ * The wrapper does NOT forward hook stdin to the probe: `--hook muse`'s inferred-question
+ * catcher reads any payload as a turn end, so piping PostToolUse JSON through would record a
+ * turn end per tool call. No input → the probe's payload read is empty and the catcher skips.
+ */
+export const MUSE_INTERRUPT_POSTTOOLUSE_SCRIPT = [
+  'const {spawnSync}=require("child_process");',
+  'let line="";',
+  'try{const r=spawnSync("musterd",["inbox","--interrupt-check","--hook","muse"],{encoding:"utf8",stdio:["ignore","pipe","ignore"]});if(r.status===0&&r.stdout)line=r.stdout.trim()}catch{}',
+  'if(line)console.log(JSON.stringify({hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:line}}))',
+].join('');
+
+/** PostToolUse: the interrupt line at every tool boundary (ADR 088), in Muse 1.4.14's shape. */
+export function musePostToolUseCommand(): string {
+  return (
+    'command -v musterd >/dev/null 2>&1 && command -v node >/dev/null 2>&1 && ' +
+    `node -e '${MUSE_INTERRUPT_POSTTOOLUSE_SCRIPT}' || true # ${MUSE_POSTTOOLUSE_MARKER} ${epochTag(FEATURE_EPOCH)}`
+  );
+}
+
 /** Stop: the mid-loop interrupt line (ADR 088), in the shape Muse 1.4.10 feeds back to the model. */
 export function museStopCommand(): string {
   return (
@@ -244,6 +272,7 @@ export function upsertMuseHooks(raw: string | null): string {
   const hooks = { ...(doc.hooks ?? {}) };
   for (const [event, command] of [
     ['SessionStart', museStartCommand()],
+    ['PostToolUse', musePostToolUseCommand()],
     ['Stop', museStopCommand()],
   ] as const) {
     const groups = [...(hooks[event] ?? [])];
@@ -262,7 +291,7 @@ export function hasMuseHooks(raw: string | null): boolean {
   try {
     const doc = JSON.parse(raw) as { hooks?: Record<string, MuseHookGroup[]> };
     const tag = epochTag(FEATURE_EPOCH);
-    return ['SessionStart', 'Stop'].every((event) =>
+    return ['SessionStart', 'PostToolUse', 'Stop'].every((event) =>
       (doc.hooks?.[event] ?? []).some((g) =>
         g.hooks?.some((h) => h.command.includes('# musterd-muse-') && h.command.includes(tag)),
       ),
@@ -273,7 +302,11 @@ export function hasMuseHooks(raw: string | null): boolean {
 }
 
 function hooksFingerprint(): string {
-  return canonicalFingerprint({ start: museStartCommand(), stop: museStopCommand() });
+  return canonicalFingerprint({
+    start: museStartCommand(),
+    posttooluse: musePostToolUseCommand(),
+    stop: museStopCommand(),
+  });
 }
 
 export const muse: Harness = {
@@ -494,7 +527,11 @@ export const museAdapter: HarnessAdapter = {
         fragmentKey: 'hooks.musterd',
         scope: 'folder',
         fingerprint: hooksFingerprint(),
-        payload: { start: museStartCommand(), stop: museStopCommand() },
+        payload: {
+          start: museStartCommand(),
+          posttooluse: musePostToolUseCommand(),
+          stop: museStopCommand(),
+        },
       },
     ];
   },

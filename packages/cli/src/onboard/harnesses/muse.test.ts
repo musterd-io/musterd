@@ -14,7 +14,9 @@ import {
   museHooksPath,
   museServerEntry,
   museSettingsPathFor,
+  MUSE_INTERRUPT_POSTTOOLUSE_SCRIPT,
   MUSE_INTERRUPT_STOP_SCRIPT,
+  musePostToolUseCommand,
   museStartCommand,
   museStopCommand,
   upsertMuseHooks,
@@ -171,11 +173,11 @@ describe('muse settings.json (ADR 619)', () => {
 });
 
 describe('muse hooks.json (ADR 619 — measured nesting)', () => {
-  it('writes SessionStart + Stop in the shape the binary accepts', () => {
+  it('writes SessionStart + PostToolUse + Stop in the shape the binary accepts', () => {
     const doc = JSON.parse(upsertMuseHooks(null)) as {
       hooks: Record<string, Array<{ hooks: Array<{ type: string; command: string }> }>>;
     };
-    expect(Object.keys(doc.hooks).sort()).toEqual(['SessionStart', 'Stop']);
+    expect(Object.keys(doc.hooks).sort()).toEqual(['PostToolUse', 'SessionStart', 'Stop']);
     for (const groups of Object.values(doc.hooks)) {
       expect(groups).toHaveLength(1);
       expect(groups[0]!.hooks[0]).toMatchObject({ type: 'command' });
@@ -191,6 +193,7 @@ describe('muse hooks.json (ADR 619 — measured nesting)', () => {
     const doc = JSON.parse(twice) as { hooks: Record<string, unknown[]> };
     expect(doc.hooks['PreToolUse']).toHaveLength(1);
     expect(doc.hooks['SessionStart']).toHaveLength(1);
+    expect(doc.hooks['PostToolUse']).toHaveLength(1);
     expect(doc.hooks['Stop']).toHaveLength(1);
     expect(hasMuseHooks(twice)).toBe(true);
   });
@@ -214,6 +217,15 @@ describe('muse hooks.json (ADR 619 — measured nesting)', () => {
     expect(museStopCommand()).toContain('stop_hook_active');
     expect(museStopCommand()).not.toContain('additionalContext');
     expect(museStopCommand()).not.toContain('interrupt-check >/dev/null');
+    // The PostToolUse doorbell is the opposite shape from Stop (measured Muse 1.4.14):
+    // additionalContext is its seam, and it must not forward hook stdin — the probe's
+    // muse catcher would read every tool call as a turn end.
+    expect(musePostToolUseCommand()).toContain('"--hook","muse"');
+    expect(musePostToolUseCommand()).toMatch(/musterd-muse-posttooluse e\d+/);
+    expect(musePostToolUseCommand()).toContain('hookSpecificOutput');
+    expect(musePostToolUseCommand()).toContain('additionalContext');
+    expect(MUSE_INTERRUPT_POSTTOOLUSE_SCRIPT).not.toContain('readFileSync(0');
+    expect(MUSE_INTERRUPT_POSTTOOLUSE_SCRIPT).not.toContain('input:raw');
   });
 });
 
@@ -287,6 +299,36 @@ describe('muse Stop doorbell (Muse 1.4.10)', () => {
       );
       expect(block.status).toBe(0);
       expect(JSON.parse(block.stdout)).toEqual({ decision: 'block', reason: 'urgent from nick' });
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('muse PostToolUse doorbell (Muse 1.4.14)', () => {
+  const runPostToolUse = (env?: NodeJS.ProcessEnv) =>
+    spawnSync(process.execPath, ['-e', MUSE_INTERRUPT_POSTTOOLUSE_SCRIPT], {
+      input: JSON.stringify({ hook_event_name: 'PostToolUse', session_id: 's1' }),
+      encoding: 'utf8',
+      env: env ? { ...process.env, ...env } : process.env,
+    });
+
+  it('wraps a raised line as additionalContext, and stays silent when the check prints nothing', () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'musterd-fake-'));
+    try {
+      const raised = runPostToolUse({
+        PATH: `${fakeMusterd(binDir, 'urgent from nick')}:${process.env['PATH'] ?? ''}`,
+      });
+      expect(raised.status).toBe(0);
+      expect(JSON.parse(raised.stdout)).toEqual({
+        hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: 'urgent from nick' },
+      });
+
+      const quiet = runPostToolUse({
+        PATH: `${fakeMusterd(binDir, '')}:${process.env['PATH'] ?? ''}`,
+      });
+      expect(quiet.status).toBe(0);
+      expect(quiet.stdout).toBe('');
     } finally {
       rmSync(binDir, { recursive: true, force: true });
     }

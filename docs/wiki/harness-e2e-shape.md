@@ -58,7 +58,9 @@ The leader-socket measurement stays on [Grok leader socket](grok-leader-socket.m
 
 ## muse holds, idle deaf (2026-10-16)
 
-Onboard is `onboard/harnesses/muse.ts` (SessionStart orient, Stop interrupt). Wake and resume are `host/backends/muse.ts` (`--session-id`, resume adds `--allow-workspace-switch`). Meter reads that session's `session.jsonl` and, when `model_completed.usage` parses, settles the summed tokens as `harness_prints_no_price` (ancestor `c42f00c4`). A log with no such event stays `harness_price_unverified` and carries no usage.
+Onboard is `onboard/harnesses/muse.ts` (SessionStart orient, PostToolUse + Stop interrupt). Wake and resume are `host/backends/muse.ts` (`--session-id`, resume adds `--allow-workspace-switch`). Meter reads that session's `session.jsonl` and, when `model_completed.usage` parses, settles the summed tokens as `harness_prints_no_price` (ancestor `c42f00c4`). A log with no such event stays `harness_price_unverified` and carries no usage.
+
+The mid-turn doorbell also holds: Muse 1.4.14 dispatches `PreToolUse`/`PostToolUse`/`PostToolUseFailure` from `.muse/hooks.json`, and the `PostToolUse` group's `hookSpecificOutput.additionalContext` lands mid-task as a `context_block_updated` developer block (`hook:post_tool_use:…`) the model acts on — measured with the shipped hooks over a fake interrupt line (2026-11-05, lane `01M6PM3V4Z`, ghost, session `01a1ad46-4e0e-7003-8ac2-31edcd9bd443`; falsify: no interrupt line in a muse transcript's post_tool_use blocks mid-task). `additionalContext` is the PostToolUse seam even though Stop rejects it. <!-- claim: other -->
 
 `museStopCommand` prints nothing when `interrupt-check` is silent. A non-empty line becomes `{"decision":"block","reason":"<line>"}`, and a continuation whose stdin has `stop_hook_active: true` exits 0. On Muse 1.4.10 a Stop hook that prints a bare line and exits 0 stores stdout as `""` and does not add a model step (2026-10-16, echo, session `eeeeeeee-3333-4333-8333-000000000003`; falsify: that bare line appears in a `context_block_updated` block). <!-- claim: other -->
 
