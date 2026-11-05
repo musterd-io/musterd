@@ -4,7 +4,7 @@ import { withDrivers } from '../db/testing.js';
 import { addMember } from './members.js';
 import { attach, listReclaimableMemberIds, release } from './presence.js';
 import { createTeam } from './teams.js';
-import { releaseWakeHold } from './wakeHold.js';
+import { releaseLateWakeHolds, releaseWakeHold } from './wakeHold.js';
 
 /** ADR 804: a settled wake releases its reclaim hold, so the act lane's next wake is not held by it. */
 withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
@@ -46,6 +46,32 @@ withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
         await releaseWakeHold(db, { id: 'L1', member_id: ada.id, created_at: leaseStart }, now),
       ).toBe(2);
       expect(await listReclaimableMemberIds(db, team.id, now)).toEqual(new Set());
+    });
+
+    it('releaseLateWakeHolds: a leaseless hold parked after a recently reported lease ends; others stand', async () => {
+      const db = await openStore();
+      const team = await createTeam(db, { slug: 'revive' });
+      const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
+      const bo = (await addMember(db, team, { name: 'Bo', kind: 'agent' })).row;
+      const now = Date.now();
+      await db.run(
+        `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
+         VALUES ('L1', ?, ?, 'A1', NULL, 'h', 'batched', 'reported', ?, ?, NULL, ?)`,
+        [team.id, ada.id, now - 60_000, now + 60_000, now - 50_000],
+      );
+      // The SessionEnd hook's row: parked after the report, no lease.
+      const late = await attach(db, ada.id, 'cli', 'c2', {});
+      await release(db, late.id, 45_000);
+      // Bo has no reported lease: its hold stands.
+      const other = await attach(db, bo.id, 'cli', 'c3', {});
+      await release(db, other.id, 45_000);
+      expect(await listReclaimableMemberIds(db, team.id, now)).toEqual(new Set([ada.id, bo.id]));
+      expect(await releaseLateWakeHolds(db, team.id, now)).toBe(1);
+      expect(await listReclaimableMemberIds(db, team.id, now)).toEqual(new Set([bo.id]));
+      // Outside the window the lease no longer speaks for new holds.
+      const again = await attach(db, ada.id, 'cli', 'c4', {});
+      await release(db, again.id, 45_000);
+      expect(await releaseLateWakeHolds(db, team.id, now, 30_000)).toBe(0);
     });
 
     it('leaves a hold parked before the wake began', async () => {

@@ -55,6 +55,7 @@ import {
   rowToEnvelope,
 } from './messages.js';
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
+import { releaseLateWakeHolds } from './wakeHold.js';
 import { answerLineFor, seatWaiting } from './questions.js';
 import { lastActionBySubject } from './quiescence.js';
 import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
@@ -2543,6 +2544,8 @@ async function deriveSeatPasses(
   gates: { seat: string; state: WakeGateState }[] = [],
 ): Promise<SeatPass[]> {
   const passes: SeatPass[] = [];
+  // ADR 804 (amended 2026-11-05): a hook session that parks after its wake's report holds nothing.
+  await releaseLateWakeHolds(db, teamId, now);
   const reclaimable = await listReclaimableMemberIds(db, teamId, now);
   const enrollments = (await listResidency(db, teamId)).filter((r) => r.host === host);
   const teamPolicy = await getPolicy(db, teamId);
