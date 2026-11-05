@@ -966,6 +966,20 @@ export class MusterdClient {
   }
 
   /**
+   * ADR 811: jump the read cursor over stale rows nobody owed this seat (older than a week, neither
+   * directed to it nor an obligation act) and learn how many were passed. A directed or owed row
+   * stops the jump; the ordinary check renders it next. An older daemon answers 404: the caller
+   * treats that as `skipped: 0`.
+   */
+  async skipStale(): Promise<{
+    skipped: number;
+    skipped_through?: number;
+    stopped_at?: { id: string; act: string; created_at: number } | null;
+  }> {
+    return this.request('POST', `/teams/${this.config.team}/inbox/cursor/skip-stale`, {});
+  }
+
+  /**
    * Read named acts back in full, whatever their read state (lane 01M2JZYTAH).
    *
    * The retrieval half of the reply budget: `team_inbox_check` clips a long body so one act cannot

@@ -94,6 +94,12 @@ lane.
 
 ## Consequences
 
+**2026-11-05 — a stale row nobody owed the reader may be passed as a count (ADR 811).** The rule here
+stands for every row the reader was owed and for every row under seven days old; a row older than
+that which is neither directed to the reader nor an obligation act may be skipped by
+`POST /inbox/cursor/skip-stale`, and the count is its rendering. Measured need: cursors from July
+with 23k unread, 86% of it lane broadcasts and team status updates.
+
 - Replayed on the same snapshot after the change (rendered chars of shown + folded, same rows):
 
   | seat     | before   | after    | full rows kept                                        | folded  |

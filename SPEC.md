@@ -1324,3 +1324,13 @@ answer's text.
   `meta.poll {state: 'open', …}`, and a `resolve` on that thread with
   `meta.poll {state: 'closed', counts, voters, end, winners, closed_at}`, where `end` is
   `deadline | ended | cancelled | interrupted`. A server MUST strip a client-sent `meta.poll`.
+
+## A.38 Stale unowed rows are skipped as a count (unreleased — ADR 811)
+
+- `POST /teams/:slug/inbox/cursor/skip-stale` `{older_than_ms?}` (default seven days; the caller's
+  own cursor) advances the read cursor to the row just before the oldest unread row that is owed
+  to the caller — directed to them, or an `ask` / `request_help` to the room — skipping only rows
+  older than the window that are owed to nobody. It answers `{skipped, skipped_through?, cursor,
+  stopped_at?}` and records `continuity.cursor_advanced` with `skipped_stale`, `skipped_through`
+  and `stopped_at`. A row within the window is never skipped. A server MUST NOT skip past an owed
+  row whatever its age.

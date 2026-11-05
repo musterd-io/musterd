@@ -527,6 +527,74 @@ export async function listInbox(
  */
 /** Unread count by the caller-supplied cursor — what a bounded read needs in order to say how much
  *  it could not carry. Counting is not marshalling: this stays cheap on a deep backlog. */
+/** ADR 811: how old an unowed row must be before a skip may count it instead of carrying it. */
+export const STALE_UNOWED_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * ADR 811: find how far a reader's cursor may jump over STALE rows nobody owed them. A row is owed
+ * when it is directed to the reader (`to_member`) or is an obligation act to the room (`ask`,
+ * `request_help`, ADR 429's any-recipient class); such a row STOPS the skip whatever its age and
+ * whether or not it was since answered — the ordinary read decides that. Everything else older
+ * than `olderThanMs` (team status updates, lane broadcasts, the room's chatter, answers owed to
+ * nobody) is passed over as a count. Nothing newer than the window is ever skipped: the fold and
+ * the drain (ADR 433, ADR 287) still render those one line at a time.
+ *
+ * Pure read: returns the row the cursor may advance to, how many rows that passes, and the row
+ * that stopped it — or `null` when there is nothing stale and unowed to skip. The caller advances.
+ */
+export async function skipStaleUnowed(
+  db: Driver,
+  member: { id: string; team_id: string },
+  cursor: { last_read_ts: number; last_read_message_id: string | null },
+  opts: { now?: number; olderThanMs?: number } = {},
+): Promise<{
+  to: { id: string; created_at: number };
+  skipped: number;
+  stopped_at: { id: string; act: string; from_member: string; created_at: number } | null;
+} | null> {
+  const now = opts.now ?? Date.now();
+  const before = now - (opts.olderThanMs ?? STALE_UNOWED_MS);
+  const after = cursor.last_read_message_id
+    ? `AND ${INBOX_AFTER_CURSOR_SQL}`
+    : 'AND created_at > ?';
+  const afterParams = cursor.last_read_message_id
+    ? [cursor.last_read_ts, cursor.last_read_ts, cursor.last_read_ts, cursor.last_read_message_id]
+    : [cursor.last_read_ts];
+  const inbox = `team_id = ? AND (to_member = ? OR to_kind IN ('team','broadcast')) AND from_member != ? ${after}`;
+  const inboxParams = [member.team_id, member.id, member.id, ...afterParams];
+  const owedActs = OBLIGATION_ACTS_ANY.map(() => '?').join(',');
+  const stopper = await db.get<{
+    id: string;
+    act: string;
+    from_member: string;
+    created_at: number;
+  }>(
+    `SELECT id, act, from_member, created_at FROM messages
+      WHERE ${inbox} AND (to_member = ? OR act IN (${owedActs}))
+      ORDER BY created_at ASC, id ASC LIMIT 1`,
+    [...inboxParams, member.id, ...OBLIGATION_ACTS_ANY],
+  );
+  const bound = stopper ? `AND (created_at < ? OR (created_at = ? AND id < ?))` : '';
+  const boundParams = stopper ? [stopper.created_at, stopper.created_at, stopper.id] : [];
+  const to = await db.get<{ id: string; created_at: number }>(
+    `SELECT id, created_at FROM messages
+      WHERE ${inbox} AND created_at < ? ${bound}
+      ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [...inboxParams, before, ...boundParams],
+  );
+  if (!to) return null;
+  const counted = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM messages
+      WHERE ${inbox} AND (created_at < ? OR (created_at = ? AND id <= ?))`,
+    [...inboxParams, to.created_at, to.created_at, to.id],
+  );
+  return {
+    to: { id: to.id, created_at: Number(to.created_at) },
+    skipped: Number(counted?.n ?? 0),
+    stopped_at: stopper ? { ...stopper, created_at: Number(stopper.created_at) } : null,
+  };
+}
+
 export async function countUnread(
   db: Driver,
   member: { id: string; team_id: string },
