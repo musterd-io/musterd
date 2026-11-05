@@ -48,7 +48,9 @@ with no new call to a model and nothing the host cannot attest.
    Consequences.)_ _(Amended 2026-11-05: later the same day — a key's NAME admits nothing; a value
    rides only when it parses as a grammar: a path with a slash, a musterd id, an act or lane state
    from the enum, an integer. `pattern`, `glob`, `name`, `to`, `seat` and every other argument ride
-   as the key alone. See Consequences.)_
+   as the key alone. See Consequences.)_ _(Amended 2026-11-05: third read — a shape is not a grammar
+   either; a value rides only from a closed set the product owns (an act, a lane state) or as an
+   integer. Paths and ids ride as the key alone. See Consequences.)_
 3. **It is fitted to the bound by the rung's own arithmetic.** The budget is what `resume_max_usd`
    buys at bytes ÷ 4 tokens × the model's input price (`briefBudgetBytes`), capped at 48 KiB
    (`BRIEF_MAX_BYTES` — a `-p` argument stays well under Linux's per-argument ceiling, and a longer
@@ -99,6 +101,12 @@ with no new call to a model and nothing the host cannot attest.
   ULID, an act or lane state from the enum, an integer — under a key that means that thing;
   everything else is the key alone. The regressions drive `{pattern:'hunter2'}`, `{to:'hunter2'}`,
   `{id:'hunter2'}` and `{file_path:'hunter2'}` through the real builder and the spawned `-p`.
+- _(2026-11-05, third acceptance read)_ `{path: 'hunter2/secret'}` is a path by that grammar and rode
+  verbatim; and a Crockford-base32 id grammar admits an AWS access key id. A shape is not a boundary.
+  `constrainedValue` now admits only a member of a closed set the product owns — an act name, a lane
+  state — or an integer; paths and ids ride as the key alone. The brief loses file names in its tool
+  lines and keeps them where the seat named them in its own words, under the prose patterns. The
+  regression drives `{path: 'hunter2/secret'}` through the real builder into the spawned `-p`.
 - On the act lane with the bound set, a wake past the bound keeps the thread of its own prior
   session for the price of the brief instead of none for the price of the boot. The boot itself is
   unchanged: this ADR does not make a fresh wake cheaper, it makes it less forgetful.

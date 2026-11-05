@@ -11,7 +11,7 @@ import { priceRowFor } from './prices.js';
  * model call, no summary the host would have to pay for and could not attest.
  *
  * What survives: the seat's own text turns, its tool calls (name, and arguments by construction:
- * path-like keys with their values, every other key by name only), and the person's prompts
+ * enum acts and states and integers with their values, every other key by name only), and the person's prompts
  * (clipped). What never does: thinking blocks, tool results (the bulk of a transcript, and
  * re-readable), attachments, API-request mirrors, any tool argument that is not a path or an
  * identifier, and anything in prose that looks like a credential (hard rule 5 applies to the brief
@@ -60,32 +60,30 @@ export function briefBudgetBytes(boundUsd: number, model: string | undefined): n
  * and the next session's transcript, and a transcript holds whatever the seat read or typed.
  *
  * 1. **By construction, for tool calls:** a tool's argument never rides the brief as a value unless
- *    it PARSES as one of a few grammars — a filesystem path (with a slash), a musterd id, an act or
- *    lane state from the enum, an integer — under a key that means that thing. A field name alone
- *    admits nothing: `{pattern: 'hunter2'}` is a free-form string whatever the key says (big-body's
- *    second acceptance read), so `pattern`, `glob`, `name`, `to`, `seat`, a Bash `command`, a Write
- *    `content`, a `body`, a `password` — every other argument — ride as the key alone. The first
- *    read found `{"password":"…"}` passing a regex; the second found a name-based allowlist passing
- *    a value. Neither depends on recognising a secret; the grammar does the refusing.
+ *    it is a member of a closed set the product owns — an act name, a lane state — or an integer.
+ *    A field name admits nothing (`{pattern: 'hunter2'}`), and neither does a shape
+ *    (`{path: 'hunter2/secret'}` is a path by every path grammar; an AWS key id is Crockford
+ *    base32): big-body's three acceptance reads of 2026-11-05 found each in turn. So paths, ids,
+ *    names, patterns, a Bash `command`, a Write `content`, a `body`, a `password` — every other
+ *    argument — ride as the key alone, and nothing here depends on recognising a secret.
  * 2. **Patterns, for the seat's own text and the person's prompts:** known key prefixes, bearer and
  *    key=value forms tolerant of JSON quoting, and any long opaque token (letters and digits, no
  *    spaces) — run on the WHOLE text before it is clipped, so a clip never splits a secret out of its
  *    pattern's reach.
  */
 /**
- * The grammars a tool-argument value must parse as to ride the brief (big-body's second acceptance
- * read, 2026-11-05: a field NAME is not a grammar — `{pattern: 'hunter2'}` is a free-form string
- * whatever the key says). A value that parses as none of them rides as its key alone.
+ * What a tool-argument value may ride the brief as (big-body's acceptance reads of 2026-11-05, three
+ * of them): nothing a person could have typed. A field NAME is not a grammar (`{pattern:
+ * 'hunter2'}`), and a SHAPE is not one either — `hunter2/secret` is a path by every path grammar,
+ * and an AWS access key id is twenty characters of Crockford base32. The only values that cannot
+ * carry a credential are the ones drawn from a closed set the product owns: an act name, a lane
+ * state, an integer. Everything else — paths, ids, names, patterns, commands, bodies — rides as its
+ * key alone. The seat's own text turns say what file it touched, in its own words, under the prose
+ * patterns.
  */
-const PATH_KEYS = new Set(['file_path', 'path', 'notebook_path']);
-const ID_KEYS = new Set(['id', 'lane', 'lane_id']);
 const ACT_KEYS = new Set(['act']);
 const STATE_KEYS = new Set(['state']);
 const INT_KEYS = new Set(['offset', 'limit']);
-/** A filesystem path: at least one slash, path characters only. A bare word is not a path. */
-const PATH_GRAMMAR = /^(?=.*\/)[A-Za-z0-9_.~@+/-]{2,}$/;
-/** A musterd id: Crockford base32, 10–26 characters (ULIDs and the lane/act ids built from them). */
-const ID_GRAMMAR = /^[0-9A-HJKMNP-TV-Z]{10,26}$/;
 const ACTS = new Set([
   'message',
   'status_update',
@@ -113,22 +111,17 @@ const LANE_STATES = new Set([
   'parked',
 ]);
 
-/** The value a tool argument may ride as, or undefined when it parses as no grammar. Exported for
- *  the tests. */
+/** The value a tool argument may ride as — a member of a closed set the product owns, or an
+ *  integer — else undefined. Exported for the tests. */
 export function constrainedValue(key: string, value: unknown): string | undefined {
   if (INT_KEYS.has(key)) {
     return typeof value === 'number' && Number.isInteger(value) ? String(value) : undefined;
   }
   if (typeof value !== 'string') return undefined;
-  if (PATH_KEYS.has(key))
-    return PATH_GRAMMAR.test(value) && value.length <= SAFE_VALUE_MAX ? value : undefined;
-  if (ID_KEYS.has(key)) return ID_GRAMMAR.test(value) ? value : undefined;
   if (ACT_KEYS.has(key)) return ACTS.has(value) ? value : undefined;
   if (STATE_KEYS.has(key)) return LANE_STATES.has(value) ? value : undefined;
   return undefined;
 }
-
-const SAFE_VALUE_MAX = 120;
 
 const SECRET_PATTERNS = [
   /\b(mskey|msgr|mscr|msat)_[A-Za-z0-9_-]+/g,

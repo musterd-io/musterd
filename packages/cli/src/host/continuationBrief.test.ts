@@ -47,7 +47,8 @@ describe('ADR 810: the continuation brief', () => {
     expect(brief.dropped).toBe(0);
     expect(brief.text).toContain('> Implement token chunking');
     expect(brief.text).toContain('I will claim a lane first.');
-    expect(brief.text).toContain('[mcp__musterd__lane_claim] id=01M6PA2PWX3AX432EJQCG62945');
+    expect(brief.text).toContain('[mcp__musterd__lane_claim] id');
+    expect(brief.text).not.toContain('01M6PA2PWX3AX432EJQCG62945');
     expect(brief.text).toContain('Patch written to chunk.py');
     expect(brief.text).not.toContain('secret plans');
     expect(brief.text).not.toContain('xxxxx');
@@ -96,25 +97,33 @@ describe('ADR 810: the continuation brief', () => {
     expect(longest).toBeLessThanOrEqual(600);
   });
 
-  it('a value rides only when it parses as a grammar: path with a slash, musterd id, enum act/state, integer', () => {
-    expect(constrainedValue('file_path', '/ws/src/a.ts')).toBe('/ws/src/a.ts');
-    expect(constrainedValue('file_path', 'hunter2')).toBeUndefined(); // no slash: not a path
-    expect(constrainedValue('path', 'a/b c')).toBeUndefined(); // a space is not a path character
-    expect(constrainedValue('id', '01M6PA2PWX3AX432EJQCG62945')).toBe('01M6PA2PWX3AX432EJQCG62945');
-    expect(constrainedValue('id', 'hunter2')).toBeUndefined();
-    expect(constrainedValue('lane', '01M6PA2PWX')).toBe('01M6PA2PWX');
+  it('a value rides only from a closed set the product owns, or as an integer — never by shape', () => {
     expect(constrainedValue('act', 'message')).toBe('message');
     expect(constrainedValue('act', 'hunter2')).toBeUndefined();
     expect(constrainedValue('state', 'active')).toBe('active');
     expect(constrainedValue('offset', 10)).toBe('10');
     expect(constrainedValue('offset', '10')).toBeUndefined();
-    // A key with no grammar never rides a value, however innocent it looks.
-    for (const key of ['pattern', 'glob', 'name', 'to', 'seat', 'goal_id', 'command', 'body']) {
-      expect(constrainedValue(key, '/ws/src/a.ts')).toBeUndefined();
+    // Shapes are not grammars (big-body's third read): a path with a slash, a Crockford id, a glob.
+    expect(constrainedValue('file_path', '/ws/src/a.ts')).toBeUndefined();
+    expect(constrainedValue('path', 'hunter2/secret')).toBeUndefined();
+    expect(constrainedValue('id', '01M6PA2PWX3AX432EJQCG62945')).toBeUndefined();
+    expect(constrainedValue('id', 'AKIAIOSFODNN7EXAMPLE')).toBeUndefined();
+    for (const key of [
+      'pattern',
+      'glob',
+      'name',
+      'to',
+      'seat',
+      'lane',
+      'goal_id',
+      'command',
+      'body',
+    ]) {
+      expect(constrainedValue(key, 'message')).toBeUndefined();
     }
   });
 
-  it("tool arguments ride by construction: grammar-checked values, every other key is a name (big-body's reads)", () => {
+  it("tool arguments ride by construction: closed-set values only, every other key is a name (big-body's reads)", () => {
     const p = transcript([
       rec('assistant', [
         {
@@ -147,33 +156,45 @@ describe('ADR 810: the continuation brief', () => {
           name: 'mcp__musterd__team_send',
           input: { act: 'message', to: 'agent2', body: 'the token is hunter2' },
         },
-        // big-body's second read: a free-form search string, a member name, a non-id "id", a bare
-        // "path" — allowlisted names, arbitrary values. None rides.
         {
           type: 'tool_use',
           id: 'f',
           name: 'Grep',
-          input: { pattern: 'hunter2', path: 'hunter2', glob: 'hunter2' },
+          input: { pattern: 'hunter2', path: 'hunter2/secret', glob: 'hunter2' },
         },
-        { type: 'tool_use', id: 'g', name: 'mcp__musterd__lane_claim', input: { id: 'hunter2' } },
+        {
+          type: 'tool_use',
+          id: 'g',
+          name: 'mcp__musterd__lane_claim',
+          input: { id: 'AKIAIOSFODNN7EXAMPLE' },
+        },
         {
           type: 'tool_use',
           id: 'h',
-          name: 'mcp__musterd__team_send',
-          input: { to: 'hunter2', act: 'hunter2' },
+          name: 'mcp__musterd__lane_update',
+          input: { id: '01M6PA2PWX', state: 'active' },
         },
       ]),
     ]);
     const brief = compactTranscript(p, BRIEF_MAX_BYTES)!;
-    expect(brief.text).toContain('[Write] file_path=/ws/.env content');
+    expect(brief.text).toContain('[Write] file_path content');
     expect(brief.text).toContain('[mcp__x__login] password user');
     expect(brief.text).toContain('[Bash] command');
-    expect(brief.text).toContain('[Read] file_path=/ws/src/a.ts offset=10 limit=40');
+    expect(brief.text).toContain('[Read] file_path offset=10 limit=40');
     expect(brief.text).toContain('[mcp__musterd__team_send] act=message to body');
     expect(brief.text).toContain('[Grep] pattern path glob');
     expect(brief.text).toContain('[mcp__musterd__lane_claim] id');
-    expect(brief.text).toContain('[mcp__musterd__team_send] to act');
-    for (const leak of ['example-value', 'AKIAIOSFODNN7', 'hunter2', 'nick', 'deploy', 'agent2']) {
+    expect(brief.text).toContain('[mcp__musterd__lane_update] id state=active');
+    for (const leak of [
+      'example-value',
+      'AKIAIOSFODNN7',
+      'hunter2',
+      'nick',
+      'deploy',
+      'agent2',
+      '/ws/',
+      '01M6PA2PWX',
+    ]) {
       expect(brief.text).not.toContain(leak);
     }
   });

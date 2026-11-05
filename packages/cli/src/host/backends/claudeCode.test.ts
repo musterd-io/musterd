@@ -298,7 +298,12 @@ describe('claudeCodeBackend.wake', () => {
             input: { file_path: '/ws/.env', content: 'TOKEN=hunter2' },
           },
           // A short secret in an allowlisted free-form search field (big-body's second read).
-          { type: 'tool_use', id: 'd', name: 'Grep', input: { pattern: 'hunter2', path: '/ws' } },
+          {
+            type: 'tool_use',
+            id: 'd',
+            name: 'Grep',
+            input: { pattern: 'hunter2', path: 'hunter2/secret' },
+          },
           { type: 'text', text: 'Logged in and wrote the env file.' },
         ]),
       ].join('\n') + '\n',
@@ -329,10 +334,10 @@ describe('claudeCodeBackend.wake', () => {
     const line = calls[0]!.args[calls[0]!.args.indexOf('-p') + 1]!;
     expect(line).toContain('[mcp__x__login] password');
     expect(line).toContain('[Bash] command');
-    expect(line).toContain('[Write] file_path=/ws/.env content');
-    expect(line).toContain('[Grep] pattern path=/ws');
+    expect(line).toContain('[Write] file_path content');
+    expect(line).toContain('[Grep] pattern path');
     expect(line).toContain('Logged in and wrote the env file.');
-    for (const leak of ['example-value', 'eyJhbGciOiJIUzI1NiJ9', 'hunter2', 'curl']) {
+    for (const leak of ['example-value', 'eyJhbGciOiJIUzI1NiJ9', 'hunter2', 'curl', '/ws/.env']) {
       expect(line).not.toContain(leak);
     }
   });
