@@ -1,4 +1,4 @@
-import { OpenPollReplySchema, type PollCounts } from '@musterd/protocol';
+import { OpenPollReplySchema, POLL_LIMITS, type PollCounts } from '@musterd/protocol';
 import type { ChatApi } from './twitchChat.js';
 import { startPollHandler, type CountsReply, type PollHandler } from './twitchPoll.js';
 
@@ -99,7 +99,11 @@ export function startPollRuntime(deps: PollRuntimeDeps) {
           current = { id: poll.id, handler };
           if (now() - poll.opened_at < ANNOUNCE_WINDOW_MS) void handler.announce();
         }
-        if (poll.poll_token) await current.handler.flush(poll.poll_token, live);
+        // A count report refreshes the hub's liveness, so it rides only an answered check inside the
+        // offline grace. Past it, votes keep counting here but nothing is sent: the hub sees the
+        // silence ADR 807 §4 closes on, and the next answered check resumes the reports.
+        const fresh = now() - lastLiveAt < POLL_LIMITS.offlineGraceMs;
+        if (poll.poll_token && fresh) await current.handler.flush(poll.poll_token, live);
       } else if (current) {
         const done = current;
         current = null;
