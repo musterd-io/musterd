@@ -7,7 +7,13 @@ import { getCursor, setCursor } from './cursors.js';
 import { actDelivery, crossedBySeen } from './delivery.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
 import { addMember } from './members.js';
-import { countUnread, insertMessage, listInbox, skipStaleUnowed } from './messages.js';
+import {
+  countOpenLoops,
+  countUnread,
+  insertMessage,
+  listInbox,
+  skipStaleUnowed,
+} from './messages.js';
 import { slowestInboxLagMs } from './metrics.js';
 import { createTeam } from './teams.js';
 
@@ -205,7 +211,13 @@ withDrivers('skipStaleUnowed (ADR 811)', (o) => {
       { lane_state: { lane: 'L1', state: 'done' } },
     );
     await at('m-20', 20, 'message', { kind: 'team' }); // a person's team message: unowed, stale
-    await at('ask-10', 10, 'ask', { kind: 'team' }, { species: 'approve', tier: 'standard' }); // owed to the room: the stop
+    await at(
+      'ask-10',
+      10,
+      'ask',
+      { kind: 'member', name: 'nick' },
+      { species: 'approve', tier: 'standard' },
+    ); // owed to the reader: the stop
     await at('s-9', 9, 'status_update', { kind: 'team' });
     await at('s-1', 1, 'status_update', { kind: 'team' }); // fresh: never skipped
     // A seat is owed what arrived after it existed (ADR 549): the fixture backdates rows past the
@@ -253,9 +265,9 @@ withDrivers('skipStaleUnowed (ADR 811)', (o) => {
   // The hub, 2026-11-05: the deep-backlog seats' oldest unread obligation was a room ask from 107
   // days before, answered long ago — the first landing stopped there and held the cursor for good.
   // Then (ADR 813) four OPEN room asks from one seat, the oldest 72 days, held every such seat the
-  // same way: a room obligation is owed to whoever answers first, and the pinned set carries it
-  // into every bounded read whatever the cursor says — so it is counted, and still pinned.
-  it('a stale room ask, answered or open, no longer stops the jump; it stays pinned', async () => {
+  // same way: a room obligation is owed to whoever answers first, every current reader has read
+  // past it already, and it stays open wherever a cursor sits — so it is counted, not a stop.
+  it('a stale room ask, answered or open, no longer stops the jump; it stays owed', async () => {
     const { db, nick, now, at } = await stage();
     await at('ask-100', 100, 'ask', { kind: 'team' }, { species: 'approve', tier: 'standard' });
     await at('acc-99', 99, 'accept', { kind: 'team' }, { in_reply_to: 'ask-100' });
@@ -269,7 +281,9 @@ withDrivers('skipStaleUnowed (ADR 811)', (o) => {
     expect(skip?.to.id).toBe('s-70');
     expect(skip?.skipped).toBe(6);
     expect(skip?.stopped_at).toBeNull();
-    // Passed by the cursor, still owed: a bounded read after the skip pins both open room asks.
+    // Passed by the cursor: the unread page is what arrived after the jump, as after any read —
+    // the pinned set is cursor-bounded (ADR 429). The two are still owed (only an answer settles
+    // them, ADR 599): readable by id, and the open request_help is still an open loop.
     await setCursor(db, nick.id, skip!.to.id);
     const page = await listInbox(db, nick, {
       unreadOnly: true,
@@ -277,7 +291,10 @@ withDrivers('skipStaleUnowed (ADR 811)', (o) => {
       cursorId: skip!.to.id,
       limit: 5,
     });
-    expect(page.map((r) => r.id)).toEqual(['ask-80', 'rh-75', 's-1']);
+    expect(page.map((r) => r.id)).toEqual(['s-1']);
+    const byId = await listInbox(db, nick, { ids: ['ask-80', 'rh-75'] });
+    expect(byId.map((r) => r.id)).toEqual(['ask-80', 'rh-75']);
+    expect(await countOpenLoops(db)).toBe(1);
   });
 
   // A directed obligation is this reader's to answer: it holds the skip whatever its age (ADR 811

@@ -549,11 +549,13 @@ export const STALE_UNOWED_MS = 7 * 24 * 60 * 60 * 1000;
  * fold and the drain (ADR 433, ADR 287) still render those one line at a time.
  *
  * A room `ask` / `request_help` is owed to whoever answers first (ADR 254), not to this reader in
- * particular, and the pinned set carries it into every bounded read whatever the cursor says
- * (ADR 429; folded as a stale obligation past a week, ADR 599). Holding one lagging seat's cursor
- * at it added nothing to its chance of an answer and cost that seat its whole backlog: on the hub,
- * 2026-11-05, four open room asks from one seat, the oldest 72 days old, stopped every
- * deep-backlog seat's skip after the ADR 811 amendment had passed the answered ones (ADR 813).
+ * particular; every reader who was current when it arrived has already read past it, and it stays
+ * an open obligation (ADR 599: only an answer or a resolve settles it) wherever any cursor sits.
+ * Holding one lagging seat's cursor at it added nothing to its chance of an answer and cost that
+ * seat its whole backlog: on the hub, 2026-11-05, four open room asks from one seat, the oldest 72
+ * days old, stopped every deep-backlog seat's skip after the ADR 811 amendment had passed the
+ * answered ones (ADR 813). The pinned set is cursor-bounded (ADR 429), so a passed row is not
+ * pinned — the same state a rendered one is in.
  *
  * The first landing (2026-11-05) stopped at ANY directed row or room obligation, answered or not.
  * Measured the same day on the hub: the deep-backlog seats' oldest unread obligation was a room

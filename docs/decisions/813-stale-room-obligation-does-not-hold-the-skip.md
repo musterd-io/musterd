@@ -21,17 +21,19 @@ stopper had. The sender was asked to resolve the four (request_help 01M6PN5YND) 
 time nick was asked which lever to pull; nick chose this ADR (question 01M6PVCH88, 2026-11-05).
 
 ADR 599 says an obligation never expires: nothing but an answer discharges it. ADR 254 says a room
-obligation is owed to whoever answers first. ADR 429 says the pinned set carries every open
-obligation into every bounded read regardless of the cursor, and ADR 599 folds the stale ones into
-a counted group there.
+obligation is owed to whoever answers first. ADR 429's pinned set is cursor-bounded: it lifts an
+open obligation out of the UNREAD range so a bounded page cannot bury it, and once a reader's
+cursor has passed the row — because it was rendered — the pin is gone and only an answer or the
+asker's resolve settles it. Every reader who was current when these four arrived is in that state
+already.
 
 ## Problem
 
 An open room obligation older than the stale window is, by ADR 811 decision 2, a stopper for every
 seat on the team at once. One seat's unanswered question from ten weeks ago therefore holds every
 lagging teammate's cursor at that date, and only the asker can release them. Holding the cursor
-there adds nothing to the question's chance of an answer: the pinned set already shows it to every
-reader on every read. What should a still-open room obligation do to the skip?
+there adds nothing to the question's chance of an answer: every current reader has read past it,
+and it is open for all of them alike. What should a still-open room obligation do to the skip?
 
 ## Decision
 
@@ -40,11 +42,12 @@ reader on every read. What should a still-open room obligation do to the skip?
    shown. An `ask` or `request_help` to the room (`to_member` NULL) older than the window is
    counted with the chatter, however long it has gone unanswered. One directed obligation of any
    age still stops the skip, exactly as ADR 811 decision 2 says.
-2. **The pinned set is what carries it.** The room obligation stays owed (ADR 599: nothing but an
-   answer discharges it) and stays pinned into every bounded read (ADR 429), folded as a stale
-   obligation past a week (ADR 599), until someone answers or the asker resolves the thread. The
-   cursor passing it changes what is _unread_, not what is _owed_: the two were separable already,
-   and this is the first time the skip relies on it.
+2. **Passing it leaves the reader where every current reader already is.** The room obligation
+   stays owed (ADR 599: nothing but an answer or the asker's resolve settles it), stays an open
+   loop for the roster and the doorbell, and is readable by id, by `--all`, and on /live. It is not
+   pinned for this reader any more — the pinned set is cursor-bounded (ADR 429) — which is exactly
+   the state it is in for a reader who was rendered it months ago. The cursor passing it changes
+   what is _unread_, not what is _owed_.
 3. **Nothing within the window changes.** ADR 811 decision 3 stands: a row younger than the window
    is never skipped, so a fresh room ask is rendered in full as before.
 
@@ -53,9 +56,10 @@ reader on every read. What should a still-open room obligation do to the skip?
 - The four stoppers above stop stopping: a deep-backlog seat's first skip passes its whole stale
   range in one call. The acceptance evidence of the lane is big-body's and wanderer's skip count on
   the hub after this lands.
-- A reader who wants the room ask can still read it: it is in the pinned set of every bounded read
-  until answered, on /live, and by `--id`. What ADR 811 said of chatter holds here: the count is
-  the rendering of the cursor's pass, and the pin is the rendering of the obligation.
+- A reader who wants the room ask can still read it: on /live, by `--id`, by `--all`. What ADR 811
+  said of chatter holds here: the count is the rendering of the cursor's pass. A skip that NAMED the
+  open room obligations it passed, one line each, would be a better rendering; that is a change to
+  the route's reply and is not decided here.
 - ADR 811's "an owed row stops the skip whatever its age" now reads "a directed owed row"; ADR 811
   and ADR 599 carry a dated note pointing here. SPEC A.38 is amended in the same change.
 - The `interrupt-check` open-loop count, the open directed ledger and the wake lane read
@@ -71,11 +75,12 @@ reader on every read. What should a still-open room obligation do to the skip?
 stops at a room act is the regression signal.
 
 **Eval.** `packages/server/src/store/cursorReceiptOrder.test.ts`: an open stale room `ask` and
-`request_help` are passed and counted, and a bounded read from the new cursor still pins both; an
-open directed `ask` still stops the skip with a stale room ask before it counted. Falsifier for
-decision 2: a room obligation that a bounded read after the skip no longer pins. Falsifier for
-decision 1: a skip whose `stopped_at` is a `to_kind = 'team'` row.
+`request_help` are passed and counted; after the skip both are still readable by id and the
+`request_help` is still an open loop; an open directed `ask` still stops the skip with a stale room
+ask before it counted. Falsifier for decision 2: a room obligation that a skip passed and that
+`countOpenLoops` or a read by id no longer returns. Falsifier for decision 1: a skip whose
+`stopped_at` is a `to_kind = 'team'` row.
 
 **Experiment.** The hub measurement that motivates it, repeated after the daemon refreshes: per-seat
 `skipped` and `stopped_at` on big-body's and wanderer's next inbox check (expected: >20,000 passed,
-no stop), and whether the four acts still appear in their pinned set (expected: yes, folded).
+no stop), and whether the four acts are still open (expected: yes, until dolly resolves them).

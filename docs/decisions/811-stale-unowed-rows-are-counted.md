@@ -39,9 +39,9 @@ cannot fall behind without bound, without ever passing something it was owed?
    as chatter.
 
 2. **An owed row stops the skip whatever its age, answered or not.** _(Amended 2026-11-05: an owed
-   row stops the skip only while it is still open — see the amendment below. Amended again the same
-   day by [ADR 813](813-stale-room-obligation-does-not-hold-the-skip.md): only a DIRECTED owed row
-   stops it; an open room obligation is counted and carried by the pinned set instead.)_ The skip jumps to
+   row stops the skip only while it is still open — see the amendment below.)_ _(Amended 2026-11-05:
+   later that day, only a DIRECTED owed row stops it; an open obligation to the room is counted —
+   ADR 813.)_ The skip jumps to
    the row just before the oldest owed row after the cursor; the ordinary read then renders that
    row, pins it if it is still open, or shows it discharged. Discharge is not the skip's business.
 
@@ -101,8 +101,9 @@ same. The before/after for the three seats above is the acceptance evidence of t
 _(2026-11-05, later: measured after this amendment was live, the next stopper for the same seats
 was a still-open room ask 72 days old, one of four from one seat — big-body's skip passed 5,208 of
 22,944 and held there. [ADR 813](813-stale-room-obligation-does-not-hold-the-skip.md) narrows the
-stopper once more, to a still-open obligation DIRECTED to the reader; a room obligation is counted,
-and the pinned set carries it.)_
+stopper once more, to a still-open obligation DIRECTED to the reader; an open obligation to the
+room is counted, and stays open — the skip leaves the reader where every current reader already
+is.)_
 
 ## Observability & Evaluation
 

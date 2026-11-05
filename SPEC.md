@@ -1350,4 +1350,4 @@ answer's text.
   and `stopped_at`. A row within the window is never skipped. A server MUST NOT skip past a
   still-open owed row DIRECTED to the caller (`to_member` the caller) whatever its age; a
   still-open obligation to the room (`ask` / `request_help` with no `to_member`) older than the
-  window is skipped as a count and stays owed and pinned (ADR 813).
+  window is skipped as a count; it stays owed until answered or resolved (ADR 813).
