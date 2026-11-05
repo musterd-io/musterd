@@ -14,9 +14,9 @@ import { readFileSync } from 'node:fs';
 import {
   compareInventories,
   openReadOnly,
+  readInventory,
   rowsOnlyInAny,
   takeInventory,
-  type Inventory,
 } from '../../packages/server/src/ops/inventory.ts';
 
 function flag(name: string): string | undefined {
@@ -40,7 +40,7 @@ if (dbPath) {
   const inventory = takeInventory(db);
   report['inventory'] = inventory;
   if (comparePath) {
-    const before = JSON.parse(readFileSync(comparePath, 'utf8')) as Inventory;
+    const before = readInventory(JSON.parse(readFileSync(comparePath, 'utf8')));
     const mismatches = compareInventories(before, inventory);
     report['mismatches'] = mismatches;
     if (mismatches.length > 0) {
@@ -78,4 +78,6 @@ if (!dbPath && !(replicaPath && hubPath)) {
 }
 
 process.stdout.write(JSON.stringify(report, null, 2) + '\n');
-process.exit(failed ? 1 : 0);
+// Not process.exit(): on a pipe stdout is asynchronous, and exiting at once cut a large report off
+// at 64 KB (rehearsal 1). Setting the code lets node exit once the write has drained.
+process.exitCode = failed ? 1 : 0;

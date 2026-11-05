@@ -195,6 +195,21 @@ export function takeInventory(db: Database.Database, now: number = Date.now()): 
 }
 
 /** Every difference between two inventories, by table, outside `ignore` and the ephemeral set. */
+/**
+ * An inventory read back from a file: bare, or as `scripts/hub/inventory.ts <db>` prints it
+ * (`{inventory: …}`). The compare only read the bare shape, so the runbook's own snapshot-then-compare
+ * flow threw (rehearsal 1, lane 01M6MG73W5).
+ */
+export function readInventory(json: unknown): Inventory {
+  const inner =
+    json && typeof json === 'object' && 'inventory' in json
+      ? (json as { inventory: unknown }).inventory
+      : json;
+  if (!inner || typeof inner !== 'object' || !Array.isArray((inner as { tables?: unknown }).tables))
+    throw new Error('not an inventory: expected {tables: [...]} or {inventory: {tables: [...]}}');
+  return inner as Inventory;
+}
+
 export function compareInventories(
   a: Inventory,
   b: Inventory,
