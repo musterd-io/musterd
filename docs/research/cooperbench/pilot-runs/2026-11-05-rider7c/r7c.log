@@ -1,0 +1,10 @@
+[2026-11-05T19:19:36Z] pull 10 images, df 39G free
+[2026-11-05T19:19:36Z] pulled · MUSTERD_ARM_LANE=act · guard pair cap $6, total $110
+[2026-11-05T19:19:36Z] start r7c-musterd
+[2026-11-05T20:13:37Z] r7c-musterd run exit=0
+[2026-11-05T20:15:28Z] r7c-musterd eval exit=0
+[2026-11-05T20:15:28Z] all done, spent $20.19
+[2026-11-05T20:15:29Z] run_arms exit=0
+[2026-11-05T20:15:29Z] guard last: {"pairs": {}, "live_wake_usd": 0, "finished_usd": 20.19, "total_usd": 20.19, "pair_cap": 6.0, "total_cap": 110.0, "over_pair": [], "stop": null}
+[2026-11-05T20:15:29Z] readout exit=0
+[2026-11-05T20:15:29Z] rider7 exit=0

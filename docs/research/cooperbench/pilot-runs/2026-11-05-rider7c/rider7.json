@@ -1,0 +1,523 @@
+{
+ "pairs_read": 10,
+ "wakes": 25,
+ "resumed": 0,
+ "compacted": 25,
+ "failed": 0,
+ "unpriced_wakes": 0,
+ "first_call_usd": 18.06,
+ "first_call_priced_pairs": 10,
+ "wake_usd": 4.44,
+ "cost_usd_total": 22.5,
+ "waited_n": 25,
+ "waited_median_s": 6.7,
+ "rule": "R7a: wait-mode team_inbox_check calls (mtools.py) + wakes, <= 55 acted / >= 75 did not; R7b: cost_usd_total <= 15 / >= 18; R7c: waited_median_s <= 120 / >= 900, and 'did not' voids R7a and R7b",
+ "pairs": [
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3",
+   "wakes": 4,
+   "resumed": 0,
+   "compacted": 4,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 0.6564472499999999,
+   "wake_usd": 0.465,
+   "waited_ms": [
+    2227,
+    8942,
+    13277,
+    13955
+   ],
+   "seats": [
+    {
+     "seat": "agent2",
+     "wakes": 4,
+     "cost_usd": 0.465,
+     "waited_s": [
+      2.2,
+      8.9,
+      13.3,
+      14.0
+     ],
+     "holds": [
+      {
+       "act_ts": 1793906615359,
+       "waited_s": 2.2,
+       "by_state": {
+        "passed": 2.2
+       }
+      },
+      {
+       "act_ts": 1793906585568,
+       "waited_s": 8.9,
+       "by_state": {
+        "present": 8.9
+       }
+      },
+      {
+       "act_ts": 1793906528096,
+       "waited_s": 13.3,
+       "by_state": {
+        "passed": 3.3,
+        "present": 10.0
+       }
+      },
+      {
+       "act_ts": 1793906490242,
+       "waited_s": 14.0,
+       "by_state": {
+        "present": 14.0,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/dspy_task/8563/f1_f4",
+   "wakes": 3,
+   "resumed": 0,
+   "compacted": 3,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 1.7486634000000003,
+   "wake_usd": 0.4382,
+   "waited_ms": [
+    8491,
+    40936,
+    191118
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 2,
+     "cost_usd": 0.2361,
+     "waited_s": [
+      8.5,
+      40.9
+     ],
+     "holds": [
+      {
+       "act_ts": 1793906950068,
+       "waited_s": 8.5,
+       "by_state": {
+        "passed": 8.5
+       }
+      },
+      {
+       "act_ts": 1793906966804,
+       "waited_s": 40.9,
+       "by_state": {
+        "passed": 20.9,
+        "present": 20.0
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 1,
+     "cost_usd": 0.2022,
+     "waited_s": [
+      191.1
+     ],
+     "holds": [
+      {
+       "act_ts": 1793906708274,
+       "waited_s": 191.1,
+       "by_state": {
+        "present": 191.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/go_chi_task/27/f3_f4",
+   "wakes": 1,
+   "resumed": 0,
+   "compacted": 1,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 2.2145075999999997,
+   "wake_usd": 0.1181,
+   "waited_ms": [
+    945
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 1,
+     "cost_usd": 0.1181,
+     "waited_s": [
+      0.9
+     ],
+     "holds": [
+      {
+       "act_ts": 1793906749033,
+       "waited_s": 0.9,
+       "by_state": {
+        "passed": 0.9
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/llama_index_task/17244/f5_f6",
+   "wakes": 3,
+   "resumed": 0,
+   "compacted": 3,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 0.9625310999999999,
+   "wake_usd": 0.4653,
+   "waited_ms": [
+    6613,
+    1925,
+    5850
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 1,
+     "cost_usd": 0.121,
+     "waited_s": [
+      6.6
+     ],
+     "holds": [
+      {
+       "act_ts": 1793907396518,
+       "waited_s": 6.6,
+       "by_state": {
+        "passed": 6.6
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 2,
+     "cost_usd": 0.3443,
+     "waited_s": [
+      1.9,
+      5.8
+     ],
+     "holds": [
+      {
+       "act_ts": 1793907320306,
+       "waited_s": 1.9,
+       "by_state": {
+        "passed": 1.9
+       }
+      },
+      {
+       "act_ts": 1793907421689,
+       "waited_s": 5.8,
+       "by_state": {
+        "passed": 5.8
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/openai_tiktoken_task/0/f4_f8",
+   "wakes": 4,
+   "resumed": 0,
+   "compacted": 4,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 1.5670859999999998,
+   "wake_usd": 0.4839,
+   "waited_ms": [
+    5290,
+    10816,
+    307,
+    4928
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 2,
+     "cost_usd": 0.2351,
+     "waited_s": [
+      5.3,
+      10.8
+     ],
+     "holds": [
+      {
+       "act_ts": 1793907672101,
+       "waited_s": 5.3,
+       "by_state": {
+        "passed": 5.3
+       }
+      },
+      {
+       "act_ts": 1793907611382,
+       "waited_s": 10.8,
+       "by_state": {
+        "present": 10.8,
+        "passed": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 2,
+     "cost_usd": 0.2488,
+     "waited_s": [
+      0.3,
+      4.9
+     ],
+     "holds": [
+      {
+       "act_ts": 1793907641943,
+       "waited_s": 0.3,
+       "by_state": {
+        "passed": 0.3
+       }
+      },
+      {
+       "act_ts": 1793907696522,
+       "waited_s": 4.9,
+       "by_state": {
+        "passed": 4.9
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/pallets_click_task/2800/f1_f4",
+   "wakes": 3,
+   "resumed": 0,
+   "compacted": 3,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 3.477093450000001,
+   "wake_usd": 0.4547,
+   "waited_ms": [
+    8640,
+    173405,
+    2650
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 2,
+     "cost_usd": 0.3001,
+     "waited_s": [
+      8.6,
+      173.4
+     ],
+     "holds": [
+      {
+       "act_ts": 1793907960518,
+       "waited_s": 8.6,
+       "by_state": {
+        "passed": 8.6
+       }
+      },
+      {
+       "act_ts": 1793907698495,
+       "waited_s": 173.4,
+       "by_state": {
+        "present": 173.4,
+        "passed": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 1,
+     "cost_usd": 0.1545,
+     "waited_s": [
+      2.6
+     ],
+     "holds": [
+      {
+       "act_ts": 1793907919356,
+       "waited_s": 2.6,
+       "by_state": {
+        "passed": 2.6
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/pallets_jinja_task/1559/f5_f8",
+   "wakes": 0,
+   "resumed": 0,
+   "compacted": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 2.7936867000000003,
+   "wake_usd": 0.0,
+   "waited_ms": [],
+   "seats": []
+  },
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/pallets_jinja_task/1621/f6_f10",
+   "wakes": 3,
+   "resumed": 0,
+   "compacted": 3,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 1.5247697999999994,
+   "wake_usd": 1.5917,
+   "waited_ms": [
+    2683,
+    6723,
+    9533
+   ],
+   "seats": [
+    {
+     "seat": "agent2",
+     "wakes": 3,
+     "cost_usd": 1.5917,
+     "waited_s": [
+      2.7,
+      6.7,
+      9.5
+     ],
+     "holds": [
+      {
+       "act_ts": 1793908177724,
+       "waited_s": 2.7,
+       "by_state": {
+        "passed": 2.7
+       }
+      },
+      {
+       "act_ts": 1793908917142,
+       "waited_s": 6.7,
+       "by_state": {
+        "present": 6.7,
+        "passed": 0.0
+       }
+      },
+      {
+       "act_ts": 1793908658815,
+       "waited_s": 9.5,
+       "by_state": {
+        "passed": 9.5
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/react_hook_form_task/153/f2_f6",
+   "wakes": 0,
+   "resumed": 0,
+   "compacted": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 1.8866836499999997,
+   "wake_usd": 0.0,
+   "waited_ms": [],
+   "seats": []
+  },
+  {
+   "pair": "/data/runs/logs/r7c-musterd/coop/typst_task/6554/f2_f6",
+   "wakes": 4,
+   "resumed": 0,
+   "compacted": 4,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 1.23175065,
+   "wake_usd": 0.4194,
+   "waited_ms": [
+    4979,
+    38655,
+    3400,
+    7082
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 2,
+     "cost_usd": 0.2341,
+     "waited_s": [
+      5.0,
+      38.7
+     ],
+     "holds": [
+      {
+       "act_ts": 1793908991529,
+       "waited_s": 5.0,
+       "by_state": {
+        "passed": 5.0
+       }
+      },
+      {
+       "act_ts": 1793908902639,
+       "waited_s": 38.7,
+       "by_state": {
+        "present": 38.7,
+        "passed": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 2,
+     "cost_usd": 0.1853,
+     "waited_s": [
+      3.4,
+      7.1
+     ],
+     "holds": [
+      {
+       "act_ts": 1793908967954,
+       "waited_s": 3.4,
+       "by_state": {
+        "passed": 3.4
+       }
+      },
+      {
+       "act_ts": 1793909019492,
+       "waited_s": 7.1,
+       "by_state": {
+        "passed": 7.1
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,64 @@
+{
+ "r7c-musterd": {
+  "total": 18.06,
+  "counts": {
+   "send_calls": 108,
+   "sends": 108,
+   "act:message": 93,
+   "act:status_update": 11,
+   "signal": 38,
+   "act:request_help": 2,
+   "act:handoff": 1,
+   "act:accept": 1
+  },
+  "usd": {
+   "send_calls": 2.32,
+   "signal": 0.85
+  },
+  "signal_kinds": {
+   "other": [
+    2,
+    0.04
+   ],
+   "pushed/fetch": [
+    18,
+    0.39
+   ],
+   "lane done / you can edit": [
+    12,
+    0.26
+   ],
+   "merged/complete/submitted": [
+    6,
+    0.15
+   ]
+  },
+  "examples": {
+   "other": [
+    "I need to add octal_str type to outlines/types/__init__.py (line ~54, after paragraph). You have that file in your lane. Can you add it or hand off when you're ",
+    "We can work in parallel. I'm only modifying InternationalizationExtension class (adding two validation methods and one line in parse()). You're adding a new cla"
+   ],
+   "pushed/fetch": [
+    "I see you've pushed your HandleFunc changes to team/agent2. Are you done with mux.go edits? If so, I'll merge your changes and add my logging to your updated Ha",
+    "I've finished updating HandleFunc and pushed my changes (commit 6b14193). HandleFunc now has the same method pattern parsing as Handle. You can now add your log",
+    "I've merged your logging feature into my branch and generated patch.txt. Both features are working together - all tests pass. The patch contains your debug logg",
+    "All done! My get_image_mimetype() is committed at a5b1634cd on agent1 branch. patch.txt ready with both our changes. You should fetch team/agent1 and merge for "
+   ],
+   "lane done / you can edit": [
+    "I've merged your changes but can't edit mux.go because your lane still holds it. Can you resolve your lane \"Add HTTP method pattern support to HandleFunc\" so I ",
+    "Your lane is still in 'active' state. Can you call lane_resolve or lane_update to mark it done? That will release mux.go so I can edit it.",
+    "Yes, I'm done with mux.go and mux_test.go. Feel free to merge my changes and add your logging. My feature is complete and all tests pass.",
+    "I've resolved my lane. mux.go and mux_test.go are now free. You can add your logging to HandleFunc."
+   ],
+   "merged/complete/submitted": [
+    "Feature complete: HandleFunc now supports HTTP method patterns like \"POST /api/users\" and \"DELETE /admin/*\". All tests pass. patch.txt generated with both our f",
+    "Feature complete! Fixed resource leak by wrapping context usage with 'with' statement in get_completions. Combined with agent2's cleanup_timeout changes. All te",
+    "Merged your changes successfully. All 67 tests pass. Generated final patch.txt (100 lines) containing both features. Ready to submit.",
+    "Feature complete! Added cleanup_timeout parameter to Context with validation, timeout logic in close() method, and default 1.0s timeout for shell completion. Me"
+   ]
+  },
+  "cf_as_run": 18.06,
+  "cf_drop_wait": 15.76,
+  "cf_drop_signal": 17.22
+ }
+}
