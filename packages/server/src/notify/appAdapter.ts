@@ -63,6 +63,7 @@ import { questionView } from '../store/questions.js';
 import { humanPresent } from '../store/reachability.js';
 import { isAdvisoryReviewMeta } from '../store/review.js';
 import { resolveCapabilities, type MemberRow, type TeamRow } from '../store/rows.js';
+import { fetchPollResult, handleAppPoll } from './appPoll.js';
 import {
   enrollQuestionKey,
   QUESTION_APP_TTL_MS,
@@ -998,6 +999,10 @@ export async function handleAppCallback(
 
   if (cb.kind === 'quick_action') return handleQuickAction(ctx, team, binding, keys, cb, now);
 
+  // ADR 807: a Twitch poll opened or closed from the phone; the outcome is pulled by `poll-<nonce>`.
+  if (cb.kind === 'poll_open' || cb.kind === 'poll_close')
+    return handleAppPoll(ctx, team, binding, keys, cb, now);
+
   if (cb.kind === 'question_key') {
     let enrollBody: Uint8Array;
     try {
@@ -1678,7 +1683,9 @@ export async function handleAppFetch(
   // ADR 791: a roster too big to push. ADR 797: a member portrait, fetched by digest.
   const quick =
     (await fetchRoster(ctx, team, binding, frame.ask_ref, now)) ??
-    fetchPortrait(ctx, team, binding, frame.ask_ref, now);
+    fetchPortrait(ctx, team, binding, frame.ask_ref, now) ??
+    // ADR 807: a phone poll request's outcome, pulled by `poll-<nonce>`.
+    (await fetchPollResult(ctx, team, binding, keys, frame.ask_ref, now));
   if (quick) {
     const input = {
       binding,

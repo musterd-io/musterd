@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { ApprovalDescriptorSchema } from './approval.js';
+import { OpenPollSchema, PollMetaSchema, PollSpecSchema } from './poll.js';
+import type { PollSpec } from './poll.wire.js';
 import { AnswerSchema, QuestionSchema, type Answer } from './question.js';
 import { QUICK_ACTIONS, type QuickAction } from './quickAction.wire.js';
 
@@ -95,6 +97,11 @@ export function sealedPushBytes(sealed: { enc: string; ct: string }): number {
  *   of truth, and a re-send reaches only the paired phone).
  * - `quick_action` (ADR 791): a person's quick action for one seat, `ref` = the body's nonce,
  *   sealed with purpose `quick_action`; the body is an {@link AppQuickActionSchema}.
+ * - `poll_open` (ADR 807 §5): a human admin opens the team's Twitch poll, `ref` = the body's nonce,
+ *   sealed with purpose `poll_open`; the body is an {@link AppPollOpenSchema}, signed by the Face ID
+ *   key — the phone's A2 path for `credential_mint`.
+ * - `poll_close` (ADR 807): end or cancel the open poll, `ref` = the body's nonce, sealed with
+ *   purpose `poll_close`; the body is an {@link AppPollCloseSchema}.
  */
 export const AppCallbackSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -131,6 +138,22 @@ export const AppCallbackSchema = z.discriminatedUnion('kind', [
   z.object({
     app: z.literal(1),
     kind: z.literal('quick_action'),
+    binding: z.string().min(1).max(64),
+    ref: z.string().min(16).max(64),
+    expires_at: z.number().int().nonnegative(),
+    sealed: SealedBodySchema,
+  }),
+  z.object({
+    app: z.literal(1),
+    kind: z.literal('poll_open'),
+    binding: z.string().min(1).max(64),
+    ref: z.string().min(16).max(64),
+    expires_at: z.number().int().nonnegative(),
+    sealed: SealedBodySchema,
+  }),
+  z.object({
+    app: z.literal(1),
+    kind: z.literal('poll_close'),
     binding: z.string().min(1).max(64),
     ref: z.string().min(16).max(64),
     expires_at: z.number().int().nonnegative(),
@@ -302,6 +325,24 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
         }),
       )
       .max(APP_ROSTER_MAX),
+    /** ADR 807: the team's Twitch poll, for a binding whose person is a human admin. */
+    poll: z.lazy(() => AppPollStateSchema).optional(),
+  }),
+  /**
+   * ADR 807: what a phone poll request did, and the poll as it stands after it. `nonce` is the
+   * request's. `reason` is set when `ok` is false: `not_admin`, `not_live`, `already_open`,
+   * `not_open`, `no_passkey`, `hub_only`, or a signature refusal.
+   */
+  z.object({
+    v: z.literal(1),
+    kind: z.literal('poll_result'),
+    team: z.string(),
+    binding: z.string(),
+    nonce: z.string(),
+    op: z.enum(['open', 'end', 'cancel']),
+    ok: z.boolean(),
+    reason: z.string().max(64).optional(),
+    poll: z.lazy(() => AppPollStateSchema),
   }),
   /** ADR 797: one member portrait, fetched by `portraitRef(digest)` and cached by digest. */
   z.object({
@@ -470,6 +511,93 @@ export function appQuickActionSigningBytes(input: {
     input.binding,
     input.seat,
     input.action,
+    input.nonce,
+    String(input.ts),
+  ].join('\n');
+}
+
+/**
+ * The team's Twitch poll as the phone shows it (ADR 807): Twitch's live state, the open poll
+ * (never its counts token) and the last closed one for the minutes the daemon keeps it.
+ */
+export const AppPollStateSchema = z.object({
+  live: z.boolean(),
+  open: OpenPollSchema.omit({ poll_token: true }).nullable(),
+  last: PollMetaSchema.options[1].nullable(),
+});
+export type AppPollState = z.infer<typeof AppPollStateSchema>;
+
+/**
+ * A human admin opens the team's poll from the phone (ADR 807 §5), opened from a body sealed with
+ * purpose `poll_open`. There is no key field: opening mints the poll's credential, so only the Face
+ * ID signing key — an enrolled A2 device key — signs it, over {@link appPollOpenSigningBytes}.
+ */
+export const AppPollOpenSchema = z
+  .object({
+    v: z.literal(1),
+    spec: PollSpecSchema,
+    nonce: z.string().min(16).max(64),
+    /** The phone's clock when Start was pressed, ms. */
+    ts: z.number().int().nonnegative(),
+    signature: b64url.max(256),
+  })
+  .strict();
+export type AppPollOpen = z.infer<typeof AppPollOpenSchema>;
+
+/** End (the votes so far) or cancel (no winner) the open poll from the phone. Ending mints nothing,
+ *  so either phone key may sign, over {@link appPollCloseSigningBytes}. */
+export const AppPollCloseSchema = z
+  .object({
+    v: z.literal(1),
+    poll_id: z.string().min(10).max(64),
+    how: z.enum(['end', 'cancel']),
+    nonce: z.string().min(16).max(64),
+    ts: z.number().int().nonnegative(),
+    key: z.enum(['question', 'signing']),
+    signature: b64url.max(256),
+  })
+  .strict();
+export type AppPollClose = z.infer<typeof AppPollCloseSchema>;
+
+/** The exact bytes a phone poll open signs: its own domain tag, and the spec in a fixed key order
+ *  (question, options, minutes), so the phone and the daemon cannot disagree on the JSON. */
+export function appPollOpenSigningBytes(input: {
+  team: string;
+  binding: string;
+  spec: PollSpec;
+  nonce: string;
+  ts: number;
+}): string {
+  const spec = JSON.stringify({
+    question: input.spec.question,
+    options: input.spec.options,
+    minutes: input.spec.minutes,
+  });
+  return [
+    'musterd-app-poll-open/v1',
+    input.team,
+    input.binding,
+    spec,
+    input.nonce,
+    String(input.ts),
+  ].join('\n');
+}
+
+/** The exact bytes a phone poll end or cancel signs. */
+export function appPollCloseSigningBytes(input: {
+  team: string;
+  binding: string;
+  poll_id: string;
+  how: 'end' | 'cancel';
+  nonce: string;
+  ts: number;
+}): string {
+  return [
+    'musterd-app-poll-close/v1',
+    input.team,
+    input.binding,
+    input.poll_id,
+    input.how,
     input.nonce,
     String(input.ts),
   ].join('\n');

@@ -211,7 +211,8 @@ export function noticeFor(
       body: quickResultText(delivery.seat, delivery.action, delivery.result),
       sound: false,
     };
-  if (delivery.kind === 'roster' || delivery.kind === 'portrait')
+  // ADR 807: a poll result is pulled too, never pushed; a stray one lands quietly.
+  if (delivery.kind === 'roster' || delivery.kind === 'portrait' || delivery.kind === 'poll_result')
     return { title: NOTICE_TITLE, body: ROSTER_TEXT, sound: false };
   if (delivery.member === '')
     return { title: NOTICE_TITLE, body: LOCK_SCREEN_FALLBACK_TEXT, sound: false };

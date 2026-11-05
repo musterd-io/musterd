@@ -25,7 +25,15 @@ import { requireNativeModule } from 'expo';
  */
 
 /** HPKE `info` discriminator, exactly the daemon's `SealPurpose` (`appSeal.ts`). */
-export type SealPurpose = 'deliver' | 'answer' | 'pair' | 'question_key' | 'quick_action';
+export type SealPurpose =
+  | 'deliver'
+  | 'answer'
+  | 'pair'
+  | 'question_key'
+  | 'quick_action'
+  // ADR 807: a Twitch poll opened or closed from the phone.
+  | 'poll_open'
+  | 'poll_close';
 
 /** Why a call refused, in the five shapes the design names. */
 export type PhoneKeysErrorCode =

@@ -2,7 +2,10 @@ import { createHash, generateKeyPairSync, sign as cryptoSign, type KeyObject } f
 import {
   appAnswerSigningBytes,
   appQuestionAnswerSigningBytes,
+  appPollCloseSigningBytes,
+  appPollOpenSigningBytes,
   appQuickActionSigningBytes,
+  GENERALIST_CAPABILITIES,
   questionKeyEnrollBytes,
   AppDeliverySchema,
   approvalWording,
@@ -43,6 +46,7 @@ import { listChannelSettings, setChannelSettings } from '../store/channelSetting
 import { getLane, openLane, updateLane } from '../store/lanes.js';
 import { addMember, haltMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
+import { openPollReply, reportLive } from '../store/polls.js';
 import { attach } from '../store/presence.js';
 import { setQuestionNotify } from '../store/questionNotify.js';
 import { questionView } from '../store/questions.js';
@@ -2051,5 +2055,237 @@ withDrivers('app channel quick actions and roster (ADR 791)', (o) => {
         NOW,
       ),
     ).resolves.toBeNull();
+  });
+});
+
+/** ADR 807 §5: a Twitch poll opened, ended or cancelled from the phone. */
+withDrivers('app channel Twitch polls (ADR 807)', (o) => {
+  beforeEach(() => {
+    openStore = o;
+  });
+  afterEach(() => __setAppChannelKeysForTest(null));
+
+  const SPEC = { question: 'What next?', options: ['Camera', 'Ask the team'], minutes: 5 };
+
+  async function asAdmin(s: Awaited<ReturnType<typeof seed>>) {
+    await s.db.run('UPDATE members SET capabilities = ? WHERE id = ?', [
+      JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
+      s.nick.id,
+    ]);
+  }
+
+  async function pollBody(
+    s: Awaited<ReturnType<typeof seed>>,
+    signer: KeyObject,
+    body:
+      | { op: 'open'; spec?: typeof SPEC; signedSpec?: typeof SPEC }
+      | { op: 'end' | 'cancel'; pollId: string; key?: 'question' | 'signing' },
+    nonce = 'p'.repeat(22),
+  ) {
+    const ts = NOW;
+    const route = {
+      team: s.team.slug,
+      binding: s.binding.id,
+      ref: nonce,
+      expires_at: NOW + 60_000,
+    };
+    let kind: 'poll_open' | 'poll_close';
+    let payload: Record<string, unknown>;
+    if (body.op === 'open') {
+      kind = 'poll_open';
+      const spec = body.spec ?? SPEC;
+      const bytes = appPollOpenSigningBytes({
+        team: s.team.slug,
+        binding: s.binding.id,
+        spec: body.signedSpec ?? spec,
+        nonce,
+        ts,
+      });
+      payload = {
+        v: 1,
+        spec,
+        nonce,
+        ts,
+        signature: cryptoSign('sha256', Buffer.from(bytes, 'utf8'), signer).toString('base64url'),
+      };
+    } else {
+      kind = 'poll_close';
+      const bytes = appPollCloseSigningBytes({
+        team: s.team.slug,
+        binding: s.binding.id,
+        poll_id: body.pollId,
+        how: body.op,
+        nonce,
+        ts,
+      });
+      payload = {
+        v: 1,
+        poll_id: body.pollId,
+        how: body.op,
+        nonce,
+        ts,
+        key: body.key ?? 'signing',
+        signature: cryptoSign('sha256', Buffer.from(bytes, 'utf8'), signer).toString('base64url'),
+      };
+    }
+    const sealed = await sealToDaemon({
+      daemonReceivePublic: s.daemon.receivePublic,
+      route,
+      payload: new TextEncoder().encode(JSON.stringify(payload)),
+      purpose: kind,
+    });
+    return JSON.stringify({ app: 1, kind, ...route, sealed });
+  }
+
+  async function pullResult(s: Awaited<ReturnType<typeof seed>>, nonce: string) {
+    const ref = `poll-${nonce}`;
+    const fetched = await handleAppFetch(
+      s.ctx,
+      s.team,
+      { ask_ref: ref, binding: s.binding.id },
+      NOW,
+    );
+    if (!fetched || !fetched.sealed) return null;
+    return receive(s, {
+      protocol: 1,
+      type: 'app_deliver',
+      ask_ref: ref,
+      dedupe_id: ref,
+      expires_at: fetched.expires_at,
+      binding: s.binding.id,
+      push: { token: PUSH_TOKEN, environment: 'development' },
+      sealed: fetched.sealed,
+    });
+  }
+
+  it('opens the poll as the paired admin on a Face ID signature, and the phone pulls the outcome', async () => {
+    const s = await seed();
+    await asAdmin(s);
+    await reportLive(s.db, s.team.id, true, NOW);
+    const r = await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('p'.repeat(22), await pollBody(s, s.phone.signing, { op: 'open' })),
+      NOW,
+    );
+    expect(r).toMatchObject({ ok: true });
+    const open = await openPollReply(s.db, s.team.id, { broadcast: false }, NOW);
+    expect(open.poll).toMatchObject({ question: 'What next?', opened_by: 'nick' });
+    const d = await pullResult(s, 'p'.repeat(22));
+    expect(d).toMatchObject({ kind: 'poll_result', op: 'open', ok: true });
+    expect((d as { poll: { open: Record<string, unknown> } }).poll.open).not.toHaveProperty(
+      'poll_token',
+    );
+    // A replay of the same request is refused: the nonce is spent.
+    const again = await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('p'.repeat(22), await pollBody(s, s.phone.signing, { op: 'open' })),
+      NOW,
+    );
+    expect(again).toMatchObject({ ok: false });
+  });
+
+  it('refuses a bad signature, a signature over a different spec, and a non-admin pairing', async () => {
+    const s = await seed();
+    await reportLive(s.db, s.team.id, true, NOW);
+    const stranger = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey;
+    await asAdmin(s);
+    expect(
+      await handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback('a'.repeat(22), await pollBody(s, stranger, { op: 'open' }, 'a'.repeat(22))),
+        NOW,
+      ),
+    ).toMatchObject({ ok: false, reason: 'bad_signature' });
+    expect(
+      await handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback(
+          'b'.repeat(22),
+          await pollBody(
+            s,
+            s.phone.signing,
+            { op: 'open', signedSpec: { ...SPEC, question: 'Something else?' } },
+            'b'.repeat(22),
+          ),
+        ),
+        NOW,
+      ),
+    ).toMatchObject({ ok: false, reason: 'bad_signature' });
+    await s.db.run('UPDATE members SET capabilities = NULL WHERE id = ?', [s.nick.id]);
+    expect(
+      await handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback(
+          'c'.repeat(22),
+          await pollBody(s, s.phone.signing, { op: 'open' }, 'c'.repeat(22)),
+        ),
+        NOW,
+      ),
+    ).toMatchObject({ ok: false, reason: 'not_admin' });
+    expect((await openPollReply(s.db, s.team.id, { broadcast: false }, NOW)).poll).toBeNull();
+  });
+
+  it('says not_live when Twitch is not live, and ends an open poll from the phone', async () => {
+    const s = await seed();
+    await asAdmin(s);
+    await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('d'.repeat(22), await pollBody(s, s.phone.signing, { op: 'open' }, 'd'.repeat(22))),
+      NOW,
+    );
+    expect(await pullResult(s, 'd'.repeat(22))).toMatchObject({ ok: false, reason: 'not_live' });
+
+    await reportLive(s.db, s.team.id, true, NOW);
+    await handleRelayCallback(
+      s.ctx,
+      s.team,
+      callback('e'.repeat(22), await pollBody(s, s.phone.signing, { op: 'open' }, 'e'.repeat(22))),
+      NOW,
+    );
+    const id = (await openPollReply(s.db, s.team.id, { broadcast: false }, NOW)).poll!.id;
+    expect(
+      await handleRelayCallback(
+        s.ctx,
+        s.team,
+        callback(
+          'f'.repeat(22),
+          await pollBody(s, s.phone.signing, { op: 'end', pollId: id }, 'f'.repeat(22)),
+        ),
+        NOW,
+      ),
+    ).toMatchObject({ ok: true });
+    const ended = await pullResult(s, 'f'.repeat(22));
+    expect(ended).toMatchObject({ op: 'end', ok: true });
+    expect((ended as { poll: { open: unknown; last: { end: string } } }).poll).toMatchObject({
+      open: null,
+      last: { end: 'ended' },
+    });
+  });
+
+  it('carries the poll on the roster for an admin only', async () => {
+    const s = await seed();
+    const ref = `roster-${NOW}`;
+    const pull = async () => {
+      const f = await handleAppFetch(s.ctx, s.team, { ask_ref: ref, binding: s.binding.id }, NOW);
+      return receive(s, {
+        protocol: 1,
+        type: 'app_deliver',
+        ask_ref: ref,
+        dedupe_id: ref,
+        expires_at: f!.expires_at,
+        binding: s.binding.id,
+        push: { token: PUSH_TOKEN, environment: 'development' },
+        sealed: (f as { sealed: never }).sealed,
+      });
+    };
+    expect(await pull()).not.toHaveProperty('poll');
+    await asAdmin(s);
+    expect(await pull()).toMatchObject({ poll: { live: false, open: null, last: null } });
   });
 });

@@ -332,8 +332,9 @@ export function appCallbackRef(raw: string): string | null {
   const binding = v['binding'];
   if (typeof binding !== 'string' || binding.length === 0 || binding.length > 64) return null;
   if (v['kind'] === 'redeliver') return binding;
-  // ADR 791: a quick action has the same shape as an answer (a ref and a sealed body).
-  const kinds = ['pair', 'answer', 'question_key', 'quick_action'];
+  // ADR 791: a quick action has the same shape as an answer (a ref and a sealed body); so do the
+  // ADR 807 poll callbacks.
+  const kinds = ['pair', 'answer', 'question_key', 'quick_action', 'poll_open', 'poll_close'];
   if (typeof v['kind'] !== 'string' || !kinds.includes(v['kind'])) return null;
   const ref = v['ref'];
   if (typeof ref !== 'string' || ref.length === 0 || ref.length > 128) return null;
