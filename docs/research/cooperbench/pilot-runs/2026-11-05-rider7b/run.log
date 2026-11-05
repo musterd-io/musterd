@@ -97,3 +97,7 @@ host's launcher shell whose exports carry `MUSTERD_LAUNCH_SURFACE=claude-code` (
 - Machine stopped 05:45Z. The per-pair agent streams and session transcripts (34 MB) stay on the clone's
   volume (`/data/runs/logs/r7b-*`) and are not committed; host logs, residency reports, patches, results
   and every readout are here.
+- 2026-11-05 16:53Z: `~/.fly/token` deleted from `musterd-joiner-1` (fifty's word, 05:58Z; nothing of the run
+  needed it after the machine stopped). ~17:05Z: nick ran `fly tokens revoke <id> <id> <id>` on the three
+  cooperbench deploy tokens from his own login (they would have expired 2026-11-06 20:5x UTC regardless);
+  reported done to lazara in chat. Manifest step 7 complete.
