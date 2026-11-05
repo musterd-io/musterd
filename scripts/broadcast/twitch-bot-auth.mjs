@@ -3,11 +3,15 @@
  * Authorize musterdbot once and stage its four chat secrets on the stream app (ADR 740, ADR 807).
  *
  * The hosted capture reads Twitch chat (`!who`, `!vote`) and posts polls on a bot account's user
- * token. That token comes from an OAuth authorization-code grant a human performs in a browser,
+ * token. With `--title` it instead authorizes the CHANNEL account for `channel:manage:broadcast`
+ * and stages MUSTERD_TWITCH_CLIENT_ID + MUSTERD_TWITCH_TOKEN, the title writer's pair (ADR 711).
+ * That pair is a raw access token Twitch expires after ~4 h, so run `--title` before each stream.
+ * The bot pair is a refresh token and lasts. That token comes from an OAuth authorization-code grant a human performs in a browser,
  * signed in as the bot. This script runs that flow on the operator's machine and hands the result
  * straight to `fly secrets import --stage` — it prints digests, never a value.
  *
  *   node scripts/broadcast/twitch-bot-auth.mjs --client-id <id> [--channel musterd_io] [--app musterd-broadcast] [--port 3000]
+ *   node scripts/broadcast/twitch-bot-auth.mjs --client-id <id> --title     # sign in as the channel account
  *
  * The client secret is read from the terminal with echo off (or `MUSTERD_TWITCH_CHAT_CLIENT_SECRET`).
  * The app's OAuth Redirect URL must be exactly `http://localhost:<port>` (the console refuses a path
@@ -22,7 +26,8 @@ import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createInterface } from 'node:readline';
 
-const SCOPES = ['user:read:chat', 'user:write:chat', 'user:bot'];
+const BOT_SCOPES = ['user:read:chat', 'user:write:chat', 'user:bot'];
+const TITLE_SCOPES = ['channel:manage:broadcast'];
 const AUTH_URL = 'https://id.twitch.tv/oauth2/authorize';
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
 const VALIDATE_URL = 'https://id.twitch.tv/oauth2/validate';
@@ -36,11 +41,13 @@ const clientId = arg('client-id', process.env.MUSTERD_TWITCH_CHAT_CLIENT_ID);
 const channel = arg('channel', process.env.MUSTERD_TWITCH_CHAT_CHANNEL ?? 'musterd_io');
 const app = arg('app', 'musterd-broadcast');
 const port = Number(arg('port', '3000'));
-const expectBot = arg('bot', 'musterdbot');
+const title = process.argv.includes('--title');
+const expectBot = title ? channel : arg('bot', 'musterdbot');
+const SCOPES = title ? TITLE_SCOPES : BOT_SCOPES;
 
 if (!clientId || process.argv.includes('--help')) {
   console.error(
-    'usage: twitch-bot-auth.mjs --client-id <id> [--channel musterd_io] [--app musterd-broadcast] [--port 3000] [--bot musterdbot]',
+    'usage: twitch-bot-auth.mjs --client-id <id> [--channel musterd_io] [--app musterd-broadcast] [--port 3000] [--bot musterdbot] [--title]',
   );
   process.exit(clientId ? 0 : 2);
 }
@@ -129,7 +136,10 @@ function waitForCode() {
       u.searchParams.set('scope', SCOPES.join(' '));
       u.searchParams.set('state', state);
       u.searchParams.set('force_verify', 'true');
-      console.error(`\nSign in as ${expectBot} (not your own account) and authorize:\n\n  ${u}\n`);
+      const who = title
+        ? `${expectBot} (the channel account)`
+        : `${expectBot} (not your own account)`;
+      console.error(`\nSign in as ${who} and authorize:\n\n  ${u}\n`);
       openBrowser(u.toString());
     });
   });
@@ -171,14 +181,19 @@ if (who.login !== expectBot) {
 }
 console.error(`✓ ${who.login} authorized with ${who.scopes.join(' ')}`);
 
-const env = [
-  `MUSTERD_TWITCH_CHAT_CLIENT_ID=${clientId}`,
-  `MUSTERD_TWITCH_CHAT_CLIENT_SECRET=${clientSecret}`,
-  `MUSTERD_TWITCH_CHAT_REFRESH_TOKEN=${tok.refresh_token}`,
-  `MUSTERD_TWITCH_CHAT_CHANNEL=${channel}`,
-].join('\n');
-await run('fly', ['secrets', 'import', '-a', app, '--stage'], env + '\n');
+const pairs = title
+  ? [`MUSTERD_TWITCH_CLIENT_ID=${clientId}`, `MUSTERD_TWITCH_TOKEN=${tok.access_token}`]
+  : [
+      `MUSTERD_TWITCH_CHAT_CLIENT_ID=${clientId}`,
+      `MUSTERD_TWITCH_CHAT_CLIENT_SECRET=${clientSecret}`,
+      `MUSTERD_TWITCH_CHAT_REFRESH_TOKEN=${tok.refresh_token}`,
+      `MUSTERD_TWITCH_CHAT_CHANNEL=${channel}`,
+    ];
+await run('fly', ['secrets', 'import', '-a', app, '--stage'], pairs.join('\n') + '\n');
+const hours = Math.floor((tok.expires_in ?? 0) / 3600);
 console.error(
-  `✓ staged four MUSTERD_TWITCH_CHAT_* secrets on ${app} — \`musterd stream doctor\` next`,
+  title
+    ? `✓ staged MUSTERD_TWITCH_CLIENT_ID + MUSTERD_TWITCH_TOKEN on ${app} — the token expires in ~${hours} h; rerun --title before each stream`
+    : `✓ staged four MUSTERD_TWITCH_CHAT_* secrets on ${app} — \`musterd stream doctor\` next`,
 );
 await run('fly', ['secrets', 'list', '-a', app]);
