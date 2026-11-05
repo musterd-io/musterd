@@ -183,6 +183,17 @@ auto-refresher, lazara's credential).
   `invalid service token`: the tick speaks to the installed daemon, a joiner with a fresh store, and
   the token was minted on the hub. The refresh itself is unaffected. Follows-up: the tick should
   announce to the hub when the local daemon is a joiner (own lane).
+- **Relay credential rotated** (ADR 659 §4): new hash in the Worker secret, new token in team policy
+  by nick's passkey; the hub log shows the relay refusing the old socket (401) and `away_relay_up`
+  with the new one within two minutes. The laptop's set-aside store now holds a dead credential.
+- **Tailscale grant removed**: the `tag:musterd-hub → nicks-laptop:4849` grant is gone (policy via the
+  API, validated first); saved tests now deny the hub box the laptop's 4849 and 22, and accept seats
+  on both hubs' 4849. From the box, the laptop's 4849 times out. Left for later: `nicks-laptop` is
+  still a `dst` in the seat grant; drop it now that no seat points at the laptop.
+- **delta-2 is on the new hub**: redeployed on main with `MUSTERD_HUB=musterd-joiner-1…` (every other
+  `--env` repeated), then `musterd node repoint --team revive http://100.115.152.1:4849` on the
+  machine as the seat user, since the volume's `node.json` still named the laptop and the entrypoint
+  enrols only on a blank volume. Pulls, provision claims and wake leases answered 200 from then on.
 - **The box publishes its own `/live`** (lane `01M6N02QHJ`): `deploy/second-machine/linux/musterd-live.timer`
   runs `live.sh` every minute, the systemd twin of the launchd build-publisher, from the box's runtime
   checkout into `~/.musterd/live/web`. `bootstrap.sh` copies the units with the others; enable the timer
@@ -216,6 +227,11 @@ Never on the box (design §"What never moves"): member credentials (`mskey_`, `m
 team-wide agent key, KMS or console access, `wrangler`, nick's passkeys, and `hcloud`.
 
 ## Residual risk
+
+- **swethas-laptop** (2026-11-05): a machine the team no longer has access to still holds a live admin
+  credential for revive and full tailnet reach as a member device. nick chose to keep both, so swetha
+  can return. Whoever holds the machine holds both until that changes; her passkey is bound to the old
+  `localhost` origin and cannot sign on the hub.
 
 A compromise of the box exposes every credential above. The table bounds the damage and revokes it;
 it does not remove the risk (big-body, design review 2026-11-03).
