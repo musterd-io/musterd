@@ -55,6 +55,28 @@ describe('readClaudeHumanLayer (ADR 794)', () => {
     );
   });
 
+  it('normalizes punctuation in user servers and connector names', () => {
+    const fs = fixture({
+      '/h/.claude.json': JSON.stringify({
+        mcpServers: { 'local+db': { command: 'x' } },
+        claudeAiMcpEverConnected: ['claude.ai Research & Docs'],
+      }),
+    });
+    expect(readClaudeHumanLayer(fs, env).mcpServers).toEqual([
+      'claude_ai_Research___Docs',
+      'local_db',
+    ]);
+  });
+
+  it('records distinct server names that normalize to the same prefix', () => {
+    const fs = fixture({
+      '/h/.claude.json': JSON.stringify({
+        mcpServers: { 'a+b': {}, a_b: {} },
+      }),
+    });
+    expect(readClaudeHumanLayer(fs, env).ambiguousMcpServers).toEqual(['a_b']);
+  });
+
   it('an unreadable settings file gives complete false and empty plugins from it', () => {
     const layer = readClaudeHumanLayer(fixture({ '/h/.claude/settings.json': '{broken' }), env);
     expect(layer.complete).toBe(false);

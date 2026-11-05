@@ -73,3 +73,5 @@ loaded.
   The list holds every connector ever connected, not only the current ones; denying an extra one
   costs nothing.
 - User MCP servers: the top-level `mcpServers` in `~/.claude.json` (empty on this laptop).
+
+On 2026-11-04, [Anthropic's Claude Code security mod documentation](https://github.com/anthropics/claude-code/blob/main/mods/sec-default/README.md) describes tool names as replacing every character outside ASCII letters, digits, hyphens and underscores with an underscore. The seat complement applies this to user server and connector names; grants use the resulting prefix, and distinct observed names that become the same prefix are denied together. Falsify by observing a Claude Code tool name whose prefix differs for such a character.
