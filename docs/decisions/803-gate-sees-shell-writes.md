@@ -106,3 +106,11 @@ scripts. The gate's strongest class is the one most easily bypassed by accident.
   opaque writes into `block` paths show up as `written_unowned` rather than as nothing.
 - **Experiment:** none; the change is uniform. Falsifier: in the after read, a `Bash` call that wrote
   a `block`-class path the seat did not own and left no `lane.gate` row.
+
+_(2026-11-05)_ The before-count was never taken: the build shipped on 2026-11-04, the same day the ADR
+was accepted, and no one read the transcript tap first. The Eval is therefore after-only. Two weeks
+after the build, around 2026-11-18, count the `Bash` calls' `lane.gate` rows by outcome and check them
+against the falsifier above. Without a baseline, the read can show whether plainly named writes have
+rows and opaque `block` writes show up as `written_unowned`, but not how many such writes went unseen
+before.
+Follows-up: 01M6PJ52EWSW16GV71RW5YJCWN
