@@ -1,0 +1,134 @@
+diff --git a/src/logic/createFormControl.ts b/src/logic/createFormControl.ts
+index f7079332..1d9e9e48 100644
+--- a/src/logic/createFormControl.ts
++++ b/src/logic/createFormControl.ts
+@@ -1097,7 +1097,7 @@ export function createFormControl<
+   };
+ 
+   const handleSubmit: UseFormHandleSubmit<TFieldValues> =
+-    (onValid, onInvalid) => async (e) => {
++    (onValid, onInvalid, onFinally) => async (e, context) => {
+       if (e) {
+         e.preventDefault && e.preventDefault();
+         e.persist && e.persist();
+@@ -1118,17 +1118,27 @@ export function createFormControl<
+ 
+       unset(_formState.errors, 'root');
+ 
+-      if (isEmptyObject(_formState.errors)) {
+-        _subjects.state.next({
+-          errors: {},
+-        });
+-        await onValid(fieldValues as TFieldValues, e);
+-      } else {
+-        if (onInvalid) {
+-          await onInvalid({ ..._formState.errors }, e);
++      let caughtError: unknown;
++
++      try {
++        if (isEmptyObject(_formState.errors)) {
++          _subjects.state.next({
++            errors: {},
++          });
++          await onValid(fieldValues as TFieldValues, e, context);
++        } else {
++          if (onInvalid) {
++            await onInvalid({ ..._formState.errors }, e, context);
++          }
++          _focusError();
++          setTimeout(_focusError);
+         }
+-        _focusError();
+-        setTimeout(_focusError);
++      } catch (error) {
++        caughtError = error;
++      }
++
++      if (onFinally) {
++        await onFinally({ ..._formState });
+       }
+ 
+       _subjects.state.next({
+@@ -1138,6 +1148,10 @@ export function createFormControl<
+         submitCount: _formState.submitCount + 1,
+         errors: _formState.errors,
+       });
++
++      if (caughtError !== undefined) {
++        throw caughtError;
++      }
+     };
+ 
+   const resetField: UseFormResetField<TFieldValues> = (name, options = {}) => {
+diff --git a/src/types/form.ts b/src/types/form.ts
+index 2f20133e..043e0fd5 100644
+--- a/src/types/form.ts
++++ b/src/types/form.ts
+@@ -71,9 +71,13 @@ export type ValidationModeFlags = {
+ 
+ export type CriteriaMode = 'firstError' | 'all';
+ 
+-export type SubmitHandler<TFieldValues extends FieldValues> = (
++export type SubmitHandler<
++  TFieldValues extends FieldValues,
++  TSubmitContext = unknown,
++> = (
+   data: TFieldValues,
+   event?: React.BaseSyntheticEvent,
++  context?: TSubmitContext,
+ ) => unknown | Promise<unknown>;
+ 
+ export type FormSubmitHandler<TFieldValues extends FieldValues> = (payload: {
+@@ -84,9 +88,13 @@ export type FormSubmitHandler<TFieldValues extends FieldValues> = (payload: {
+   method?: 'post' | 'put' | 'delete';
+ }) => unknown | Promise<unknown>;
+ 
+-export type SubmitErrorHandler<TFieldValues extends FieldValues> = (
++export type SubmitErrorHandler<
++  TFieldValues extends FieldValues,
++  TSubmitContext = unknown,
++> = (
+   errors: FieldErrors<TFieldValues>,
+   event?: React.BaseSyntheticEvent,
++  context?: TSubmitContext,
+ ) => unknown | Promise<unknown>;
+ 
+ export type SetValueConfig = Partial<{
+@@ -628,14 +636,16 @@ export type UseFormUnregister<TFieldValues extends FieldValues> = (
+ export type UseFormHandleSubmit<
+   TFieldValues extends FieldValues,
+   TTransformedValues extends FieldValues | undefined = undefined,
++  TSubmitContext = unknown,
+ > = (
+   onValid: TTransformedValues extends undefined
+-    ? SubmitHandler<TFieldValues>
++    ? SubmitHandler<TFieldValues, TSubmitContext>
+     : TTransformedValues extends FieldValues
+-    ? SubmitHandler<TTransformedValues>
++    ? SubmitHandler<TTransformedValues, TSubmitContext>
+     : never,
+-  onInvalid?: SubmitErrorHandler<TFieldValues>,
+-) => (e?: React.BaseSyntheticEvent) => Promise<void>;
++  onInvalid?: SubmitErrorHandler<TFieldValues, TSubmitContext>,
++  onFinally?: (formState: FormState<TFieldValues>) => unknown | Promise<unknown>,
++) => (e?: React.BaseSyntheticEvent, context?: TSubmitContext) => Promise<void>;
+ 
+ /**
+  * Reset a field state and reference.
+@@ -834,6 +844,7 @@ export type UseFormReturn<
+   TFieldValues extends FieldValues = FieldValues,
+   TContext = any,
+   TTransformedValues extends FieldValues | undefined = undefined,
++  TSubmitContext = unknown,
+ > = {
+   watch: UseFormWatch<TFieldValues>;
+   getValues: UseFormGetValues<TFieldValues>;
+@@ -845,7 +856,7 @@ export type UseFormReturn<
+   formState: FormState<TFieldValues>;
+   resetField: UseFormResetField<TFieldValues>;
+   reset: UseFormReset<TFieldValues>;
+-  handleSubmit: UseFormHandleSubmit<TFieldValues, TTransformedValues>;
++  handleSubmit: UseFormHandleSubmit<TFieldValues, TTransformedValues, TSubmitContext>;
+   unregister: UseFormUnregister<TFieldValues>;
+   control: Control<TFieldValues, TContext>;
+   register: UseFormRegister<TFieldValues>;

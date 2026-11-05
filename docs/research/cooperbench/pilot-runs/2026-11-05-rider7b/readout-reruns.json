@@ -1,0 +1,296 @@
+{
+ "arms": {
+  "claude_code_musterd": {
+   "pairs": 2,
+   "passed": 1,
+   "cause:None": 0,
+   "cause:coordination": 1
+  }
+ },
+ "pairs": [
+  {
+   "pair": "/data/runs/logs/r7b-rerun-jinja/coop/pallets_jinja_task/1559/f5_f8",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    5,
+    8
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 57,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 55,
+    "tests_failed": 0
+   },
+   "cost": 2.0647605,
+   "steps": 88,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/ext.py"
+    ],
+    "agent2": [
+     "src/jinja2/ext.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/ext.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6N2A1X5MG7YP8Y9CGVNC56E",
+      "title": "Implement ConditionalI18nExtension with ctrans tag",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "test_ctrans.py"
+      ],
+      "named": [
+       "test_ctrans.py"
+      ],
+      "claimed_at": 1793855915940
+     },
+     {
+      "id": "01M6N2ADQX0P5AMFJR6ZKW4GK6",
+      "title": "Add translation variable validation to Jinja2",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/jinja2/ext.py"
+      ],
+      "named": [
+       "src/jinja2/ext.py"
+      ],
+      "claimed_at": 1793855928060
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 16,
+     "status_update": 2,
+     "request_help": 1,
+     "accept": 1
+    },
+    "acts_directed": 10,
+    "gate": {
+     "allow:allowed": 7,
+     "deny:denied": 4,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 3,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "tried another edit (held)"
+     },
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "tried another edit (held)"
+     },
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": false
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent1",
+      "next": "wait_until_lane"
+     },
+     {
+      "agent": "agent1",
+      "next": "bash"
+     },
+     {
+      "agent": "agent1",
+      "next": "message:message"
+     }
+    ]
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-rerun-rhf/coop/react_hook_form_task/153/f2_f6",
+   "task": "react_hook_form_task/153",
+   "features": [
+    2,
+    6
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 2.56620855,
+   "steps": 127,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts"
+    ],
+    "agent2": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts"
+    ]
+   },
+   "common_files": [
+    "src/logic/createFormControl.ts",
+    "src/types/form.ts"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6N2A7CW0PFKTQ8SNB5Q2GFM",
+      "title": "Add onFinally callback to handleSubmit",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/logic/createFormControl.ts",
+       "src/types/form.ts"
+      ],
+      "named": [
+       "src/logic/createFormControl.ts",
+       "src/types/form.ts"
+      ],
+      "claimed_at": 1793855921563
+     },
+     {
+      "id": "01M6N2ADF5FTX39ZBHXM0BCGF9",
+      "title": "feat(handleSubmit): Pass submission context to handlers",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "src/types/form.ts",
+       "src/logic/createFormControl.ts"
+      ],
+      "named": [
+       "src/types/form.ts",
+       "src/logic/createFormControl.ts"
+      ],
+      "claimed_at": 1793855927781
+     }
+    ],
+    "named_common_files": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts"
+    ],
+    "acts": {
+     "message": 22,
+     "request_help": 1,
+     "status_update": 2,
+     "accept": 2,
+     "resolve": 1
+    },
+    "acts_directed": 15,
+    "gate": {
+     "allow:allowed": 6,
+     "deny:denied": 2,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent request_help to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent2",
+      "next": "wait_until_lane"
+     },
+     {
+      "agent": "agent2",
+      "next": "message:request_help"
+     }
+    ]
+   }
+  }
+ ]
+}

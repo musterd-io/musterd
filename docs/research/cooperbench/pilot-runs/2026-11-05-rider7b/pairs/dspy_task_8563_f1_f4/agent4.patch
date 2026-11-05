@@ -1,0 +1,164 @@
+diff --git a/dspy/adapters/types/tool.py b/dspy/adapters/types/tool.py
+index 843eceed1..13b810982 100644
+--- a/dspy/adapters/types/tool.py
++++ b/dspy/adapters/types/tool.py
+@@ -1,9 +1,11 @@
+ import asyncio
++import hashlib
+ import inspect
++import json
+ from typing import TYPE_CHECKING, Any, Callable, Type, get_origin, get_type_hints
+ 
+ from jsonschema import ValidationError, validate
+-from pydantic import BaseModel, TypeAdapter, create_model
++from pydantic import BaseModel, TypeAdapter, create_model, model_validator
+ 
+ from dspy.adapters.types.base_type import Type
+ from dspy.dsp.utils.settings import settings
+@@ -254,10 +256,68 @@ class Tool(Type):
+         return f"{self.name}{desc} {arg_desc}"
+ 
+ 
++def _canonicalize_args(args: dict[str, Any]) -> dict[str, Any]:
++    """Recursively canonicalize tool call arguments for stable fingerprinting.
++
++    This ensures identical calls produce the same fingerprint regardless of:
++    - Dictionary key order
++    - Tuple vs list representation
++    - Extra whitespace in string values
++
++    Args:
++        args: The arguments dictionary to canonicalize
++
++    Returns:
++        A canonicalized version of the arguments
++    """
++    def canonicalize_value(value: Any) -> Any:
++        if isinstance(value, dict):
++            # Recursively canonicalize nested dicts and sort keys
++            return {k: canonicalize_value(v) for k, v in sorted(value.items())}
++        elif isinstance(value, (list, tuple)):
++            # Convert tuples to lists and recursively canonicalize elements
++            return [canonicalize_value(item) for item in value]
++        elif isinstance(value, str):
++            # Trim leading/trailing whitespace from strings
++            return value.strip()
++        else:
++            # Keep numeric, boolean, and other types as-is
++            return value
++
++    return canonicalize_value(args)
++
++
+ class ToolCalls(Type):
+     class ToolCall(BaseModel):
+         name: str
+         args: dict[str, Any]
++        fingerprint: str = ""
++        id: str = ""
++
++        @model_validator(mode='after')
++        def _compute_fingerprint(self) -> 'ToolCalls.ToolCall':
++            """Compute a stable fingerprint for this tool call."""
++            # Canonicalize the args (sort keys, tuple→list, trim strings)
++            canonical_args = _canonicalize_args(self.args)
++
++            # Create canonical representation: {name: ..., args: ...}
++            canonical_repr = {
++                "name": self.name,
++                "args": canonical_args
++            }
++
++            # Serialize to JSON with sorted keys and compact separators
++            canonical_json = json.dumps(canonical_repr, sort_keys=True, separators=(",", ":"))
++
++            # Compute SHA-256 hash
++            hash_obj = hashlib.sha256(canonical_json.encode('utf-8'))
++            fingerprint_hex = hash_obj.hexdigest()
++
++            # Set fingerprint (64 chars) and id (first 8 chars)
++            self.fingerprint = fingerprint_hex
++            self.id = fingerprint_hex[:8]
++
++            return self
+ 
+     tool_calls: list[ToolCall]
+ 
+@@ -284,6 +344,77 @@ class ToolCalls(Type):
+         tool_calls = [cls.ToolCall(**item) for item in tool_calls_dicts]
+         return cls(tool_calls=tool_calls)
+ 
++    @classmethod
++    def validate_input(cls, data: Any) -> dict[str, Any] | list[dict[str, Any]] | str:
++        """Normalize varied LM output formats for tool calls.
++
++        This method handles multiple formats that language models might return:
++        1. Canonical format: {"tool_calls": [{"name": "foo", "args": {...}}, ...]}
++        2. Single object: {"name": "foo", "args": {...}}
++        3. Bare list: [{"name": "foo", "args": {...}}, ...]
++        4. JSON strings (parsed and then normalized)
++        5. Non-JSON strings (returned unchanged)
++
++        Args:
++            data: The input data to normalize. Can be a dict, list, or string.
++
++        Returns:
++            Normalized Python structure (dict, list, or string).
++            - Dict with "tool_calls" key for canonical format
++            - Single dict for single object format
++            - List of dicts for bare list format
++            - Original string if it cannot be parsed as JSON
++
++        Example:
++
++            ```python
++            # Single object format
++            result = ToolCalls.validate_input({"name": "search", "args": {"query": "hello"}})
++            # Returns: {"tool_calls": [{"name": "search", "args": {"query": "hello"}}]}
++
++            # Bare list format
++            result = ToolCalls.validate_input([{"name": "search", "args": {"query": "hello"}}])
++            # Returns: {"tool_calls": [{"name": "search", "args": {"query": "hello"}}]}
++
++            # Canonical format (unchanged)
++            result = ToolCalls.validate_input({"tool_calls": [{"name": "search", "args": {"query": "hello"}}]})
++            # Returns: {"tool_calls": [{"name": "search", "args": {"query": "hello"}}]}
++            ```
++        """
++        # If input is a string, try to parse it as JSON
++        if isinstance(data, str):
++            try:
++                data = json.loads(data)
++            except (json.JSONDecodeError, ValueError):
++                # Not valid JSON, return the original string unchanged
++                return data
++
++        # Now handle dict or list formats
++        if isinstance(data, dict):
++            # Check if it's already in canonical format with "tool_calls" key
++            if "tool_calls" in data:
++                return data
++
++            # Check if it's a single tool call object (has "name" and "args")
++            if "name" in data and "args" in data:
++                # Wrap single object in canonical format
++                return {"tool_calls": [data]}
++
++            # Otherwise, return as-is (might be some other dict format)
++            return data
++
++        elif isinstance(data, list):
++            # Check if it's a non-empty list of tool call objects
++            if data and all(isinstance(item, dict) and "name" in item and "args" in item for item in data):
++                # Wrap bare list in canonical format
++                return {"tool_calls": data}
++
++            # Otherwise, return as-is (including empty lists)
++            return data
++
++        # For any other type, return unchanged
++        return data
++
+     @classmethod
+     def description(cls) -> str:
+         return (

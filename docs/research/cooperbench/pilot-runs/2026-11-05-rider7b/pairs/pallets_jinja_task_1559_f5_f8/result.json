@@ -1,0 +1,46 @@
+{
+  "repo": "pallets_jinja_task",
+  "task_id": 1559,
+  "features": [
+    5,
+    8
+  ],
+  "setting": "coop",
+  "run_id": "c199358d",
+  "run_name": "r7b-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-05T03:10:14.387328",
+  "ended_at": "2026-11-05T05:11:14.700332",
+  "duration_seconds": 7260.313004,
+  "agents": {
+    "agent2": {
+      "feature_id": 8,
+      "status": "Error",
+      "cost": 0.0,
+      "steps": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "patch_lines": 0,
+      "error": "musterd MCP server was not connected at session start (status: absent)"
+    },
+    "agent1": {
+      "feature_id": 5,
+      "status": "Error",
+      "cost": 0.0,
+      "steps": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "patch_lines": 0,
+      "error": "musterd MCP server was not connected at session start (status: absent)"
+    }
+  },
+  "total_cost": 0.0,
+  "total_steps": 0,
+  "messages_sent": 0,
+  "log_dir": "logs/r7b-musterd/coop/pallets_jinja_task/1559/f5_f8"
+}

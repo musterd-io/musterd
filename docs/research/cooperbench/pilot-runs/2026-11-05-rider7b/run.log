@@ -54,3 +54,46 @@ Evidence in `smoke2/`. **$2.85 for the pair:** first calls $1.49 (agent1) + $0.9
   after the daemon's release. Fix: a per-poll sweep of leaseless holds parked after a recently reported
   lease (#3878, ADR 804 second amendment). Run halted until it is on the build; smoke pair 3 follows.
 - Machine stopped 01:08Z.
+
+## Smoke pair 3, 2026-11-05 01:27Z → 01:37Z (build `968bef7a`: #3878's per-poll sweep)
+
+Not scored, not read. Both patches written; ended by the quiet rule. **$0.55 of wakes** (3, all fresh, 3
+price-bound refusals), 0 Bash gate errors. **`reclaimable` still 50 / 90 / 130 s** — and this time the
+parked row survived in the pair database: a `cli` session **stamped with the wake's lease** (hooks inherit
+`MUSTERD_WAKE_LEASE`), created at the report's own second (01:36:38Z), held 45 s. The report-time release
+ran before it existed and the sweep excluded leased rows. Fixed in #3880. A duplicate start of the same
+script (a hung console session re-ran it) was killed at 01:50Z; its pair is not read. Evidence `smoke3/`.
+
+## Smoke pair 4, 2026-11-05 01:59Z → stopped 02:36Z (build `a6e0d8c0`: #3880)
+
+Not scored, not read. **Gate met:** agent1's reports at 02:03:13Z and 02:07:54Z were followed by `passed`
+at 02:03:18Z and 02:07:56Z — no `reclaimable` between a report and the next lease. The only reclaimable
+holds left are each seat's initial call ending (45 s, once per seat). $2.50 of wakes, 0 Bash gate errors,
+guard alive. Stopped by the author at 37 min: both seats idle with no patch, and the idle rule never
+fired — the harness-live probe matched its own command line (#3882), then, as the ten pairs showed, the
+host's launcher shell whose exports carry `MUSTERD_LAUNCH_SURFACE=claude-code` (#3886). Evidence `smoke4/`.
+
+## The ten pairs, 2026-11-05 02:41Z → 05:15Z (`r7b.sh`, build `ac0dc20d`)
+
+- 02:41:54Z pull of the ten `core` images (fresh volume, 33 GB); 02:49:24Z `cooperbench run -n r7b-musterd
+  -s core -c 3` under `run_arms.py --cap 110` beside `wake_guard.py --pair-cap 6 --total-cap 110`.
+- 05:11:27Z run exit 0; 05:15:07Z eval exit 0, `readout.py` exit 0, `rider7.py` exit 0. **Neither guard
+  fired**; the guard's last read $22.18 finished (that figure counts the smoke pairs' results, which share
+  the `r7b-*` run-name prefix). No API-limit line. `MUSTERD_REF` `ac0dc20d` in every pair.
+- Nine pairs ended under the patch-and-quiet rule in 10–20 min each. The tenth (`pallets_jinja 1621`)
+  ran to the 7,200 s cap with both agents idle from 03:14Z: the idle probe counted the host's launcher
+  shell as a live harness (its exports carry `MUSTERD_LAUNCH_SURFACE=claude-code`) — fixed in #3886
+  after the run; it cost no model spend, only wall time.
+- **Two pairs errored** and were **re-run once, as pre-registered**, 05:17–05:32Z (`rerun.log`):
+  `pallets_jinja 1559` (agent2's musterd MCP server `absent` at session start; re-run: passed, clean
+  merge) and `react_hook_form 153` (evaluator: `Failed to write patch2.patch`, a 40,448-line patch;
+  re-run: scored, merge conflicts). The read is the **composite** — the eight clean pairs plus the two
+  re-runs — built as `logs/r7b-composite` on the machine and read with every pre-registered script
+  unchanged (`composite/`). The first complete run's own readout is kept beside it (`readout.json`,
+  `rider7.json`, `residue/`).
+- **Reads** ([finding 032](../../../032-cooperbench-rider7-rerun.md)): composite R7c median 90.9 s over 26
+  wakes (acted); R7a 52 wait-mode calls + 26 wakes = 78 (did not; the first run alone 46 + 21 = 67, part
+  of it); R7b $25.04 (did not; first run $21.98). Pass 4 of 10.
+- Machine stopped 05:45Z. The per-pair agent streams and session transcripts (34 MB) stay on the clone's
+  volume (`/data/runs/logs/r7b-*`) and are not committed; host logs, residency reports, patches, results
+  and every readout are here.

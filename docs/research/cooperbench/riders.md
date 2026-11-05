@@ -249,7 +249,10 @@ Decided by nick, 2026-11-04, in session ("go with the third, amend the gate and 
 pair, no rule read** — the wiring worked (15 wakes, 0 failed) but one pair cost $17.80 of the $25 stop
 (resumed wakes $0.17 → $1.64 each) and waits grew to 5m42s on the `reclaimable` hold; nick chose to
 stop and write it up. **Re-run pre-registered 2026-11-04** on the ADR 804/805 build, rules unchanged:
-[rider7-rerun-manifest.md](./rider7-rerun-manifest.md) (spend pending nick; finding 032).
+[rider7-rerun-manifest.md](./rider7-rerun-manifest.md). **Run 2026-11-05 → [finding
+032](../032-cooperbench-rider7-rerun.md):** R7c acted (median 90.9 s over 26 wakes), R7a did not (52 wait
+calls + 26 wakes = 78 against 90; the first run alone read 67, part of it), R7b did not ($25.04 against
+$18.45). The act lane wakes an unattended seat within the host's poll and does not make the pair cheaper.
 
 **What changes.** Nothing in the product. The arm runs its seats on [ADR 735](../../decisions/735-act-lane-the-seat-ends-its-turn.md)'s
 act lane, which every team has: the pair's team sets `lane: act`, `tool_policy: seat-policy`,

@@ -1,0 +1,250 @@
+{
+ "r7b-composite": {
+  "pairs": [
+   {
+    "pair": "r7b-composite/coop/dottxt_ai_outlines_task/1655/f1_f3",
+    "git_pushes": 2,
+    "recorded_pushes": 2,
+    "announced_pushes": 2,
+    "announced_holders": [
+     "agent1",
+     "agent2"
+    ],
+    "holders_repeating_by_hand": [
+     "agent1",
+     "agent2"
+    ],
+    "receiver_next": [
+     "message:message",
+     "bash"
+    ],
+    "refusals": 2,
+    "refusals_with_pushed_head": 0,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   },
+   {
+    "pair": "r7b-composite/coop/dspy_task/8563/f1_f4",
+    "git_pushes": 2,
+    "recorded_pushes": 2,
+    "announced_pushes": 2,
+    "announced_holders": [
+     "agent1",
+     "agent2"
+    ],
+    "holders_repeating_by_hand": [
+     "agent1",
+     "agent2"
+    ],
+    "receiver_next": [
+     "bash",
+     "bash"
+    ],
+    "refusals": 4,
+    "refusals_with_pushed_head": 2,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   },
+   {
+    "pair": "r7b-composite/coop/go_chi_task/27/f3_f4",
+    "git_pushes": 3,
+    "recorded_pushes": 3,
+    "announced_pushes": 2,
+    "announced_holders": [
+     "agent1"
+    ],
+    "holders_repeating_by_hand": [
+     "agent1"
+    ],
+    "receiver_next": [
+     "bash",
+     "bash"
+    ],
+    "refusals": 2,
+    "refusals_with_pushed_head": 0,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   },
+   {
+    "pair": "r7b-composite/coop/llama_index_task/17244/f5_f6",
+    "git_pushes": 2,
+    "recorded_pushes": 1,
+    "announced_pushes": 1,
+    "announced_holders": [
+     "agent1"
+    ],
+    "holders_repeating_by_hand": [
+     "agent1"
+    ],
+    "receiver_next": [
+     "bash"
+    ],
+    "refusals": 2,
+    "refusals_with_pushed_head": 0,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   },
+   {
+    "pair": "r7b-composite/coop/openai_tiktoken_task/0/f4_f8",
+    "git_pushes": 2,
+    "recorded_pushes": 2,
+    "announced_pushes": 1,
+    "announced_holders": [
+     "agent2"
+    ],
+    "holders_repeating_by_hand": [
+     "agent2"
+    ],
+    "receiver_next": [
+     "bash"
+    ],
+    "refusals": 4,
+    "refusals_with_pushed_head": 2,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   },
+   {
+    "pair": "r7b-composite/coop/pallets_click_task/2800/f1_f4",
+    "git_pushes": 3,
+    "recorded_pushes": 2,
+    "announced_pushes": 2,
+    "announced_holders": [
+     "agent1",
+     "agent2"
+    ],
+    "holders_repeating_by_hand": [
+     "agent2"
+    ],
+    "receiver_next": [
+     "bash",
+     "bash"
+    ],
+    "refusals": 2,
+    "refusals_with_pushed_head": 0,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   },
+   {
+    "pair": "r7b-composite/coop/pallets_jinja_task/1559/f5_f8",
+    "git_pushes": 2,
+    "recorded_pushes": 2,
+    "announced_pushes": 1,
+    "announced_holders": [
+     "agent2"
+    ],
+    "holders_repeating_by_hand": [
+     "agent2"
+    ],
+    "receiver_next": [
+     "wait_until_lane"
+    ],
+    "refusals": 6,
+    "refusals_with_pushed_head": 4,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   },
+   {
+    "pair": "r7b-composite/coop/pallets_jinja_task/1621/f6_f10",
+    "git_pushes": 2,
+    "recorded_pushes": 2,
+    "announced_pushes": 2,
+    "announced_holders": [
+     "agent1",
+     "agent2"
+    ],
+    "holders_repeating_by_hand": [
+     "agent2"
+    ],
+    "receiver_next": [
+     "bash",
+     "bash"
+    ],
+    "refusals": 4,
+    "refusals_with_pushed_head": 2,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   },
+   {
+    "pair": "r7b-composite/coop/react_hook_form_task/153/f2_f6",
+    "git_pushes": 2,
+    "recorded_pushes": 2,
+    "announced_pushes": 2,
+    "announced_holders": [
+     "agent1",
+     "agent2"
+    ],
+    "holders_repeating_by_hand": [
+     "agent1",
+     "agent2"
+    ],
+    "receiver_next": [
+     "bash",
+     "act not seen in stream"
+    ],
+    "refusals": 4,
+    "refusals_with_pushed_head": 2,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   },
+   {
+    "pair": "r7b-composite/coop/typst_task/6554/f2_f6",
+    "git_pushes": 2,
+    "recorded_pushes": 2,
+    "announced_pushes": 1,
+    "announced_holders": [
+     "agent1"
+    ],
+    "holders_repeating_by_hand": [
+     "agent1"
+    ],
+    "receiver_next": [
+     "message:request_help"
+    ],
+    "refusals": 4,
+    "refusals_with_pushed_head": 4,
+    "pusher_lines_seen": {
+     "agent1": 0,
+     "agent2": 0
+    }
+   }
+  ],
+  "totals": {
+   "git_pushes": 22,
+   "recorded_pushes": 20,
+   "announced_pushes": 16,
+   "R5b_fraction": 0.727,
+   "R5b_fraction_recorded": 0.8,
+   "announced_holders": 15,
+   "holders_repeating_by_hand": 13,
+   "R5c_fraction": 0.867,
+   "refusals": 34,
+   "refusals_with_pushed_head": 16,
+   "pusher_lines_seen": 0,
+   "receiver_next": {
+    "act not seen in stream": 1,
+    "bash": 12,
+    "message:message": 1,
+    "message:request_help": 1,
+    "wait_until_lane": 1
+   }
+  }
+ }
+}

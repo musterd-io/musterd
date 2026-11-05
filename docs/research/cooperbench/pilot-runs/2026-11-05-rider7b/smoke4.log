@@ -1,0 +1,2 @@
+[2026-11-05T01:59:27Z] smoke pair start (guard: pair cap $6)
+[2026-11-05T02:36:41Z] smoke pair 4 STOPPED by lazara at 37 min: the gate is met (passed 2-5 s after each report, no reclaimable between report and next lease); both seats idle, the idle probe matched itself (#3882) so the end rule never fired

@@ -1,0 +1,46 @@
+{
+  "repo": "llama_index_task",
+  "task_id": 17244,
+  "features": [
+    5,
+    6
+  ],
+  "setting": "coop",
+  "run_id": "2086d1a4",
+  "run_name": "r7b-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-05T03:00:18.530384",
+  "ended_at": "2026-11-05T03:10:14.383406",
+  "duration_seconds": 595.853022,
+  "agents": {
+    "agent1": {
+      "feature_id": 5,
+      "status": "Submitted",
+      "cost": 0.42048285,
+      "steps": 33,
+      "input_tokens": 164,
+      "output_tokens": 6754,
+      "cache_read_tokens": 756532,
+      "cache_write_tokens": 24459,
+      "patch_lines": 53,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 6,
+      "status": "Submitted",
+      "cost": 0.5141724000000001,
+      "steps": 37,
+      "input_tokens": 204,
+      "output_tokens": 7964,
+      "cache_read_tokens": 969593,
+      "cache_write_tokens": 27526,
+      "patch_lines": 53,
+      "error": null
+    }
+  },
+  "total_cost": 0.93465525,
+  "total_steps": 70,
+  "messages_sent": 0,
+  "log_dir": "logs/r7b-musterd/coop/llama_index_task/17244/f5_f6"
+}

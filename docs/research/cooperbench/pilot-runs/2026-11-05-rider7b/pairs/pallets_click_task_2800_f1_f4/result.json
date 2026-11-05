@@ -1,0 +1,46 @@
+{
+  "repo": "pallets_click_task",
+  "task_id": 2800,
+  "features": [
+    1,
+    4
+  ],
+  "setting": "coop",
+  "run_id": "5942109e",
+  "run_name": "r7b-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-05T03:03:23.990377",
+  "ended_at": "2026-11-05T03:18:59.619368",
+  "duration_seconds": 935.628991,
+  "agents": {
+    "agent1": {
+      "feature_id": 1,
+      "status": "Submitted",
+      "cost": 1.5634884,
+      "steps": 58,
+      "input_tokens": 466,
+      "output_tokens": 24659,
+      "cache_read_tokens": 3295093,
+      "cache_write_tokens": 54314,
+      "patch_lines": 173,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 4,
+      "status": "Submitted",
+      "cost": 1.9839807000000007,
+      "steps": 92,
+      "input_tokens": 698,
+      "output_tokens": 23134,
+      "cache_read_tokens": 4761989,
+      "cache_write_tokens": 55008,
+      "patch_lines": 173,
+      "error": null
+    }
+  },
+  "total_cost": 3.5474691000000007,
+  "total_steps": 150,
+  "messages_sent": 0,
+  "log_dir": "logs/r7b-musterd/coop/pallets_click_task/2800/f1_f4"
+}

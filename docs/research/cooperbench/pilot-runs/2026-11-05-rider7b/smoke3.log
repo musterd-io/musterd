@@ -1,0 +1,7 @@
+[2026-11-05T01:34:44Z] smoke pair start (guard: pair cap $6)
+[2026-11-05T01:37:18Z] smoke pair exit=0
+[2026-11-05T01:37:18Z] /data/runs/logs/r7b-smoke/coop/pallets_click_task/2068/f1_f2/agent1_host.log: 0 due · 0 resumed · 0 fresh · 0 price-bound
+[2026-11-05T01:37:18Z] /data/runs/logs/r7b-smoke/coop/pallets_click_task/2068/f1_f2/agent2_host.log: 3 due · 0 resumed · 3 fresh · 3 price-bound
+[2026-11-05T01:37:18Z] /data/runs/logs/r7b-smoke/coop/pallets_click_task/2068/f1_f2/musterd-residency.json: wakes 3 resumed 0 failed 0 cost 0.55 reclaimable_s [50.1, 90.1, 130.4]
+{"pairs": {"/tmp/cb-musterd-b5e83da4-uajjmmh1": 0.0, "/tmp/cb-musterd-e9786309-e__wgmfj": 0.5462}, "live_wake_usd": 0.55, "finished_usd": 0.0, "total_usd": 0.55, "pair_cap": 6.0, "total_cap": 110.0, "over_pair": [], "stop": null}
+[2026-11-05T01:44:32Z] smoke pair 3b (duplicate start) STOPPED by lazara; smoke 3a (01:27–01:37Z) is the read: reclaimable 50/90/130 s — the hook row carries the lease and parks at the report (#3880)

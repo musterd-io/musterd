@@ -1,0 +1,173 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 666ad68..ea203e3 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -4,8 +4,10 @@ import collections.abc as cabc
+ import enum
+ import errno
+ import inspect
++import logging
+ import os
+ import sys
++import threading
+ import typing as t
+ from collections import abc
+ from collections import Counter
+@@ -228,6 +230,10 @@ class Context:
+         value is not set, it defaults to the value from the parent
+         context. ``Command.show_default`` overrides this default for the
+         specific command.
++    :param cleanup_timeout: Maximum time in seconds to wait for cleanup
++                           operations during close(). If cleanup exceeds
++                           this timeout, operations are forcibly terminated.
++                           None (default) means no timeout.
+ 
+     .. versionchanged:: 8.2
+         The ``protected_args`` attribute is deprecated and will be removed in
+@@ -280,6 +286,7 @@ class Context:
+         token_normalize_func: t.Callable[[str], str] | None = None,
+         color: bool | None = None,
+         show_default: bool | None = None,
++        cleanup_timeout: float | None = None,
+     ) -> None:
+         #: the parent context or `None` if none exists.
+         self.parent = parent
+@@ -427,6 +434,16 @@ class Context:
+         #: Show option default values when formatting help text.
+         self.show_default: bool | None = show_default
+ 
++        # Validate cleanup_timeout parameter
++        if cleanup_timeout is not None and cleanup_timeout <= 0:
++            raise ValueError(
++                "cleanup_timeout must be a positive float value greater than 0"
++            )
++
++        #: Maximum time in seconds to wait for cleanup operations during close().
++        #: None means no timeout.
++        self.cleanup_timeout: float | None = cleanup_timeout
++
+         self._close_callbacks: list[t.Callable[[], t.Any]] = []
+         self._depth = 0
+         self._parameter_source: dict[str, ParameterSource] = {}
+@@ -607,7 +624,35 @@ class Context:
+         :meth:`call_on_close`, and exit all context managers entered
+         with :meth:`with_resource`.
+         """
+-        self._exit_stack.close()
++        if self.cleanup_timeout is None:
++            # No timeout, run cleanup normally
++            self._exit_stack.close()
++        else:
++            # Run cleanup with timeout
++            cleanup_exception = None
++
++            def _run_cleanup() -> None:
++                nonlocal cleanup_exception
++                try:
++                    self._exit_stack.close()
++                except Exception as e:
++                    cleanup_exception = e
++
++            cleanup_thread = threading.Thread(target=_run_cleanup, daemon=True)
++            cleanup_thread.start()
++            cleanup_thread.join(timeout=self.cleanup_timeout)
++
++            if cleanup_thread.is_alive():
++                # Timeout occurred
++                logger = logging.getLogger(__name__)
++                logger.warning(
++                    f"Context cleanup exceeded timeout of {self.cleanup_timeout}s "
++                    "and was forcibly terminated"
++                )
++            elif cleanup_exception is not None:
++                # Cleanup raised an exception, re-raise it
++                raise cleanup_exception
++
+         # In case the context is reused, create a new exit stack.
+         self._exit_stack = ExitStack()
+ 
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 6fd9e54..3f0518a 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -544,46 +544,48 @@ def _resolve_context(
+     :param args: List of complete args before the incomplete value.
+     """
+     ctx_args["resilient_parsing"] = True
+-    ctx = cli.make_context(prog_name, args.copy(), **ctx_args)
+-    args = ctx._protected_args + ctx.args
++    with cli.make_context(prog_name, args.copy(), **ctx_args) as ctx:
++        args = ctx._protected_args + ctx.args
+ 
+-    while args:
+-        command = ctx.command
++        while args:
++            command = ctx.command
+ 
+-        if isinstance(command, Group):
+-            if not command.chain:
+-                name, cmd, args = command.resolve_command(ctx, args)
+-
+-                if cmd is None:
+-                    return ctx
+-
+-                ctx = cmd.make_context(name, args, parent=ctx, resilient_parsing=True)
+-                args = ctx._protected_args + ctx.args
+-            else:
+-                sub_ctx = ctx
+-
+-                while args:
++            if isinstance(command, Group):
++                if not command.chain:
+                     name, cmd, args = command.resolve_command(ctx, args)
+ 
+                     if cmd is None:
+                         return ctx
+ 
+-                    sub_ctx = cmd.make_context(
+-                        name,
+-                        args,
+-                        parent=ctx,
+-                        allow_extra_args=True,
+-                        allow_interspersed_args=False,
+-                        resilient_parsing=True,
+-                    )
+-                    args = sub_ctx.args
+-
+-                ctx = sub_ctx
+-                args = [*sub_ctx._protected_args, *sub_ctx.args]
+-        else:
+-            break
++                    with cmd.make_context(name, args, parent=ctx, resilient_parsing=True) as sub_ctx:
++                        ctx = sub_ctx
++                        args = ctx._protected_args + ctx.args
++                else:
++                    sub_ctx = ctx
++
++                    while args:
++                        name, cmd, args = command.resolve_command(ctx, args)
++
++                        if cmd is None:
++                            return ctx
++
++                        with cmd.make_context(
++                            name,
++                            args,
++                            parent=ctx,
++                            allow_extra_args=True,
++                            allow_interspersed_args=False,
++                            resilient_parsing=True,
++                        ) as sub_sub_ctx:
++                            sub_ctx = sub_sub_ctx
++                            args = sub_ctx.args
++
++                    ctx = sub_ctx
++                    args = [*sub_ctx._protected_args, *sub_ctx.args]
++            else:
++                break
+ 
+-    return ctx
++        return ctx
+ 
+ 
+ def _resolve_incomplete(
