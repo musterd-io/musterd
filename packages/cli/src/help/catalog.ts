@@ -1361,4 +1361,22 @@ export const CATALOG: readonly CommandEntry[] = [
       '`propose` (any seat) sends an approve-ask; a human admin accepting it activates the hold.',
     examples: ['musterd hold', 'musterd hold list'],
   },
+  {
+    name: 'poll',
+    signature:
+      'start "<question>" "<option>" "<option>" [… up to 4] [--minutes 1-15] | end | cancel | status',
+    summary: 'ask the stream a question — viewers vote in Twitch chat with !vote N',
+    group: 'team',
+    detail:
+      'ADR 807. A human admin starts one while the stream is live on Twitch; musterdbot posts it and ' +
+      'counts `!vote N` by viewer, and /broadcast shows the tally. Each option is its own quoted ' +
+      'argument (2–4). Starting mints the poll’s counts-only credential, so an enrolled admin ' +
+      'approves it with their passkey (the approve page opens). `end` closes it with the votes so ' +
+      'far, `cancel` with no winner; the result is recorded on the team.',
+    examples: [
+      'musterd poll start "What should we work on next?" "The director camera" "Viewers ask the team"',
+      'musterd poll status',
+      'musterd poll end',
+    ],
+  },
 ];

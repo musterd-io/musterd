@@ -58,6 +58,11 @@ import {
   type ActiveWithhold,
   type EnforcementPolicy,
   EnforcementReadSchema,
+  type OpenPoll,
+  type OpenPollReply,
+  OpenPollReplySchema,
+  type PollMeta,
+  type PollSpec,
   type ActorAttestation,
   type GateCheckRequest,
   type LanePushReport,
@@ -2453,6 +2458,40 @@ export class HttpClient {
       policy: Policy;
       stored: PolicyOverride;
     };
+  }
+
+  /** ADR 807: whether Twitch shows the stream live, the open poll and the last closed one. A human's
+   *  read carries no poll token (that is the broadcast seat's, on `?token=1`). */
+  async getOpenPoll(slug: string): Promise<OpenPollReply> {
+    const parsed = OpenPollReplySchema.safeParse(
+      await this.request('GET', `/teams/${slug}/polls/open`),
+    );
+    if (!parsed.success) throw new CliError('the daemon sent an unreadable poll reply', 1);
+    return parsed.data;
+  }
+
+  /** ADR 807: a human admin opens the team's poll; `approval` is the passkey's proof for it. */
+  async openPoll(
+    slug: string,
+    spec: PollSpec,
+    approval?: ApprovalProof,
+  ): Promise<{ poll: OpenPoll }> {
+    return (await this.request('POST', `/teams/${slug}/polls`, {
+      spec,
+      ...(approval ? { approval } : {}),
+    })) as { poll: OpenPoll };
+  }
+
+  /** ADR 807: close the open poll now — `end` keeps the votes so far, `cancel` names no winner. */
+  async closePoll(
+    slug: string,
+    id: string,
+    how: 'end' | 'cancel',
+  ): Promise<{ poll: Extract<PollMeta, { state: 'closed' }> }> {
+    return (await this.request(
+      'POST',
+      `/teams/${slug}/polls/${encodeURIComponent(id)}/${how}`,
+    )) as { poll: Extract<PollMeta, { state: 'closed' }> };
   }
 
   /** The enforcement class table (ADR 150) — `GET /teams/:slug/enforcement`, MEMBER-readable (unlike the
