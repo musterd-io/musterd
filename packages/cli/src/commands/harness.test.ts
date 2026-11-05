@@ -9,6 +9,7 @@ import { nodeFs, type HarnessContext } from '../onboard/reconcile/context.js';
 import {
   canonicalFingerprint,
   folderResourceKey,
+  openIsolation,
   type FragmentMutation,
   type HarnessAdapter,
   type ObservedFragment,
@@ -47,6 +48,7 @@ function fakeAdapter(
     id,
     surface: 'other',
     adapterVersion: 1,
+    isolation: openIsolation('test double'),
     availability: async () => ({
       available: opts.available ?? true,
       detail: opts.available === false ? 'not installed here' : 'ok',

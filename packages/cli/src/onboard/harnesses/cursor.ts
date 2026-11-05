@@ -16,10 +16,11 @@ import {
   resolveMcpLaunch,
   type McpServerEntry,
 } from '../mcpEntry.js';
-import type { FsSeam } from '../reconcile/context.js';
+import type { FsSeam, HarnessContext } from '../reconcile/context.js';
 import {
   canonicalFingerprint,
   folderResourceKey,
+  type FragmentIntent,
   type HarnessAdapter,
 } from '../reconcile/fragments.js';
 import {
@@ -29,6 +30,8 @@ import {
   observeRoleSkill,
   roleSkillFragments,
 } from '../roleSkills.js';
+import { resolveSeatDeclared } from '../seatTools/context.js';
+import type { DeclaredSet } from '../seatTools/resolve.js';
 
 interface CursorConfig {
   mcpServers?: Record<
@@ -511,10 +514,82 @@ function writeJsonSeam(fs: FsSeam, path: string, value: unknown): void {
 
 const CURSOR_SURFACE = 'cursor';
 
+/**
+ * `cursor-agent mcp disable` writes `~/.cursor/projects/<slug>/mcp-disabled.json`. The slug is the
+ * absolute path with the leading slash removed and each slash replaced by a hyphen. Measured
+ * 2026-11-05: `/private/tmp/seat-tools-spike/cursor-empty` → `private-tmp-seat-tools-spike-cursor-empty`.
+ * This is not `~/.cursor/mcp.json`, which musterd does not write (ADR 031).
+ */
+export function cursorProjectSlug(worktreeRoot: string): string {
+  const abs = worktreeRoot.startsWith('/') ? worktreeRoot : `/${worktreeRoot}`;
+  return abs.slice(1).replaceAll('/', '-');
+}
+
+function cursorHome(ctx: HarnessContext): string {
+  return ctx.env['HOME'] ?? homedir();
+}
+
+function cursorDisabledPath(ctx: HarnessContext): string {
+  return join(
+    cursorHome(ctx),
+    '.cursor',
+    'projects',
+    cursorProjectSlug(ctx.worktreeRoot),
+    'mcp-disabled.json',
+  );
+}
+
+/** Server names in the user `~/.cursor/mcp.json`. Values are not read. */
+function userCursorServerNames(ctx: HarnessContext): string[] {
+  const raw = ctx.fs.readFile(join(cursorHome(ctx), '.cursor', 'mcp.json'));
+  if (raw === null) return [];
+  try {
+    const parsed = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
+    if (typeof parsed !== 'object' || parsed === null || parsed.mcpServers === undefined) return [];
+    return Object.keys(parsed.mcpServers)
+      .filter((name) => name.length > 0)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/** The denylist for user MCP servers the seat does not declare. `musterd` stays loadable. */
+function cursorMcpDisabled(ctx: HarnessContext, declared: DeclaredSet): FragmentIntent[] {
+  const keep = new Set(['musterd', ...declared.mcp_servers]);
+  const names = userCursorServerNames(ctx).filter((name) => !keep.has(name));
+  if (names.length === 0) return [];
+  return [
+    {
+      harness: 'cursor',
+      resourceKey: folderResourceKey(ctx.worktreeRoot, 'cursor', 'mcp.disabled'),
+      containerKey: `folder ${ctx.worktreeRoot} cursor-mcp-disabled`,
+      fragmentKey: 'mcp.disabled',
+      scope: 'folder',
+      fingerprint: canonicalFingerprint(names),
+      payload: names,
+    },
+  ];
+}
+
 export const cursorAdapter: HarnessAdapter = {
   id: 'cursor',
   surface: 'cursor',
   adapterVersion: 2,
+  // Measured 2026-11-05 on cursor-agent 2026.10.22. See docs/wiki/claude-code-seat-isolation.md.
+  isolation: {
+    plugins: {
+      strength: 'open',
+      reason:
+        'cursor-agent 2026.10.22 has a plugin marketplace command only; no project disable was measured on 2026-11-05',
+    },
+    skills: {
+      strength: 'open',
+      reason:
+        'cursor-agent 2026.10.22 has no skill command; no project skill disable was measured on 2026-11-05',
+    },
+    mcp_servers: { strength: 'excluded' },
+  },
   interactive: {
     resolveBin: () => resolveCursorAgentBin(),
     installHint: 'see https://cursor.com/cli',
@@ -556,6 +631,7 @@ export const cursorAdapter: HarnessAdapter = {
   },
 
   async desiredFragments(ctx) {
+    const declared = await resolveSeatDeclared(ctx);
     const launch = resolveMcpLaunch();
     const mcpPayload = {
       command: launch.command,
@@ -598,6 +674,7 @@ export const cursorAdapter: HarnessAdapter = {
         CURSOR_BRIDGE,
         `folder ${ctx.worktreeRoot} cursor-role-skills`,
       ),
+      ...(declared ? cursorMcpDisabled(ctx, declared) : []),
     ];
   },
 
@@ -654,6 +731,21 @@ export const cursorAdapter: HarnessAdapter = {
         }
         if (observed.length === 0) return { state: 'absent' };
         return { state: 'present', fingerprint: canonicalFingerprint(sortHookList(observed)) };
+      }
+      case 'mcp.disabled': {
+        const read = readJsonSeam<unknown>(ctx.fs, cursorDisabledPath(ctx));
+        if (read === undefined) return { state: 'absent' };
+        if (!Array.isArray(read) || read.some((name) => typeof name !== 'string')) {
+          return {
+            state: 'invalid-container',
+            issues: [{ path: '<mcp-disabled.json>', message: 'not a list of server names' }],
+          };
+        }
+        const got = [...read].sort();
+        const want = [...(intent.payload as string[])].sort();
+        return canonicalFingerprint(got) === canonicalFingerprint(want)
+          ? { state: 'present', fingerprint: intent.fingerprint }
+          : { state: 'absent' };
       }
       case 'guidance':
         return observeFileMap(
@@ -741,6 +833,15 @@ export const cursorAdapter: HarnessAdapter = {
         }
         if (next.hooks && Object.keys(next.hooks).length === 0) delete next.hooks;
         writeJsonSeam(ctx.fs, path, next);
+        return;
+      }
+      case 'mcp.disabled': {
+        const path = cursorDisabledPath(ctx);
+        if (mutation.kind === 'remove') {
+          ctx.fs.rm(path);
+          return;
+        }
+        writeJsonSeam(ctx.fs, path, [...(intent.payload as string[])].sort());
         return;
       }
       case 'guidance':

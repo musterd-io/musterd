@@ -70,6 +70,27 @@ export function listServers(toml: string): string[] {
   return out;
 }
 
+/** True when `[mcp_servers.<name>]` sets `enabled = false`. The rest of the table is not returned. */
+export function serverDisabled(toml: string, name: string): boolean {
+  const want = new Set([`mcp_servers.${name}`, `mcp_servers.${key(name)}`]);
+  for (const section of splitSections(toml)) {
+    const header = sectionHeader(section);
+    if (header === null || !want.has(header)) continue;
+    return section.split('\n').some((line) => /^\s*enabled\s*=\s*false\s*(?:#.*)?$/.test(line));
+  }
+  return false;
+}
+
+/**
+ * Replace `[mcp_servers.<name>]` and its `.env` subtable with a table that is only
+ * `enabled = false`. Names only: command, args, and env from the old table are not copied.
+ */
+export function disableServer(toml: string, name: string): string {
+  const stripped = removeServers(toml, [name]).replace(/\s+$/, '');
+  const block = `[mcp_servers.${key(name)}]\nenabled = false\n`;
+  return stripped.length === 0 ? block : `${stripped}\n\n${block}`;
+}
+
 /**
  * Read one server's `[mcp_servers.<name>.env]` subtable back as a plain record.
  *

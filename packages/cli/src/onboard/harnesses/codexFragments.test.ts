@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { FEATURE_EPOCH } from '@musterd/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { memoryFs, nodeFs, type HarnessContext, type MemoryFs } from '../reconcile/context.js';
+import { emptyDeclaredSet } from '../seatTools/resolve.js';
 import { codexAdapter } from './codex.js';
 import { CODEX_HOOK_MARKER, codexHookCommands } from './codexHooks.js';
 import type { CodexServer } from './codexToml.js';
@@ -366,7 +367,7 @@ describe('codexAdapter — managed fragments', () => {
     expect(intents.filter((i) => i.fragmentKey.startsWith('plugin.'))).toEqual([]);
   });
 
-  it('writes a project-local plugin table from the workspace toolkit and removes only that table', async () => {
+  it('writes a project-local plugin table from the seat set, not the workspace toolkit, and removes only that table', async () => {
     const fs = memoryFs();
     fs.writeFile(TOML, THEIR_TOML, 0o600);
     fs.writeFile(
@@ -389,7 +390,16 @@ describe('codexAdapter — managed fragments', () => {
       })}\n`,
       0o644,
     );
-    const ctx = ctxOf(fs);
+    const toolkitOnly = await intentsOf(ctxOf(fs));
+    expect(toolkitOnly.filter((i) => i.fragmentKey.startsWith('plugin.'))).toEqual([]);
+
+    const ctx: HarnessContext = {
+      ...ctxOf(fs),
+      seatTools: {
+        ...emptyDeclaredSet(),
+        codex_plugins: ['codex-security@openai-curated'],
+      },
+    };
     const intents = await intentsOf(ctx);
     const plugin = intents.find((i) => i.fragmentKey === 'plugin.codex-security@openai-curated');
     expect(plugin).toBeDefined();
@@ -414,5 +424,57 @@ describe('codexAdapter — managed fragments', () => {
     const removed = fs.readFile(TOML)!;
     expect(removed).not.toContain('codex-security@openai-curated');
     expect(removed).toContain('[mcp_servers.figma]');
+  });
+
+  it('codex closes an undeclared mcp_servers', async () => {
+    const fs = memoryFs();
+    const user = [
+      '[mcp_servers.kept]',
+      'command = "node"',
+      '',
+      '[mcp_servers.musterd]',
+      'command = "node"',
+      '',
+      '[mcp_servers.node_repl]',
+      'command = "node"',
+      'args = ["-e", "0"]',
+      '',
+    ].join('\n');
+    const userPath = '/home/u/.codex/config.toml';
+    fs.writeFile(userPath, user, 0o600);
+    fs.writeFile(TOML, THEIR_TOML, 0o644);
+
+    const human = await intentsOf(ctxOf(fs));
+    expect(human.filter((i) => i.fragmentKey.startsWith('mcp.disabled.'))).toEqual([]);
+    expect(fs.readFile(userPath)).toBe(user);
+
+    const ctx: HarnessContext = {
+      ...ctxOf(fs),
+      seatTools: { ...emptyDeclaredSet(), mcp_servers: ['kept'] },
+    };
+    const intents = await intentsOf(ctx);
+    expect(
+      intents.filter((i) => i.fragmentKey.startsWith('mcp.disabled.')).map((i) => i.fragmentKey),
+    ).toEqual(['mcp.disabled.node_repl']);
+    const intent = intents.find((i) => i.fragmentKey === 'mcp.disabled.node_repl')!;
+
+    await codexAdapter.apply(ctx, { kind: 'write', intent });
+    const project = fs.readFile(TOML)!;
+    expect(project).toContain('[mcp_servers.node_repl]\nenabled = false');
+    expect(project).not.toContain('args = ["-e", "0"]');
+    expect(project).toContain('[mcp_servers.figma]');
+    expect(project).not.toContain('[mcp_servers.kept]');
+    expect(project).not.toContain('[mcp_servers.musterd]');
+    expect(fs.readFile(userPath)).toBe(user);
+    expect(await codexAdapter.observe(ctx, intent)).toEqual({
+      state: 'present',
+      fingerprint: intent.fingerprint,
+    });
+
+    await codexAdapter.apply(ctx, { kind: 'remove', intent });
+    const removed = fs.readFile(TOML)!;
+    expect(removed).not.toContain('node_repl');
+    expect(removed).toContain('[mcp_servers.figma]');
+    expect(fs.readFile(userPath)).toBe(user);
   });
 });

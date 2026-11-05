@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { FLOOR_DENIED_SKILLS } from '../permissions.js';
 import { memoryFs, type HarnessContext, type MemoryFs } from '../reconcile/context.js';
+import { emptyDeclaredSet } from '../seatTools/resolve.js';
 import { opencodeAdapter } from './opencode.js';
 import {
   OPENCODE_PLUGIN_GENERATION,
@@ -164,5 +166,88 @@ describe('opencodeAdapter — managed fragments', () => {
     expect(entry.environment.MUSTERD_SURFACE).toBeUndefined();
     expect(entry.environment.MUSTERD_GRANT).toBe('msgr_keep'); // unrelated env preserved
     expect(entry.command).toEqual(['/their/node', '/their/adapter.js']); // repaired, not adopted
+  });
+
+  it('opencode closes an undeclared plugins', async () => {
+    const fs = memoryFs();
+    fs.writeFile(CFG, THEIR_CFG, 0o600);
+    const ctx: HarnessContext = { ...ctxOf(fs), seatTools: emptyDeclaredSet() };
+    const intents = await intentsOf(ctx);
+    expect(intents.map((i) => i.fragmentKey)).toEqual(['mcp.musterd', 'plugin', 'seatTools']);
+    const seat = intents.find((i) => i.fragmentKey === 'seatTools')!;
+    const payload = seat.payload as {
+      plugin: Record<string, string>;
+      skill: Record<string, string>;
+      mcp: Record<string, string>;
+    };
+    expect(payload.plugin).toEqual({ '*': 'deny' });
+
+    await opencodeAdapter.apply(ctx, { kind: 'write', intent: seat });
+    const after = JSON.parse(fs.readFile(CFG)!) as {
+      theme: string;
+      mcp: Record<string, unknown>;
+      permission: { plugin: Record<string, string> };
+    };
+    expect(after.theme).toBe('ayu');
+    expect(after.mcp['context7']).toBeDefined();
+    expect(after.permission.plugin).toEqual({ '*': 'deny' });
+    expect(await opencodeAdapter.observe(ctx, seat)).toEqual({
+      state: 'present',
+      fingerprint: seat.fingerprint,
+    });
+
+    await opencodeAdapter.apply(ctx, { kind: 'remove', intent: seat });
+    const removed = JSON.parse(fs.readFile(CFG)!) as {
+      theme: string;
+      mcp: Record<string, unknown>;
+      permission?: unknown;
+    };
+    expect(removed.theme).toBe('ayu');
+    expect(removed.mcp['context7']).toBeDefined();
+    expect(removed.permission).toBeUndefined();
+  });
+
+  it('opencode closes an undeclared skills', async () => {
+    const ctx: HarnessContext = {
+      ...ctxOf(memoryFs()),
+      seatTools: { ...emptyDeclaredSet(), skills: ['review'] },
+    };
+    const seat = (await intentsOf(ctx)).find((i) => i.fragmentKey === 'seatTools')!;
+    const skill = (seat.payload as { skill: Record<string, string> }).skill;
+    expect(skill['*']).toBe('deny');
+    expect(skill['review']).toBe('allow');
+    expect(skill['Skill(review)']).toBeUndefined();
+  });
+
+  it('opencode closes an undeclared mcp_servers', async () => {
+    const ctx: HarnessContext = {
+      ...ctxOf(memoryFs()),
+      seatTools: { ...emptyDeclaredSet(), mcp_servers: ['context7'] },
+    };
+    const seat = (await intentsOf(ctx)).find((i) => i.fragmentKey === 'seatTools')!;
+    expect((seat.payload as { mcp: Record<string, string> }).mcp).toEqual({
+      '*': 'deny',
+      musterd: 'allow',
+      context7: 'allow',
+    });
+  });
+
+  it('opencode denies both floor skills', async () => {
+    const ctx: HarnessContext = {
+      ...ctxOf(memoryFs()),
+      seatTools: { ...emptyDeclaredSet(), skills: [...FLOOR_DENIED_SKILLS, 'review'] },
+    };
+    const seat = (await intentsOf(ctx)).find((i) => i.fragmentKey === 'seatTools')!;
+    const skill = (seat.payload as { skill: Record<string, string> }).skill;
+    expect(skill['review']).toBe('allow');
+    for (const name of FLOOR_DENIED_SKILLS) expect(skill[name]).toBe('deny');
+    expect(Object.keys(skill).filter((k) => k.startsWith('Skill('))).toEqual([]);
+  });
+
+  it('a jsonc sibling skips the seatTools fragment', async () => {
+    const fs = memoryFs();
+    fs.writeFile(`${ROOT}/.opencode/opencode.jsonc`, '{}\n', 0o644);
+    const ctx: HarnessContext = { ...ctxOf(fs), seatTools: emptyDeclaredSet() };
+    expect((await intentsOf(ctx)).map((i) => i.fragmentKey)).toEqual(['mcp.musterd', 'plugin']);
   });
 });

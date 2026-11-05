@@ -12,6 +12,7 @@ import { reconcileHarnesses, inspectHarnesses } from './engine.js';
 import {
   canonicalFingerprint,
   folderResourceKey,
+  openIsolation,
   repoSharedResourceKey,
   type HarnessAdapter,
 } from './fragments.js';
@@ -69,6 +70,7 @@ function jsonAdapter(opts: {
     id: opts.id,
     surface: 'other',
     adapterVersion: 1,
+    isolation: openIsolation('test double'),
     availability: async () => ({ available: true }),
     target: async () => ({ containers: [{ containerKey, scope, handle: opts.containerPath }] }),
     desiredFragments: async (ctx) =>
@@ -479,6 +481,7 @@ describe('byte preservation outside an adapter-owned block (TOML-style container
       id: 'fake',
       surface: 'other',
       adapterVersion: 1,
+      isolation: openIsolation('test double'),
       availability: async () => ({ available: true }),
       target: async () => ({
         containers: [{ containerKey: `folder ${CONTAINER}`, scope: 'folder', handle: CONTAINER }],

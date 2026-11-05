@@ -684,6 +684,24 @@ export const grokAdapter: HarnessAdapter = {
   id: 'grok',
   surface: GROK_SURFACE,
   adapterVersion: 1,
+  // Measured 2026-11-05 on Grok 1.0.70. An open kind writes nothing.
+  isolation: {
+    plugins: {
+      strength: 'open',
+      reason:
+        'trusted grok inspect on 2026-11-05 (1.0.70) still listed a plugin named in project plugins.disabled as enabled, and still listed its hook',
+    },
+    skills: {
+      strength: 'open',
+      reason:
+        'trusted grok inspect on 2026-11-05 (1.0.70) did not tag a skill named in skills.disabled, and a permission.deny of Skill(...) was skipped as an unknown tool prefix',
+    },
+    mcp_servers: {
+      strength: 'open',
+      reason:
+        'trusted grok inspect on 2026-11-05 (1.0.70) kept a config-toml server and an mcpJson server whose project table set enabled=false',
+    },
+  },
   interactive: {
     resolveBin: () => resolveGrokBin(),
     fresh: () => [],

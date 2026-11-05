@@ -11,12 +11,16 @@ import {
 } from '../harness.js';
 import type { McpServerEntry } from '../mcpEntry.js';
 import { launchEntryEnv, markerGenerationOfEnv, resolveMcpLaunch } from '../mcpEntry.js';
-import type { FsSeam } from '../reconcile/context.js';
+import type { FsSeam, HarnessContext } from '../reconcile/context.js';
 import {
   canonicalFingerprint,
   folderResourceKey,
+  type FragmentIntent,
   type HarnessAdapter,
+  type ObservedFragment,
 } from '../reconcile/fragments.js';
+import { resolveSeatDeclared } from '../seatTools/context.js';
+import type { DeclaredSet } from '../seatTools/resolve.js';
 import {
   OPENCODE_PLUGIN_GENERATION,
   OPENCODE_PLUGIN_SURFACE,
@@ -81,8 +85,22 @@ interface OpencodeLocalMcp {
 
 type OpencodeMcpEntry = OpencodeLocalMcp | { type: 'remote'; url: string };
 
+interface OpencodePermission {
+  plugin?: Record<string, 'allow' | 'deny'>;
+  skill?: Record<string, 'allow' | 'deny'>;
+  mcp?: Record<string, 'allow' | 'deny'>;
+  [key: string]: unknown;
+}
+
+interface OpencodeSeatToolsPayload {
+  plugin: Record<string, 'allow' | 'deny'>;
+  skill: Record<string, 'allow' | 'deny'>;
+  mcp: Record<string, 'allow' | 'deny'>;
+}
+
 interface OpencodeConfig {
   mcp?: Record<string, OpencodeMcpEntry>;
+  permission?: OpencodePermission;
   [key: string]: unknown;
 }
 
@@ -347,10 +365,85 @@ function isPluginDeclined(fs: FsSeam, worktreeRoot: string): boolean {
   }
 }
 
+/**
+ * Project permission denies, measured on OpenCode 2.2.5 (`opencode debug agents`). `*` closes
+ * every undeclared name. There is no OpenCode plugin grant, so plugins are `*` only. `musterd`
+ * stays allowed. Floor skills are denied by name after any grant.
+ */
+function opencodeSeatTools(declared: DeclaredSet): OpencodeSeatToolsPayload {
+  const skill: Record<string, 'allow' | 'deny'> = { '*': 'deny' };
+  for (const name of declared.skills) skill[name] = 'allow';
+  for (const name of declared.deniedSkills) skill[name] = 'deny';
+  const mcp: Record<string, 'allow' | 'deny'> = { '*': 'deny', musterd: 'allow' };
+  for (const name of declared.mcp_servers) mcp[name] = 'allow';
+  return { plugin: { '*': 'deny' }, skill, mcp };
+}
+
+function opencodeSeatIntent(ctx: HarnessContext, declared: DeclaredSet): FragmentIntent {
+  const payload = opencodeSeatTools(declared);
+  return {
+    harness: 'opencode',
+    resourceKey: folderResourceKey(ctx.worktreeRoot, 'opencode', 'seatTools'),
+    containerKey: `folder ${ctx.worktreeRoot} .opencode/opencode.json`,
+    fragmentKey: 'seatTools',
+    scope: 'folder',
+    fingerprint: canonicalFingerprint(payload),
+    payload,
+  };
+}
+
+function observeSeatTools(ctx: HarnessContext, intent: FragmentIntent): ObservedFragment {
+  const cfg = readJsonSeam(ctx.fs, join(ctx.worktreeRoot, '.opencode', 'opencode.json'));
+  if (cfg === undefined) return { state: 'absent' };
+  if (cfg === null) {
+    return {
+      state: 'invalid-container',
+      issues: [{ path: '<.opencode/opencode.json>', message: 'not valid JSON' }],
+    };
+  }
+  const permission = cfg.permission ?? {};
+  const observed = { plugin: permission.plugin, skill: permission.skill, mcp: permission.mcp };
+  return canonicalFingerprint(observed) === intent.fingerprint
+    ? { state: 'present', fingerprint: intent.fingerprint }
+    : { state: 'absent' };
+}
+
+function applySeatTools(
+  ctx: HarnessContext,
+  intent: FragmentIntent,
+  kind: 'write' | 'remove',
+): void {
+  const path = join(ctx.worktreeRoot, '.opencode', 'opencode.json');
+  const read = readJsonSeam(ctx.fs, path);
+  if (read === null) throw new Error('.opencode/opencode.json invalid at apply time');
+  const cfg: OpencodeConfig = { ...(read ?? {}) };
+  const permission: OpencodePermission = { ...(cfg.permission ?? {}) };
+  if (kind === 'remove') {
+    delete permission.plugin;
+    delete permission.skill;
+    delete permission.mcp;
+  } else {
+    const desired = intent.payload as OpencodeSeatToolsPayload;
+    permission.plugin = desired.plugin;
+    permission.skill = desired.skill;
+    permission.mcp = desired.mcp;
+  }
+  if (Object.keys(permission).length > 0) cfg.permission = permission;
+  else delete cfg.permission;
+  ctx.fs.mkdirp(dirname(path));
+  ctx.fs.writeFile(path, `${JSON.stringify(cfg, null, 2)}\n`, 0o644);
+}
+
 export const opencodeAdapter: HarnessAdapter = {
   id: 'opencode',
   surface: OPENCODE_SURFACE,
   adapterVersion: 1,
+  // Measured 2026-11-05 on OpenCode 2.2.5. See docs/wiki/claude-code-seat-isolation.md.
+  isolation: {
+    plugins: { strength: 'denied' },
+    skills: { strength: 'denied' },
+    mcp_servers: { strength: 'denied' },
+  },
   interactive: {
     resolveBin: () => resolveOpencodeBin(),
     installHint: 'npm install -g opencode-ai',
@@ -386,6 +479,9 @@ export const opencodeAdapter: HarnessAdapter = {
   },
 
   async desiredFragments(ctx) {
+    const declared = await resolveSeatDeclared(ctx);
+    // A jsonc sibling is a second live config (ADR 321). The seat-tools merge stays out of it.
+    const jsonc = ctx.fs.readFile(join(ctx.worktreeRoot, '.opencode', 'opencode.jsonc')) !== null;
     const launch = resolveMcpLaunch();
     const mcpPayload: MusterdOpencodePayload = {
       type: 'local',
@@ -417,6 +513,7 @@ export const opencodeAdapter: HarnessAdapter = {
               payload: pluginPayload,
             },
           ]),
+      ...(declared && !jsonc ? [opencodeSeatIntent(ctx, declared)] : []),
     ];
   },
 
@@ -427,6 +524,7 @@ export const opencodeAdapter: HarnessAdapter = {
       if (raw === null) return { state: 'absent' };
       return { state: 'present', fingerprint: canonicalFingerprint(raw) };
     }
+    if (intent.fragmentKey === 'seatTools') return observeSeatTools(ctx, intent);
     if (intent.fragmentKey !== 'mcp.musterd') return { state: 'absent' };
     const path = join(ctx.worktreeRoot, '.opencode', 'opencode.json');
     const cfg = readJsonSeam(ctx.fs, path);
@@ -467,6 +565,10 @@ export const opencodeAdapter: HarnessAdapter = {
       const payload = (mutation.intent.payload as string | undefined) ?? renderOpencodePlugin();
       ctx.fs.mkdirp(dirname(path));
       ctx.fs.writeFile(path, payload, 0o644);
+      return;
+    }
+    if (mutation.intent.fragmentKey === 'seatTools') {
+      applySeatTools(ctx, mutation.intent, mutation.kind === 'remove' ? 'remove' : 'write');
       return;
     }
     if (mutation.intent.fragmentKey !== 'mcp.musterd') {

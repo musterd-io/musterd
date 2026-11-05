@@ -92,6 +92,8 @@ are now its declared set on every start path.
   orient hooks, which live in the user layer. Wakes keep `--setting-sources` (ADR 426). So the
   isolation is: wakes exclude the user layer at launch; every path gets the folder complement.
 
+- _2026-11-05, increment 4 (lane `01M6HHSXBTG02XH81DGMRZS8NX`):_ each harness adapter declares a strength for plugins, skills, and mcp_servers. The measurements are on `docs/wiki/claude-code-seat-isolation.md` ("Other harnesses"). Codex writes plugin enable tables from the seat's `codex_plugins`, not from a toolkit file, and disables undeclared user MCP servers in the trusted project file. Cursor writes undeclared user MCP names to `~/.cursor/projects/<slug>/mcp-disabled.json` and does not write `~/.cursor/mcp.json`. OpenCode denies undeclared plugins, skills, and MCP servers, including both floor skills, through the project `permission` object. Grok and Muse are open on all three kinds and write nothing for them. Wake backends gained no new flag. A human folder with no agent binding still gets no complement.
+
 ## Observability & Evaluation
 
 - **Traces:** every grant is a `policy.change` audit row naming the admin human, with the stored

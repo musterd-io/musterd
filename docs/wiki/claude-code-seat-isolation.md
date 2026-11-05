@@ -75,3 +75,31 @@ loaded.
 - User MCP servers: the top-level `mcpServers` in `~/.claude.json` (empty on this laptop).
 
 On 2026-11-04, [Anthropic's Claude Code security mod documentation](https://github.com/anthropics/claude-code/blob/main/mods/sec-default/README.md) describes tool names as replacing every character outside ASCII letters, digits, hyphens and underscores with an underscore. The seat complement applies this to user server and connector names; grants use the resulting prefix, and distinct observed names that become the same prefix are denied together. Falsify by observing a Claude Code tool name whose prefix differs for such a character.
+
+## Other harnesses (2026-11-05)
+
+Same question as Task 5, for the five harnesses in plan Task 12 (lane `01M6HHSXBTG02XH81DGMRZS8NX`). One strength per kind. `excluded` means the harness does not load it. `denied` means it can load and a rule blocks invocation. `open` means this seat folder writes nothing for that kind. Counts below are type counts from the probe, not an inventory. No secret, command, or argument is recorded.
+
+### Codex 0.166.0: a trusted project file can disable an MCP server (2026-11-05; falsify: `codex mcp list --json` in a trusted project whose `.codex/config.toml` sets that server `enabled = false` still reports it enabled) <!-- claim: other -->
+
+From `/private/tmp/seat-tools-spike/codex-proj`, a project file containing only `[mcp_servers.node_repl]` / `enabled = false`, plus `-c 'projects={"/private/tmp/seat-tools-spike/codex-proj"={trust_level="trusted"}}'`, changed `node_repl` from enabled to disabled. The same file without the trust override left it enabled. Codex loads project config only for a trusted project. Wakes already pass that inline trust table. `CODEX_HOME` was not used: a throwaway `CODEX_HOME` reported "Not logged in", so it is not a way to isolate a seat. The user `~/.codex/config.toml` was not written.
+
+Plugins and skills stay open. `codex debug prompt-input` did not show a project plugin `enabled = false`, and did not show a project `skills.config` entry set `enabled = false`. `codex plugin list` is marketplace availability; a `--json` run produced no stdout. App connectors were not probed.
+
+### Grok 1.0.70: project disables do not take those three layers off the inspect list (2026-11-05; falsify: a trusted `grok inspect` whose hooks list omits a plugin named in project `plugins.disabled`, or whose skill list drops a skill named in `skills.disabled`, or whose MCP list drops a server whose project table sets `enabled = false`) <!-- claim: other -->
+
+`grok` 1.0.70 (`f50904eaee6c`). Project `.grok/config.toml` is parsed even when the folder is untrusted. Trust was toggled for one probe and `~/.grok/trusted_folders.toml` was restored afterward. `~/.grok/config.toml` was not written.
+
+`plugins.disabled` removed that plugin's skills from `grok inspect` and left the plugin row enabled, including its hook once the folder was trusted. `[mcp_servers.<name>] enabled = false`, without restating the server's command, left a config-toml server and an mcpJson server in the list. `[skills].disabled` plus a `permission.deny` of `Skill(...)` left the skills in the list; each rule was skipped as an unknown tool prefix. All three kinds are open. A full server restatement and a `GROK_HOME` inspect were not run. Hook execution was not run; the hooks list is the instrument.
+
+### Cursor 2026.10.22: `mcp disable` writes a per-project denylist under the home directory (2026-11-05; falsify: `cursor-agent mcp disable <name>` in a folder leaves that name out of `~/.cursor/projects/<slug>/mcp-disabled.json`) <!-- claim: other -->
+
+`cursor-agent mcp disable spike-not-a-server` in an empty temp folder printed that the server will no longer be loaded, and wrote `~/.cursor/projects/private-tmp-seat-tools-spike-cursor-empty/mcp-disabled.json` as a one-element array. The slug is the absolute path with the leading slash removed and each slash replaced by a hyphen. `~/.cursor/mcp.json` did not change. The probe directory was removed afterward. `cursor-agent plugin` is marketplace only, and the help that was read has no skill command, so plugins and skills are open. The denylist is the MCP close. It is not `~/.cursor/mcp.json`, which musterd still does not write.
+
+### OpenCode 2.2.5: project `permission` denies merge into the build agent (2026-11-05; falsify: `opencode debug agents` for `build` lacks the skill, plugin, or mcp deny when the project `permission` object sets it) <!-- claim: other -->
+
+`permission.skill`, `permission.plugin`, and `permission.mcp` in the project `.opencode/opencode.json` were the only difference in `opencode debug agents` for the build agent, including a `"*"` resource and a named resource. That is a deny on the effective permission list, not a live tool call. A `policies` array with `skill.use` / `plugin.use` / `mcp.use` did not change that document. A project `mcp.servers` entry that was only `{enabled: false}` was dropped, and `opencode mcp list` printed no servers either way, so it is not the instrument. The global file is inspected and not written. All three kinds are denied. Floor skills go in `permission.skill`, not in Claude `Skill()` strings.
+
+### Muse 1.4.14: a project skill disable writes the machine-global settings file (2026-11-05; falsify: `muse skills disable <id> --scope project` leaves `~/.config/muse/settings.json` unchanged, or resolves a user skill id to `off` for that project only) <!-- claim: other -->
+
+`muse skills disable spike-skill --scope project` returned `activation: off` and wrote `skills.activation.projects` in `~/.config/muse/settings.json`. The settings file was restored. A later probe under `XDG_CONFIG_HOME` returned `unknown-skill` for a user skill id and for a user skill path, and the real settings file did not change. Project scope only resolved a skill that lived in the workspace. `muse plugins disable` has no `--scope`, and `muse plugins list --json` was an empty object. MCP stays open because Muse reads one machine-global MCP file. Plugins and skills are open. musterd does not call `muse skills disable` and does not edit `skills.activation`.
