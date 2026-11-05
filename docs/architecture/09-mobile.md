@@ -113,6 +113,12 @@ small change.
   press is not kept for the next open. The result comes back as a `quick_action_result` push. The
   extension shows it quietly ("Check inbox reached cider." or "cider is offline. Check inbox waits
   in its inbox."), and a roster pushed by mistake lands quietly as "Seats updated."
+- **Twitch polls** (2026-11-05, lane `01M6ME5N4R`, ADR 807 §5). For an admin, the roster carries the
+  team's poll, and **Seats** shows a card that opens **Poll**. Start is signed by Face ID over the
+  exact question, options and minutes, and sealed as `poll_open`. End and Cancel are signed by Face
+  ID too, as `poll_close`. The relay carries no answer back, so after a press the phone pulls
+  `poll-<nonce>` a few times for a `poll_result`: what happened, and the poll as it stands. A refusal
+  reads as what to do ("Polls open while you're live on Twitch."). Nothing about a poll is pushed.
 - **Seat portraits** (2026-11-03, lane `01M6JG7AX1`, ADR 797). Each seat on **Seats** shows the face
   /live paints for it, not a letter. The roster names each seat's picture by digest. The phone pulls
   `body/<binding>/portrait-<digest>` once and keeps the opened PNG for the life of the app, keyed by
@@ -417,6 +423,7 @@ src/
     pairingPin.ts          // the keychain pin pairing writes and the extension reads
     pairingQr.ts           // the QR parse, the relay origin, the fingerprint, the challenge
     phoneKeys.ts           // the typed TS contract of the native module modules/musterd-keys
+    poll.ts                // Twitch polls (ADR 807): Face ID signs and seals a poll_open / poll_close; pull the outcome by poll-<nonce>
     push.ts                // the musterd block on an APNs payload, and a fetched body
     questionKey.ts         // the question key: enrollment (question_key callback), and answering a question in the app
     quickAction.ts         // quick actions (ADR 791): sign, seal and send one; pull the seat roster by ref; pull a seat portrait by digest (ADR 797); check the pairing stands (ADR 802)
@@ -434,7 +441,8 @@ The screens are `.tsx` and outside the drift check; kept honest by hand:
 src/app/_layout.tsx   // the Stack, themed from the palette, every screen under the app's own NavBar
 src/app/index.tsx     // the asks list — its empty state, and the way into pairing
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
-src/app/seats.tsx     // the team's agent seats, pulled on focus, each with its quick actions
+src/app/seats.tsx     // the team's agent seats, pulled on focus, each with its quick actions; a Twitch poll card for an admin
+src/app/poll.tsx      // a Twitch poll: start one behind Face ID, its count, End / Cancel (admin phones only)
 src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, the question card, and answering
 src/ui/askText.tsx    // the asker's words on the ask screen: light formatting, long text folded
 src/ui/button.tsx     // the three buttons: one mustard primary, a grey secondary, a quiet text way out

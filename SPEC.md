@@ -1324,6 +1324,18 @@ answer's text.
   `meta.poll {state: 'open', …}`, and a `resolve` on that thread with
   `meta.poll {state: 'closed', counts, voters, end, winners, closed_at}`, where `end` is
   `deadline | ended | cancelled | interrupted`. A server MUST strip a client-sent `meta.poll`.
+- From the phone, an app callback MAY be `{app: 1, kind: 'poll_open', binding, ref, expires_at,
+  sealed}`, sealed with purpose `poll_open`. The opened body is `{v: 1, spec, nonce, ts, signature}`,
+  with `ref` equal to `nonce` and no key field. A server MUST refuse it unless `expires_at` is in the
+  future and at most 10 minutes ahead, the signature by the binding's Face ID signing key verifies
+  over `appPollOpenSigningBytes`, the binding's person is a human admin, and the nonce is unspent.
+  That signature is the open's A2 proof.
+- `{kind: 'poll_close', …}`, sealed with purpose `poll_close`, has the body `{v: 1, poll_id, how:
+  end | cancel, nonce, ts, key, signature}`, signed over `appPollCloseSigningBytes`. The same checks
+  apply, except that either phone key may sign.
+- A server MUST NOT push the outcome. It serves a sealed `poll_result {nonce, op, ok, reason?, poll}`
+  when the phone fetches `poll-<nonce>`. A roster MAY carry `poll {live, open, last}`, and only for an
+  admin's binding. Neither ever carries a poll token.
 
 ## A.38 Stale unowed rows are skipped as a count (unreleased — ADR 811)
 
