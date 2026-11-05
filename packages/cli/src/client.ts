@@ -828,6 +828,8 @@ export class HttpClient {
     trace_schema?: number;
     /** The trace store's bytes on disk, file + WAL (ADR 445 increment 3a). */
     trace_db_bytes?: number;
+    /** The daemon's first https passkey origin, where a browser ceremony can sign (#3900). */
+    browser_origin?: string;
   }> {
     return this.request('GET', '/health');
   }
