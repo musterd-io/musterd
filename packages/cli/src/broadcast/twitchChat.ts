@@ -59,9 +59,22 @@ export interface ChatSocket {
   close(): void;
 }
 
+/** What the reader can do on the bot's token once it is subscribed (ADR 807): post, and ask Twitch
+ *  whether the channel is live. Nothing else of the bot's token leaves this module. */
+export interface ChatApi {
+  /** Post one line to the channel's chat as the bot. False when Twitch refused or dropped it. */
+  post(text: string): Promise<boolean>;
+  /** Whether Twitch reports the channel live right now. */
+  live(): Promise<boolean>;
+}
+
 export interface ChatReaderDeps {
   creds: ChatCreds;
   onWho: (name: string) => void;
+  /** Every chat message, with the viewer's Twitch user id — for polls' `!vote N` (ADR 807). */
+  onChat?: (userId: string, text: string) => void;
+  /** Called once the reader is subscribed, with what it can do on the bot's token. */
+  onReady?: (api: ChatApi) => void;
   log: (line: string) => void;
   fetch?: typeof fetch;
   connect?: (url: string) => ChatSocket;
@@ -75,7 +88,7 @@ type Frame = {
   payload?: {
     session?: { id?: string; reconnect_url?: string; keepalive_timeout_seconds?: number };
     subscription?: { type?: string; status?: string };
-    event?: { chatter_user_login?: string; message?: { text?: string } };
+    event?: { chatter_user_login?: string; chatter_user_id?: string; message?: { text?: string } };
   };
 };
 
@@ -170,6 +183,43 @@ export function startChatReader(deps: ChatReaderDeps): () => void {
     });
     if (!r.ok) throw new Error(`subscription refused (${r.status})`);
     deps.log('chat: subscribed');
+    if (!readySaid && deps.onReady) {
+      readySaid = true;
+      deps.onReady(api);
+    }
+  };
+
+  let readySaid = false;
+  const api: ChatApi = {
+    post: async (text) => {
+      if (!ids) return false;
+      try {
+        const r = await helix('/chat/messages', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            broadcaster_id: ids.broadcaster,
+            sender_id: ids.bot,
+            message: text,
+          }),
+        });
+        if (!r.ok) return false;
+        const sent = ((await r.json()) as { data?: { is_sent?: boolean }[] }).data?.[0]?.is_sent;
+        return sent === true;
+      } catch {
+        return false;
+      }
+    },
+    live: async () => {
+      if (!ids) return false;
+      try {
+        const r = await helix(`/streams?user_id=${encodeURIComponent(ids.broadcaster)}`);
+        if (!r.ok) return false;
+        return (((await r.json()) as { data?: unknown[] }).data ?? []).length > 0;
+      } catch {
+        return false;
+      }
+    },
   };
 
   const fail = (why: string): void => {
@@ -233,6 +283,9 @@ export function startChatReader(deps: ChatReaderDeps): () => void {
           return;
         case 'notification': {
           const ev2 = f.payload?.event;
+          // Polls read every message (ADR 807); the handler takes only `!vote N` and logs nothing.
+          if (deps.onChat && ev2?.chatter_user_id && ev2.message?.text)
+            deps.onChat(ev2.chatter_user_id, ev2.message.text);
           const name = parseWho(ev2?.message?.text ?? '');
           if (!name || !ev2?.chatter_user_login) return;
           if (!gate(ev2.chatter_user_login.toLowerCase())) return;

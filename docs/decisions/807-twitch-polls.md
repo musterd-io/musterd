@@ -89,6 +89,10 @@ malicious".
   reports Twitch's live state on `POST /teams/:slug/stream/live` (broadcast seat, leaseless) as well as
   inside each counts report, so the open gate works before any poll exists. End and cancel are
   hub-local for now (a joiner gets `hub_local_required`); relaying them is a later op.
+- _(2026-11-04, increment 3, lane 01M6ME58BT)_ `GET /polls/open` also returns `last`: the team's most
+  recent closed poll, for 5 minutes after it closed (`POLL_LIMITS.lastKeptMs`). That is how the stream
+  machine learns how a poll ended and posts its result line. A machine that finds a poll already more
+  than 60 s old joins it quietly, without posting the poll again (`ANNOUNCE_WINDOW_MS`).
 
 ## Observability & Evaluation
 

@@ -119,6 +119,7 @@ withDrivers('polls-http (ADR 807)', (_o, kind) => {
     expect((await call('GET', '/teams/dawn/polls/open', nick)).json).toEqual({
       live: true,
       poll: null,
+      last: null,
     });
   });
 

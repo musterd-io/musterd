@@ -185,7 +185,7 @@ export async function openPollReply(
 ): Promise<OpenPollReply> {
   const live = await isLive(db, teamId, now);
   const row = await openRow(db, teamId);
-  if (!row) return { live, poll: null };
+  if (!row) return { live, poll: null, last: await lastClosed(db, teamId, now) };
   const poll = toOpenPoll(row);
   if (viewer.broadcast) poll.poll_token = await issuePollToken(db, teamId, row.id);
   return { live, poll };
@@ -267,4 +267,27 @@ export async function duePolls(
     else if (offline || silent) due.push({ teamId: r.team_id, pollId: r.id, end: 'interrupted' });
   }
   return due;
+}
+
+/** The team's most recent closed poll, inside `POLL_LIMITS.lastKeptMs` of its close. */
+async function lastClosed(
+  db: Driver,
+  teamId: string,
+  now: number,
+): Promise<Extract<PollMeta, { state: 'closed' }> | null> {
+  const r = await db.get<PollRow>(
+    'SELECT * FROM polls WHERE team_id = ? AND end_reason IS NOT NULL AND closed_at >= ? ORDER BY closed_at DESC LIMIT 1',
+    [teamId, now - POLL_LIMITS.lastKeptMs],
+  );
+  if (!r || r.end_reason === null || r.closed_at === null) return null;
+  const p = toOpenPoll(r);
+  return {
+    ...openMeta(p),
+    state: 'closed',
+    counts: p.counts,
+    voters: p.voters,
+    end: r.end_reason,
+    winners: r.end_reason === 'cancelled' ? [] : winnersOf(p.counts),
+    closed_at: Number(r.closed_at),
+  };
 }

@@ -158,3 +158,30 @@ describe('the read and the relay', () => {
     ).toBe(true);
   });
 });
+
+describe('the reply keeps the last closed poll (ADR 807, increment 3)', () => {
+  const last = {
+    state: 'closed',
+    id: '01M6POLL0000000000000000AA',
+    question: 'Q?',
+    options: ['a', 'b'],
+    opened_by: 'nick',
+    opened_at: 1,
+    closes_at: 2,
+    counts: [1, 0],
+    voters: 1,
+    end: 'deadline',
+    winners: [0],
+    closed_at: 3,
+  };
+  it('carries a closed record as `last`, never an open one', () => {
+    expect(OpenPollReplySchema.safeParse({ live: true, poll: null, last }).success).toBe(true);
+    expect(OpenPollReplySchema.safeParse({ live: true, poll: null, last: null }).success).toBe(
+      true,
+    );
+    expect(
+      OpenPollReplySchema.safeParse({ live: true, poll: null, last: { ...last, state: 'open' } })
+        .success,
+    ).toBe(false);
+  });
+});

@@ -58,10 +58,6 @@ export const OpenPollSchema = z
   })
   .strict();
 
-export const OpenPollReplySchema = z
-  .object({ live: z.boolean(), poll: OpenPollSchema.nullable() })
-  .strict();
-
 const PollMetaBase = {
   id: PollIdSchema,
   question: text(POLL_LIMITS.questionMax),
@@ -86,3 +82,11 @@ export const PollMetaSchema = z.discriminatedUnion('state', [
     })
     .strict(),
 ]);
+
+export const OpenPollReplySchema = z
+  .object({
+    live: z.boolean(),
+    poll: OpenPollSchema.nullable(),
+    last: PollMetaSchema.options[1].nullable().optional(),
+  })
+  .strict();

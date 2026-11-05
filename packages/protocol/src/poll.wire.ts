@@ -13,6 +13,8 @@ export const POLL_LIMITS = {
   offlineGraceMs: 90_000,
   /** At most one counted vote per viewer per this long. */
   voteGapMs: 2_000,
+  /** A closed poll stays in `GET /polls/open`'s `last` this long, so the stream can post its result. */
+  lastKeptMs: 5 * 60_000,
   questionMax: 200,
   optionMax: 80,
 } as const;
@@ -56,6 +58,8 @@ export interface OpenPollReply {
   /** Twitch reported the channel live within the offline grace. */
   live: boolean;
   poll: OpenPoll | null;
+  /** The team's most recent closed poll, for 5 minutes after it closed: the stream posts its result. */
+  last?: Extract<PollMeta, { state: 'closed' }> | null | undefined;
 }
 
 interface PollMetaBase {

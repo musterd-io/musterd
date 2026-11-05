@@ -7,6 +7,7 @@ import {
   parseWho,
   spotlightExpression,
   startChatReader,
+  type ChatApi,
   type ChatSocket,
 } from './twitchChat.js';
 
@@ -213,4 +214,71 @@ it('keeps a rotated refresh token for the run and says so once, without the toke
   expect(logs.filter((l) => l.includes('rotated'))).toHaveLength(1);
   expect(logs.join('\n')).not.toMatch(/\br2\b|tok\d/);
   stop();
+});
+
+describe('the chat API polls use (ADR 807)', () => {
+  it('hands over post and live once subscribed, and passes every message with its user id', async () => {
+    let sock: (ChatSocket & { send: (f: unknown) => void }) | null = null;
+    const connect = () => {
+      const s = {
+        onmessage: null as ChatSocket['onmessage'],
+        onclose: null as ChatSocket['onclose'],
+        close() {},
+        send(f: unknown) {
+          s.onmessage?.({ data: JSON.stringify(f) });
+        },
+      };
+      sock = s;
+      return s;
+    };
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('oauth2/token')) return Response.json({ access_token: 'tok' });
+      if (u.includes('/users?login=')) return Response.json({ data: [{ id: 'B' }] });
+      if (u.endsWith('/users')) return Response.json({ data: [{ id: 'BOT' }] });
+      if (u.includes('/eventsub/subscriptions')) return new Response(null, { status: 202 });
+      if (u.includes('/chat/messages')) {
+        const body = JSON.parse(String(init?.body)) as { message: string };
+        return Response.json({ data: [{ is_sent: body.message !== 'refuse me' }] });
+      }
+      if (u.includes('/streams?user_id=B')) return Response.json({ data: [{ type: 'live' }] });
+      return new Response(null, { status: 404 });
+    });
+    const chats: [string, string][] = [];
+    let api: ChatApi | null = null;
+    const stop = startChatReader({
+      creds: { clientId: 'c', clientSecret: 's', refreshToken: 'r', channel: 'musterd' },
+      onWho: () => {},
+      onChat: (id, text) => chats.push([id, text]),
+      onReady: (a) => (api = a),
+      log: () => {},
+      fetch: fetchFn as unknown as typeof fetch,
+      connect,
+      backoffMs: 0,
+    });
+    sock!.send({
+      metadata: { message_type: 'session_welcome' },
+      payload: { session: { id: 'S' } },
+    });
+    await flush();
+    await flush();
+    expect(api).not.toBeNull();
+    expect(await api!.post('hello')).toBe(true);
+    expect(await api!.post('refuse me')).toBe(false);
+    expect(await api!.live()).toBe(true);
+    const post = fetchFn.mock.calls.find(([u]) => String(u).includes('/chat/messages'));
+    expect(JSON.parse(String(post![1]!.body))).toEqual({
+      broadcaster_id: 'B',
+      sender_id: 'BOT',
+      message: 'hello',
+    });
+    sock!.send({
+      metadata: { message_type: 'notification' },
+      payload: {
+        event: { chatter_user_login: 'v', chatter_user_id: 'U1', message: { text: '!vote 2' } },
+      },
+    });
+    expect(chats).toEqual([['U1', '!vote 2']]);
+    stop();
+  });
 });
