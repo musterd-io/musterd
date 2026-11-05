@@ -34,6 +34,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   harness: async () => (await import('./commands/harness.js')).harnessCommand,
   hold: async () => (await import('./commands/hold.js')).holdCommand,
   host: async () => (await import('./commands/host.js')).hostCommand,
+  poll: async () => (await import('./commands/poll.js')).pollCommand,
   huddle: async () => (await import('./commands/huddle.js')).huddleCommand,
   import: async () => (await import('./commands/import.js')).importCommand,
   human: async () => (await import('./commands/human.js')).humanCommand,
