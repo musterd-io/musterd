@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { get as httpGet, type IncomingHttpHeaders } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,7 +11,7 @@ import {
 } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
-import { createServer } from '../index.js';
+import { createServer, openDb, seedDawn, sqliteDriver } from '../index.js';
 import { appendAudit } from '../store/audit.js';
 import { getMemberByName } from '../store/members.js';
 import { DUPLICATE_ENVELOPE_ID, insertMessage } from '../store/messages.js';
@@ -1007,6 +1007,54 @@ withDrivers('integration · http', (_o, kind) => {
         const revalidated = await rawGet(`${b}/`, { 'if-none-match': etag as string });
         expect(revalidated.status).toBe(304);
         expect(revalidated.body.length).toBe(0);
+      } finally {
+        await s.close();
+      }
+    });
+
+    it('ADR 808 inc D: the recovery code is minted only with the secret the first ask writes, once per member', async () => {
+      if (kind !== 'sqlite') return; // the secret lives beside a SQLite store file
+      const dir = mkdtempSync(join(tmpdir(), 'musterd-recovery-'));
+      const raw = openDb(join(dir, 'musterd.db'));
+      await seedDawn(sqliteDriver(raw));
+      const s = createServer({ db: raw, port: 0 });
+      const { port } = await s.listen();
+      const mint = (body: Record<string, unknown>) =>
+        fetch(`http://127.0.0.1:${port}/teams/dawn/authority/recoveries`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      try {
+        const secretPath = join(dir, 'recovery.secret');
+        expect(existsSync(secretPath)).toBe(false);
+        // First use, from loopback, with no secret: refused — and the daemon has written the file.
+        const first = await mint({ member: 'nick' });
+        expect(first.status).toBe(403);
+        expect(existsSync(secretPath)).toBe(true);
+        expect((statSync(secretPath).mode & 0o777).toString(8)).toBe('600');
+        const secret = readFileSync(secretPath, 'utf8').trim();
+        // A wrong secret is the unauthorised call: refused, nothing minted.
+        expect((await mint({ member: 'nick', operator_secret: 'x'.repeat(32) })).status).toBe(403);
+        // The secret the file holds mints a code for a member with no usable key.
+        const ok = await mint({ member: 'nick', operator_secret: secret, issued_by: 'ops' });
+        expect(ok.status).toBe(201);
+        const body = (await ok.json()) as { code: string; expires_at: number };
+        expect(body.code.length).toBeGreaterThanOrEqual(16);
+        // One live code per member; an agent is never recovered (both are validation refusals).
+        expect((await mint({ member: 'nick', operator_secret: secret })).status).toBe(422);
+        expect((await mint({ member: 'Ada', operator_secret: secret })).status).toBe(422);
+        // The code is spent by its member only: an unsigned registration with it is refused.
+        const spend = await fetch(`http://127.0.0.1:${port}/teams/dawn/authority/passkeys`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            actor: 'nick',
+            challenge: body.code,
+            registration: { attestation_object: 'AA', client_data_json: '{}' },
+          }),
+        });
+        expect(spend.status).toBe(401);
       } finally {
         await s.close();
       }

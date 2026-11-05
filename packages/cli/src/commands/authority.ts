@@ -656,11 +656,32 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     } catch {
       operatorSecret = undefined;
     }
-    const minted = await http.issueRecoveryCode(team, {
-      ...(operatorSecret ? { operator_secret: operatorSecret } : {}),
-      member: who,
-      issued_by: userInfo().username,
-    });
+    const mint = (secret: string | undefined) =>
+      http.issueRecoveryCode(team, {
+        ...(secret ? { operator_secret: secret } : {}),
+        member: who,
+        issued_by: userInfo().username,
+      });
+    let minted: Awaited<ReturnType<typeof mint>>;
+    try {
+      minted = await mint(operatorSecret);
+    } catch (e) {
+      // First use on this hub: the daemon has just written the secret file. Read it and ask once
+      // more; if it is still unreadable, this is not the daemon's user, and the refusal stands.
+      if (
+        operatorSecret !== undefined ||
+        !(e instanceof CliError) ||
+        !/recovery secret/.test(e.message)
+      )
+        throw e;
+      let second: string;
+      try {
+        second = readFileSync(secretPath, 'utf8').trim();
+      } catch {
+        throw e;
+      }
+      minted = await mint(second);
+    }
     if (json) return printJson(minted);
     const where = minted.redeem_at
       ? `${minted.redeem_at}/live?team=${encodeURIComponent(team)}`
