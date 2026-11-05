@@ -16,6 +16,7 @@ import {
   dayKey,
   dayLabel,
   goalEvent,
+  pollEvent,
   initial,
   kindOf,
   laneEvent,
@@ -347,8 +348,10 @@ function Row({
   // A lane transition or Goal declaration rides as `message` + structured meta — recover the intended
   // sub-type + its human parts so the row renders a rich work item instead of the composed body dump.
   const goal = lane ? null : goalEvent(env);
-  const structured = lane ? laneEventDetail(env) : goal;
-  const effAct = lane ?? (goal ? 'goal' : env.act);
+  // A Twitch poll's record (ADR 807): its opening message and closing resolve read as one line.
+  const poll = lane || goal ? null : pollEvent(env);
+  const structured = lane ? laneEventDetail(env) : (goal ?? poll);
+  const effAct = lane ?? (goal ? 'goal' : poll ? 'poll' : env.act);
   const tone = actTone(effAct);
   const kind = kindOf(env.from, idx);
   const hue = hueOf(env.from, idx);
@@ -535,6 +538,8 @@ const ACT_GLYPH: Record<string, ReactElement> = {
   lane_handoff: <path d="M2 6h5M5.5 3.5 8 6l-2.5 2.5M8.6 2.5h1.4v7H8.6" />,
   // A declared Goal (ADR 084) — a flag planted on the plan: the umbrella its lanes advance toward.
   goal: <path d="M3 10.5V2M3 2.4h6l-1.3 2 1.3 2H3" />,
+  // A Twitch poll (ADR 807) — three bars of a tally.
+  poll: <path d="M2.6 10V6.4M6 10V2.4M9.4 10V4.8M1.6 10h8.8" />,
   // The to-human ask (ADR 147/149) — a bell: a notification aimed at a person, distinct from
   // request_help's open question mark. The loud rendering lives in the asks strip; this keeps the
   // firehose row legible.
@@ -574,9 +579,9 @@ function WorkItem({ detail }: { detail: LaneEventDetail }) {
 /** A clean one-line summary for a reply quote — the structured title if any, else the body with its
  * composed `[lane]`/`[goal]` tag stripped. Never the raw dump. */
 function summaryLine(env: Envelope): string {
-  const detail = laneEventDetail(env) ?? goalEvent(env);
+  const detail = laneEventDetail(env) ?? goalEvent(env) ?? pollEvent(env);
   if (detail?.title) return detail.title;
-  return env.body.replace(/^\[(?:lane|goal)\]\s+/, '') || `(${env.act})`;
+  return env.body.replace(/^\[(?:lane|goal|poll)\]\s+/, '') || `(${env.act})`;
 }
 
 /** Render a tokenized body richly. With `reveal` set (the typewriter), only that many visible

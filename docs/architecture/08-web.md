@@ -200,7 +200,9 @@ access; roster handles and Presence remain visible.
   (`GET`/`PUT /members/me/doorbell`, ADR 443; a personal URL is CLI-only, never shown here), each
   paired away channel's switches (away channels 6), and how agents talk to them (`StyleSheet.tsx`'s
   `MyStylePart`). **Team** (`TeamPanel.tsx`, shown when the roster says admin; the daemon still
-  decides): the Team's hours read-only (an editor is lane 01M5BDFCFE), `pause…`, the policy knobs in
+  decides): first, the Twitch poll (`PollPanel.tsx`, ADR 807: start one while Twitch says live — the
+  passkey signs the exact spec — watch its counts, end or cancel it; refusals read as what to do),
+  then the Team's hours read-only (an editor is lane 01M5BDFCFE), `pause…`, the policy knobs in
   plain groups from one table (`policyKnobs.ts`: waking agents, spend, acceptance & asks, huddles,
   joining — no secret is in it, and a test holds that), and the team style. Every Team write goes
   through one copy of the sparse stored doc, so a knob and a style edit cannot undo each other (ADR

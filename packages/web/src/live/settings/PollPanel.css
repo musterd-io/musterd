@@ -1,0 +1,86 @@
+/* The Twitch poll panel in settings' Team tab (ADR 807, lane 01M6ME5EPX). It wears the sheet's own
+   controls (Settings.css) and adds only what a form of several fields needs: a column, a live pill,
+   and the open poll's counts. */
+.lc-poll__live {
+  margin-left: var(--lc-3);
+  padding: 2px var(--lc-3);
+  border-radius: 999px;
+  background: var(--lc-surface-2);
+  color: var(--lc-muted);
+  font: 600 10.5px/1.4 var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.lc-poll__live.is-live {
+  background: color-mix(in srgb, var(--lc-success-ink) 12%, transparent);
+  color: var(--lc-success-ink);
+}
+
+.lc-poll__form,
+.lc-poll__open {
+  display: grid;
+  gap: var(--lc-4);
+  margin-top: var(--lc-4);
+}
+
+.lc-poll__field {
+  display: grid;
+  gap: var(--lc-2);
+}
+.lc-poll__input {
+  width: 100%;
+}
+.lc-poll__optrow {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-3);
+}
+
+.lc-poll__row,
+.lc-poll__acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lc-4);
+}
+.lc-poll__mins {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lc-3);
+  margin-left: auto;
+}
+
+.lc-poll__q {
+  margin: 0;
+  font: 600 14px/1.35 var(--font-sans);
+  color: var(--lc-text);
+}
+.lc-poll__counts {
+  display: grid;
+  gap: var(--lc-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lc-poll__counts li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--lc-3);
+  font: 500 12.5px/1.35 var(--font-sans);
+}
+.lc-poll__n {
+  font: 500 11px/1 var(--font-code);
+  color: var(--lc-muted);
+}
+.lc-poll__c {
+  font-variant-numeric: tabular-nums;
+  color: var(--lc-muted);
+}
+
+.lc-poll__last {
+  margin: 0;
+  font: 500 12px/1.4 var(--font-sans);
+  color: var(--lc-muted);
+}

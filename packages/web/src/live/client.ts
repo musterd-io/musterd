@@ -29,6 +29,10 @@ import type {
 import type {
   DoorbellSink,
   LaneChainLink,
+  OpenPoll,
+  OpenPollReply,
+  PollMeta,
+  PollSpec,
   StyleDialsWire,
   StyleFloorWire,
   StylePrefsWire,
@@ -869,6 +873,36 @@ export function setTeamPolicy(
     cfg,
     `/teams/${encodeURIComponent(cfg.team)}/policy`,
     approval ? { ...stored, approval } : stored,
+  );
+}
+
+/** ADR 807: whether Twitch shows the stream live, the open poll (no token: this is not the stream
+ * machine), and the last closed poll for 5 minutes. */
+export function getOpenPoll(cfg: LiveConfig): Promise<OpenPollReply> {
+  return apiGet(cfg, `/teams/${encodeURIComponent(cfg.team)}/polls/open`);
+}
+
+/** ADR 807: a human admin opens the team's poll; `approval` is the passkey's A2 proof for it. */
+export function openPoll(
+  cfg: LiveConfig,
+  spec: PollSpec,
+  approval: ApprovalProof | null,
+): Promise<{ poll: OpenPoll }> {
+  return postAsWeb(cfg, `/teams/${encodeURIComponent(cfg.team)}/polls`, {
+    spec,
+    ...(approval ? { approval } : {}),
+  });
+}
+
+/** ADR 807: close the open poll now — `end` keeps the votes so far, `cancel` names no winner. */
+export function closeOpenPoll(
+  cfg: LiveConfig,
+  id: string,
+  how: 'end' | 'cancel',
+): Promise<{ poll: Extract<PollMeta, { state: 'closed' }> }> {
+  return postAsWeb(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/polls/${encodeURIComponent(id)}/${how}`,
   );
 }
 
