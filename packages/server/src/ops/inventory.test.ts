@@ -5,6 +5,7 @@ import {
   compareInventories,
   EPHEMERAL_TABLES,
   rowsOnlyIn,
+  readInventory,
   rowsOnlyInAny,
   takeInventory,
 } from './inventory.js';
@@ -161,5 +162,13 @@ describe('the hub inventory (ADR 796)', () => {
     expect(only['members']).toEqual([['revive', 'ghost']]);
     // A table node-local by design is never listed: the new hub writes its own.
     expect(only['local_node']).toBeUndefined();
+  });
+
+  it('reads an inventory saved either bare or as the script prints it (rehearsal 1, lane 01M6MG73W5)', () => {
+    const inv = takeInventory(seeded());
+    expect(readInventory(inv)).toEqual(inv);
+    // `scripts/hub/inventory.ts <db>` prints `{inventory: …}`; --compare read only the bare shape.
+    expect(readInventory({ inventory: inv })).toEqual(inv);
+    expect(() => readInventory({ tables: 'nope' })).toThrow(/not an inventory/);
   });
 });

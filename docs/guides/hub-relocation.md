@@ -83,9 +83,11 @@ Findings, each to settle before the switch:
    writes on start (audit, sync log, session leases, `sync_meta`), and they read as mismatches.
 2. **`inventory.ts` cannot compare its own output.** The default report is `{inventory: {tables}}`,
    and `--compare` reads `{tables}`, so the documented snapshot-then-compare flow throws
-   (`a.tables is not iterable`). The rehearsal unwrapped the file by hand.
+   (`a.tables is not iterable`). The rehearsal unwrapped the file by hand. Fixed 2026-11-04
+   (lane `01M6MG73W5`): `--compare` reads either shape.
 3. **`inventory.ts` output cut off at 64 KB when piped.** A large `--replica` report ends mid-JSON.
-   Redirect it to a file.
+   Fixed 2026-11-04 (lane `01M6MG73W5`): the script no longer exits before stdout drains; a 21 MB
+   piped report parses.
 4. **The replica-only check compares row ids, but the box keeps its own.** The box's replica holds
    the team, members, roles, residency, seat memory and inbox cursors under node-local ids
    (team `01M64DHQ…` on the box, `01KWHV06…` on the hub). So it lists all 43 members as box-only,
