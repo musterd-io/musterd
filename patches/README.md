@@ -5,27 +5,6 @@ required by Expo and Metro. Keep them until the dependency chain can consume an
 upstream fixed release; remove each patch when the dependency chain can consume
 that release and the vulnerable version is no longer resolved.
 
-## `deepmerge@4.3.1`
-
-All destination writes define own data properties, including the target-copy loop and both
-source-copy branches. This prevents a supplied `__proto__` key from invoking the destination's
-prototype setter, while preserving ordinary keys, symbols, arrays and recursive merges.
-The CommonJS distribution, UMD distribution and source entry point carry the same change.
-It addresses [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4),
-which has no published fixed version as of 2026-11-01.
-
-## `zod@3.25.76`
-
-First-party validation uses Zod 4.6.7. Expo's CLI still requires Zod 3. The legacy patch
-rejects arrays exceeding their declared maximum or exact length before visiting elements,
-and stops sync and async array parsing at a failing element rather than allocating a
-result and issue for every remaining item. Both module formats and the TypeScript source
-carry the guard. Valid arrays still parse, in input order. This backports the array boundary
-behavior needed for [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).
-It does not impose a size limit on otherwise valid unconstrained arrays.
-The bundled `zod/v4` export is not used by the installed Expo CLI and is outside this legacy
-entry-point patch; first-party v4 imports resolve the separate 4.6.7 package.
-
 ## `braces@3.0.3`
 
 The patch rejects brace nesting deeper than 100 in the parser, before the
@@ -41,8 +20,14 @@ releases become available and remove the local patches with the corresponding
 upgrade.
 
 `tests/dependency-guards.test.ts` resolves dependencies through Expo's installed graph and
-checks malformed inputs and ordinary controls. [ADR 784](../docs/decisions/784-dependency-validation-refresh.md)
+checks malformed inputs and ordinary controls, and checks that the lockfile no longer resolves
+the Zod 3 or deepmerge versions removed below. [ADR 784](../docs/decisions/784-dependency-validation-refresh.md)
 records the dependency refresh and validation compatibility choices.
+
+The `zod@3.25.76` and `deepmerge@4.3.1` patches were removed on 2026-11-04 with the bump to
+Expo SDK 58.0.23 (GHSA-mrhx-c7xc-m3w5, GHSA-gcqx-w48m-w2h4). Its `@expo/cli` 58.1.19 no
+longer depends on Zod, and its `@expo/config` 58.0.11 no longer depends on deepmerge, so
+neither vulnerable version resolves.
 
 The `node-forge@1.4.0` patch was removed on 2026-11-01 with the upgrade to 1.4.2. That
 release checks the decrypted DigestInfo against canonical DER encodings with and without
