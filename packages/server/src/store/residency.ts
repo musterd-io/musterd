@@ -55,7 +55,6 @@ import {
   rowToEnvelope,
 } from './messages.js';
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
-import { releaseLateWakeHolds } from './wakeHold.js';
 import { answerLineFor, seatWaiting } from './questions.js';
 import { lastActionBySubject } from './quiescence.js';
 import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
@@ -70,6 +69,7 @@ import {
 } from './shift.js';
 import { getPolicy, getTeamById, spendApprovalUsd } from './teams.js';
 import { deriveContext } from './wakeContextBody.js';
+import { releaseLateWakeHolds } from './wakeHold.js';
 
 /**
  * The wake ledger (ADR 131, increment 2). The daemon side of harness residency: enrollment rows
