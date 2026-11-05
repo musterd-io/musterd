@@ -46,7 +46,10 @@ if [ ! -e "$WORKTREE/.git" ]; then
 fi
 cd "$WORKTREE" || { echo "$(stamp) cannot cd to $WORKTREE"; exit 1; }
 
-git fetch --quiet origin main 2>/dev/null || exit 0
+# Three tries: refresh.sh fetches the same ref from the same .git every two minutes, and two
+# fetches at once lose a ref lock. Still unreachable after that: a quiet no-op, as before.
+fetch_main() { local n; for n in 1 2 3; do git fetch --quiet origin main 2>/dev/null && return 0; sleep 2; done; return 1; }
+fetch_main || exit 0
 TIP="$(git rev-parse origin/main 2>/dev/null || true)"
 PUBLISHED="$(cat "$STAMP" 2>/dev/null || true)"
 # Already on tip and that tip is what was last published: the poll stays cheap. (Not index.html
