@@ -35,7 +35,8 @@ def test_act_settings_add_capture_hooks_and_the_floor_and_never_a_skip_flag():
     s = cfg.claude_settings(lane="act")
     assert set(s["hooks"]) == {"PreToolUse", "PostToolUse", "SessionStart", "SessionEnd"}
     assert s["hooks"]["SessionStart"][0]["hooks"][0]["command"] == cfg.SESSION_CAPTURE_HOOK
-    assert s["permissions"] == {"allow": cfg.PERMISSION_FLOOR}
+    assert s["permissions"] == {"allow": cfg.PERMISSION_FLOOR, "deny": cfg.ACT_LANE_DENY}
+    assert cfg.ACT_LANE_DENY == ["Bash(sleep:*)"]  # rider 8: the shell-sleep backstop
     assert "dangerously" not in json.dumps(s)
     # The launch-lane settings are byte-identical to before.
     assert "permissions" not in cfg.claude_settings() and "SessionStart" not in cfg.claude_settings()["hooks"]
@@ -51,6 +52,18 @@ def test_act_block_keeps_the_coop_shape_and_drops_only_the_wait_sentences():
     assert "wait: 45" not in build_instruction(
         "T", agents=["agent1", "agent2"], agent_id="agent1", git_enabled=False, lane="act"
     )
+
+
+def test_act_block_leads_with_the_turn_rule_and_rewrites_the_check_step():
+    # Rider 8 (finding 033): the rule leads the protocol, before the tool table, and the workflow's
+    # step 2 says to end the turn when the inbox is empty; the launch block carries neither.
+    launch, act = musterd_block("agent1", ["agent2"]), musterd_block("agent1", ["agent2"], lane="act")
+    assert "**Your turn is short.**" in act and "Your turn is short" not in launch
+    assert act.index("Your turn is short") < act.index("lane_open")
+    assert "do not `sleep`" in act and "END YOUR\nTURN" in act
+    assert "cannot proceed without your partner, end your turn" in act
+    assert "at minimum after major edits" in launch and "at minimum" not in act
+    assert launch.count("\n1. ") == act.count("\n1. ") and launch.count("\n2. ") == act.count("\n2. ")
 
 
 def test_team_sets_the_act_lane_policy_only_when_switched(monkeypatch):

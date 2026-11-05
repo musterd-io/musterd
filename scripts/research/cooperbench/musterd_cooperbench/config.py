@@ -55,6 +55,11 @@ SESSION_END_HOOK = (
 # CooperBench's own skip-permissions flag; a wake never passes that flag (ADR 131 §6), so under
 # `seat-policy` the workspace's settings must let the woken run read, edit and run git and tests.
 PERMISSION_FLOOR = ["Read", "Edit", "Write", "MultiEdit", "Glob", "Grep", "Bash", "mcp__musterd"]
+# Rider 8: on the act lane a seat that waits should end its turn, not sleep in a shell. Finding 033
+# counted 22 `sleep` calls inside first calls. A permission deny is the backstop the guidance cannot
+# be; it catches a bare `sleep N` (Claude Code's prefix rule), not a sleep inside a loop — the
+# guidance covers that, and `mtools.py` still counts it.
+ACT_LANE_DENY = ["Bash(sleep:*)"]
 
 # musterd's own matcher is "Edit|Write|MultiEdit|NotebookEdit|Bash". The arm leaves Bash out on purpose.
 # It gates every path with one `**` class (agents declare their own scopes), and the gate matches a
@@ -198,7 +203,7 @@ def claude_settings(extra_env: dict[str, str] | None = None, *, lane: str = "lau
     if lane == "act":
         settings["hooks"]["SessionStart"] = [{"hooks": [{"type": "command", "command": SESSION_CAPTURE_HOOK}]}]
         settings["hooks"]["SessionEnd"] = [{"hooks": [{"type": "command", "command": SESSION_END_HOOK}]}]
-        settings["permissions"] = {"allow": list(PERMISSION_FLOOR)}
+        settings["permissions"] = {"allow": list(PERMISSION_FLOOR), "deny": list(ACT_LANE_DENY)}
     if extra_env:
         settings["env"] = dict(extra_env)
     return settings

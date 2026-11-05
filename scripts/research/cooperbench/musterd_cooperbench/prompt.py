@@ -25,11 +25,31 @@ _HELD_LAUNCH = """the file, wait on that lane in one call (`team_inbox_check` wi
 _HELD_ACT = """the file, end your turn — the host resumes you when the lane frees the
    file, and the act says so — do not message for an ETA."""
 
+# Rider 8 (finding 033): the act-lane sentence above was buried under a workflow that says "check"
+# before each step, and the seats still waited inside their first calls (46 wait-mode checks and 22
+# shell sleeps over ten pairs). The rule now leads the protocol, in its own block, and the workflow's
+# "check" steps say "end your turn" where they said "check".
+_TURN_RULE_ACT = """**Your turn is short.** The host wakes you whenever your partner sends you an
+act, and the wake carries it and your work so far. The moment you are waiting on
+your partner for anything — a reply, a lane to free, a file, a merge — END YOUR
+TURN: write one line saying what you are waiting for, and stop. Do not call
+`team_inbox_check` with `wait`, do not `sleep`, do not re-read the board while
+you wait. Ending your turn costs nothing; waiting inside it is what costs.
+
+"""
+_CHECK_LAUNCH = """2. Check `team_inbox_check` at minimum after major edits and before
+   submitting. Acts addressed to you also appear after your tool calls."""
+_CHECK_ACT = """2. Check `team_inbox_check` once after major edits and once before
+   submitting. Acts addressed to you also appear after your tool calls. If it
+   is empty and you cannot proceed without your partner, end your turn."""
+
 
 def musterd_block(agent_id: str, partners: list[str], *, lane: str = "launch") -> str:
     partner_str = ", ".join(partners)
     wait = _WAIT_ACT if lane == "act" else _WAIT_LAUNCH
     held = _HELD_ACT if lane == "act" else _HELD_LAUNCH
+    turn_rule = _TURN_RULE_ACT if lane == "act" else ""
+    check = _CHECK_ACT if lane == "act" else _CHECK_LAUNCH
     return f"""## Cooperation protocol
 
 You are **{agent_id}**, working alongside: **{partner_str}**.
@@ -37,7 +57,7 @@ Each agent has been assigned a separate feature from the same codebase;
 your features may overlap (touch the same files), so coordinate to avoid
 clobbering each other's changes.
 
-You are all seats on one musterd team. Use the `musterd` MCP tools to
+{turn_rule}You are all seats on one musterd team. Use the `musterd` MCP tools to
 coordinate:
 
 ```text
@@ -56,8 +76,7 @@ Recommended workflow:
    Then open and claim a lane whose scope names the files you intend to
    touch, and `team_send` your partners a short summary of your feature
    and your lane.
-2. Check `team_inbox_check` at minimum after major edits and before
-   submitting. Acts addressed to you also appear after your tool calls.
+{check}
 {wait}
 3. If two agents need to modify the same file, coordinate explicitly
    (split the file, agree on one owner and hand off, or ask the owner to
