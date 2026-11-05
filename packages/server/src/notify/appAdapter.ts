@@ -14,6 +14,7 @@ import {
   isAwaitingAcceptance,
   makeEnvelope,
   sealedPushBytes,
+  payloadDigest,
   type AppApproval,
   type AppCallback,
   type AppAnswer,
@@ -286,6 +287,19 @@ export function deviceKeyEnrollOf(meta: Record<string, unknown> | null): { nonce
   return typeof e?.nonce === 'string' && e.nonce.length >= 16 ? { nonce: e.nonce } : null;
 }
 
+/**
+ * An enrollment ask is the human's OWN ask to their own phone (the ask-phone route raises it as
+ * them). Any other sender carrying `device_key_enroll` — a seat steering a human's phone at a
+ * descriptor it minted — is not one, whatever its meta says; routeEnvelope attests the sender.
+ */
+function enrollAskOf(
+  ask: { from_name: string; from_kind: string; meta: string | null },
+  human: { name: string },
+): { nonce: string } | null {
+  if (ask.from_kind !== 'human' || ask.from_name !== human.name) return null;
+  return deviceKeyEnrollOf(parseMeta(ask.meta));
+}
+
 /** What the app channel carries for an ask: advisory or a privileged human answer. */
 function appAskKind(
   meta: Record<string, unknown> | null,
@@ -348,7 +362,10 @@ async function buildEnrollApproval(
     !descriptor ||
     descriptor.act !== 'device_key_admin' ||
     descriptor.actor !== human.name ||
-    descriptor.target !== human.name
+    descriptor.target !== human.name ||
+    // …and over the exact enrollment payload: a nonce minted over any other act (a revoke, a
+    // policy write) can never be put in front of the phone wearing these words.
+    descriptor.payload_digest !== payloadDigest(PASSKEY_ENROLL_PAYLOAD)
   )
     return null;
   const owner = await ctx.db.get<{ member_id: string }>(
@@ -427,7 +444,9 @@ async function issueAskDelivery(
       ? kind.lane
         ? await buildVerdictApproval(ctx, team, human, kind.lane.id)
         : kind.enroll
-          ? ((await buildEnrollApproval(ctx, team, human, kind.enroll.nonce)) ?? undefined)
+          ? enrollAskOf(ask, human)
+            ? ((await buildEnrollApproval(ctx, team, human, kind.enroll.nonce)) ?? undefined)
+            : undefined
           : await buildAskAnswerApproval(ctx, team, human, ask.id)
       : undefined;
   return {
@@ -1081,7 +1100,8 @@ export async function handleAppCallback(
       reported,
     });
   }
-  const enroll = ask ? deviceKeyEnrollOf(parseMeta(ask.meta)) : null;
+  const enrollHuman = ask ? await getMemberById(ctx.db, binding.member_id) : null;
+  const enroll = ask && enrollHuman ? enrollAskOf(ask, enrollHuman) : null;
   if (ask && enroll) {
     return answerEnrollAsk(ctx, team, {
       binding,
@@ -1347,7 +1367,7 @@ async function answerEnrollAsk(
             id: input.messageId,
             team: team.slug,
             from: authorizer.memberName,
-            to: { kind: 'team' },
+            to: { kind: 'member', name: authorizer.memberName },
             act: 'message',
             body:
               answer.decision === 'approve'
@@ -1361,7 +1381,8 @@ async function answerEnrollAsk(
                 decision: answer.decision,
                 signed_by: input.key.id,
               },
-              device_key_enroll: { nonce: input.nonce, outcome: answer.decision },
+              // The nonce is the capability to collect the parked proof: it stays off the record.
+              device_key_enroll: { outcome: answer.decision },
             },
             ts: now,
           }),
