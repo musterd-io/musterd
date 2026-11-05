@@ -147,6 +147,23 @@ withDrivers('polls-store', (open) => {
     expect(await duePolls(db, T + 10_000 + POLL_LIMITS.offlineGraceMs)).toEqual([]);
   });
 
+  it("measures liveness from Twitch's answer, not from count reports: a late flush extends nothing", async () => {
+    const { db, team } = await seed();
+    await reportLive(db, team.id, true, T); // Twitch answered live at T, then stops answering
+    const { poll, token } = await openPoll(db, team.id, 'nick', SPEC, T);
+    const grace = POLL_LIMITS.offlineGraceMs;
+    // The machine's last flush lands just inside its own grace, still carrying live: true.
+    expect(
+      await reportCounts(db, team.id, poll.id, token, counts(poll.id, [1, 0], 1), T + grace - 1),
+    ).toBe('ok');
+    // The hub still counts from T: no new poll and the open one goes silent at T + grace, not later.
+    expect(await isLive(db, team.id, T + grace - 1)).toBe(true);
+    expect(await isLive(db, team.id, T + grace)).toBe(false);
+    expect(await duePolls(db, T + grace)).toEqual([
+      { teamId: team.id, pollId: poll.id, end: 'interrupted' },
+    ]);
+  });
+
   it('keeps the closed poll as `last` for five minutes, so the stream can post its result', async () => {
     const { db, team } = await seed();
     await reportLive(db, team.id, true, T);

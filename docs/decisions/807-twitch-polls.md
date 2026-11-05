@@ -93,6 +93,14 @@ malicious".
   recent closed poll, for 5 minutes after it closed (`POLL_LIMITS.lastKeptMs`). That is how the stream
   machine learns how a poll ended and posts its result line. A machine that finds a poll already more
   than 60 s old joins it quietly, without posting the poll again (`ANNOUNCE_WINDOW_MS`).
+- _(2026-11-05, increment 3 acceptance, lane 01M6ME58BT)_ The note above on increment 2 no longer
+  holds in one respect: a counts report does not refresh the hub's liveness. Only
+  `POST /stream/live` does, and the stream machine sends it only when Twitch answers its Helix
+  `streams` check. A counts report arrives later than the check it rests on, so letting it stamp
+  `reported_at` could hold a poll open for almost 180 s after Twitch last said live. The report's
+  `live` field stays in the schema and is not used for liveness. When Twitch does not answer, the
+  machine reports nothing and keeps counting votes locally. It stops sending counts once its last
+  answered check is 90 s old, so the hub's 90 s grace runs from the moment Twitch actually answered.
 
 ## Observability & Evaluation
 
