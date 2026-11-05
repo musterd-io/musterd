@@ -79,14 +79,19 @@ export async function teamStyle(db: Driver, teamId: string): Promise<StylePolicy
   return (await getPolicy(db, teamId)).style;
 }
 
-/** The driver for a seat (ADR 799): the human holding the newest live lease on the seat's node —
- *  their own presence or a `/live` browser session — else the driver its newest presence attested
- *  (driver co-presence, ADR 021/155). Rows with no driver are skipped, not read as none. */
-export async function driverForSeat(
+/** A seat's driver resolution (ADR 799): `cleared` separates §3 — the node had a human and
+ *  none is live, so the driver is *cleared* and no fallback may revive a stale label — from
+ *  "no answer", where the claimed/attested fallback still stands (§4). */
+export interface SeatDriverResolution {
+  driver: string | null;
+  cleared: boolean;
+}
+
+export async function driverResolutionForSeat(
   db: Driver,
   teamId: string,
   memberId: string,
-): Promise<string | null> {
+): Promise<SeatDriverResolution> {
   const seat = await db.get<{ node: string | null }>(
     'SELECT node FROM presence WHERE team_id = ? AND member_id = ? AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
     [teamId, memberId],
@@ -96,14 +101,14 @@ export async function driverForSeat(
       `SELECT m.name AS name FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = 'human' AND m.observer = 0 AND p.held_until IS NULL AND p.conn_id IS NOT NULL AND ${seat.node === null ? 'p.node IS NULL' : 'p.node = ?'} ORDER BY p.last_seen_at DESC LIMIT 1`,
       seat.node === null ? [teamId] : [teamId, seat.node],
     );
-    if (lease) return lease.name;
+    if (lease) return { driver: lease.name, cleared: false };
     if (seat.node === null) {
       try {
         const browser = await db.get<{ name: string }>(
           'SELECT m.name AS name FROM browser_sessions bs JOIN members m ON m.id = bs.member_id WHERE bs.team_id = ? AND bs.revoked_at IS NULL AND bs.expires_at > ? ORDER BY bs.last_used_at DESC LIMIT 1',
           [teamId, Date.now()],
         );
-        if (browser) return browser.name;
+        if (browser) return { driver: browser.name, cleared: false };
       } catch {
         // No browser_sessions table yet (pre-ADR-722 daemon).
       }
@@ -116,18 +121,31 @@ export async function driverForSeat(
       'SELECT COUNT(*) AS n FROM node_humans WHERE team_id = ? AND node_key = ?',
       [teamId, seat.node ?? ''],
     );
-    if ((marked?.n ?? 0) > 0) return null;
+    if ((marked?.n ?? 0) > 0) return { driver: null, cleared: true };
     const had = await db.get<{ n: number }>(
       `SELECT COUNT(*) AS n FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = 'human' AND m.observer = 0 AND ${seat.node === null ? 'p.node IS NULL' : 'p.node = ?'}`,
       seat.node === null ? [teamId] : [teamId, seat.node],
     );
-    if ((had?.n ?? 0) > 0) return null;
+    if ((had?.n ?? 0) > 0) return { driver: null, cleared: true };
   }
   const row = await db.get<{ driver: string | null }>(
     'SELECT driver FROM presence WHERE team_id = ? AND member_id = ? AND held_until IS NULL AND driver IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1',
     [teamId, memberId],
   );
-  return row?.driver ?? null;
+  return { driver: row?.driver ?? null, cleared: false };
+}
+
+/** The driver for a seat (ADR 799): the human holding the newest live lease on the seat's node —
+ *  their own presence or a `/live` browser session — else the driver its newest presence attested
+ *  (driver co-presence, ADR 021/155). Rows with no driver are skipped, not read as none. A §3
+ *  clear also returns null here; callers that hold a fallback must use
+ *  {@link driverResolutionForSeat} so a clear is not read as "no answer". */
+export async function driverForSeat(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+): Promise<string | null> {
+  return (await driverResolutionForSeat(db, teamId, memberId)).driver;
 }
 
 /**
@@ -144,7 +162,12 @@ export async function styleDriverFor(
   claimed: string | null,
 ): Promise<string | null> {
   if (member.kind === 'human' && member.observer !== 1) return member.name;
-  return (await driverForSeat(db, teamId, member.id)) ?? claimed;
+  const resolution = await driverResolutionForSeat(db, teamId, member.id);
+  // ADR 799 §3: a cleared driver is an answer, not an absence — the claimed label
+  // (the ws hello's `frame.driver`) must not revive the departed human's block.
+  // The fallback stands only on a node that never had a human (§4).
+  if (resolution.cleared) return null;
+  return resolution.driver ?? claimed;
 }
 
 /**

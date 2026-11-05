@@ -50,7 +50,7 @@ import {
   touchAmbientPresenceRows,
 } from './presence.js';
 import { hasValidSessionLease, mintSessionLease } from './session-leases.js';
-import { driverForSeat } from './style.js';
+import { driverForSeat, styleDriverFor } from './style.js';
 import {
   bootstrapCutoverReadiness,
   createTeam,
@@ -857,6 +857,17 @@ withDrivers('store', (o) => {
       expect(remaining.map((r) => r.member_id)).toEqual([ada.id]);
       expect(await driverOfAda()).toBeNull();
       expect(await driverForSeat(db, team.id, ada.id)).toBeNull();
+
+      // The style consumer too (dolly's review): a seat re-helloing with the stale
+      // claimed label after the human left must not get that human's style block —
+      // §3 cleared is not "no answer", so there is no fallback to the claimed label.
+      expect(await styleDriverFor(db, team.id, ada, 'nick')).toBeNull();
+
+      // §4 preserved: a seat on a node that never had a human (another team here)
+      // still falls back to its claimed label.
+      const other = await createTeam(db, { slug: 'elsewhere' });
+      const bob = (await addMember(db, other, { name: 'Bob', kind: 'agent' })).row;
+      expect(await styleDriverFor(db, other.id, bob, 'bo')).toBe('bo');
     });
 
     it('resolveActivity: steering marks you working even without your own heartbeat (ADR 155)', () => {
