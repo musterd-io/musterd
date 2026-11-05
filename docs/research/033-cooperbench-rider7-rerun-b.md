@@ -107,7 +107,8 @@ inside the first calls, as in finding 032; a seat that has not ended its turn is
   `ToolSearch` 6.
 - **Spend:** $22.50 model for the ten pairs, $0.26 of wakes plus two first calls for the smoke pair,
   neither guard near its cap ($20.19 finished at the run's end as the guard counted it); Fly about
-  1.5 h of a performance-8x on `cb-run-2`; the deploy token nick minted is revoked at the end.
+  1.5 h of a performance-8x on `cb-run-2`; the deploy token nick minted stays on the box for the next
+  riders by nick's decision (run log, 22:05Z) and expires on its own ~2026-11-07 07:00Z.
 
 ## How far it reaches
 
