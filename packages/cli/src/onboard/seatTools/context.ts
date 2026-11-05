@@ -4,6 +4,7 @@ import { readBindingAt } from '../../config.js';
 import type { HarnessContext } from '../reconcile/context.js';
 import { seatRolesAt } from '../roleSkills.js';
 import { loadDeclaredSet } from './cache.js';
+import type { DeclaredSet } from './resolve.js';
 
 export interface WithSeatToolsDeps {
   /** Reads the team's grants; default: `GET /seat-tools` as the folder's bound seat. */
@@ -11,6 +12,17 @@ export interface WithSeatToolsDeps {
   /** The seat's roles; default: its seat file in the team's roster home. */
   roles?: readonly string[];
   now?: number;
+}
+
+/**
+ * The declared set for a bound agent seat (ADR 794). A folder with no seat binding and no set
+ * already on the context is a human's folder: `undefined`, and the caller writes no complement.
+ */
+export async function resolveSeatDeclared(ctx: HarnessContext): Promise<DeclaredSet | undefined> {
+  if (ctx.seatTools) return ctx.seatTools;
+  const binding = readBindingAt(ctx.worktreeRoot);
+  if (!binding || !bindingSeat(binding)) return undefined;
+  return (await withSeatTools(ctx)).seatTools;
 }
 
 /**

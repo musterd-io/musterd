@@ -18,6 +18,11 @@ export const musterdAdapter: HarnessAdapter = {
   id: 'musterd',
   surface: 'musterd',
   adapterVersion: 1,
+  isolation: {
+    plugins: { strength: 'excluded' },
+    skills: { strength: 'excluded' },
+    mcp_servers: { strength: 'excluded' },
+  },
   interactive: null,
   availability: async () => ({ available: true, detail: 'native host (ships with the CLI)' }),
   target: async () => ({ containers: [] }),
@@ -68,6 +73,12 @@ export const musterdCoreAdapter: HarnessAdapter = {
   id: MUSTERD_CORE_ID,
   surface: 'musterd',
   adapterVersion: 1,
+  // Guidance only. It loads no user plugin, skill, or MCP layer.
+  isolation: {
+    plugins: { strength: 'excluded' },
+    skills: { strength: 'excluded' },
+    mcp_servers: { strength: 'excluded' },
+  },
   interactive: null,
   availability: async () => ({ available: true }),
   target: async (ctx) => ({

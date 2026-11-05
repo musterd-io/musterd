@@ -26,6 +26,11 @@ const h = vi.hoisted(() => {
     id,
     surface: 'other',
     adapterVersion: 1,
+    isolation: {
+      plugins: { strength: 'open' as const, reason: 'test double' },
+      skills: { strength: 'open' as const, reason: 'test double' },
+      mcp_servers: { strength: 'open' as const, reason: 'test double' },
+    },
     availability: async () => ({ available: true }),
     target: async (ctx: { worktreeRoot: string }) => ({
       containers: [

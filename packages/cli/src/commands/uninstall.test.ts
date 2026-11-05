@@ -171,6 +171,11 @@ describe('uninstallCommand — v2 reconcile-to-empty (ADR 282)', () => {
       id: 'fake-a',
       surface: 'other' as const,
       adapterVersion: 1,
+      isolation: {
+        plugins: { strength: 'open' as const, reason: 'test double' },
+        skills: { strength: 'open' as const, reason: 'test double' },
+        mcp_servers: { strength: 'open' as const, reason: 'test double' },
+      },
       availability: async () => ({ available: true }),
       target: async () => ({
         containers: [
@@ -250,6 +255,11 @@ describe('uninstallCommand — v2 reconcile-to-empty (ADR 282)', () => {
       id: 'fake-a',
       surface: 'other' as const,
       adapterVersion: 1,
+      isolation: {
+        plugins: { strength: 'open' as const, reason: 'test double' },
+        skills: { strength: 'open' as const, reason: 'test double' },
+        mcp_servers: { strength: 'open' as const, reason: 'test double' },
+      },
       availability: async () => ({ available: true }),
       target: async () => ({ containers: [] }),
       desiredFragments: async () => [],

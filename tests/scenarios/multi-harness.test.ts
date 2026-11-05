@@ -15,7 +15,10 @@ import {
   type ExecSeam,
   type HarnessContext,
 } from '../../packages/cli/src/onboard/reconcile/context.js';
-import type { HarnessAdapter } from '../../packages/cli/src/onboard/reconcile/fragments.js';
+import {
+  openIsolation,
+  type HarnessAdapter,
+} from '../../packages/cli/src/onboard/reconcile/fragments.js';
 import { loadLedger } from '../../packages/cli/src/onboard/reconcile/store.js';
 
 /**
@@ -426,6 +429,7 @@ describe('multi-harness worktree selection (ADR 281/282/286 acceptance)', () => 
       id: 'future.harness',
       surface: 'other',
       adapterVersion: 1,
+      isolation: openIsolation('test double'),
       availability: async () => ({ available: true }),
       target: async (ctx) => ({
         containers: [

@@ -1501,6 +1501,13 @@ export const claudeCodeAdapter: HarnessAdapter = {
   id: 'claude-code',
   surface: 'claude-code',
   adapterVersion: 3,
+  // Interactive path, measured on docs/wiki/claude-code-seat-isolation.md (2026-11-03).
+  // Wakes exclude more; this field records the path that always holds.
+  isolation: {
+    plugins: { strength: 'excluded' },
+    skills: { strength: 'denied' },
+    mcp_servers: { strength: 'denied' },
+  },
   interactive: {
     resolveBin: () => resolveClaudeBin(),
     installHint: 'npm install -g @anthropic-ai/claude-code',

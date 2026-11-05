@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { BINDING_DIR, WorktreeProvisioningSchema } from '@musterd/protocol';
 import { resolveCodexBin } from '../../codexBin.js';
 import { readModelFromTranscript } from '../../session/transcript-model.js';
 import {
@@ -20,7 +19,8 @@ import {
   type FragmentIntent,
   type HarnessAdapter,
 } from '../reconcile/fragments.js';
-import { BUILTIN_TOOLKITS, parseToolkit } from '../toolkit.js';
+import { resolveSeatDeclared } from '../seatTools/context.js';
+import type { DeclaredSet } from '../seatTools/resolve.js';
 import {
   CODEX_HOOK_MARKER,
   codexCommonDirRoot,
@@ -33,7 +33,9 @@ import {
   removeCodexHooks,
 } from './codexHooks.js';
 import {
+  disableServer,
   hasServer,
+  listServers,
   readPermissionProfile,
   readPlugin,
   readServer,
@@ -43,6 +45,7 @@ import {
   removePermissionProfile,
   removePlugins,
   removeServers,
+  serverDisabled,
   upsertPermissionProfile,
   upsertPlugin,
   upsertServer,
@@ -281,28 +284,48 @@ function pluginIdFromFragmentKey(fragmentKey: string): string | null {
   return fragmentKey.startsWith('plugin.') ? fragmentKey.slice('plugin.'.length) : null;
 }
 
-/** Toolkit-declared Codex plugins for this worktree (ADR 323). Missing/invalid state is none. */
-function declaredCodexPlugins(ctx: HarnessContext): string[] {
-  const raw = ctx.fs.readFile(join(ctx.worktreeRoot, BINDING_DIR, 'provisioned.json'));
-  if (raw === null) return [];
-  let name: string;
-  try {
-    const parsed = WorktreeProvisioningSchema.safeParse(JSON.parse(raw) as unknown);
-    if (!parsed.success) return [];
-    name = parsed.data.toolkit;
-  } catch {
-    return [];
-  }
-  if (!name) return [];
-  const file = ctx.fs.readFile(join(ctx.worktreeRoot, BINDING_DIR, 'toolkits', `${name}.json`));
-  if (file !== null) {
-    try {
-      return parseToolkit(JSON.parse(file) as unknown).tools.codex_plugins;
-    } catch {
-      return [];
-    }
-  }
-  return BUILTIN_TOOLKITS[name]?.tools.codex_plugins ?? [];
+/** Seat-declared Codex plugins (ADR 794). A toolkit file is not a grant. No set means none. */
+function declaredCodexPlugins(declared: DeclaredSet | undefined): string[] {
+  return [...(declared?.codex_plugins ?? [])].sort();
+}
+
+const MCP_DISABLED_PREFIX = 'mcp.disabled.';
+
+function disabledServerName(fragmentKey: string): string | null {
+  return fragmentKey.startsWith(MCP_DISABLED_PREFIX)
+    ? fragmentKey.slice(MCP_DISABLED_PREFIX.length)
+    : null;
+}
+
+/**
+ * The user Codex config, read only. musterd never writes this path (ADR 031) and never sets
+ * `CODEX_HOME` (a throwaway home drops login). When the variable is already set, Codex reads
+ * its config from there, so the name list follows it.
+ */
+function userCodexToml(ctx: HarnessContext): string {
+  const root = ctx.env['CODEX_HOME'] ?? join(ctx.env['HOME'] ?? homedir(), '.codex');
+  return ctx.fs.readFile(join(root, 'config.toml')) ?? '';
+}
+
+/** One project table per user MCP server the seat does not declare. `musterd` is never closed. */
+function mcpDisableIntents(ctx: HarnessContext, declared: DeclaredSet): FragmentIntent[] {
+  const keep = new Set<string>(['musterd', ...declared.mcp_servers]);
+  return listServers(userCodexToml(ctx))
+    .filter((name) => name.length > 0 && !keep.has(name))
+    .sort()
+    .map((name) => {
+      const payload = { enabled: false as const };
+      const fragmentKey = `${MCP_DISABLED_PREFIX}${name}`;
+      return {
+        harness: 'codex' as const,
+        resourceKey: folderResourceKey(ctx.worktreeRoot, 'codex', fragmentKey),
+        containerKey: `folder ${ctx.worktreeRoot} .codex/config.toml`,
+        fragmentKey,
+        scope: 'folder' as const,
+        fingerprint: canonicalFingerprint(payload),
+        payload,
+      };
+    });
 }
 
 function pluginIntent(ctx: HarnessContext, id: string): FragmentIntent {
@@ -356,6 +379,20 @@ export const codexAdapter: HarnessAdapter = {
   id: 'codex',
   surface: 'codex',
   adapterVersion: 2,
+  // Measured 2026-11-05 on Codex 0.166.0. See docs/wiki/claude-code-seat-isolation.md.
+  isolation: {
+    plugins: {
+      strength: 'open',
+      reason:
+        'codex debug prompt-input on 2026-11-05 (0.166.0) did not show a project plugin enabled=false; plugin list is marketplace availability, and CODEX_HOME drops login',
+    },
+    skills: {
+      strength: 'open',
+      reason:
+        'codex debug prompt-input on 2026-11-05 (0.166.0) did not show a project skills.config enabled=false, and CODEX_HOME drops login',
+    },
+    mcp_servers: { strength: 'excluded' },
+  },
   interactive: {
     resolveBin: () => resolveCodexBin(),
     installHint: 'npm install -g @openai/codex',
@@ -391,6 +428,7 @@ export const codexAdapter: HarnessAdapter = {
   },
 
   async desiredFragments(ctx) {
+    const declared = await resolveSeatDeclared(ctx);
     const launch = resolveMcpLaunch();
     // ADR 495: `approve` — a headless `codex exec` wake refuses any tool call that would prompt, and
     // the musterd tools are the seat's own coordination surface, so the entry approves them itself.
@@ -401,7 +439,8 @@ export const codexAdapter: HarnessAdapter = {
       default_tools_approval_mode: 'approve',
     };
     const hooks = [...codexHookCommands()].sort((a, b) => (a.event < b.event ? -1 : 1));
-    const plugins = declaredCodexPlugins(ctx).map((id) => pluginIntent(ctx, id));
+    const plugins = declaredCodexPlugins(declared).map((id) => pluginIntent(ctx, id));
+    const disables = declared ? mcpDisableIntents(ctx, declared) : [];
     const profile = permissionProfile(ctx);
     return [
       {
@@ -432,10 +471,18 @@ export const codexAdapter: HarnessAdapter = {
         payload: profile,
       },
       ...plugins,
+      ...disables,
     ];
   },
 
   async observe(ctx, intent) {
+    const disabled = disabledServerName(intent.fragmentKey);
+    if (disabled) {
+      const toml = ctx.fs.readFile(join(ctx.worktreeRoot, '.codex', 'config.toml')) ?? '';
+      return serverDisabled(toml, disabled)
+        ? { state: 'present', fingerprint: intent.fingerprint }
+        : { state: 'absent' };
+    }
     switch (intent.fragmentKey) {
       case 'mcp.musterd': {
         const toml = ctx.fs.readFile(join(ctx.worktreeRoot, '.codex', 'config.toml'));
@@ -486,6 +533,18 @@ export const codexAdapter: HarnessAdapter = {
 
   async apply(ctx, mutation) {
     const { intent } = mutation;
+    const disabled = disabledServerName(intent.fragmentKey);
+    if (disabled) {
+      const path = join(ctx.worktreeRoot, '.codex', 'config.toml');
+      const toml = ctx.fs.readFile(path) ?? '';
+      const next =
+        mutation.kind === 'remove'
+          ? removeServers(toml, [disabled])
+          : disableServer(toml, disabled);
+      ctx.fs.mkdirp(dirname(path));
+      ctx.fs.writeFile(path, next.endsWith('\n') ? next : `${next}\n`, 0o644);
+      return;
+    }
     switch (intent.fragmentKey) {
       case 'mcp.musterd': {
         const path = join(ctx.worktreeRoot, '.codex', 'config.toml');

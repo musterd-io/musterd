@@ -456,6 +456,20 @@ export const museAdapter: HarnessAdapter = {
   id: 'muse',
   surface: MUSE_SURFACE,
   adapterVersion: 1,
+  // Measured 2026-11-05 on Muse 1.4.14. An open kind writes nothing, including no skills.activation edit.
+  isolation: {
+    plugins: {
+      strength: 'open',
+      reason:
+        'muse plugins disable has no project scope; muse plugins list on 2026-11-05 (1.4.14) did not show a project off bit',
+    },
+    skills: {
+      strength: 'open',
+      reason:
+        'muse skills disable --scope project on 2026-11-05 (1.4.14) wrote the off bit in the machine-global settings file and only resolved a workspace skill; a user skill id or path returned unknown-skill',
+    },
+    mcp_servers: { strength: 'open', reason: 'Muse reads one machine-global MCP file' },
+  },
   interactive: {
     resolveBin: () => resolveMuseBin(),
     installHint: 'curl -fsSL https://dev.meta.ai/install.sh | bash',

@@ -1,11 +1,14 @@
 import type { FragmentLedger, WorktreeProvisioning } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { harnessAdapters } from '../harnesses/index.js';
 import { saveProvisioning, loadProvisioning } from '../manifest.js';
 import { memoryFs, type HarnessContext, type MemoryFs } from './context.js';
 import { reconcileHarnesses } from './engine.js';
 import {
   canonicalFingerprint,
   folderResourceKey,
+  openIsolation,
+  TOOL_KINDS,
   type FragmentMutation,
   type HarnessAdapter,
   type ObservedFragment,
@@ -34,6 +37,7 @@ function fakeAdapter(
     id,
     surface: 'other',
     adapterVersion: 1,
+    isolation: openIsolation('test double'),
     availability: async () => ({ available: true }),
     target: async () => ({ containers: [{ containerKey, scope: 'folder', handle: null }] }),
     desiredFragments: async () => [
@@ -322,5 +326,27 @@ describe('the reconciliation action matrix (ADR 282)', () => {
     const report = await run(['fake']);
     expect(report.results[0]!.result).toBe('busy');
     expect(state.applied).toEqual([]);
+  });
+});
+
+describe('seat-tool isolation (ADR 794)', () => {
+  it('every registered adapter declares a strength for every tool kind, and every open one has a reason', () => {
+    const adapters = harnessAdapters();
+    expect(adapters.map((a) => a.id)).toContain('muse');
+    for (const adapter of adapters) {
+      for (const kind of TOOL_KINDS) {
+        const claim = adapter.isolation[kind];
+        expect(claim?.strength, `${adapter.id} ${kind}`).toMatch(/^(excluded|denied|open)$/);
+        if (claim.strength === 'open') {
+          expect(claim.reason, `${adapter.id} ${kind}`).toEqual(expect.any(String));
+          expect(claim.reason!.length, `${adapter.id} ${kind}`).toBeGreaterThan(0);
+        }
+      }
+    }
+    const muse = adapters.find((a) => a.id === 'muse')!;
+    expect(muse.isolation.mcp_servers).toEqual({
+      strength: 'open',
+      reason: 'Muse reads one machine-global MCP file',
+    });
   });
 });

@@ -78,6 +78,32 @@ export interface InteractiveLaunch {
   resume(sessionId: string | undefined): string[];
 }
 
+/** A tool layer a harness can load from outside the seat's declared set (ADR 794). */
+export const TOOL_KINDS = ['plugins', 'skills', 'mcp_servers'] as const;
+export type ToolKind = (typeof TOOL_KINDS)[number];
+
+/**
+ * How completely a harness can keep an undeclared tool out of a seat.
+ * `excluded` — it never loads. `denied` — it loads, and invocation is blocked.
+ * `open` — this workspace writes nothing for the kind. An `open` claim needs a reason.
+ */
+export type IsolationStrength = 'excluded' | 'denied' | 'open';
+
+export interface ToolIsolation {
+  strength: IsolationStrength;
+  /** Required when `strength` is `open`: why this harness cannot close the kind. */
+  reason?: string;
+}
+
+/** Three `open` claims sharing one reason. Test doubles use this; a real adapter does not. */
+export function openIsolation(reason: string): Record<ToolKind, ToolIsolation> {
+  return {
+    plugins: { strength: 'open', reason },
+    skills: { strength: 'open', reason },
+    mcp_servers: { strength: 'open', reason },
+  };
+}
+
 /** The pluggable fragment adapter. */
 export interface HarnessAdapter {
   id: HarnessId;
@@ -85,6 +111,8 @@ export interface HarnessAdapter {
   surface: Surface;
   /** Bumped when the adapter's fragment representation changes shape — recorded in the ledger. */
   adapterVersion: number;
+  /** Per tool kind, how far this harness can close an undeclared tool (ADR 794). */
+  isolation: Record<ToolKind, ToolIsolation>;
   /** The terminal launch entry (ADR 491); null for a harness with none (the native `musterd host`). */
   interactive: InteractiveLaunch | null;
   availability(ctx: HarnessContext): Promise<HarnessAvailability>;

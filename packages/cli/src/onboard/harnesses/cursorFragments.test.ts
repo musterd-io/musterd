@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { memoryFs, type HarnessContext, type MemoryFs } from '../reconcile/context.js';
-import { cursorAdapter } from './cursor.js';
+import { emptyDeclaredSet } from '../seatTools/resolve.js';
+import { cursorAdapter, cursorProjectSlug } from './cursor.js';
 
 const ROOT = '/w/a';
 const MCP = '/w/a/.cursor/mcp.json';
@@ -21,6 +22,18 @@ function ctxOf(fs: MemoryFs): HarnessContext {
 async function intentsOf(ctx: HarnessContext) {
   return cursorAdapter.desiredFragments(ctx, await cursorAdapter.target(ctx));
 }
+
+describe('cursor project slug', () => {
+  it('drops the leading slash and replaces each slash with a hyphen', () => {
+    expect(cursorProjectSlug('/private/tmp/seat-tools-spike/cursor-empty')).toBe(
+      'private-tmp-seat-tools-spike-cursor-empty',
+    );
+    expect(cursorProjectSlug('/Users/nick/musterd/revive/agents/wanderer')).toBe(
+      'Users-nick-musterd-revive-agents-wanderer',
+    );
+    expect(cursorProjectSlug(ROOT)).toBe('w-a');
+  });
+});
 
 describe('cursorAdapter — managed fragments', () => {
   it('gives .cursor/mcp.json, hooks, and guidance independent fragment keys and containers', async () => {
@@ -176,5 +189,46 @@ describe('cursorAdapter — managed fragments', () => {
       state: 'present',
       fingerprint: guidance.fingerprint,
     });
+  });
+
+  it('cursor closes an undeclared mcp_servers', async () => {
+    const fs = memoryFs();
+    const userPath = '/home/u/.cursor/mcp.json';
+    const user = `${JSON.stringify({
+      mcpServers: {
+        eleven: { command: 'npx' },
+        kept: { command: 'npx' },
+        musterd: { command: 'npx' },
+      },
+    })}\n`;
+    fs.writeFile(userPath, user, 0o600);
+    const disabled = '/home/u/.cursor/projects/w-a/mcp-disabled.json';
+
+    const human = await intentsOf(ctxOf(fs));
+    expect(human.map((i) => i.fragmentKey).sort()).toEqual(['guidance', 'hooks', 'mcp.musterd']);
+    expect(fs.readFile(disabled)).toBeNull();
+    expect(fs.readFile(userPath)).toBe(user);
+
+    const ctx: HarnessContext = {
+      ...ctxOf(fs),
+      seatTools: { ...emptyDeclaredSet(), mcp_servers: ['kept'] },
+    };
+    const intents = await intentsOf(ctx);
+    const close = intents.find((i) => i.fragmentKey === 'mcp.disabled')!;
+    expect(close.payload).toEqual(['eleven']);
+    expect(close.containerKey).toBe(`folder ${ROOT} cursor-mcp-disabled`);
+
+    await cursorAdapter.apply(ctx, { kind: 'write', intent: close });
+    expect(JSON.parse(fs.readFile(disabled)!)).toEqual(['eleven']);
+    expect(fs.readFile(userPath)).toBe(user);
+    expect(fs.readFile(MCP)).toBeNull();
+    expect(await cursorAdapter.observe(ctx, close)).toEqual({
+      state: 'present',
+      fingerprint: close.fingerprint,
+    });
+
+    await cursorAdapter.apply(ctx, { kind: 'remove', intent: close });
+    expect(fs.readFile(disabled)).toBeNull();
+    expect(fs.readFile(userPath)).toBe(user);
   });
 });
