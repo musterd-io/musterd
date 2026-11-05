@@ -191,12 +191,12 @@ withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
       // Ada: the MCP session closes a few seconds before the hook posts; the hook's own CLI claim
       // parks a few seconds after it; a later session of her own parked past the settle window.
       await parked(db, ada.id, 'mcp', exitAt - 3_000);
-      // The hook's claim is the session that posts the exit: created just before the row's ts.
-      await parked(db, ada.id, 'hook', exitAt + 4_000, exitAt - 100);
+      // The hook's claim is the session that posts the exit: created at or before the row's ts.
+      await parked(db, ada.id, 'hook', exitAt + 4_000, exitAt);
       const later = await parked(db, ada.id, 'later', exitAt + EXIT_SETTLE_MS + 1_000);
-      // A session the seat's person starts AFTER the exit and parks inside the settle window is
-      // not the exiting run, whatever the clock says (big-body's acceptance read, 2026-11-05).
-      const fresh = await parked(db, ada.id, 'fresh', exitAt + 30_000, exitAt + 5_000);
+      // A session the seat's person starts AFTER the exit — by one millisecond — and parks inside
+      // the settle window is not the exiting run (big-body's acceptance reads, 2026-11-05).
+      const fresh = await parked(db, ada.id, 'fresh', exitAt + 30_000, exitAt + 1);
       await parked(db, bo.id, 'bo', exitAt + 1_000);
       await parked(db, cy.id, 'cy', exitAt + 1_000);
       expect(await listReclaimableMemberIds(db, team.id, now)).toEqual(
