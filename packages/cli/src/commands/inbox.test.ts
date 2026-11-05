@@ -20,6 +20,7 @@ import { teamCommand } from './team.js';
  */
 describe('inbox command', () => {
   let server: RunningServer;
+  let db: ReturnType<typeof openDb>;
   let dir: string;
   let serverUrl: string;
   let ada: HttpClient; // sends as the agent seat Ada (claimed credential + Presence lease)
@@ -27,7 +28,8 @@ describe('inbox command', () => {
   const base = Date.UTC(2026, 6, 7, 12, 0);
 
   beforeEach(async () => {
-    server = createServer({ db: openDb(':memory:'), port: 0 });
+    db = openDb(':memory:');
+    server = createServer({ db, port: 0 });
     const { port } = await server.listen();
     serverUrl = `http://127.0.0.1:${port}`;
     process.env['MUSTERD_SERVER'] = serverUrl;
@@ -289,6 +291,89 @@ describe('inbox command', () => {
     const res = await capture(() => inboxCommand(parseArgs(['--unread', '--json'])));
     expect(JSON.parse(res.out) as unknown[]).toHaveLength(205);
     expect(await unreadCount()).toBe(0);
+  });
+
+  describe('ADR 811: a deep stale backlog is skipped, not walked', () => {
+    const WEEK = 7 * 24 * 60 * 60 * 1000;
+    /** Move every row received so far, and the seats themselves, eight days into the past. The
+     *  seats move too because a member's default cursor floor is its own birth (store/cursors.ts):
+     *  rows older than the seat would read as already read, which is not the case under test. */
+    function ageEverything(): void {
+      const by = WEEK + 24 * 60 * 60 * 1000;
+      db.prepare('UPDATE messages SET created_at = created_at - ?').run(by);
+      db.prepare('UPDATE members SET created_at = created_at - ?').run(by);
+    }
+    /** 205 broadcasts received eight days ago (deeper than one daemon page), then four fresh rows:
+     *  three broadcasts and one message to nick. */
+    async function seedStaleBacklog(): Promise<void> {
+      await seed(205, 200);
+      ageEverything();
+      await seed(3);
+      await ada.send(
+        'dawn',
+        makeEnvelope({
+          id: ulid(),
+          team: 'dawn',
+          from: 'Ada',
+          to: { kind: 'member', name: 'nick' },
+          act: 'message',
+          body: 'for you',
+          ts: base + 300 * 60_000,
+          thread: null,
+          meta: null,
+        }),
+      );
+    }
+
+    it('a consuming read skips the stale unowed rows, says how many, and shows the rest', async () => {
+      await seedStaleBacklog();
+      const res = await capture(() => inboxCommand(parseArgs(['--unread'])));
+      expect(res.code).toBe(0);
+      expect(res.out).toContain('skipped 205 stale unread older than a week that nobody owed you');
+      expect(res.out).toContain('counted, not shown (ADR 811)');
+      expect(res.out).toContain('for you');
+      expect(res.out).toContain('msg 2');
+      expect(res.out).not.toContain('msg 100');
+      expect(await unreadCount()).toBe(0);
+    });
+
+    it('the bounded default view skips too, and marks read only what it showed', async () => {
+      await seedStaleBacklog();
+      const res = await capture(() => inboxCommand(parseArgs([])));
+      expect(res.out).toContain('skipped 205 stale unread');
+      expect(res.out).toContain('for you');
+      expect(await unreadCount()).toBe(0);
+    });
+
+    it('a peek never skips — the cursor stays where it was', async () => {
+      await seedStaleBacklog();
+      const res = await capture(() => inboxCommand(parseArgs(['--unread', '--peek', '--json'])));
+      expect(JSON.parse(res.out) as unknown[]).toHaveLength(209);
+      expect(await unreadCount()).toBe(209);
+    });
+
+    it('a directed row older than the window stops the skip and is shown', async () => {
+      await seed(205, 200);
+      await ada.send(
+        'dawn',
+        makeEnvelope({
+          id: ulid(),
+          team: 'dawn',
+          from: 'Ada',
+          to: { kind: 'member', name: 'nick' },
+          act: 'message',
+          body: 'old but yours',
+          ts: base + 300 * 60_000,
+          thread: null,
+          meta: null,
+        }),
+      );
+      ageEverything();
+      const res = await capture(() => inboxCommand(parseArgs(['--unread'])));
+      expect(res.out).toContain('skipped 205 stale unread');
+      expect(res.out).toContain('old but yours');
+      expect(await unreadCount()).toBe(0);
+    });
   });
 
   it('leads with the directed acts the daily view counts (ADR 770)', async () => {

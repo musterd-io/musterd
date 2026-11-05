@@ -65,9 +65,11 @@ cannot fall behind without bound, without ever passing something it was owed?
 - ADR 287's rule now reads: the cursor never passes what you did not see, and a count of stale rows
   nobody owed you is seeing them. ADR 433's fold stays the rendering for ambient rows within the
   window. Both ADRs carry a dated note pointing here.
-- The CLI's `musterd inbox` does not call the skip in this increment; a seat whose human reads the
-  CLI banner still drains the old way. Follows-up: lane `01M6M61A0EBD4KWK7PXB8SR3R7` carries the
-  CLI call as its last item.
+- The CLI's `musterd inbox` did not call the skip in the first increment; a seat whose human read the
+  CLI banner still drained the old way. _(2026-11-05: landed in lane `01M6M61A0EBD4KWK7PXB8SR3R7` —
+  a consuming read whose first unread page is `truncated` calls the skip before walking, prints
+  `skipped N stale unread … (ADR 811)` under the header (stderr beside `--json`), and refetches from
+  the new cursor; `--peek`, a lens, and `--limit 0` never skip.)_
 
 ## Observability & Evaluation
 
