@@ -1,4 +1,5 @@
 import {
+  authorityProofForKeyRevoke,
   authorityProofForPasskeyEnroll,
   b64urlToBytes,
   bytesToB64url,
@@ -131,4 +132,28 @@ export async function enrollPasskey(
     created_at: Date.now(),
     revoked_at: null,
   };
+}
+
+/**
+ * ADR 808 inc B: revoke one of this human's keys from /live. The approval is a standing key's
+ * signature over the server-built `device_key_admin` descriptor (ADR 662 decision 6), collected on
+ * this page; the daemon decides, as it does for `musterd authority revoke`. The sole standing key
+ * may retire itself (the lost-device path), and the caller says so before asking.
+ */
+export async function revokeDeviceKey(
+  cfg: LiveConfig,
+  member: string,
+  keyId: string,
+): Promise<void> {
+  const approval = await authorityProofForKeyRevoke(cfg, member, keyId);
+  if (!approval) {
+    throw new Error(
+      'none of your passkeys can sign on this page, so it cannot approve a revocation here',
+    );
+  }
+  await apiPost<{ ok: true }>(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/authority/keys/${encodeURIComponent(keyId)}/revoke`,
+    { approval },
+  );
 }

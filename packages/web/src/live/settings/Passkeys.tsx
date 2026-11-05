@@ -4,6 +4,7 @@ import {
   enrollPasskey,
   enrollRefusal,
   fetchMyDeviceKeys,
+  revokeDeviceKey,
   signsHere,
   type DeviceKey,
 } from '../passkeyEnroll';
@@ -29,6 +30,7 @@ export function Passkeys({
 }) {
   const [keys, setKeys] = useState<DeviceKey[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
   const [note, setNote] = useState<SheetNote>(null);
   const refresh = useCallback(async () => {
     try {
@@ -56,6 +58,30 @@ export function Passkeys({
   const elsewhereOrigins = [...new Set(elsewhere.map((k) => k.origin ?? k.rp_id ?? ''))].filter(
     Boolean,
   );
+
+  // ADR 808 inc B: a revoke is approved by a key that signs here; with none, the control is off and
+  // the line above already says why. Retiring the last passkey is allowed (ADR 662 dec. 6) but named.
+  const canApproveHere = here.length > 0;
+  const revoke = async (k: DeviceKey) => {
+    const last = passkeys.length === 1;
+    const sure = window.confirm(
+      last
+        ? 'This is your only passkey. Revoking it leaves your phone (if paired) as your only signer, and a new passkey will need approval. Revoke it?'
+        : `Revoke the passkey from ${since(k.created_at)}? It will no longer sign for you.`,
+    );
+    if (!sure) return;
+    setRevoking(k.id);
+    setNote(null);
+    try {
+      await revokeDeviceKey(cfg, me, k.id);
+      setNote({ tone: 'ok', text: 'passkey revoked' });
+      await refresh();
+    } catch (e) {
+      setNote({ tone: 'err', text: enrollRefusal(e) });
+    } finally {
+      setRevoking(null);
+    }
+  };
 
   const enroll = async () => {
     setBusy(true);
@@ -106,6 +132,15 @@ export function Passkeys({
                     <span className="lc-set__hint"> · made before its origin was recorded</span>
                   )}
                 </span>
+                <button
+                  type="button"
+                  className="lc-set__btn lc-keys__revoke"
+                  disabled={busy || revoking !== null || !canApproveHere}
+                  aria-label={`Revoke the passkey from ${since(k.created_at)}`}
+                  onClick={() => void revoke(k)}
+                >
+                  {revoking === k.id ? 'Revoking…' : 'Revoke'}
+                </button>
               </li>
             );
           })}

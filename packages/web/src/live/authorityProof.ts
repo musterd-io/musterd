@@ -111,6 +111,18 @@ export async function authorityProofForPasskeyEnroll(
   });
 }
 
+/** ADR 808 inc B: revoking a device key from /live, signed by a key that works on this page. */
+export async function authorityProofForKeyRevoke(
+  cfg: LiveConfig,
+  member: string,
+  keyId: string,
+): Promise<ApprovalProof | null> {
+  return authorityProofForDescriptor(cfg, 'device_key_admin', member, {
+    action: 'revoke',
+    key_id: keyId,
+  });
+}
+
 async function authorityProofForDescriptor(
   cfg: LiveConfig,
   act: string,
