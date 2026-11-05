@@ -65,9 +65,7 @@ without a second admin?
    hub operator on the hub's own loopback may mint a one-time recovery code for that member instead
    is a policy question that reverses part of nick's 2026-10-19 call, and it is not decided here.
    Follows-up: lane `01M6N3YGD4GNA1PGK90TZV5V5W` holds the proposal for nick to accept or decline.
-   _(Amended 2026-11-05: nick accepted the proposal the same day ("I like your proposal"). The
-   hub's operator may mint that code — see the dated consequence below for its bounds; everything
-   else in this decision stands.)_
+   _(Amended 2026-11-05: nick accepted the proposal that day. See the amendment below.)_
 
 ### Increments
 
@@ -76,7 +74,7 @@ without a second admin?
 | A — origin and rp_id recorded, shown, no silent QR     | `01M6N3XZDCCQT2RG1H76HHDJC4` |
 | B — revoke from /live settings                         | `01M6N3Y40H80TVE8N1AK6655H3` |
 | C — the phone approves a new passkey                   | `01M6N3YA0JSBAR8GV6NS015PHA` |
-| D — operator-minted recovery code (accepted 2026-11-05)   | `01M6N3YGD4GNA1PGK90TZV5V5W` |
+| D — operator-minted recovery code (proposed, nick decides) | `01M6N3YGD4GNA1PGK90TZV5V5W` |
 
 ## Consequences
 
@@ -91,19 +89,26 @@ without a second admin?
 
 **2026-11-05 — increment D accepted and built (lane `01M6N3YGD4GNA1PGK90TZV5V5W`).** nick accepted
 the proposal in chat the day the ADR landed. The exception to ADR 662's 2026-10-19 fail-closed rule
-is one act with four bounds: `musterd authority recover <member>` is taken only from the hub
-machine's own loopback (the same local-process trust as `node join` and `node repoint`) and only on
-a hub; it is refused while any key of the member's signs somewhere the hub serves (a phone key, a
-platform key, a passkey whose relying party is a configured passkey hostname, or a passkey from
-before origins were recorded); one code is live per member, for five minutes, used once; and the
-mint is audited (`device_key.recovery_code`, with the operator's OS user) and announced to the whole
-team by the board seat, so a recovery nobody asked for is seen the minute it is minted. The code is
-an enrollment challenge: the registration that spends it needs no standing-key approval and no
-admin countersign, and re-checks at that moment that no usable key stands. The member redeems it on
-/live under Your passkeys ("I have a recovery code"). The trade, stated to nick: anyone with a shell
-on the hub box can re-key any human — no new reach, since they can already read the store, but a
-new act, now on the record. Falsifier: a recovery code minted or spent while a usable key stands, or
-one minted from any address but the hub's loopback.
+is one act with these bounds. `musterd authority recover <member>` is taken only on a hub, only
+from the hub machine's own loopback, and only with the daemon's recovery secret — a 0600 file the
+daemon writes beside its store on the first ask, readable by its own OS user and by nobody else,
+because on a hub that also runs agent seats (the box does) loopback alone would let a seat re-key a
+human. What the caller says about themself is recorded as a claim, never as the proof. It is refused
+while any key of the member's is known to sign somewhere the hub serves (a phone key, a platform
+key, or a passkey whose recorded relying party is a configured passkey hostname; a passkey from
+before origins were recorded does not count, since it may well be dead — the operator asks the
+member first). It is refused while another human admin holds such a key: then ADR 662's countersign
+applies unchanged, and the code is only for a team with nobody left who can vouch. One code is live
+per member, for five minutes, used once; the mint is audited (`device_key.recovery_code`) and
+announced to the whole team by the board seat, so a recovery nobody asked for is seen the minute it
+is minted. The code is an enrollment challenge: the registration that spends it is accepted only
+from the member it was minted for, signed in as themself (two factors: the code and their
+credential), needs no standing-key approval and no admin countersign, and re-checks at that moment
+that no usable key and no countersigner stands. The member redeems it on /live under Your passkeys
+("I have a recovery code"). The trade, stated to nick: the hub machine's own operator can re-key a
+human who has no other way back — no new reach, since they can already read the store, but a new
+act, now on the record. Falsifier: a recovery code minted or spent while a usable key or a
+countersigning admin stands, minted without the secret, or spent by anyone but the member.
 
 ## Observability & Evaluation
 

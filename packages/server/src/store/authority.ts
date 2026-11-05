@@ -12,6 +12,8 @@ import {
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { appendAudit } from './audit.js';
+import { listMembers } from './members.js';
+import { resolveCapabilities } from './rows.js';
 import {
   assertionFailure,
   extractAuthData,
@@ -249,8 +251,27 @@ export function usableKeyStands(keys: readonly DeviceKey[], hosts: readonly stri
       k.revokedAt === null &&
       (k.kind === 'phone' ||
         k.kind === 'platform' ||
-        (k.kind === 'passkey' && (k.rpId === null || hosts.includes(k.rpId)))),
+        (k.kind === 'passkey' && k.rpId !== null && hosts.includes(k.rpId))),
   );
+}
+
+/**
+ * ADR 808 inc D: is there ANOTHER human admin whose key is known to sign here? Then the fail-closed
+ * countersign of ADR 662 still applies and no recovery code is minted: the admin vouches, as the
+ * rule always said. The code is only for a team with nobody left who can.
+ */
+export async function recoveryCountersignerStands(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+  hosts: readonly string[],
+): Promise<string | null> {
+  const members = await listMembers(db, teamId);
+  for (const m of members) {
+    if (m.id === memberId || m.kind !== 'human' || !resolveCapabilities(m).is_admin) continue;
+    if (usableKeyStands(await listDeviceKeys(db, teamId, m.id), hosts)) return m.name;
+  }
+  return null;
 }
 
 /**
@@ -272,12 +293,23 @@ export async function issueRecoveryCode(
   },
 ): Promise<
   | { ok: true; code: string; expiresAt: number }
-  | { ok: false; reason: 'agent_member' | 'usable_key_stands' | 'recovery_live' }
+  | {
+      ok: false;
+      reason: 'agent_member' | 'usable_key_stands' | 'countersigner_stands' | 'recovery_live';
+      countersigner?: string;
+    }
 > {
   const now = input.now ?? Date.now();
   if (input.member.kind !== 'human') return { ok: false, reason: 'agent_member' };
   const keys = await listDeviceKeys(db, input.teamId, input.member.id);
   if (usableKeyStands(keys, input.hosts)) return { ok: false, reason: 'usable_key_stands' };
+  const countersigner = await recoveryCountersignerStands(
+    db,
+    input.teamId,
+    input.member.id,
+    input.hosts,
+  );
+  if (countersigner) return { ok: false, reason: 'countersigner_stands', countersigner };
   const live = await db.get<{ code_hash: string }>(
     `SELECT code_hash FROM enrollment_codes
       WHERE team_id = ? AND member_id = ? AND recovery = 1 AND used_at IS NULL AND expires_at >= ?`,
@@ -298,13 +330,15 @@ export async function issueRecoveryCode(
     action: 'device_key.recovery_code',
     target: input.member.name,
     result: 'allow',
-    detail: { issued_by: input.issuedBy, expires_at: expiresAt },
+    // `claimed_by` is what the caller typed about themself; the proof of who they are is the
+    // daemon's own recovery secret, readable only by the daemon's OS user (the route checks it).
+    detail: { claimed_by: input.issuedBy, expires_at: expiresAt, proof: 'operator_secret' },
   });
   return { ok: true, code, expiresAt };
 }
 
 /** Is this challenge a live recovery code of this member's (ADR 808 inc D)? Read, not spent. */
-async function recoveryChallengeStands(
+export async function recoveryChallengeStands(
   db: Driver,
   teamId: string,
   memberId: string,
@@ -981,6 +1015,14 @@ export async function enrollPasskeyGuarded(
     (await recoveryChallengeStands(db, input.teamId, input.member.id, input.challenge, now));
   if (recovery && usableKeyStands(active, input.recoveryHosts!)) {
     return { ok: false, reason: 'usable_key_stands' };
+  }
+  // …and re-checked: an admin who can countersign appeared since the mint, so the ADR 662 rule
+  // applies again and the code is not enough.
+  if (
+    recovery &&
+    (await recoveryCountersignerStands(db, input.teamId, input.member.id, input.recoveryHosts!))
+  ) {
+    return { ok: false, reason: 'countersign_required' };
   }
   if (recovery) {
     // nothing more to prove: the operator's loopback act is the authority (audited at mint)

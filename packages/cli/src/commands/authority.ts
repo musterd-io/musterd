@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import {
   ApprovalProofSchema,
@@ -8,6 +9,7 @@ import {
 } from '@musterd/protocol';
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
+import { machineStatePath } from '../machinePaths.js';
 import { theme } from '../render/theme.js';
 import { success } from '../render/ui.js';
 import { resolve, resolveRead } from './helpers.js';
@@ -644,7 +646,18 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     const who = parsed.positionals[1];
     if (!who) throw new CliError(USAGE, 2);
     const { team, http } = resolveRead(parsed.flags, { claimSeatPerRequest: true });
+    // The daemon's recovery secret (0600 beside its store) is the proof this is the daemon's own
+    // OS user, not merely a local process — on a hub that also runs agent seats, loopback is not
+    // enough. The daemon writes the file on the first ask; a second ask then carries it.
+    const secretPath = machineStatePath('MUSTERD_RECOVERY_SECRET', 'recovery.secret');
+    let operatorSecret: string | undefined;
+    try {
+      operatorSecret = readFileSync(secretPath, 'utf8').trim();
+    } catch {
+      operatorSecret = undefined;
+    }
     const minted = await http.issueRecoveryCode(team, {
+      ...(operatorSecret ? { operator_secret: operatorSecret } : {}),
       member: who,
       issued_by: userInfo().username,
     });
@@ -658,7 +671,7 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
       }) +
         '\n' +
         `  ${minted.code}\n` +
-        `  ${theme.meta('The team was told a recovery code was minted; the audit row names you.')}\n`,
+        `  ${theme.meta('The team was told a recovery code was minted; the audit row records the daemon secret as the proof and your OS user as a claim.')}\n`,
     );
     return 0;
   }

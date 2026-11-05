@@ -1607,7 +1607,7 @@ export class HttpClient {
   /** ADR 808 inc D: the hub operator mints a passkey recovery code for a member (loopback only). */
   async issueRecoveryCode(
     slug: string,
-    body: { member: string; issued_by?: string },
+    body: { member: string; issued_by?: string; operator_secret?: string },
   ): Promise<{ code: string; expires_at: number; redeem_at: string | null }> {
     return this.request('POST', `/teams/${slug}/authority/recoveries`, body) as Promise<{
       code: string;

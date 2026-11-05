@@ -1,5 +1,5 @@
 import { createHash, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
-import { descriptorSigningBytes } from '@musterd/protocol';
+import { descriptorSigningBytes, GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import { beforeEach, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
@@ -448,6 +448,49 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
     ).toEqual({
       ok: false,
       reason: 'usable_key_stands',
+    });
+    // Another human ADMIN whose key is known to sign here can countersign the ADR 662 way, so no
+    // code is minted for anyone while they stand — the code is for a team with nobody left who can.
+    const swetha = (await addMember(db, team, { name: 'swetha', kind: 'human' })).row;
+    const sid = (await addMember(db, team, { name: 'sid', kind: 'human' })).row;
+    await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: sid.id,
+      publicKey: generateKeyPairSync('ed25519')
+        .publicKey.export({ format: 'der', type: 'spki' })
+        .toString('base64url'),
+      kind: 'passkey',
+      credentialId: 'sid-dead',
+      origin: 'http://localhost:4849',
+      rpId: 'localhost',
+    });
+    // nick now holds a passkey on this hub but is no admin: sid is still recoverable.
+    expect(
+      (await issueRecoveryCode(db, { teamId: team.id, member: sid, issuedBy: 'ops', hosts })).ok,
+    ).toBe(true);
+    // swetha, made admin with a key that signs here, is a countersigner: sid is no longer.
+    await enrollDeviceKey(db, {
+      teamId: team.id,
+      memberId: swetha.id,
+      publicKey: generateKeyPairSync('ed25519')
+        .publicKey.export({ format: 'der', type: 'spki' })
+        .toString('base64url'),
+      kind: 'passkey',
+      credentialId: 'swetha-here',
+      origin: 'https://hub.example.ts.net',
+      rpId: 'hub.example.ts.net',
+    });
+    await db.run('UPDATE members SET capabilities = ? WHERE id = ?', [
+      JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
+      swetha.id,
+    ]);
+    const bo = (await addMember(db, team, { name: 'bo', kind: 'human' })).row;
+    expect(
+      await issueRecoveryCode(db, { teamId: team.id, member: bo, issuedBy: 'ops', hosts }),
+    ).toEqual({
+      ok: false,
+      reason: 'countersigner_stands',
+      countersigner: 'swetha',
     });
     // A phone key alone also counts as usable; an agent cannot be recovered.
     const ada = (await addMember(db, team, { name: 'ada', kind: 'agent', role: '' })).row;

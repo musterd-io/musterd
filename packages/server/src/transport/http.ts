@@ -1,8 +1,8 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { hostname } from 'node:os';
-import { extname, join, resolve, sep } from 'node:path';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 import {
   AllowancePostSchema,
@@ -294,6 +294,7 @@ import {
   issueEnrollmentChallenge,
   issueRecoveryCode,
   listDeviceKeys,
+  recoveryChallengeStands,
   requireAuthority,
   revokeKeyGuarded,
   storePasskeyProof,
@@ -1451,8 +1452,35 @@ const RevokeKeyBody = z.object({
 /** ADR 808 inc D: whom the hub's operator is recovering, and who they are (an OS user name). */
 const RecoveryCodeBody = z.object({
   member: z.string().min(1).max(128),
+  /** What the operator says about themself — recorded as a claim, never as the proof. */
   issued_by: z.string().min(1).max(128).optional(),
+  /** The daemon's own recovery secret (`recoverySecretPath`): the proof the caller is its OS user. */
+  operator_secret: z.string().min(16).max(256).optional(),
 });
+
+/**
+ * ADR 808 inc D: the recovery secret lives beside the store, 0600, written by the daemon the first
+ * time it is asked for. Only the daemon's OS user can read it, so presenting it proves the caller is
+ * that user — which loopback alone does not on a hub that also runs agent seats.
+ */
+function recoverySecretPath(ctx: Ctx): string {
+  return join(dirname(ctx.config.dbPath), 'recovery.secret');
+}
+function recoverySecretPresented(ctx: Ctx, presented: string | undefined): boolean {
+  if (ctx.config.dbPath === ':memory:' || !presented) return false;
+  const path = recoverySecretPath(ctx);
+  let secret: string;
+  try {
+    secret = readFileSync(path, 'utf8').trim();
+  } catch {
+    secret = randomBytes(32).toString('base64url');
+    writeFileSync(path, `${secret}\n`, { mode: 0o600 });
+    return false; // the first ask writes the file; the operator reads it and asks again
+  }
+  const a = Buffer.from(secret, 'utf8');
+  const b = Buffer.from(presented.trim(), 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 const PasskeyEnrollBody = z.object({
   actor: z.string().min(1),
@@ -5665,12 +5693,20 @@ export async function handleHttp(
       if (method === 'POST' && rest === '/authority/recoveries') {
         requireLocalPeer(ctx, req, 'minting a passkey recovery code');
         const team = await requireTeam(ctx.db, slug);
+        // Loopback is not enough on a hub where seats run as local processes too (the box hosts
+        // agent seats): the caller must also present the daemon's recovery secret, a file only the
+        // daemon's OS user can read (0600 beside the store). The CLI reads it; a jailed seat cannot.
+        const body = parseOrBadRequest(RecoveryCodeBody, await readJson(req));
+        if (!recoverySecretPresented(ctx, body.operator_secret))
+          throw new MusterdError(
+            'forbidden',
+            `minting a recovery code needs the daemon's recovery secret, which only the daemon's own OS user can read: ${recoverySecretPath(ctx)} — run \`musterd authority recover\` as that user on the hub`,
+          );
         if (await joinerEnrollment(ctx.db, team.id, team.slug))
           throw new MusterdError(
             'validation',
             'a recovery code is minted on the hub machine, not on a joiner — run this on the hub',
           );
-        const body = parseOrBadRequest(RecoveryCodeBody, await readJson(req));
         const target = await getMemberByName(ctx.db, team.id, body.member);
         if (!target || target.left_at !== null || target.kind !== 'human')
           throw new MusterdError('validation', `no human member "${body.member}" on ${slug}`);
@@ -5685,6 +5721,7 @@ export async function handleHttp(
           const why: Record<typeof minted.reason, string> = {
             agent_member: 'only a human has passkeys to recover',
             usable_key_stands: `${target.name} still has a key that signs somewhere this hub serves (a phone, or a passkey on a configured origin) — use it, or revoke it first`,
+            countersigner_stands: `${minted.countersigner ?? 'another admin'} is a human admin with a key that signs here: they countersign ${target.name}'s enrollment the ADR 662 way (\`musterd authority enroll --confirmed-by\`); a recovery code is only for a team with nobody left who can`,
             recovery_live: `a recovery code for ${target.name} is already live; wait for it to expire (5 minutes)`,
           };
           throw new MusterdError('validation', why[minted.reason]);
@@ -5700,9 +5737,9 @@ export async function handleHttp(
               from: voice.name,
               to: { kind: 'team' },
               act: 'message',
-              body: `A passkey recovery code was minted for ${target.name} on the hub machine by ${body.issued_by ?? 'the operator'}; it expires in 5 minutes. If nobody asked for this, revoke ${target.name}'s next passkey.`,
+              body: `A passkey recovery code was minted for ${target.name} by the hub machine's operator${body.issued_by ? ` (who says they are ${body.issued_by})` : ''}; it expires in 5 minutes. If nobody asked for this, revoke ${target.name}'s next passkey.`,
               meta: {
-                device_key_recovery: { member: target.name, issued_by: body.issued_by ?? null },
+                device_key_recovery: { member: target.name, claimed_by: body.issued_by ?? null },
               },
             });
             await routeEnvelope(ctx, team, voice, env, undefined, true);
@@ -5722,6 +5759,16 @@ export async function handleHttp(
         const member = await getMemberByName(ctx.db, team.id, body.actor);
         if (!member || member.left_at !== null) {
           throw new MusterdError('validation', `no member "${body.actor}" on ${slug}`);
+        }
+        // ADR 808 inc D: a recovery code is spent only by the member it was minted for, signed in
+        // as themself — the code and their credential are two factors, never the code alone.
+        if (await recoveryChallengeStands(ctx.db, team.id, member.id, body.challenge, Date.now())) {
+          const signedIn = await authTouch(ctx, slug, req);
+          if (signedIn.member.id !== member.id)
+            throw new MusterdError(
+              'forbidden',
+              `a recovery code is redeemed by ${member.name}, signed in as themself`,
+            );
         }
         const relayed = await authorityRelayIfJoiner(ctx, team, {
           op: 'passkeys.enroll',
