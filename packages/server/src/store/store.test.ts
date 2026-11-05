@@ -843,14 +843,18 @@ withDrivers('store', (o) => {
       await release(db, nickRow.id, 60_000);
       expect(await driverOfAda()).toBeNull();
 
-      // Still null 25h later (cider's review): "ever had a human" has no window, so the
-      // stale label never revives — on the roster read and the style read alike.
-      const aged = Date.now() - 25 * 60 * 60 * 1000;
-      await db.run('UPDATE presence SET last_seen_at = ? WHERE member_id IN (?, ?)', [
-        aged,
-        nick.id,
-        swetha.id,
-      ]);
+      // Still null after the reaper deletes the held human rows (miley's review):
+      // presence rows are live attachments, not history — once reapStale past the hold
+      // removes them, the node must still read as had-a-human on both reads, or §4's
+      // static label revives. Ada's heartbeat is bumped so only the human rows reap.
+      const reapNow = Date.now() + 61_000;
+      await db.run('UPDATE presence SET last_seen_at = ? WHERE member_id = ?', [reapNow, ada.id]);
+      await reapStale(db, 45_000, 0, reapNow);
+      const remaining = await db.all<{ member_id: string }>(
+        'SELECT member_id FROM presence WHERE team_id = ?',
+        [team.id],
+      );
+      expect(remaining.map((r) => r.member_id)).toEqual([ada.id]);
       expect(await driverOfAda()).toBeNull();
       expect(await driverForSeat(db, team.id, ada.id)).toBeNull();
     });
