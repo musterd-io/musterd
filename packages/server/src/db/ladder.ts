@@ -1317,6 +1317,27 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec(`ALTER TABLE enrollment_codes ADD COLUMN IF NOT EXISTS issued_by TEXT`);
     },
   },
+  {
+    // v144 — ADR 799 §3 (lane 01M61SG460): "this node had a human" must outlive the human's
+    // presence row. Presence rows are live attachments — release holds one only until
+    // held_until, then reapStale deletes it, and the node read as never-had-a-human so §4's
+    // static label revived. One marker row per (team, node) ever signed in on by a
+    // non-observer human, written at attach/fold/reap; node_key '' is the local daemon
+    // (presence.node IS NULL). Backfilled from the presence rows still held at upgrade.
+    version: 144,
+    sql: `CREATE TABLE IF NOT EXISTS node_humans (
+  team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  node_key TEXT NOT NULL,
+  first_seen_at BIGINT NOT NULL,
+  PRIMARY KEY (team_id, node_key)
+);
+INSERT INTO node_humans (team_id, node_key, first_seen_at)
+  SELECT p.team_id, COALESCE(p.node, ''), MIN(p.last_seen_at) FROM presence p
+    JOIN members m ON m.id = p.member_id
+   WHERE m.kind = 'human' AND m.observer = 0
+   GROUP BY p.team_id, COALESCE(p.node, '')
+  ON CONFLICT(team_id, node_key) DO NOTHING`,
+  },
 ];
 
 /** The interrupt window's text guard (interruptCandidates.ts): a necessary condition for a row to

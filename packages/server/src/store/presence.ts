@@ -80,6 +80,24 @@ export interface AttachContext {
   wake_lease?: string | null;
 }
 
+/**
+ * Record that a non-observer human has signed in on a node (ADR 799 §3, v144): the durable
+ * "had a human" fact. Presence rows are live attachments the reaper deletes, so without this
+ * marker a node whose human rows are gone reads as never-had-a-human and §4's static label
+ * revives. `node` null is this daemon, stored as ''. Idempotent; first sighting wins.
+ */
+export async function markNodeHadHuman(
+  db: Driver,
+  teamId: string,
+  node: string | null,
+  at = Date.now(),
+): Promise<void> {
+  await db.run(
+    'INSERT INTO node_humans (team_id, node_key, first_seen_at) VALUES (?, ?, ?) ON CONFLICT(team_id, node_key) DO NOTHING',
+    [teamId, node ?? '', at],
+  );
+}
+
 /** The seat and team behind a member id — every transition names the seat, never the private id. */
 async function seatOf(
   db: Driver,
@@ -193,6 +211,14 @@ export async function attach(
     );
     const seat = await seatOf(t, memberId);
     if (seat) {
+      // ADR 799 §3: a human signing in is the durable fact §3 reads back — record it now,
+      // while the row that proves it is being created, not from the row later.
+      const member = await t.get<{ kind: string; observer: number }>(
+        'SELECT kind, observer FROM members WHERE id = ?',
+        [memberId],
+      );
+      if (member?.kind === 'human' && member.observer !== 1)
+        await markNodeHadHuman(t, seat.team_id, null, now);
       await appendReplicatedEvent(t, seat.team_id, {
         actor: seat.name,
         action: 'presence.attached',
@@ -728,13 +754,19 @@ export async function liveNodeDrivers(
     // No browser_sessions table yet (pre-ADR-722 daemon): CLI leases alone decide.
   }
   const leases = new Map([...best].map(([k, v]) => [k, v.name]));
-  // A node "had a human" if a non-observer human presence was ever recorded on it (ADR 799 §3,
-  // review fix 2026-11-05): no window — a stale name must not revive after any lapse.
+  // A node "had a human" if a non-observer human ever signed in on it (ADR 799 §3): the
+  // durable node_humans marker (v144), plus any human presence row still held — the marker
+  // is what survives the reaper deleting those rows, so no lapse revives a stale name.
   const had = await db.all<{ node: string | null }>(
     "SELECT DISTINCT p.node AS node FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = 'human' AND m.observer = 0",
     [teamId],
   );
   const hadHuman = new Set(had.map((h) => h.node ?? ''));
+  const marked = await db.all<{ node_key: string }>(
+    'SELECT node_key FROM node_humans WHERE team_id = ?',
+    [teamId],
+  );
+  for (const m of marked) hadHuman.add(m.node_key);
   for (const key of leases.keys()) hadHuman.add(key);
   return { leases, hadHuman };
 }
@@ -1000,6 +1032,19 @@ export async function reapStale(
   if (now - watchedSince < timeoutMs) return [];
   const cutoff = now - timeoutMs;
   return db.tx(async (t) => {
+    // ADR 799 §3: before any human row dies here, record its node in node_humans — the rows
+    // below are the last proof the node had a human, and the marker must outlive them.
+    await t.run(
+      `INSERT INTO node_humans (team_id, node_key, first_seen_at)
+         SELECT p.team_id, COALESCE(p.node, ''), MIN(p.last_seen_at) FROM presence p
+           JOIN members m ON m.id = p.member_id
+          WHERE m.kind = 'human' AND m.observer = 0
+            AND ((p.node IS NULL AND (p.last_seen_at <= ? OR (p.held_until IS NOT NULL AND p.held_until <= ?)))
+              OR (p.node IS NOT NULL AND p.node IN (SELECT n.id FROM nodes n WHERE n.last_seen_at IS NULL OR n.last_seen_at <= ?)))
+          GROUP BY p.team_id, COALESCE(p.node, '')
+         ON CONFLICT(team_id, node_key) DO NOTHING`,
+      [cutoff, now, now - REMOTE_PRESENCE_TTL_MS],
+    );
     // The heartbeat cutoff is a LOCAL rule: only this machine's sockets and ambient touches animate
     // a local row, so only a local row can go quiet by it.
     const stale = await t.all<PresenceRow>(

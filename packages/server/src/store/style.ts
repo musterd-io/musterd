@@ -110,6 +110,13 @@ export async function driverForSeat(
     }
     // ADR 799 §3: the node ever had a human and none is live now — the driver clears to
     // null rather than reviving the seat's stale attested label, however long ago it was.
+    // The durable node_humans marker (v144) answers first: presence rows are deleted by
+    // the reaper, so a row count alone would read never-had-a-human after a reap.
+    const marked = await db.get<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM node_humans WHERE team_id = ? AND node_key = ?',
+      [teamId, seat.node ?? ''],
+    );
+    if ((marked?.n ?? 0) > 0) return null;
     const had = await db.get<{ n: number }>(
       `SELECT COUNT(*) AS n FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = 'human' AND m.observer = 0 AND ${seat.node === null ? 'p.node IS NULL' : 'p.node = ?'}`,
       seat.node === null ? [teamId] : [teamId, seat.node],

@@ -28,6 +28,7 @@ import { parseWriter } from '../store/memory.js';
 import { upsertForeignNode } from '../store/nodes.js';
 import { stripPolicyRedactionMarkers } from '../store/policyRedaction.js';
 import { POLICY_REVIEW_SEAT, policyReviewSeat } from '../store/policyReview.js';
+import { markNodeHadHuman } from '../store/presence.js';
 import {
   applyFoldedEnrollment,
   isLiveHostLabel,
@@ -893,6 +894,10 @@ async function projectPresenceEvent(
           event.ts,
         ],
       );
+      // ADR 799 §3: a remote human's attach marks its origin node durably (v144), so the
+      // fact survives this folded row's removal when the node goes quiet.
+      if (member.kind === 'human' && member.observer !== 1)
+        await markNodeHadHuman(db, teamId, originNode, event.ts);
       return 'applied';
     }
     case 'presence.detached':
