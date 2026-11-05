@@ -59,35 +59,75 @@ export function briefBudgetBytes(boundUsd: number, model: string | undefined): n
  * The credential boundary (hard rule 5), in two layers — because the brief rides a process argument
  * and the next session's transcript, and a transcript holds whatever the seat read or typed.
  *
- * 1. **By construction, for tool calls:** a tool's arguments never ride the brief as values, except
- *    for the keys below — paths, patterns and musterd identifiers, which name *what* was touched and
- *    cannot carry a credential by their nature. Every other key (a Bash `command`, a Write `content`,
- *    a `body`, a `password`, anything) is named and its value dropped. big-body's acceptance read of
- *    2026-11-05: `{"password":"…"}` passed the first landing's regex because the closing quote sat
- *    between the key and the colon; an allowlist does not depend on a pattern matching.
+ * 1. **By construction, for tool calls:** a tool's argument never rides the brief as a value unless
+ *    it PARSES as one of a few grammars — a filesystem path (with a slash), a musterd id, an act or
+ *    lane state from the enum, an integer — under a key that means that thing. A field name alone
+ *    admits nothing: `{pattern: 'hunter2'}` is a free-form string whatever the key says (big-body's
+ *    second acceptance read), so `pattern`, `glob`, `name`, `to`, `seat`, a Bash `command`, a Write
+ *    `content`, a `body`, a `password` — every other argument — ride as the key alone. The first
+ *    read found `{"password":"…"}` passing a regex; the second found a name-based allowlist passing
+ *    a value. Neither depends on recognising a secret; the grammar does the refusing.
  * 2. **Patterns, for the seat's own text and the person's prompts:** known key prefixes, bearer and
  *    key=value forms tolerant of JSON quoting, and any long opaque token (letters and digits, no
  *    spaces) — run on the WHOLE text before it is clipped, so a clip never splits a secret out of its
  *    pattern's reach.
  */
-const SAFE_INPUT_KEYS = new Set([
-  'file_path',
-  'path',
-  'notebook_path',
-  'pattern',
-  'glob',
-  'id',
-  'lane',
-  'lane_id',
-  'goal_id',
-  'act',
-  'to',
-  'state',
-  'name',
-  'seat',
-  'offset',
-  'limit',
+/**
+ * The grammars a tool-argument value must parse as to ride the brief (big-body's second acceptance
+ * read, 2026-11-05: a field NAME is not a grammar — `{pattern: 'hunter2'}` is a free-form string
+ * whatever the key says). A value that parses as none of them rides as its key alone.
+ */
+const PATH_KEYS = new Set(['file_path', 'path', 'notebook_path']);
+const ID_KEYS = new Set(['id', 'lane', 'lane_id']);
+const ACT_KEYS = new Set(['act']);
+const STATE_KEYS = new Set(['state']);
+const INT_KEYS = new Set(['offset', 'limit']);
+/** A filesystem path: at least one slash, path characters only. A bare word is not a path. */
+const PATH_GRAMMAR = /^(?=.*\/)[A-Za-z0-9_.~@+/-]{2,}$/;
+/** A musterd id: Crockford base32, 10–26 characters (ULIDs and the lane/act ids built from them). */
+const ID_GRAMMAR = /^[0-9A-HJKMNP-TV-Z]{10,26}$/;
+const ACTS = new Set([
+  'message',
+  'status_update',
+  'request_help',
+  'handoff',
+  'accept',
+  'decline',
+  'wait',
+  'resolve',
+  'steer',
+  'challenge',
+  'defer',
+  'ask',
+  'insight',
 ]);
+const LANE_STATES = new Set([
+  'open',
+  'claimed',
+  'active',
+  'blocked',
+  'awaiting_acceptance',
+  'ready_for_review',
+  'done',
+  'abandoned',
+  'parked',
+]);
+
+/** The value a tool argument may ride as, or undefined when it parses as no grammar. Exported for
+ *  the tests. */
+export function constrainedValue(key: string, value: unknown): string | undefined {
+  if (INT_KEYS.has(key)) {
+    return typeof value === 'number' && Number.isInteger(value) ? String(value) : undefined;
+  }
+  if (typeof value !== 'string') return undefined;
+  if (PATH_KEYS.has(key))
+    return PATH_GRAMMAR.test(value) && value.length <= SAFE_VALUE_MAX ? value : undefined;
+  if (ID_KEYS.has(key)) return ID_GRAMMAR.test(value) ? value : undefined;
+  if (ACT_KEYS.has(key)) return ACTS.has(value) ? value : undefined;
+  if (STATE_KEYS.has(key)) return LANE_STATES.has(value) ? value : undefined;
+  return undefined;
+}
+
 const SAFE_VALUE_MAX = 120;
 
 const SECRET_PATTERNS = [
@@ -112,17 +152,14 @@ function oneLine(s: string, max: number): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-/** A tool call's argument line: safe keys with their (clipped, redacted) scalar values, every other
- *  key by name only. Exported for the tests. */
+/** A tool call's argument line: a value rides only when it parses as one of the grammars above
+ *  ({@link constrainedValue}); every other argument rides as its key alone. Exported for the tests. */
 export function toolInputLine(input: unknown): string {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) return '';
   const parts: string[] = [];
   for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (SAFE_INPUT_KEYS.has(key) && (typeof value === 'string' || typeof value === 'number')) {
-      parts.push(`${key}=${oneLine(redact(String(value)), SAFE_VALUE_MAX)}`);
-    } else {
-      parts.push(key);
-    }
+    const v = constrainedValue(key, value);
+    parts.push(v === undefined ? key : `${key}=${v}`);
   }
   return parts.join(' ');
 }

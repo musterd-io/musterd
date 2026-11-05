@@ -297,6 +297,8 @@ describe('claudeCodeBackend.wake', () => {
             name: 'Write',
             input: { file_path: '/ws/.env', content: 'TOKEN=hunter2' },
           },
+          // A short secret in an allowlisted free-form search field (big-body's second read).
+          { type: 'tool_use', id: 'd', name: 'Grep', input: { pattern: 'hunter2', path: '/ws' } },
           { type: 'text', text: 'Logged in and wrote the env file.' },
         ]),
       ].join('\n') + '\n',
@@ -328,6 +330,7 @@ describe('claudeCodeBackend.wake', () => {
     expect(line).toContain('[mcp__x__login] password');
     expect(line).toContain('[Bash] command');
     expect(line).toContain('[Write] file_path=/ws/.env content');
+    expect(line).toContain('[Grep] pattern path=/ws');
     expect(line).toContain('Logged in and wrote the env file.');
     for (const leak of ['example-value', 'eyJhbGciOiJIUzI1NiJ9', 'hunter2', 'curl']) {
       expect(line).not.toContain(leak);
