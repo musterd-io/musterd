@@ -966,6 +966,43 @@ function sendFile(
  * Anything else (a hub, an unknown team, several enrolments and no team named) is served as before.
  * Pure: the handler passes the enrolment map it already reads for sync.
  */
+/**
+ * The origin a human's browser should use for this daemon: the first `https://` entry of the
+ * configured passkey origins, since that is where its passkeys are bound (ADR 662 decision 5);
+ * null when none is configured (a loopback-only daemon is reached at its own address).
+ */
+export function browserOriginOf(webauthnOrigins: readonly string[]): string | null {
+  return webauthnOrigins.find((o) => o.startsWith('https://'))?.replace(/\/+$/, '') ?? null;
+}
+
+const HUB_BROWSER_ORIGIN_TTL_MS = 5 * 60_000;
+const hubBrowserOrigins = new Map<string, { origin: string; at: number }>();
+
+/**
+ * Where to send a browser for the hub at `hubUrl`: the hub's own `browser_origin` from `/health`
+ * (its HTTPS passkey origin), else the sync address itself. Cached per hub; a hub that does not
+ * answer in time, or an older hub without the field, falls back to the address the joiner syncs
+ * with — a working page, even if its passkeys cannot sign there.
+ */
+export async function hubBrowserOrigin(hubUrl: string, now = Date.now()): Promise<string> {
+  const hub = hubUrl.replace(/\/+$/, '');
+  const cached = hubBrowserOrigins.get(hub);
+  if (cached && now - cached.at < HUB_BROWSER_ORIGIN_TTL_MS) return cached.origin;
+  let origin = hub;
+  try {
+    const res = await fetch(`${hub}/health`, { signal: AbortSignal.timeout(1500) });
+    if (res.ok) {
+      const body = (await res.json()) as { browser_origin?: unknown };
+      if (typeof body.browser_origin === 'string' && body.browser_origin.startsWith('https://'))
+        origin = body.browser_origin.replace(/\/+$/, '');
+    }
+  } catch {
+    // the sync address stands
+  }
+  hubBrowserOrigins.set(hub, { origin, at: now });
+  return origin;
+}
+
 export function hubLiveRedirect(
   pathname: string,
   search: string,
@@ -3111,6 +3148,13 @@ export async function handleHttp(
         v: PROTOCOL_VERSION,
         db: ctx.config.dbPath,
         schema: await schemaVersionOf(ctx.db),
+        // Where a browser should open this daemon (lane 01M6N2WJ8P): the origin its passkeys work
+        // on. A joiner's /live redirects here rather than to the sync address, which is plain http
+        // on a tailnet IP and can sign nothing.
+        ...(() => {
+          const origin = browserOriginOf(ctx.config.webauthnOrigins);
+          return origin ? { browser_origin: origin } : {};
+        })(),
         // The trace store (ADR 445 §3) is a separate file with its own ladder; named here so a
         // `wrong_db` diagnosis can see both halves.
         trace_db: ctx.config.traceDbPath,
@@ -12112,7 +12156,21 @@ export async function handleHttp(
       path !== '/health' &&
       !path.startsWith('/teams')
     ) {
-      const toHub = hubLiveRedirect(path, url.search, readNodeState().nodes);
+      const enrolled = readNodeState().nodes;
+      const toHub = hubLiveRedirect(path, url.search, enrolled)
+        ? hubLiveRedirect(
+            path,
+            url.search,
+            Object.fromEntries(
+              await Promise.all(
+                Object.entries(enrolled).map(async ([slug, n]) => [
+                  slug,
+                  { hub_url: await hubBrowserOrigin(n.hub_url) },
+                ]),
+              ),
+            ),
+          )
+        : null;
       if (toHub) {
         res.writeHead(302, { location: toHub, 'cache-control': 'no-store' });
         res.end();

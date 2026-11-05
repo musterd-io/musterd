@@ -16,7 +16,7 @@ import { appendAudit } from '../store/audit.js';
 import { getMemberByName } from '../store/members.js';
 import { DUPLICATE_ENVELOPE_ID, insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
-import { hubLiveRedirect } from './http.js';
+import { browserOriginOf, hubLiveRedirect } from './http.js';
 import { integrationHarness } from './integration.helpers.js';
 
 withDrivers('integration · http', (_o, kind) => {
@@ -1012,6 +1012,23 @@ withDrivers('integration · http', (_o, kind) => {
       }
     });
 
+    it('/health names the browser origin when an https passkey origin is configured', async () => {
+      const s = createServer({
+        db: await openTestDriver(kind),
+        port: 0,
+        webauthnOrigins: ['http://localhost:4849', 'https://hub.example.ts.net'],
+      });
+      const { port } = await s.listen();
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/health`);
+        expect(((await r.json()) as { browser_origin: string | null }).browser_origin).toBe(
+          'https://hub.example.ts.net',
+        );
+      } finally {
+        await s.close();
+      }
+    });
+
     it('stays API-only (404s the web root) when no webRoot is configured', async () => {
       const s = createServer({ db: await openTestDriver(kind), port: 0 });
       const { port } = await s.listen();
@@ -1040,6 +1057,16 @@ withDrivers('integration · http', (_o, kind) => {
         hubLiveRedirect('/live', '', { ...nodes, other: { hub_url: 'http://h:1' } }),
       ).toBeNull();
       expect(hubLiveRedirect('/live', '', {})).toBeNull();
+    });
+    it("sends the browser to the hub's HTTPS passkey origin, never the plain sync address", () => {
+      expect(
+        browserOriginOf([
+          'http://localhost:4849',
+          'https://musterd-joiner-1.tail400343.ts.net/',
+          'http://127.0.0.1:4849',
+        ]),
+      ).toBe('https://musterd-joiner-1.tail400343.ts.net');
+      expect(browserOriginOf(['http://localhost:4849'])).toBeNull();
     });
     it('leaves an unknown team, other paths and a hub (no enrolment) alone', () => {
       expect(hubLiveRedirect('/live', '?team=dawn', nodes)).toBeNull();
