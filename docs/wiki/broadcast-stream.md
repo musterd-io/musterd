@@ -6,6 +6,16 @@ The stream rents one Fly machine per stream (its lifetime IS the stream's) reach
 
 `musterd stream start` rents one Fly machine (app `musterd-broadcast`, performance-4x, auto-destroy) that reaches the laptop's loopback-bound daemon via Tailscale (`MUSTERD_AIR_ADDR` is a tailnet name; the ADR 040 allow-list accepts that Host). Stop with `musterd stream stop`, never by killing the machine. Nothing stream-related runs locally unless you run `musterd broadcast` yourself — except the ADR 293 supervisor below.
 
+_(2026-11-05, lane 01M6PMX7DX — corrects "the laptop's loopback-bound daemon" above.)_ Since the hub
+moved to musterd-joiner-1 (2026-11-04), the laptop is a joiner with its own store. `stream start` now
+puts the tailnet name of the daemon the CLI is configured for into `MUSTERD_AIR_ADDR`: the hub's peer
+name (`musterd-joiner-1.tail400343.ts.net`) when `config.server` is the hub, and this machine's name
+only for a loopback daemon. Before this fix the capture loaded the laptop's empty office while the
+broadcast seat was minted on the hub, and `stream doctor` failed "daemon allows the tailnet Host".
+Falsify: `musterd stream doctor` on this laptop must list `musterd-joiner-1.tail400343.ts.net,
+100.115.152.1 accepted` and skip the local `tailscale serve` check; a launched machine whose
+`fly machine status` env shows `MUSTERD_AIR_ADDR=nicks-laptop…` falsifies it.
+
 ## Crash vs deliberate stop (2026-08-19, ADR 293; falsify: induce a crash with a raw `fly machine stop` and watch `stream ensure` heal it) <!-- claim: other -->
 
 The verbs record intent in `~/.musterd/stream/state.json`: `start` says live (before launching), `stop` says stopped with **who and why** (`--reason`, shown by `stream status`) — so a machine gone while the file says live is a crash by definition. `musterd service install --stream` installs a 60s LaunchAgent running `stream ensure`: crash → relaunch (≤3 per 30min, then it stands down and asks the team as the `streamwatch` service seat until a human `stream start` re-arms). Consequences to know: killing the machine any way other than `stream stop` now gets healed within ~60s, and `stream start --once` is the opt-out for deliberately unsupervised (e.g. `--duration`) runs. The 2026-08-18 Chrome death ("Chrome DevTools socket closed", dead until a human noticed) is the incident this closes; ADR 292 keeps the restarted page's bundle current from there.

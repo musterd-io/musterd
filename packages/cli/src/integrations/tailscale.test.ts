@@ -5,6 +5,7 @@ import {
   parseTailscaleSelf,
   probeUpgradeHost,
   serveForwardsPort,
+  tailnetTarget,
   type TailscaleDoctorDeps,
   type UpgradeVerdict,
 } from './tailscale.js';
@@ -302,5 +303,53 @@ describe('Tailscale Team transport inspector (ADR 385)', () => {
     const checks = byKey(await inspectTailscaleTransport(base.deps));
     expect(checks['tailnet-up']?.state).toBe('fail');
     expect(checks['tailnet-up']?.detail).toMatch(/IPv4/i);
+  });
+});
+
+describe('tailnetTarget — which daemon the capture machine loads', () => {
+  const status = JSON.stringify({
+    BackendState: 'Running',
+    Self: {
+      DNSName: 'nicks-laptop.tail400343.ts.net.',
+      TailscaleIPs: ['100.100.246.14', 'fd7a::1'],
+      Online: true,
+    },
+    Peer: {
+      k1: {
+        DNSName: 'musterd-joiner-1.tail400343.ts.net.',
+        TailscaleIPs: ['100.115.152.1', 'fd7a::2'],
+        Online: true,
+      },
+      k2: { DNSName: 'other.tail400343.ts.net.', TailscaleIPs: ['100.64.0.9'] },
+    },
+  });
+
+  it('a loopback daemon is this machine (the laptop was the hub)', () => {
+    expect(tailnetTarget(status, 'http://127.0.0.1:4849')).toEqual({
+      dnsName: 'nicks-laptop.tail400343.ts.net',
+      ip4: '100.100.246.14',
+      local: true,
+    });
+    expect(tailnetTarget(status, 'http://localhost:4849')?.local).toBe(true);
+  });
+
+  it('a hub on the tailnet is that peer, by IP or by name (since the hub moved, 2026-11-04)', () => {
+    const hub = {
+      dnsName: 'musterd-joiner-1.tail400343.ts.net',
+      ip4: '100.115.152.1',
+      local: false,
+    };
+    expect(tailnetTarget(status, 'http://100.115.152.1:4849')).toEqual(hub);
+    expect(tailnetTarget(status, 'http://musterd-joiner-1.tail400343.ts.net:4849')).toEqual(hub);
+  });
+
+  it('this machine named by its own tailnet address is still local', () => {
+    expect(tailnetTarget(status, 'http://100.100.246.14:4849')?.local).toBe(true);
+  });
+
+  it('a daemon not on the tailnet, or unreadable status, has no target', () => {
+    expect(tailnetTarget(status, 'https://musterd.example.com')).toBeNull();
+    expect(tailnetTarget('not json', 'http://127.0.0.1:4849')).toBeNull();
+    expect(tailnetTarget(status, 'not a url')).toBeNull();
   });
 });

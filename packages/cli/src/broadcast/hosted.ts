@@ -33,6 +33,8 @@ import {
   type TailnetSelf,
   type UpgradeVerdict,
   parseTailscaleSelf,
+  tailnetTarget,
+  type TailnetTarget,
   serveForwardsPort,
 } from '../integrations/tailscale.js';
 import type { Exec } from '../process.js';
@@ -306,6 +308,8 @@ export interface DoctorCtx {
   repoRoot: string | null;
   /** The image the supervisor would launch, if any — machine record or legacy checkout file. */
   image: CaptureImage | null;
+  /** The daemon the capture will load (the CLI's configured server). */
+  server: string;
 }
 
 /**
@@ -345,12 +349,14 @@ export async function runChecks(ctx: DoctorCtx): Promise<Check[]> {
 
   // 2 — the overlay is up, and it tells us our own address
   let self: TailnetSelf | null = null;
+  let target: TailnetTarget | null = null;
   let capture: CaptureNodes | null = null;
   if (!haveTs) {
     checks.push(skip('tailnet', 'tailnet up', 'needs tailscale'));
   } else {
     const st = exec('tailscale', ['status', '--json']);
     self = st.code === 0 ? parseTailscaleSelf(st.stdout) : null;
+    target = st.code === 0 ? tailnetTarget(st.stdout, ctx.server) : null;
     // Same payload, second reading — the capture-node census below costs no extra process.
     capture = st.code === 0 ? parseCaptureNodes(st.stdout) : null;
     const up = Boolean(self?.running && self.dnsName);
@@ -404,6 +410,11 @@ export async function runChecks(ctx: DoctorCtx): Promise<Check[]> {
   // 3 — the daemon is forwarded onto the tailnet
   if (!haveTs) {
     checks.push(skip('serve', `tailscale serve forwards ${ctx.port}`, 'needs tailscale'));
+  } else if (target && !target.local) {
+    // The daemon is a hub elsewhere on the tailnet: its own `tailscale serve`, not this machine's.
+    checks.push(
+      skip('serve', `tailscale serve forwards ${ctx.port}`, `the daemon is on ${target.dnsName}`),
+    );
   } else {
     const sv = exec('tailscale', ['serve', 'status', '--json']);
     const forwarding = sv.code === 0 && serveForwardsPort(sv.stdout, ctx.port);
@@ -425,12 +436,14 @@ export async function runChecks(ctx: DoctorCtx): Promise<Check[]> {
   // Both the name and the IP are checked because either can land in `Host` depending on how the
   // container resolved the daemon, and on 2026-07-27 the container resolved by IP (Fly owns
   // /etc/resolv.conf, so MagicDNS never installs). An allow-list with only the name still fails.
-  if (!self) {
+  // The Host the container sends is the daemon's own tailnet name or IP — the hub's, since it moved.
+  const hostOf = target ?? self;
+  if (!hostOf) {
     checks.push(
       skip('allowed-host', 'daemon allows the tailnet Host', 'needs the tailnet address'),
     );
   } else {
-    const hosts = [self.dnsName, ...(self.ip4 ? [self.ip4] : [])];
+    const hosts = [hostOf.dnsName, ...(hostOf.ip4 ? [hostOf.ip4] : [])];
     const verdicts = await Promise.all(hosts.map((h) => ctx.probeUpgrade(h)));
     const unreachable = verdicts.includes('unreachable');
     const rejected = hosts.filter((_, i) => verdicts[i] === 'rejected');

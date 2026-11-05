@@ -39,7 +39,7 @@ Once it is green:
 
 ```sh
 musterd stream build     # only after broadcast-relevant code changes
-musterd stream start     # go live (discovers this machine's tailnet address itself)
+musterd stream start     # go live (finds the configured daemon's tailnet address itself — the hub's, if it is elsewhere)
 musterd stream status
 musterd stream stop      # ends the stream; the machine self-destructs, which ends the billing
 ```
@@ -110,7 +110,7 @@ context.
 ## Streaming
 
 ```sh
-musterd stream start     # go live — discovers this machine's tailnet address itself
+musterd stream start     # go live — finds the configured daemon's tailnet address itself
 musterd stream status    # ◉ live / ○ not live
 musterd stream stop      # end stream; machine self-destroys
 ```
