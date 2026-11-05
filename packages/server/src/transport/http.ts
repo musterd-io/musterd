@@ -5639,6 +5639,14 @@ export async function handleHttp(
           nonce,
         });
         if (relayed) return sendJson(res, 200, { proof: relayed.proof });
+        // The nonce is a capability, but a parked proof is the owner's: the descriptor's human
+        // collects it, nobody else (ADR 808 inc C review).
+        const owner = await ctx.db.get<{ member_id: string }>(
+          `SELECT member_id FROM approval_nonces WHERE team_id = ? AND nonce = ?`,
+          [team.id, nonce],
+        );
+        if (!owner || owner.member_id !== member.id)
+          throw new MusterdError('not_found', 'no approval parked for that nonce yet');
         const proof = await getParkedProof(ctx.db, team.id, nonce);
         if (!proof) throw new MusterdError('not_found', 'no approval parked for that nonce yet');
         return sendJson(res, 200, { proof });

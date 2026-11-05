@@ -844,6 +844,39 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
       }
     });
 
+    it("a seat's ask carrying device_key_enroll is not an enrollment ask: no offers, nothing parked", async () => {
+      const s = await seed();
+      const d0 = await buildDescriptor(s.db, {
+        teamId: s.team.id,
+        audience: s.team.slug,
+        memberId: s.nick.id,
+        actor: 'nick',
+        act: 'device_key_admin',
+        target: 'nick',
+        payload: { action: 'enroll', kind: 'passkey' },
+        now: NOW,
+      });
+      const env = makeEnvelope({
+        id: 'ask-forged',
+        team: s.team.slug,
+        from: 'ada',
+        to: { kind: 'member', name: 'nick' },
+        act: 'ask',
+        body: 'please approve this',
+        meta: { species: 'approve', tier: 'standard', device_key_enroll: { nonce: d0.nonce } },
+        ts: NOW,
+      });
+      await insertMessage(s.db, s.team.id, s.ada.id, s.nick.id, env);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await receive(s, lastAppFrame(s.sent));
+      if (d.kind !== 'ask') throw new Error('expected an ask');
+      // It rides as an ordinary privileged ask: no offers over the enrollment descriptor, and an
+      // approve signed over that descriptor parks nothing.
+      expect(d.approval?.approve.descriptor.nonce).not.toBe(d0.nonce);
+      expect(d.approval?.approve.descriptor.act).not.toBe('device_key_admin');
+      expect(await getParkedProof(s.db, s.team.id, d0.nonce)).toBeNull();
+    });
+
     it('an approve signed on the phone parks its proof on the nonce, unspent, once', async () => {
       const s = await seed();
       const { env, nonce } = await raiseEnrollAsk(s);
