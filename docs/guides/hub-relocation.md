@@ -59,6 +59,44 @@ What made it harder than it should be (lane `01M6KYZ1SM`): a "Not my phone" on a
 already closed left the panel stuck until a page reload, and nothing marks the old pairing as dead.
 On switch day the same steps run against the box's daemon.
 
+## Rehearsal 1 (2026-11-04, lane `01M6HWVB7F`)
+
+The plan's increment 5, run once against a staging copy of the hub on the box (port 4859, bound to
+`127.0.0.1` only, relay keys removed from the copy). Every copy was deleted after.
+
+| Step | Time |
+| --- | --- |
+| Online snapshot on the laptop (`sqlite3 … ".backup …"`, 711 MB) | 3.4 s |
+| Inventory of the snapshot (70 tables) | 7.6 s |
+| Copy to the box over the tailnet (`scp`) | **148 s** (~4.8 MB/s) |
+| Inventory compare on the box, before the new daemon starts | 4.8 s, `mismatches: []` |
+| New daemon boot to `/health` | 1.1 s |
+| Replica-only check (`--replica` box store `--hub` copy) | 2.0 s |
+
+About 2 m 50 s of measured steps against the 30 minutes. The copy is the long pole; compress it
+(`zstd`) on the day. The drain, the joiner re-point and the seat move were not rehearsed: they act on
+the live team.
+
+Findings, each to settle before the switch:
+
+1. **The compare must run before the new hub boots.** Run after boot, it shows the rows any daemon
+   writes on start (audit, sync log, session leases, `sync_meta`), and they read as mismatches.
+2. **`inventory.ts` cannot compare its own output.** The default report is `{inventory: {tables}}`,
+   and `--compare` reads `{tables}`, so the documented snapshot-then-compare flow throws
+   (`a.tables is not iterable`). The rehearsal unwrapped the file by hand.
+3. **`inventory.ts` output cut off at 64 KB when piped.** A large `--replica` report ends mid-JSON.
+   Redirect it to a file.
+4. **The replica-only check compares row ids, but the box keeps its own.** The box's replica holds
+   the team, members, roles, residency, seat memory and inbox cursors under node-local ids
+   (team `01M64DHQ…` on the box, `01KWHV06…` on the hub). So it lists all 43 members as box-only,
+   and the list cannot tell node-local ids from data that really exists only on the box. The tables
+   it named: `audit` 40k and `tool_call_stats` 17k (node-local, expected), `messages` 15 (sent after
+   the snapshot, which a drain would push), and `residency` 19, `seat_memory` 26, `seeds` 7,
+   `grants` 3, `lane_samples` 65, `agent_bootstrap_credentials` 1, which need a carry rule in
+   ADR 796 or an id-independent check before the switch.
+
+Follows-up: findings 2–3 in lane `01M6MG73W5`; finding 4 in lane `01M6MG78J7`, which blocks the switch (lane `01M6HWVD5J`).
+
 ## Credentials on the box (the revocation list)
 
 Each credential that lives on `musterd-joiner-1`, and the one step that revokes it. On a compromise,
