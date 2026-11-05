@@ -231,8 +231,12 @@ describe('the chat API polls use (ADR 807)', () => {
       sock = s;
       return s;
     };
+    let streams: 'live' | 'error' | 'throw' = 'live';
     const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const u = String(url);
+      if (u.includes('/streams?user_id=B') && streams === 'throw') throw new Error('network');
+      if (u.includes('/streams?user_id=B') && streams === 'error')
+        return new Response(null, { status: 503 });
       if (u.includes('oauth2/token')) return Response.json({ access_token: 'tok' });
       if (u.includes('/users?login=')) return Response.json({ data: [{ id: 'B' }] });
       if (u.endsWith('/users')) return Response.json({ data: [{ id: 'BOT' }] });
@@ -266,6 +270,11 @@ describe('the chat API polls use (ADR 807)', () => {
     expect(await api!.post('hello')).toBe(true);
     expect(await api!.post('refuse me')).toBe(false);
     expect(await api!.live()).toBe(true);
+    // Twitch not answering is "can't tell" (null), never "offline" (false).
+    streams = 'error';
+    expect(await api!.live()).toBeNull();
+    streams = 'throw';
+    expect(await api!.live()).toBeNull();
     const post = fetchFn.mock.calls.find(([u]) => String(u).includes('/chat/messages'));
     expect(JSON.parse(String(post![1]!.body))).toEqual({
       broadcaster_id: 'B',

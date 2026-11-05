@@ -70,12 +70,18 @@ export function startPollRuntime(deps: PollRuntimeDeps) {
       const chat = deps.chat();
       if (!chat) return;
       if (now() - lastLiveAt >= (deps.liveMs ?? 30_000)) {
-        lastLiveAt = now();
-        live = await chat.live();
-        await seat('/stream/live', { method: 'POST', body: JSON.stringify({ live }) }).catch(
-          () => undefined,
-        );
+        const seen = await chat.live();
+        // A check Twitch did not answer is not "offline": report nothing, and ask again next tick.
+        if (seen !== null) {
+          lastLiveAt = now();
+          live = seen;
+          await seat('/stream/live', { method: 'POST', body: JSON.stringify({ live }) }).catch(
+            () => undefined,
+          );
+        }
       }
+      // No poll is read or counted before the first answered liveness check.
+      if (lastLiveAt === -Infinity) return;
       const res = await seat('/polls/open');
       if (!res.ok) return;
       const parsed = OpenPollReplySchema.safeParse(await res.json());
