@@ -2980,8 +2980,8 @@ CI's read.
 ADR 807 increment 4. While a Twitch poll runs, /broadcast shows its question, a bar per option, the
 time left and the vote count, then the result for 15 s. The card is `PollCard.tsx`, its own lazy
 chunk (0.56 KB gzip, plus 1.0 KB of CSS in the `app` group), fetched only the first time a poll is
-on screen. Its 2 s read (`usePoll.ts`, `poll.ts`) sits in the broadcast route chunk. Initial JS
-stays within budget. Total JS read 408.8 KB on this laptop against 408.2 KB. Lazy-loading cannot
-move that total, so the budget is raised by 2 KB to clear CI's read, which runs about 0.7 KB above
-this laptop.
+on screen. Its 2 s read (`usePoll.ts`, `poll.ts`) sits in the broadcast route chunk. Initial JS is
+unchanged at 149.8 KB against 150.9. Total JS read 408.8 KB on this laptop against 408.2 KB, and CI
+read 409.4 KB (`static` job, run 42076904027). Lazy-loading cannot move that total, so the budget
+is raised by 2 KB to clear CI's read.
 
