@@ -42,7 +42,11 @@ export async function releaseWakeHold(
  * `reclaimable` resumed ~7 s after each report and held 40–80 s). Each poll, before the reclaimable
  * gate is read, a leaseless hold on a seat whose newest lease was reported within `windowMs` and
  * minted before the row was last seen is released: it belongs to a run the host has already said
- * is over. A hold with a lease, a live connection, or a seat with no recent reported lease is untouched.
+ * is over. A live connection, or a seat with no recent reported lease, is untouched. The row may
+ * carry the lease itself: the hooks run with `MUSTERD_WAKE_LEASE` in their environment, so the
+ * SessionEnd hook's CLI claim is stamped with the wake's lease and parks at the report's own second
+ * (smoke pair 3, 01:36:38Z: `cli`, lease set, created at the report, held 45 s) — the lease-only
+ * release at the report ran before that row existed, and a `wake_lease IS NULL` filter here missed it.
  */
 export async function releaseLateWakeHolds(
   db: Driver,
@@ -56,7 +60,6 @@ export async function releaseLateWakeHolds(
          SELECT p.id FROM presence p
            JOIN wake_leases l ON l.member_id = p.member_id AND l.team_id = ?
           WHERE p.conn_id IS NULL AND p.held_until IS NOT NULL AND p.held_until > ?
-            AND p.wake_lease IS NULL
             AND l.status = 'reported' AND l.created_at >= ? AND l.created_at <= p.last_seen_at
        )`,
     [now, teamId, now, now - windowMs],
