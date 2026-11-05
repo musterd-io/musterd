@@ -42,3 +42,8 @@
   Scanned for credentials before commit. `fly machine stop 8175e6b907de58` 20:3xZ.
 - Token: nick revokes the 36 h deploy token on his word after this lands; `~/.fly/token` deleted then.
 
+- 2026-11-05 ~22:05Z: **token kept, by nick's decision** in session ("lets just keep the tokens since we
+  plan to do more riders"), amending the manifest's step 7 for this run and the next. The 36 h deploy
+  token nick minted ~19:25Z stays in `~/.fly/token` on `musterd-joiner-1` (0600) and expires on its own
+  ~2026-11-07 07:00Z; it is a deploy token scoped to `musterd-cooperbench`. Deletion and revocation
+  happen when the rider series pauses, or at expiry, whichever first. `cb-run-2` stays stopped.
