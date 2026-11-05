@@ -41,7 +41,13 @@ import {
   redeemAskChannelToken,
 } from '../store/askChannelTokens.js';
 import { appendAudit, listAuditByAction } from '../store/audit.js';
-import { buildDescriptor, getDeviceKey, requireAuthority } from '../store/authority.js';
+import {
+  buildDescriptor,
+  getDescriptorByNonce,
+  getDeviceKey,
+  requireAuthority,
+  storePhoneProof,
+} from '../store/authority.js';
 import { listBindings, type ChannelBinding } from '../store/channelBindings.js';
 import {
   deliverRefusal,
@@ -270,13 +276,27 @@ export function laneVerdictOf(
   return { id: review.lane, title: typeof review.title === 'string' ? review.title : '' };
 }
 
+/**
+ * ADR 808 inc C: an ask that carries an EXISTING `device_key_admin` enrollment descriptor by nonce
+ * — /live raised it because no passkey signs on its origin, and the phone key is the one standing
+ * signer. The phone's approval is parked on that nonce for /live to collect; it closes no lane.
+ */
+export function deviceKeyEnrollOf(meta: Record<string, unknown> | null): { nonce: string } | null {
+  const e = meta?.['device_key_enroll'] as { nonce?: unknown } | undefined;
+  return typeof e?.nonce === 'string' && e.nonce.length >= 16 ? { nonce: e.nonce } : null;
+}
+
 /** What the app channel carries for an ask: advisory or a privileged human answer. */
 function appAskKind(
   meta: Record<string, unknown> | null,
-): { class: 'advisory' } | { class: 'privileged'; lane?: { id: string; title: string } } | null {
+):
+  | { class: 'advisory' }
+  | { class: 'privileged'; lane?: { id: string; title: string }; enroll?: { nonce: string } }
+  | null {
   if (classifyAskAction(meta) === 'advisory') return { class: 'advisory' };
   const lane = laneVerdictOf(meta);
-  return { class: 'privileged', ...(lane ? { lane } : {}) };
+  const enroll = deviceKeyEnrollOf(meta);
+  return { class: 'privileged', ...(lane ? { lane } : {}), ...(enroll ? { enroll } : {}) };
 }
 
 /** The two verdicts' payloads, exactly as `applyAcceptanceVerdict` builds them for the gate. */
@@ -306,6 +326,50 @@ async function buildVerdictApproval(
     return { descriptor, payload };
   };
   return { approve: await offer('accept'), reject: await offer('decline') };
+}
+
+/** The standing-key enrollment payload, exactly as the web's enroll flow and the guard build it. */
+const PASSKEY_ENROLL_PAYLOAD = { action: 'enroll', kind: 'passkey' } as const;
+
+/**
+ * ADR 808 inc C: the offers for a passkey-enrollment ask. `approve` is the descriptor /live already
+ * minted (the registration presents its proof), re-read by nonce so the app signs those exact
+ * bytes; `reject` is a second descriptor over a payload the guard never accepts, so a signed
+ * reject can approve nothing. Null when the nonce is dead, not this human's, or not an enrollment.
+ */
+async function buildEnrollApproval(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  human: { id: string; name: string },
+  nonce: string,
+): Promise<AppApproval | null> {
+  const descriptor = await getDescriptorByNonce(ctx.db, team.id, team.slug, nonce);
+  if (
+    !descriptor ||
+    descriptor.act !== 'device_key_admin' ||
+    descriptor.actor !== human.name ||
+    descriptor.target !== human.name
+  )
+    return null;
+  const owner = await ctx.db.get<{ member_id: string }>(
+    `SELECT member_id FROM approval_nonces WHERE team_id = ? AND nonce = ?`,
+    [team.id, nonce],
+  );
+  if (owner?.member_id !== human.id) return null;
+  const rejectPayload = { ...PASSKEY_ENROLL_PAYLOAD, decision: 'reject' };
+  const reject = await buildDescriptor(ctx.db, {
+    teamId: team.id,
+    audience: team.slug,
+    memberId: human.id,
+    actor: human.name,
+    act: 'device_key_admin',
+    target: human.name,
+    payload: rejectPayload,
+  });
+  return {
+    approve: { descriptor, payload: { ...PASSKEY_ENROLL_PAYLOAD } },
+    reject: { descriptor: reject, payload: rejectPayload },
+  };
 }
 
 async function buildAskAnswerApproval(
@@ -362,7 +426,9 @@ async function issueAskDelivery(
     kind.class === 'privileged' && human
       ? kind.lane
         ? await buildVerdictApproval(ctx, team, human, kind.lane.id)
-        : await buildAskAnswerApproval(ctx, team, human, ask.id)
+        : kind.enroll
+          ? ((await buildEnrollApproval(ctx, team, human, kind.enroll.nonce)) ?? undefined)
+          : await buildAskAnswerApproval(ctx, team, human, ask.id)
       : undefined;
   return {
     ...target,
@@ -1015,6 +1081,19 @@ export async function handleAppCallback(
       reported,
     });
   }
+  const enroll = ask ? deviceKeyEnrollOf(parseMeta(ask.meta)) : null;
+  if (ask && enroll) {
+    return answerEnrollAsk(ctx, team, {
+      binding,
+      key,
+      ask,
+      answer,
+      messageId,
+      now,
+      reported,
+      nonce: enroll.nonce,
+    });
+  }
   if (ask && appAskKind(parseMeta(ask.meta))?.class === 'privileged') {
     return answerPrivilegedAsk(ctx, team, {
       binding,
@@ -1208,6 +1287,91 @@ async function answerPrivilegedAsk(
   if (!settled.ok) return { ok: false, reason: settled.reason };
   if (input.reported) await auditReported(ctx, team, ask.id, ask.from_name, binding.id);
   await tickVerdictQueue(ctx, team, human, now);
+  return { ok: true };
+}
+
+/**
+ * ADR 808 inc C: the phone's answer to a passkey-enrollment ask. An approve carries the phone's
+ * signature over the enrollment descriptor; it is verified and PARKED on the nonce (never spent
+ * here — the registration spends it through `requireAuthority`), then the token settles and the
+ * answer is recorded as nick's own. A reject settles the token and parks nothing.
+ */
+async function answerEnrollAsk(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  input: {
+    binding: ChannelBinding;
+    key: { id: string };
+    ask: AskRow;
+    answer: AppAnswer;
+    messageId: string;
+    now: number;
+    reported: boolean;
+    nonce: string;
+  },
+): Promise<{ ok: boolean; reason?: string }> {
+  const { binding, ask, answer, now } = input;
+  const proof = answer.approval;
+  if (!proof) return { ok: false, reason: 'no_signature' };
+  if (proof.key_id !== input.key.id) return { ok: false, reason: 'key_revoked' };
+  if (answer.decision === 'approve') {
+    if (proof.nonce !== input.nonce) return { ok: false, reason: 'descriptor_mismatch' };
+    const parked = await storePhoneProof(ctx.db, {
+      teamId: team.id,
+      audience: team.slug,
+      memberId: binding.member_id,
+      proof,
+      now,
+    });
+    if (!parked) return { ok: false, reason: 'bad_signature' };
+  }
+  const result = await redeemAskChannelToken(
+    ctx.db,
+    {
+      teamId: team.id,
+      token: answer.token,
+      askId: ask.id,
+      assurance: 'A2',
+      decision: answer.decision,
+      answerMessageId: input.messageId,
+      providerIdentity: { tenantId: binding.provider_tenant_id, userId: binding.provider_user_id },
+      deliveryActor: 'app',
+      now,
+      writeAnswer: async (t, authorizer) => {
+        await insertMessage(
+          t,
+          team.id,
+          authorizer.memberId,
+          null,
+          makeEnvelope({
+            id: input.messageId,
+            team: team.slug,
+            from: authorizer.memberName,
+            to: { kind: 'team' },
+            act: 'message',
+            body:
+              answer.decision === 'approve'
+                ? 'Approved a new passkey from the musterd app'
+                : 'Declined a new passkey from the musterd app',
+            meta: {
+              in_reply_to: ask.id,
+              channel_answer: {
+                channel: APP_CHANNEL,
+                assurance: 'A2',
+                decision: answer.decision,
+                signed_by: input.key.id,
+              },
+              device_key_enroll: { nonce: input.nonce, outcome: answer.decision },
+            },
+            ts: now,
+          }),
+        );
+      },
+    },
+    relayChecks,
+  );
+  if (!result.ok) return { ok: false, reason: result.reason };
+  if (input.reported) await auditReported(ctx, team, ask.id, ask.from_name, binding.id);
   return { ok: true };
 }
 
