@@ -120,6 +120,25 @@ export default function SeatsScreen() {
                 />
               </Rise>
             ) : null}
+            {roster?.poll ? (
+              // ADR 807: the team's Twitch poll — the roster carries it for an admin's phone only.
+              <Rise>
+                <Glass style={styles.card}>
+                  <Text numberOfLines={2} style={[styles.name, { color: p.text }]}>
+                    {roster.poll.open ? roster.poll.open.question : 'Twitch poll'}
+                    <Text style={[styles.meta, { color: p.muted }]}>
+                      {`  ${roster.poll.live ? 'live' : 'not live'}`}
+                    </Text>
+                  </Text>
+                  <Button
+                    label={roster.poll.open ? 'Open the poll' : 'Start a poll'}
+                    kind="secondary"
+                    icon="chart.bar"
+                    onPress={() => router.push('/poll')}
+                  />
+                </Glass>
+              </Rise>
+            ) : null}
             {roster && seats.length > 0 ? (
               <SectionLabel label="Online" count={`${online}/${seats.length}`} />
             ) : null}

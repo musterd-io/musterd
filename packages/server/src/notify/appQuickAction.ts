@@ -20,6 +20,7 @@ import { hasLivePresence } from '../store/presence.js';
 import { openQuestions } from '../store/questions.js';
 import { getResidency } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
+import { rosterPoll } from './appPoll.js';
 import { verifyPhoneSigned } from './appQuestion.js';
 import { loadAppChannelKeys, openFromPhone } from './appSeal.js';
 
@@ -220,5 +221,15 @@ export async function buildAppRoster(
       ...(waiting.has(agent.name) ? { waiting: waiting.get(agent.name)! } : {}),
     });
   }
-  return { v: 1, kind: 'roster', team: team.slug, binding: binding.id, ts: now, seats };
+  // ADR 807: the team's Twitch poll rides the roster, for an admin's binding only.
+  const poll = await rosterPoll(ctx, team.id, binding, now);
+  return {
+    v: 1,
+    kind: 'roster',
+    team: team.slug,
+    binding: binding.id,
+    ts: now,
+    seats,
+    ...(poll ? { poll } : {}),
+  };
 }

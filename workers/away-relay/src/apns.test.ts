@@ -265,6 +265,22 @@ describe('app frames and payload (ADR 676 §2)', () => {
     expect(
       appCallbackRef(JSON.stringify({ app: 1, kind: 'quick_action', binding: 'b1', ref: 'r' })),
     ).toBeNull();
+    // ADR 807: a Twitch poll opened or closed from the phone, ref = its nonce.
+    for (const kind of ['poll_open', 'poll_close']) {
+      expect(
+        appCallbackRef(
+          JSON.stringify({
+            app: 1,
+            kind,
+            binding: 'b1',
+            ref: 'p'.repeat(22),
+            expires_at: 1,
+            sealed,
+          }),
+        ),
+      ).toBe('p'.repeat(22));
+      expect(appCallbackRef(JSON.stringify({ app: 1, kind, binding: 'b1', ref: 'p' }))).toBeNull();
+    }
     expect(
       appCallbackRef(JSON.stringify({ app: 1, kind: 'answer', binding: 'b1', ref: 'a' })),
     ).toBeNull();

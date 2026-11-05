@@ -44,7 +44,15 @@ export interface SealedBody {
 }
 
 /** Which way a sealed body travels. It is the HPKE `info`, so a body sealed for one cannot open as the other. */
-export type SealPurpose = 'deliver' | 'answer' | 'pair' | 'question_key' | 'quick_action';
+export type SealPurpose =
+  | 'deliver'
+  | 'answer'
+  | 'pair'
+  | 'question_key'
+  | 'quick_action'
+  // ADR 807: a Twitch poll opened or closed from the phone.
+  | 'poll_open'
+  | 'poll_close';
 
 export interface AppChannelKeys {
   identityPrivate: KeyObject;

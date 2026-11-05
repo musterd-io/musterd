@@ -108,6 +108,18 @@ malicious".
   `?token=1`. Only the stream machine asks. A page read gets the poll without a token and mints
   nothing, so it never cancels the token the machine is about to report on.
 
+- _(2026-11-05, increment 7, lane 01M6ME5N4R)_ The phone path, as §5 names it. A `poll_open`
+  callback (sealed with purpose `poll_open`) carries the spec and a signature by the binding's Face
+  ID signing key over `appPollOpenSigningBytes`. That key is an enrolled A2 device key, so the
+  signature is the `credential_mint` proof and the open is audited as `A2`. The body has no key
+  field, so the silent question key can never open a poll. A `poll_close` callback ends or cancels
+  the open poll; the phone signs it with Face ID too. The daemon refuses a binding whose person is
+  not a human admin, and on a joiner it answers `hub_only`, because the phone path has no proof to
+  relay. The relay carries no answer back, so the daemon keeps the outcome on the binding. The
+  phone pulls it as a `poll_result` delivery by `poll-<nonce>`; it is never pushed. The roster
+  carries the poll (`roster.poll`) for an admin's binding only. Shipping it needs a relay deploy
+  (the relay checks callback kinds) and a TestFlight build (the Swift seal-purpose list).
+
 ## Observability & Evaluation
 
 - **Traces:** the stream machine logs one line per poll state change (`poll: opened <id>`, `poll: posted`,
