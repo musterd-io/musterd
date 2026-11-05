@@ -28,6 +28,13 @@ const ROWS: Row[] = [
   { gate: 'requireLocalPeer', method: 'POST', path: '/node/repoint', want: 404 },
   { gate: 'requireLocalPeer', method: 'POST', path: '/teams/revive/signin-handoff', want: 404 },
   { gate: 'requireLocalPeer', method: 'GET', path: '/teams/revive/local-identity', want: 404 },
+  // ADR 808 inc D: the passkey recovery code is minted on the hub's own loopback, never on Cloud.
+  {
+    gate: 'requireLocalPeer',
+    method: 'POST',
+    path: '/teams/revive/authority/recoveries',
+    want: 404,
+  },
   {
     gate: 'requireLocalPeer',
     method: 'GET',
