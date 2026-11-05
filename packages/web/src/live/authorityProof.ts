@@ -127,16 +127,44 @@ export async function authorityProofForPasskeyEnroll(
   });
 }
 
-/** ADR 808 inc B: revoking a device key from /live, signed by a key that works on this page. */
+/**
+ * ADR 808 inc B: revoking a device key from /live, signed by a key that works on this page —
+ * and not by the key being revoked. The daemon refuses a key's approval of its own revocation
+ * while another of the member's keys stands (`revokeDeviceKeyGuarded`, as `descriptor_mismatch`),
+ * and the browser, offered every passkey, picks whichever it likes: nick's revoke of a key added
+ * a minute earlier was signed by that very key (2026-11-05, lane 01M6Q1QMTF). So the key under
+ * revocation is left out of the offer; when it is the member's only passkey it is offered alone,
+ * which is the self-revoke the daemon does accept.
+ */
 export async function authorityProofForKeyRevoke(
   cfg: LiveConfig,
   member: string,
   keyId: string,
 ): Promise<ApprovalProof | null> {
-  return authorityProofForDescriptor(cfg, 'device_key_admin', member, {
-    action: 'revoke',
-    key_id: keyId,
-  });
+  return authorityProofForDescriptor(
+    cfg,
+    'device_key_admin',
+    member,
+    {
+      action: 'revoke',
+      key_id: keyId,
+    },
+    keyId,
+  );
+}
+
+/**
+ * Which of the member's passkeys a descriptor is offered to: all of them, less `excludeKeyId`
+ * (the key a revoke descriptor names) — unless that is the only one, in which case it stays,
+ * because a member's last key may revoke itself. Pure, so it is testable without WebAuthn.
+ */
+export function passkeysToOffer<T extends { key_id: string }>(
+  passkeys: readonly T[],
+  excludeKeyId?: string,
+): T[] {
+  if (!excludeKeyId) return [...passkeys];
+  const others = passkeys.filter((p) => p.key_id !== excludeKeyId);
+  return others.length > 0 ? others : [...passkeys];
 }
 
 async function authorityProofForDescriptor(
@@ -144,6 +172,7 @@ async function authorityProofForDescriptor(
   act: string,
   target: string,
   payload: unknown,
+  excludeKeyId?: string,
 ): Promise<ApprovalProof | null> {
   const teamPath = `/teams/${encodeURIComponent(cfg.team)}/authority`;
   const created = await apiPost<{ descriptor: { nonce: string } }>(cfg, `${teamPath}/descriptors`, {
@@ -156,7 +185,8 @@ async function authorityProofForDescriptor(
     cfg,
     `${teamPath}/descriptors/${encodeURIComponent(nonce)}`,
   );
-  if (!view.passkeys || view.passkeys.length === 0) return null;
+  const offered = passkeysToOffer(view.passkeys ?? [], excludeKeyId);
+  if (offered.length === 0) return null;
   if (!navigator.credentials?.get) throw new Error('passkeys are unavailable in this browser');
   // A cancel or timeout rejects with NotAllowedError (or AbortError) rather than
   // returning null — translate it, or the person reads the browser's raw error and
@@ -166,7 +196,7 @@ async function authorityProofForDescriptor(
     assertion = (await navigator.credentials.get({
       publicKey: {
         challenge: b64urlToBytes(nonce) as BufferSource,
-        allowCredentials: view.passkeys.map((p) => ({
+        allowCredentials: offered.map((p) => ({
           type: 'public-key' as const,
           id: b64urlToBytes(p.credential_id) as BufferSource,
         })),
@@ -189,7 +219,7 @@ async function authorityProofForDescriptor(
   }
   if (!assertion) throw new Error('passkey cancelled; nothing was sent');
   const resp = assertion.response as AuthenticatorAssertionResponse;
-  const key = view.passkeys.find(
+  const key = offered.find(
     (p) => bytesToB64url(assertion.rawId) === p.credential_id.replace(/=+$/, ''),
   );
   if (!key) throw new Error('passkey mismatch; nothing was sent');
