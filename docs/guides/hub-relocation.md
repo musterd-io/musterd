@@ -153,6 +153,27 @@ Follows-up: lane `01M6MRAVRF` (HTTPS and passkeys for `/live`, delta-2, relay cr
 Tailscale rule, a `localhost:4849/live` forward, the box's `/live` publisher, the laptop
 auto-refresher, lazara's credential).
 
+## Follow-ups done (2026-11-04 evening, lane `01M6MRAVRF`)
+
+- **`/live` over HTTPS.** `tailscale serve --bg --https=443 http://127.0.0.1:4849` (as root) fronts the
+  daemon at `https://musterd-joiner-1.tail400343.ts.net` with a tailnet certificate; the `--tcp 4849`
+  forward stays for the seats. The drop-in `musterd-daemon.service.d/https.conf` sets
+  `MUSTERD_WEBAUTHN_ORIGINS` to that origin plus the two loopback origins (the variable replaces the
+  default list, it does not extend it). The hub's own passkey origin is this variable;
+  `MUSTERD_WEBAUTHN_NODE_ORIGINS` is only for authority forwarded from a joiner. Checked from the
+  laptop: `/health`, `/live` and a WebSocket upgrade with a browser `Origin` all answer on the HTTPS
+  name. A laptop with MagicDNS off (`CorpDNS: false`) does not resolve the name: `tailscale set
+  --accept-dns=true` there, or the browser never reaches it. Passkeys still need re-enrolling on the
+  new origin (the old ones were `rp_id localhost`).
+- **The laptop auto-refresher is back** (`launchctl bootstrap gui/501 …musterd-autorefresh.plist`);
+  it now refreshes a joiner. Its presence touch and bounce announcement fail with
+  `invalid service token`: the tick speaks to the installed daemon, a joiner with a fresh store, and
+  the token was minted on the hub. The refresh itself is unaffected. Follows-up: the tick should
+  announce to the hub when the local daemon is a joiner (own lane).
+- Not scripted yet, by design: the box's `/live` publisher (`service install --live` is launchd-only;
+  the box needs a systemd timer or a post-publish copy) and a `localhost:4849/live` forward (a
+  joiner's `/live` has no hub redirect; server change, own lane).
+
 ## Credentials on the box (the revocation list)
 
 Each credential that lives on `musterd-joiner-1`, and the one step that revokes it. On a compromise,
