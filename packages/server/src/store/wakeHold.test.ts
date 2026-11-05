@@ -141,15 +141,21 @@ withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
         [`a-${seat}-${ts}`, teamId, ts, seat, ts],
       );
     }
-    /** A parked row (ADR 010 hold) last seen at `seenAt`. */
-    async function parked(db: Driver, memberId: string, conn: string, seenAt: number) {
+    /** A parked row (ADR 010 hold) last seen at `seenAt`, attached at `createdAt` (default: a
+     *  minute before it parked — a session that ran a while). */
+    async function parked(
+      db: Driver,
+      memberId: string,
+      conn: string,
+      seenAt: number,
+      createdAt = seenAt - 60_000,
+    ) {
       const row = await attach(db, memberId, 'claude-code', conn, {});
       await release(db, row.id, 45_000);
-      await db.run('UPDATE presence SET last_seen_at = ?, held_until = ? WHERE id = ?', [
-        seenAt,
-        seenAt + 45_000,
-        row.id,
-      ]);
+      await db.run(
+        'UPDATE presence SET last_seen_at = ?, held_until = ?, created_at = ? WHERE id = ?',
+        [seenAt, seenAt + 45_000, createdAt, row.id],
+      );
       return row;
     }
     async function enroll(
@@ -185,8 +191,12 @@ withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
       // Ada: the MCP session closes a few seconds before the hook posts; the hook's own CLI claim
       // parks a few seconds after it; a later session of her own parked past the settle window.
       await parked(db, ada.id, 'mcp', exitAt - 3_000);
-      await parked(db, ada.id, 'hook', exitAt + 4_000);
+      // The hook's claim is the session that posts the exit: created just before the row's ts.
+      await parked(db, ada.id, 'hook', exitAt + 4_000, exitAt - 100);
       const later = await parked(db, ada.id, 'later', exitAt + EXIT_SETTLE_MS + 1_000);
+      // A session the seat's person starts AFTER the exit and parks inside the settle window is
+      // not the exiting run, whatever the clock says (big-body's acceptance read, 2026-11-05).
+      const fresh = await parked(db, ada.id, 'fresh', exitAt + 30_000, exitAt + 5_000);
       await parked(db, bo.id, 'bo', exitAt + 1_000);
       await parked(db, cy.id, 'cy', exitAt + 1_000);
       expect(await listReclaimableMemberIds(db, team.id, now)).toEqual(
@@ -194,7 +204,7 @@ withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
       );
 
       expect(await releaseExitedSessionHolds(db, team.id, now)).toBe(2);
-      // Ada's later session still holds; Bo (batched lane) and Cy (unenrolled) keep theirs.
+      // Ada's later and fresh sessions still hold; Bo (batched lane) and Cy (unenrolled) keep theirs.
       expect(await listReclaimableMemberIds(db, team.id, now)).toEqual(
         new Set([ada.id, bo.id, cy.id]),
       );
@@ -202,8 +212,8 @@ withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
         'SELECT id, held_until FROM presence WHERE member_id = ? ORDER BY last_seen_at ASC',
         [ada.id],
       );
-      expect(rows.map((r) => r.held_until > now)).toEqual([false, false, true]);
-      expect(rows[2]?.id).toBe(later.id);
+      expect(rows.map((r) => r.held_until > now)).toEqual([false, false, true, true]);
+      expect(rows.slice(2).map((r) => r.id)).toEqual([fresh.id, later.id]);
       // Idempotent.
       expect(await releaseExitedSessionHolds(db, team.id, now)).toBe(0);
     });
@@ -225,10 +235,10 @@ withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
         ),
       ).toEqual({ held_until: null, conn_id: 'live' });
       // A hold parked around the exit goes through the per-poll sweep too.
-      await parked(db, ada.id, 'hook', now - 2_000);
+      await parked(db, ada.id, 'hook', now - 2_000, now - 5_100);
       expect(await releaseLateWakeHolds(db, team.id, now)).toBe(1);
       // An exit older than the window speaks for nothing.
-      await parked(db, ada.id, 'again', now - 1_000);
+      await parked(db, ada.id, 'again', now - 1_000, now - 5_100);
       expect(await releaseLateWakeHolds(db, team.id, now, 3_000)).toBe(0);
     });
   });
