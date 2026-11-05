@@ -18,6 +18,15 @@ const TS_STATUS = JSON.stringify({
   Self: { DNSName: 'nicks-laptop.tail400343.ts.net.', TailscaleIPs: ['100.100.246.14'] },
 });
 
+/** Since 2026-11-04 the hub is a tailnet peer (musterd-joiner-1), not this laptop. */
+const TS_STATUS_HUB = JSON.stringify({
+  BackendState: 'Running',
+  Self: { DNSName: 'nicks-laptop.tail400343.ts.net.', TailscaleIPs: ['100.100.246.14'] },
+  Peer: {
+    hub: { DNSName: 'musterd-joiner-1.tail400343.ts.net.', TailscaleIPs: ['100.115.152.1'] },
+  },
+});
+
 function greenExec(over: Record<string, ExecResult> = {}): Exec {
   return (cmd, args) => {
     const key = [cmd, ...args].join(' ');
@@ -130,6 +139,21 @@ describe('musterd stream', () => {
       });
       expect(seen).toEqual(['nicks-laptop.tail400343.ts.net', '100.100.246.14']);
       expect(out.join('')).toContain('tailscale serve forwards 9999');
+    });
+
+    it('checks the hub, not this machine, when the daemon is a hub on the tailnet', async () => {
+      withImage();
+      const seen: string[] = [];
+      expect(
+        await run(['doctor'], {
+          server: 'http://100.115.152.1:4849',
+          exec: greenExec({ 'tailscale status --json': ok(TS_STATUS_HUB) }),
+          probeUpgrade: async (h) => (seen.push(h), 'allowed'),
+        }),
+      ).toBe(0);
+      expect(seen).toEqual(['musterd-joiner-1.tail400343.ts.net', '100.115.152.1']);
+      // The hub's port is forwarded by the hub's own `tailscale serve`, not this laptop's.
+      expect(out.join('')).toContain('the daemon is on musterd-joiner-1.tail400343.ts.net');
     });
   });
 
@@ -506,6 +530,24 @@ describe('musterd stream', () => {
         }),
       ).toBe(0);
       expect(flyArgs).toContain('BROADCAST_ARGS=--duration 600');
+    });
+
+    it('start points the capture at the hub the CLI is configured for, not this laptop', async () => {
+      withImage();
+      let flyArgs: string[] = [];
+      expect(
+        await run(['start'], {
+          ...sup(),
+          server: 'http://100.115.152.1:4849',
+          exec: greenExec({ 'tailscale status --json': ok(TS_STATUS_HUB) }),
+          launch: (args) => {
+            flyArgs = args;
+            launches += 1;
+            return { code: 0, output: '' };
+          },
+        }),
+      ).toBe(0);
+      expect(flyArgs).toContain('MUSTERD_AIR_ADDR=musterd-joiner-1.tail400343.ts.net');
     });
 
     // Lane 01M5WN8NB8: a file on the machine dies with `--rm`, so the recorder writes to the log.

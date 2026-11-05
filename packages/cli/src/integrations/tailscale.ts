@@ -65,6 +65,58 @@ export function parseTailscaleSelf(json: string): TailnetSelf | null {
   };
 }
 
+/** Where the capture machine reaches the daemon: its tailnet name and IPv4, and whether it is here. */
+export interface TailnetTarget {
+  dnsName: string;
+  ip4: string | null;
+  /** The daemon runs on this machine (a loopback server, or this machine's own tailnet address). */
+  local: boolean;
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+const ipv4Of = (ips: unknown): string | null =>
+  Array.isArray(ips)
+    ? ((ips.find((ip) => typeof ip === 'string' && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) as
+        | string
+        | undefined) ?? null)
+    : null;
+const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+
+/**
+ * The daemon `server` names, as a tailnet node: this machine for a loopback server (the hub on this
+ * laptop, as it was until 2026-11-04), or the peer whose name or address it is (the hub on
+ * musterd-joiner-1 since). Null when the daemon is not on the tailnet or the status is unreadable.
+ * `Peer` is the vendor's own map, read field by field here, never trusted whole.
+ */
+export function tailnetTarget(statusJson: string, server: string): TailnetTarget | null {
+  let host: string;
+  try {
+    host = new URL(server).hostname.replace(/\.$/, '');
+  } catch {
+    return null;
+  }
+  const self = parseTailscaleSelf(statusJson);
+  if (!self) return null;
+  if (LOOPBACK.has(host) || host === self.dnsName || host === self.ip4)
+    return { dnsName: self.dnsName, ip4: self.ip4, local: true };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(statusJson);
+  } catch {
+    return null;
+  }
+  const peers = isRecord(parsed) && isRecord(parsed['Peer']) ? Object.values(parsed['Peer']) : [];
+  for (const p of peers) {
+    if (!isRecord(p) || typeof p['DNSName'] !== 'string') continue;
+    const name = p['DNSName'].replace(/\.$/, '');
+    const ips = Array.isArray(p['TailscaleIPs']) ? p['TailscaleIPs'] : [];
+    if (name === host || ips.includes(host))
+      return { dnsName: name, ip4: ipv4Of(p['TailscaleIPs']), local: false };
+  }
+  return null;
+}
+
 export function serveForwardsPort(json: string, port: number): boolean {
   let parsed: unknown;
   try {

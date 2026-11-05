@@ -66,7 +66,7 @@ import {
 import { HttpClient } from '../client.js';
 import { configPath, loadConfig, serverProvenance, type ServerProvenance } from '../config.js';
 import { CliError } from '../errors.js';
-import { probeUpgradeHost, parseTailscaleSelf } from '../integrations/tailscale.js';
+import { probeUpgradeHost, tailnetTarget } from '../integrations/tailscale.js';
 import { realExec, type Exec } from '../process.js';
 import { theme } from '../render/theme.js';
 import { summarize, type PerfSample } from './broadcast-perf.js';
@@ -226,6 +226,7 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
   const postWindDown = deps.postWindDown ?? defaultPostWindDown;
   const sup = {
     statePath,
+    server,
     now,
     who,
     launch,
@@ -249,6 +250,7 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
         statePath,
         out,
         json: parsed.flags['json'] === true,
+        server,
         // Only when the CALLER did not name the server: an injected/flagged one has no provenance
         // question, and the doctor's own checks are about the resolved origin either way.
         ...(deps.server ? {} : { provenance: serverProvenance(cwd) }),
@@ -303,6 +305,7 @@ async function doctorVerb(a: {
   statePath: string;
   out: (s: string) => void;
   json: boolean;
+  server: string;
   provenance?: ServerProvenance;
 }): Promise<number> {
   const checks = await runChecks({
@@ -314,6 +317,7 @@ async function doctorVerb(a: {
     // The image the SUPERVISOR would launch, not this checkout's file — a doctor that answers
     // about its own worktree reads green while the stream would run something else entirely.
     image: readCaptureImage({ statePath: a.statePath, repoRoot: a.repoRoot }),
+    server: a.server,
   });
   const failed = checks.filter((c) => c.state === 'fail');
 
@@ -467,6 +471,8 @@ async function buildFrom(
 /** The injected supervisor plumbing every desired-state verb shares (ADR 293). */
 interface Sup {
   statePath: string;
+  /** The daemon this CLI is configured for — the one the capture machine must load. */
+  server: string;
   now: () => number;
   who: () => string;
   launch: (flyArgs: string[]) => LaunchResult | Promise<LaunchResult>;
@@ -684,7 +690,12 @@ async function defaultTitleFor(flags: Record<string, string | boolean>): Promise
 }
 
 /** Resolve the launch preconditions (image digest + tailnet address) or throw the doctor hint. */
-function launchPreconditions(a: { exec: Exec; repoRoot: string | null; statePath: string }): {
+function launchPreconditions(a: {
+  exec: Exec;
+  repoRoot: string | null;
+  statePath: string;
+  server: string;
+}): {
   digest: string;
   addr: string;
 } {
@@ -695,10 +706,10 @@ function launchPreconditions(a: { exec: Exec; repoRoot: string | null; statePath
   if (!digest) throw new CliError('no image recorded — run `musterd stream build` first', 2);
   // The address is discovered, never demanded. Requiring MUSTERD_AIR_ADDR meant every launch began
   // by looking up a name the machine already knows.
-  const addr = tailnetAddr(a.exec);
+  const addr = tailnetAddr(a.exec, a.server);
   if (!addr) {
     throw new CliError(
-      'could not read this machine’s tailnet address from `tailscale status` — run `musterd stream doctor`',
+      `could not read the tailnet address of the daemon ${a.server} from \`tailscale status\` — run \`musterd stream doctor\``,
       2,
     );
   }
@@ -980,12 +991,16 @@ export function currentSeatName(flags: Record<string, string | boolean>): string
   }
 }
 
-/** This machine's MagicDNS name, which is what the container puts in `Host`. */
-function tailnetAddr(exec: Exec): string | null {
+/**
+ * The MagicDNS name of the daemon this CLI is configured for, which is what the container loads and
+ * puts in `Host`: this machine when the daemon is local, the hub's peer name when it is not. Since
+ * the hub moved off this laptop (2026-11-04) the laptop is a joiner with its own store, so loading
+ * the laptop would show an empty office and refuse the hub-minted broadcast seat.
+ */
+function tailnetAddr(exec: Exec, server: string): string | null {
   const st = exec('tailscale', ['status', '--json']);
   if (st.code !== 0) return null;
-  const self = parseTailscaleSelf(st.stdout);
-  return self?.running ? self.dnsName : null;
+  return tailnetTarget(st.stdout, server)?.dnsName ?? null;
 }
 
 // ── stop / status ────────────────────────────────────────────────────────────────────────────────
