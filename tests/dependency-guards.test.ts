@@ -37,6 +37,27 @@ describe('installed dependency guards', () => {
     expect(duplicated).toEqual([]);
   });
 
+  // TestFlight build 54 (2026-11-05) still died at launch: dyld could not find
+  // _OBJC_CLASS_$_RCTStatusBarAppearance, which ExpoModulesCore 58.0.30 links against and only
+  // react-native 0.88.1 defines — the app pinned 0.88.0. expo doctor reported the mismatch, but the
+  // TestFlight build does not fail on it. Every native module the SDK pins must meet its floor.
+  it('the app declares every SDK-pinned native module at or above the SDK floor', () => {
+    const app = JSON.parse(
+      readFileSync(new URL('../packages/mobile/package.json', import.meta.url), 'utf8'),
+    ) as { dependencies: Record<string, string> };
+    const bundled = expoRequire('./bundledNativeModules.json') as Record<string, string>;
+    const parse = (range: string) => range.replace(/^[~^]/, '').split('.').map(Number);
+    const below = Object.entries(app.dependencies)
+      .filter(([name]) => bundled[name] !== undefined)
+      .filter(([name, declared]) => {
+        const [want, have] = [parse(bundled[name]!), parse(declared)];
+        if (have[0] !== want[0] || have[1] !== want[1]) return true; // other major/minor line
+        return (have[2] ?? 0) < (want[2] ?? 0);
+      })
+      .map(([name, declared]) => `${name}: ${declared} < ${bundled[name]}`);
+    expect(below).toEqual([]);
+  });
+
   it('accepts valid RSA signatures and rejects extra digest algorithm elements', () => {
     // reason: node-forge ships no types; this fixture uses its public ASN.1/RSA API.
     const forge: any = cliRequire('node-forge');
