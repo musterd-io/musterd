@@ -957,6 +957,29 @@ function sendFile(
  * client route) falls back to `index.html` so deep links + refresh work. Path
  * traversal is refused by resolving under `webRoot` and requiring containment.
  */
+/**
+ * A joiner's `/live` sends the browser to the hub (lane 01M6N2WJ8P). A joiner holds no seat
+ * credentials and no team state of its own, so its `/live` is an empty office that signs you out —
+ * observed on the laptop the evening the revive hub moved to a box (2026-11-04). The joiner knows
+ * where its hub is (`node.json`, per team), so `/live?team=<slug>` for an enrolled team answers a
+ * 302 to the hub's `/live` with the same query; with no `team` and exactly one enrolment, the same.
+ * Anything else (a hub, an unknown team, several enrolments and no team named) is served as before.
+ * Pure: the handler passes the enrolment map it already reads for sync.
+ */
+export function hubLiveRedirect(
+  pathname: string,
+  search: string,
+  nodes: Record<string, { hub_url: string }>,
+): string | null {
+  if (pathname !== '/live' && pathname !== '/live/') return null;
+  const team = new URLSearchParams(search).get('team');
+  const slugs = Object.keys(nodes);
+  const slug = team ? (nodes[team] ? team : null) : slugs.length === 1 ? slugs[0]! : null;
+  if (!slug) return null;
+  const hub = nodes[slug]!.hub_url.replace(/\/+$/, '');
+  return `${hub}/live${search}`;
+}
+
 function serveStatic(
   req: IncomingMessage,
   webRoot: string,
@@ -12087,6 +12110,11 @@ export async function handleHttp(
       path !== '/health' &&
       !path.startsWith('/teams')
     ) {
+      const toHub = hubLiveRedirect(path, url.search, readNodeState().nodes);
+      if (toHub) {
+        res.writeHead(302, { location: toHub, 'cache-control': 'no-store' });
+        return res.end();
+      }
       return serveStatic(req, ctx.config.webRoot, path, res);
     }
 
