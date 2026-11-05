@@ -108,7 +108,7 @@ hostile same-user process.
 | --- | --- | --- | --- |
 | cursor | none | none | deaf until a human prompts |
 | grok | `Stop` at `end_turn` | yes — blocks once with the daemon-composed line | deaf |
-| muse | `Stop` with `stop_hook_active` | yes — blocks once via `decision:block` developer block (ADR 370 analogue; `additionalContext` rejected on Stop though accepted on PostToolUse) | deaf (`no-inject:muse`; 2026-10-16 on 1.4.10, unre-measured on 1.4.14) |
+| muse | `Stop` with `stop_hook_active` | yes — blocks once via `decision:block` developer block (ADR 370 analogue; `additionalContext` rejected on Stop though accepted on PostToolUse) | deaf (`no-inject:muse`; 2026-10-16 on 1.4.10, re-measured 2026-11-05 on 1.4.14 — `session-message` still `external_agent_ingress_closed`, ADR 558 §6) |
 | claude-code | `Notification` → `musterd inbox --waiting` | **no** — Notification stdout never enters model context. The machine-wide `UserPromptSubmit` nudge reaches the model, but only after the human has typed | deaf |
 | opencode | `session.idle` → `promptAsync` (synthetic, capped at 4) | half-measured — silent-with-live-lease confirmed live (no spurious prompt); deaf lease rings a deaf notice *as a turn* by code reading; raised-while-idle still unmeasured, inherits the #21524 race (ghost, 2026-09-14, eval §9b) | unmeasured |
 | codex | none | none | deaf |
