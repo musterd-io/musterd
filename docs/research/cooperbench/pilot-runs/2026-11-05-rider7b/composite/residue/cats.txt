@@ -1,0 +1,7 @@
+== r7b-composite total $20.32 calls 852 median calls/agent 45
+   musterd other / wait / gate       281 calls $  6.91   34%
+   work (read/edit/test/bash)        239 calls $  5.94   29%
+   git                               202 calls $  4.49   22%
+   messages                          101 calls $  2.21   11%
+   text-only                          20 calls $  0.58    3%
+   other                               9 calls $  0.20    1%

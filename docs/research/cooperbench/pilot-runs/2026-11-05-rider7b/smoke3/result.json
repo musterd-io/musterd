@@ -1,0 +1,46 @@
+{
+  "repo": "pallets_click_task",
+  "task_id": 2068,
+  "features": [
+    1,
+    2
+  ],
+  "setting": "coop",
+  "run_id": "e9786309",
+  "run_name": "r7b-smoke",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-05T01:26:14.682001",
+  "ended_at": "2026-11-05T01:37:16.452899",
+  "duration_seconds": 661.770898,
+  "agents": {
+    "agent2": {
+      "feature_id": 2,
+      "status": "Submitted",
+      "cost": 0.7855816500000001,
+      "steps": 42,
+      "input_tokens": 194,
+      "output_tokens": 9169,
+      "cache_read_tokens": 1273278,
+      "cache_write_tokens": 70795,
+      "patch_lines": 162,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 1,
+      "status": "Submitted",
+      "cost": 1.4560579500000002,
+      "steps": 55,
+      "input_tokens": 442,
+      "output_tokens": 14097,
+      "cache_read_tokens": 3215894,
+      "cache_write_tokens": 74269,
+      "patch_lines": 162,
+      "error": null
+    }
+  },
+  "total_cost": 2.2416396,
+  "total_steps": 97,
+  "messages_sent": 0,
+  "log_dir": "logs/r7b-smoke/coop/pallets_click_task/2068/f1_f2"
+}

@@ -1,0 +1,80 @@
+{
+ "pairs_read": 1,
+ "wakes": 4,
+ "resumed": 0,
+ "failed": 0,
+ "unpriced_wakes": 0,
+ "first_call_usd": 2.06,
+ "first_call_priced_pairs": 1,
+ "wake_usd": 0.62,
+ "cost_usd_total": 2.68,
+ "waited_n": 4,
+ "waited_median_s": 39.0,
+ "rule": "R7a: wait-mode team_inbox_check calls (mtools.py) + wakes, <= 55 acted / >= 75 did not; R7b: cost_usd_total <= 15 / >= 18; R7c: waited_median_s <= 120 / >= 900, and 'did not' voids R7a and R7b",
+ "pairs": [
+  {
+   "pair": "/data/runs/logs/r7b-rerun-jinja/coop/pallets_jinja_task/1559/f5_f8",
+   "wakes": 4,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 2.0647605,
+   "wake_usd": 0.6153,
+   "waited_ms": [
+    9928,
+    36833,
+    41108,
+    51938
+   ],
+   "seats": [
+    {
+     "seat": "agent2",
+     "wakes": 4,
+     "cost_usd": 0.6153,
+     "waited_s": [
+      9.9,
+      36.8,
+      41.1,
+      51.9
+     ],
+     "holds": [
+      {
+       "act_ts": 1793856382250,
+       "waited_s": 9.9,
+       "by_state": {
+        "passed": 9.9
+       }
+      },
+      {
+       "act_ts": 1793856178985,
+       "waited_s": 36.8,
+       "by_state": {
+        "passed": 6.8,
+        "present": 30.1
+       }
+      },
+      {
+       "act_ts": 1793856231844,
+       "waited_s": 41.1,
+       "by_state": {
+        "passed": 11.1,
+        "present": 30.0
+       }
+      },
+      {
+       "act_ts": 1793856108674,
+       "waited_s": 51.9,
+       "by_state": {
+        "present": 1.8,
+        "reclaimable": 50.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

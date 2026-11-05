@@ -1,0 +1,502 @@
+{
+ "pairs_read": 10,
+ "wakes": 21,
+ "resumed": 0,
+ "failed": 0,
+ "unpriced_wakes": 1,
+ "first_call_usd": 17.54,
+ "first_call_priced_pairs": 10,
+ "wake_usd": 4.44,
+ "cost_usd_total": 21.98,
+ "waited_n": 21,
+ "waited_median_s": 82.8,
+ "rule": "R7a: wait-mode team_inbox_check calls (mtools.py) + wakes, <= 55 acted / >= 75 did not; R7b: cost_usd_total <= 15 / >= 18; R7c: waited_median_s <= 120 / >= 900, and 'did not' voids R7a and R7b",
+ "pairs": [
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3",
+   "wakes": 2,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 1.2956123999999998,
+   "wake_usd": 0.3007,
+   "waited_ms": [
+    72899,
+    72366
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 1,
+     "cost_usd": 0.1734,
+     "waited_s": [
+      72.9
+     ],
+     "holds": [
+      {
+       "act_ts": 1793847277769,
+       "waited_s": 72.9,
+       "by_state": {
+        "present": 32.8,
+        "reclaimable": 40.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 1,
+     "cost_usd": 0.1273,
+     "waited_s": [
+      72.4
+     ],
+     "holds": [
+      {
+       "act_ts": 1793847288502,
+       "waited_s": 72.4,
+       "by_state": {
+        "present": 22.3,
+        "reclaimable": 50.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/dspy_task/8563/f1_f4",
+   "wakes": 0,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 1.8347229,
+   "wake_usd": 0.0,
+   "waited_ms": [],
+   "seats": []
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/go_chi_task/27/f3_f4",
+   "wakes": 1,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 2.3943882,
+   "wake_usd": 0.1284,
+   "waited_ms": [
+    99251
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 1,
+     "cost_usd": 0.1284,
+     "waited_s": [
+      99.3
+     ],
+     "holds": [
+      {
+       "act_ts": 1793847369775,
+       "waited_s": 99.3,
+       "by_state": {
+        "present": 59.2,
+        "reclaimable": 40.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/llama_index_task/17244/f5_f6",
+   "wakes": 2,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 0.93465525,
+   "wake_usd": 0.4178,
+   "waited_ms": [
+    152415,
+    177347
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 2,
+     "cost_usd": 0.4178,
+     "waited_s": [
+      152.4,
+      177.3
+     ],
+     "holds": [
+      {
+       "act_ts": 1793847879039,
+       "waited_s": 152.4,
+       "by_state": {
+        "present": 97.2,
+        "reclaimable": 40.1,
+        "passed": 15.1
+       }
+      },
+      {
+       "act_ts": 1793847768835,
+       "waited_s": 177.3,
+       "by_state": {
+        "present": 137.3,
+        "reclaimable": 40.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/openai_tiktoken_task/0/f4_f8",
+   "wakes": 1,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 1.9301060999999997,
+   "wake_usd": 0.2398,
+   "waited_ms": [
+    44074
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 1,
+     "cost_usd": 0.2398,
+     "waited_s": [
+      44.1
+     ],
+     "holds": [
+      {
+       "act_ts": 1793848197300,
+       "waited_s": 44.1,
+       "by_state": {
+        "reclaimable": 44.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/pallets_click_task/2800/f1_f4",
+   "wakes": 4,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 3.5474691000000007,
+   "wake_usd": 0.9371,
+   "waited_ms": [
+    74895,
+    3332,
+    168534,
+    350611
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 1,
+     "cost_usd": 0.3743,
+     "waited_s": [
+      74.9
+     ],
+     "holds": [
+      {
+       "act_ts": 1793848384212,
+       "waited_s": 74.9,
+       "by_state": {
+        "present": 24.8,
+        "reclaimable": 50.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 3,
+     "cost_usd": 0.5628,
+     "waited_s": [
+      3.3,
+      168.5,
+      350.6
+     ],
+     "holds": [
+      {
+       "act_ts": 1793848663083,
+       "waited_s": 3.3,
+       "by_state": {
+        "passed": 3.3
+       }
+      },
+      {
+       "act_ts": 1793848358640,
+       "waited_s": 168.5,
+       "by_state": {
+        "present": 99.3,
+        "reclaimable": 40.1,
+        "passed": 29.1
+       }
+      },
+      {
+       "act_ts": 1793848127390,
+       "waited_s": 350.6,
+       "by_state": {
+        "present": 310.5,
+        "reclaimable": 40.1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/pallets_jinja_task/1559/f5_f8",
+   "wakes": 2,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 0.0,
+   "wake_usd": 0.5772,
+   "waited_ms": [
+    41907,
+    62167
+   ],
+   "seats": [
+    {
+     "seat": "agent2",
+     "wakes": 2,
+     "cost_usd": 0.5772,
+     "waited_s": [
+      41.9,
+      62.2
+     ],
+     "holds": [
+      {
+       "act_ts": 1793848413327,
+       "waited_s": 41.9,
+       "by_state": {
+        "present": 1.8,
+        "reclaimable": 40.1,
+        "passed": 0.0
+       }
+      },
+      {
+       "act_ts": 1793848432225,
+       "waited_s": 62.2,
+       "by_state": {
+        "reclaimable": 23.0,
+        "passed": 29.1,
+        "present": 10.0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/pallets_jinja_task/1621/f6_f10",
+   "wakes": 4,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 2.1339819,
+   "wake_usd": 0.91,
+   "waited_ms": [
+    131000,
+    387499,
+    349,
+    82771
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 2,
+     "cost_usd": 0.371,
+     "waited_s": [
+      131.0,
+      387.5
+     ],
+     "holds": [
+      {
+       "act_ts": 1793848998789,
+       "waited_s": 131.0,
+       "by_state": {
+        "present": 71.8,
+        "reclaimable": 40.1,
+        "passed": 19.1
+       }
+      },
+      {
+       "act_ts": 1793848703131,
+       "waited_s": 387.5,
+       "by_state": {
+        "present": 347.4,
+        "reclaimable": 40.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 2,
+     "cost_usd": 0.539,
+     "waited_s": [
+      0.3,
+      82.8
+     ],
+     "holds": [
+      {
+       "act_ts": 1793849187728,
+       "waited_s": 0.3,
+       "by_state": {
+        "passed": 0.3
+       }
+      },
+      {
+       "act_ts": 1793849028049,
+       "waited_s": 82.8,
+       "by_state": {
+        "present": 32.7,
+        "reclaimable": 50.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/react_hook_form_task/153/f2_f6",
+   "wakes": 1,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 0,
+   "first_call_usd": 1.8472283999999999,
+   "wake_usd": 0.1522,
+   "waited_ms": [
+    83904
+   ],
+   "seats": [
+    {
+     "seat": "agent2",
+     "wakes": 1,
+     "cost_usd": 0.1522,
+     "waited_s": [
+      83.9
+     ],
+     "holds": [
+      {
+       "act_ts": 1793849092437,
+       "waited_s": 83.9,
+       "by_state": {
+        "present": 33.8,
+        "reclaimable": 50.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/typst_task/6554/f2_f6",
+   "wakes": 4,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 1,
+   "first_call_usd": 1.6222536,
+   "wake_usd": 0.7791,
+   "waited_ms": [
+    6414,
+    175743,
+    181276,
+    8011
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 3,
+     "cost_usd": 0.6546,
+     "waited_s": [
+      6.4,
+      175.7,
+      181.3
+     ],
+     "holds": [
+      {
+       "act_ts": 1793849985821,
+       "waited_s": 6.4,
+       "by_state": {
+        "passed": 6.4
+       }
+      },
+      {
+       "act_ts": 1793849571988,
+       "waited_s": 175.7,
+       "by_state": {
+        "present": 135.7,
+        "reclaimable": 40.1,
+        "passed": 0.0
+       }
+      },
+      {
+       "act_ts": 1793849653704,
+       "waited_s": 181.3,
+       "by_state": {
+        "present": 114.0,
+        "reclaimable": 40.1,
+        "passed": 27.2
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 1,
+     "cost_usd": 0.1245,
+     "waited_s": [
+      8.0
+     ],
+     "holds": [
+      {
+       "act_ts": 1793849949973,
+       "waited_s": 8.0,
+       "by_state": {
+        "passed": 8.0
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,70 @@
+{
+ "r7b-musterd": {
+  "total": 17.54,
+  "counts": {
+   "send_calls": 117,
+   "sends": 117,
+   "act:message": 105,
+   "signal": 28,
+   "act:status_update": 5,
+   "act:request_help": 5,
+   "act:accept": 2
+  },
+  "usd": {
+   "send_calls": 2.61,
+   "signal": 0.58
+  },
+  "signal_kinds": {
+   "lane done / you can edit": [
+    11,
+    0.23
+   ],
+   "pushed/fetch": [
+    9,
+    0.18
+   ],
+   "other": [
+    2,
+    0.03
+   ],
+   "merged/complete/submitted": [
+    5,
+    0.12
+   ],
+   "waiting / ETA": [
+    1,
+    0.02
+   ]
+  },
+  "examples": {
+   "lane done / you can edit": [
+    "Thanks! Can you resolve your lane now so I can edit the file? Use lane_resolve or lane_submit.",
+    "The file is still held by your lane. I need you to either: 1) resolve your lane so the file is freed, or 2) hand off the lane to me so I can add my types. The s",
+    "Lane resolved. File is yours now - go ahead with your additions.",
+    "Lane released - set to awaiting_acceptance. File is yours now. Let me know when you're done so I can merge both our changes for final submission."
+   ],
+   "pushed/fetch": [
+    "I've completed my octal_str addition (added after document types, before email regex). Since we're both editing the same file, I can either: 1) push my change n",
+    "Already pushed to team/agent2 (commit 6e7488d4). Will keep my lane active until we merge both changes for final submission. Go ahead with your work.",
+    "My work is complete and pushed to team/agent2. Standing by for your completion so I can merge and create final patch.txt. Let me know if you need any help.",
+    "You're right - method parsing is your feature. I'll revert HandleFunc to logging-only and let you implement the parsing. Will update and push shortly."
+   ],
+   "other": [
+    "Lane 01M6MSWVQPG1CVHKCHP79VWAQQ is showing [done] on the board. Try checking lane_board or retrying your edit. The file should be free now.",
+    "Lane already handed off to you (01M6MW4D8HFDKGB7QHN2PJ3M14). You should now own it and can edit str.rs. Check lane_board to confirm."
+   ],
+   "merged/complete/submitted": [
+    "Task complete. Added octal_str type, merged agent1's work (hex_str, uuid4, ipv4), and created final patch.txt with all changes. File ready for submission.",
+    "\u2713 Both features complete in patch.txt (164 lines):\n- agent1: validate_input() for flexible ToolCalls parsing\n- agent2: fingerprint/id fields with SHA-256 canoni",
+    "Work complete. Fixed resource leak in shell_completion.py by wrapping make_context calls with 'with' statements. Tests pass, file handles properly closed. Merge",
+    "Feature complete: cleanup_timeout parameter added to Context class. Merged with shell_completion fixes. patch.txt created with unified diff (173 lines, 82 addit"
+   ],
+   "waiting / ETA": [
+    "My edits to types.py are blocked because you hold the file. Can you hand off the lane to me once you're done, or should I wait? How close are you to finishing?"
+   ]
+  },
+  "cf_as_run": 17.54,
+  "cf_drop_wait": 15.25,
+  "cf_drop_signal": 16.96
+ }
+}

@@ -1,0 +1,13 @@
+== r7b-musterd
+   musterd:team_inbox_check (plain)           74 $ 1.97
+   musterd:team_inbox_check (wait)            46 $ 0.90
+   gate:edit-refused                          32 $ 0.88
+   musterd:lane_board                         29 $ 0.54
+   musterd:lane_update                        18 $ 0.43
+   musterd:lane_open                          13 $ 0.32
+   wait:bash-sleep                            14 $ 0.30
+   musterd:lane_resolve                       11 $ 0.27
+   musterd:team_status                        11 $ 0.21
+   other:ToolSearch                            7 $ 0.15
+   musterd:lane_handoff                        4 $ 0.08
+   musterd:lane_submit                         2 $ 0.04

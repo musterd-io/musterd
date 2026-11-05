@@ -1,0 +1,1543 @@
+{
+ "arms": {
+  "claude_code_musterd": {
+   "pairs": 10,
+   "passed": 3,
+   "cause:None": 0,
+   "cause:task": 5,
+   "cause:setup": 2
+  }
+ },
+ "pairs": [
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3",
+   "task": "dottxt_ai_outlines_task/1655",
+   "features": [
+    1,
+    3
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": true,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 95,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 87,
+    "tests_failed": 0
+   },
+   "cost": 1.2956123999999998,
+   "steps": 82,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/types/__init__.py"
+    ],
+    "agent2": [
+     "outlines/types/__init__.py"
+    ]
+   },
+   "common_files": [
+    "outlines/types/__init__.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MSWVQPG1CVHKCHP79VWAQQ",
+      "title": "Add octal_str type for octal number validation",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "outlines/types/__init__.py"
+      ],
+      "named": [
+       "outlines/types/__init__.py"
+      ],
+      "claimed_at": 1793847095029
+     },
+     {
+      "id": "01M6MSWZJ9NZPBB856RP5W9622",
+      "title": "Add IPv4, UUID4, and Hex String types to regex DSL",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "outlines/types/__init__.py"
+      ],
+      "named": [
+       "outlines/types/__init__.py"
+      ],
+      "claimed_at": 1793847098953
+     }
+    ],
+    "named_common_files": [
+     "outlines/types/__init__.py"
+    ],
+    "acts": {
+     "message": 26,
+     "status_update": 1
+    },
+    "acts_directed": 18,
+    "gate": {
+     "allow:allowed": 2,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": true
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent1",
+      "next": "wait_until_lane"
+     }
+    ]
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/dspy_task/8563/f1_f4",
+   "task": "dspy_task/8563",
+   "features": [
+    1,
+    4
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 43,
+    "tests_failed": 7
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 59,
+    "tests_failed": 0
+   },
+   "cost": 1.8347229,
+   "steps": 99,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "dspy/adapters/types/tool.py"
+    ],
+    "agent2": [
+     "dspy/adapters/types/tool.py"
+    ]
+   },
+   "common_files": [
+    "dspy/adapters/types/tool.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MSWX0G218GREAXQ9CXHN02",
+      "title": "Add flexible parsing for dspy.ToolCalls",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "dspy/adapters/types/tool.py",
+       "test_toolcalls.py"
+      ],
+      "named": [
+       "dspy/adapters/types/tool.py",
+       "test_toolcalls.py"
+      ],
+      "claimed_at": 1793847096335
+     },
+     {
+      "id": "01M6MSX9H69JP9EQE94BBQ5W8X",
+      "title": "Add fingerprinting to ToolCalls",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "dspy/adapters/types/tool.py"
+      ],
+      "named": [
+       "dspy/adapters/types/tool.py"
+      ],
+      "claimed_at": 1793847109158
+     }
+    ],
+    "named_common_files": [
+     "dspy/adapters/types/tool.py"
+    ],
+    "acts": {
+     "message": 24
+    },
+    "acts_directed": 16,
+    "gate": {
+     "allow:allowed": 7,
+     "deny:denied": 3,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent2",
+      "next": "wait_until_lane"
+     },
+     {
+      "agent": "agent2",
+      "next": "message:message"
+     }
+    ]
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/go_chi_task/27/f3_f4",
+   "task": "go_chi_task/27",
+   "features": [
+    3,
+    4
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 4,
+    "tests_failed": 0
+   },
+   "cost": 2.3943882,
+   "steps": 139,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "log.go",
+     "mux.go",
+     "mux_test.go"
+    ],
+    "agent2": [
+     "log.go",
+     "mux.go",
+     "mux_test.go"
+    ]
+   },
+   "common_files": [
+    "log.go",
+    "mux.go",
+    "mux_test.go"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MSW63KFBMSMHJAEGTJJ390",
+      "title": "Add debug logging for route pattern handling",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "log.go"
+      ],
+      "named": [
+       "log.go"
+      ],
+      "claimed_at": 1793847072882
+     },
+     {
+      "id": "01M6MSWNFQQYEXFGPWQWW8PT1E",
+      "title": "Add path prefix support for HTTP method patterns",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "mux.go",
+       "mux_test.go"
+      ],
+      "named": [
+       "mux.go",
+       "mux_test.go"
+      ],
+      "claimed_at": 1793847088630
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 28,
+     "status_update": 1
+    },
+    "acts_directed": 20,
+    "gate": {
+     "allow:allowed": 6,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": true
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent2",
+      "next": "wait_until_lane"
+     }
+    ]
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/llama_index_task/17244/f5_f6",
+   "task": "llama_index_task/17244",
+   "features": [
+    5,
+    6
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 13,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 13,
+    "tests_failed": 1
+   },
+   "cost": 0.93465525,
+   "steps": 70,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ],
+    "agent2": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ]
+   },
+   "common_files": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MTFWTHYPYJT1GFZ9TR7A9R",
+      "title": "Add lazy mimetype accessor for ImageBlock",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "named": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "claimed_at": 1793847800361
+     },
+     {
+      "id": "01M6MTG1JCC1890TGSQ00ND9DQ",
+      "title": "Add encoding field to ImageBlock for base64 control",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "named": [
+       "llama-index-core/llama_index/core/base/llms/types.py"
+      ],
+      "claimed_at": 1793847723595
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 14,
+     "request_help": 1,
+     "handoff": 1,
+     "status_update": 1
+    },
+    "acts_directed": 11,
+    "gate": {
+     "allow:allowed": 3,
+     "deny:denied": 1,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent request_help to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent2",
+      "next": "wait_until_lane"
+     }
+    ]
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/openai_tiktoken_task/0/f4_f8",
+   "task": "openai_tiktoken_task/0",
+   "features": [
+    4,
+    8
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": true,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 1.9301060999999997,
+   "steps": 116,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "tiktoken/core.py"
+    ],
+    "agent2": [
+     "tiktoken/core.py"
+    ]
+   },
+   "common_files": [
+    "tiktoken/core.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 3
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MTM4282W0Y0G7Z83EMC89P",
+      "title": "Add token pattern tracking to encode function",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "tiktoken/core.py",
+       "test_pattern.py"
+      ],
+      "named": [
+       "tiktoken/core.py",
+       "test_pattern.py"
+      ],
+      "claimed_at": 1793847996442
+     },
+     {
+      "id": "01M6MTMEJSZE993E3F5AGASEJB",
+      "title": "Add token chunking support for long documents",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "tiktoken/core.py",
+       "test_chunking.py"
+      ],
+      "named": [
+       "tiktoken/core.py",
+       "test_chunking.py"
+      ],
+      "claimed_at": 1793847867993
+     }
+    ],
+    "named_common_files": [],
+    "acts": {
+     "message": 14,
+     "status_update": 2,
+     "handoff": 1
+    },
+    "acts_directed": 10,
+    "gate": {
+     "allow:allowed": 9,
+     "deny:denied": 4,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "tried another edit (held)"
+     },
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": true
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent1",
+      "next": "wait_until_lane"
+     },
+     {
+      "agent": "agent1",
+      "next": "message:message"
+     }
+    ]
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/pallets_click_task/2800/f1_f4",
+   "task": "pallets_click_task/2800",
+   "features": [
+    1,
+    4
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 68,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 76,
+    "tests_failed": 1
+   },
+   "cost": 3.5474691000000007,
+   "steps": 150,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ],
+    "agent2": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ]
+   },
+   "common_files": [
+    "src/click/core.py",
+    "src/click/shell_completion.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MTNBDXTRE7DS7NP1M1WGGK",
+      "title": "Add cleanup_timeout parameter to Context",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "src/click/core.py"
+      ],
+      "named": [
+       "src/click/core.py"
+      ],
+      "claimed_at": 1793847897532
+     },
+     {
+      "id": "01M6MTNG1EMBQ4BTAPB1WVCFGE",
+      "title": "Fix resource leak in shell completion file contexts",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/click/shell_completion.py",
+       "src/click/core.py",
+       "test_resource_leak.py",
+       "test_resource_leak2.py"
+      ],
+      "named": [
+       "src/click/shell_completion.py",
+       "src/click/core.py",
+       "test_resource_leak.py",
+       "test_resource_leak2.py"
+      ],
+      "claimed_at": 1793847902254
+     }
+    ],
+    "named_common_files": [
+     "src/click/core.py"
+    ],
+    "acts": {
+     "message": 27,
+     "request_help": 1,
+     "accept": 1,
+     "resolve": 2
+    },
+    "acts_directed": 16,
+    "gate": {
+     "allow:allowed": 8,
+     "deny:denied": 5,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 1,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "sent a message to agent2"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": false
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent1",
+      "next": "wait_until_lane"
+     }
+    ]
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/pallets_jinja_task/1559/f5_f8",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    5,
+    8
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "skipped",
+    "agent2": "skipped"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.0,
+   "steps": 0,
+   "agent_status": {
+    "agent2": "Error",
+    "agent1": "Error"
+   },
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "setup",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MV15H6SJQE0E0YDW0MRR78",
+      "title": "Add translation variable validation to Jinja2",
+      "owner": "agent1",
+      "state": "awaiting_acceptance",
+      "scope": [
+       "src/jinja2/ext.py"
+      ],
+      "named": [
+       "src/jinja2/ext.py"
+      ],
+      "claimed_at": 1793848284709
+     },
+     {
+      "id": "01M6MV16H14T4ZBMEB3T13BC17",
+      "title": "feat(i18n): Add conditional translation rendering with ctrans tag",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "src/jinja2/ext.py"
+      ],
+      "named": [
+       "src/jinja2/ext.py"
+      ],
+      "claimed_at": 1793848285728
+     }
+    ],
+    "named_common_files": [
+     "src/jinja2/ext.py"
+    ],
+    "acts": {
+     "message": 14,
+     "ask": 1
+    },
+    "acts_directed": 9,
+    "gate": {
+     "allow:allowed": 2,
+     "deny:denied": 1
+    },
+    "holds": {},
+    "after_held_refusal": [],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [],
+    "held_refusal_moves": []
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/pallets_jinja_task/1621/f6_f10",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    6,
+    10
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": true,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 49,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 55,
+    "tests_failed": 0
+   },
+   "cost": 2.1339819,
+   "steps": 140,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/loaders.py"
+    ],
+    "agent2": [
+     "src/jinja2/loaders.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/loaders.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 3
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MVAP85S9D3ZQM09DG0NZM3",
+      "title": "Add path_transform parameter to template loaders",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/jinja2/loaders.py",
+       "test_path_transform.py"
+      ],
+      "named": [
+       "src/jinja2/loaders.py",
+       "test_path_transform.py"
+      ],
+      "claimed_at": 1793848596739
+     },
+     {
+      "id": "01M6MVARX6D4WF2CZM4JTHM4CV",
+      "title": "Add template path aliasing support",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "src/jinja2/loaders.py",
+       "test_aliasing.py"
+      ],
+      "named": [
+       "src/jinja2/loaders.py",
+       "test_aliasing.py"
+      ],
+      "claimed_at": 1793848599462
+     }
+    ],
+    "named_common_files": [
+     "src/jinja2/loaders.py"
+    ],
+    "acts": {
+     "message": 21,
+     "request_help": 1,
+     "accept": 1,
+     "ask": 1
+    },
+    "acts_directed": 14,
+    "gate": {
+     "allow:allowed": 32,
+     "deny:denied": 4,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent request_help to agent1"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": true
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent2",
+      "next": "wait_until_lane"
+     },
+     {
+      "agent": "agent2",
+      "next": "message:message"
+     }
+    ]
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/react_hook_form_task/153/f2_f6",
+   "task": "react_hook_form_task/153",
+   "features": [
+    2,
+    6
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "error",
+   "strategy": null,
+   "apply": {
+    "agent1": "unknown",
+    "agent2": "unknown"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 1.8472283999999999,
+   "steps": 107,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts"
+    ],
+    "agent2": [
+     ".eslintignore",
+     ".eslintrc",
+     ".github/FUNDING.yml",
+     ".github/actions/install-dependencies/action.yml",
+     ".github/workflows/README.yml",
+     ".github/workflows/api-extrator.yml",
+     ".github/workflows/automation.yml",
+     ".github/workflows/build-test.yml",
+     ".github/workflows/codeql-analysis.yml",
+     ".github/workflows/compressed-size.yml",
+     ".github/workflows/lock-issue.yml",
+     ".husky/pre-commit",
+     ".prettierignore",
+     ".vscode/launch.json",
+     ".vscode/settings.json",
+     "CHANGELOG.md",
+     "CODE_OF_CONDUCT.md",
+     "CONTRIBUTING.md",
+     "README.md",
+     "SECURITY.md",
+     "app/.npmrc",
+     "app/index.html",
+     "app/package.json",
+     "app/pnpm-lock.yaml",
+     "app/src/app.tsx",
+     "app/src/autoUnregister.tsx",
+     "app/src/basic.tsx",
+     "app/src/basicSchemaValidation.tsx",
+     "app/src/controller.tsx",
+     "app/src/crossFrameForm.tsx",
+     "app/src/defaultValues.tsx",
+     "app/src/main.tsx",
+     "app/src/resetKeepDirty.tsx",
+     "app/src/setValue.tsx",
+     "app/src/useFieldArray.tsx",
+     "app/src/welcome/index.tsx",
+     "cypress.config.ts",
+     "cypress/e2e/basic.cy.ts",
+     "cypress/e2e/basicSchemaValidation.cy.ts",
+     "cypress/e2e/conditionalField.cy.ts",
+     "cypress/e2e/controller.cy.ts",
+     "cypress/e2e/crossFrameRendering.cy.ts",
+     "cypress/e2e/customSchemaValidation.cy.ts",
+     "cypress/e2e/formState.cy.ts",
+     "cypress/e2e/formStateWithNestedFields.cy.ts",
+     "cypress/e2e/formStateWithSchema.cy.ts",
+     "cypress/e2e/isValid.cy.ts",
+     "cypress/e2e/manualRegisterForm.cy.ts",
+     "cypress/e2e/reValidateMode.cy.ts",
+     "cypress/e2e/reset.cy.ts",
+     "cypress/e2e/setValue.cy.ts",
+     "cypress/e2e/setValueCustomRegister.cy.ts",
+     "cypress/e2e/setValueWithSchema.cy.ts",
+     "cypress/e2e/setValueWithTrigger.cy.ts",
+     "cypress/e2e/triggerValidation.cy.ts",
+     "cypress/e2e/useFieldArray.cy.ts",
+     "cypress/e2e/useFieldArrayAsync.cy.ts",
+     "cypress/e2e/useFieldArrayNested.cy.ts",
+     "cypress/e2e/useFieldArrayUnregister.cy.ts",
+     "cypress/e2e/useFormState.cy.ts",
+     "cypress/e2e/useWatch.cy.ts",
+     "cypress/e2e/useWatchUseFieldArrayNested.cy.ts",
+     "cypress/e2e/validateFieldCriteria.cy.ts",
+     "cypress/e2e/watch.cy.ts",
+     "docs/Sponsors.yaml",
+     "eslint.config.mjs",
+     "examples/V7/nativeMultipleInput.tsx",
+     "examples/V7/useFieldArraySimpleExample.tsx",
+     "package.json",
+     "pnpm-lock.yaml",
+     "reports/api-extractor.md",
+     "reports/api-extractor.md.api.md",
+     "scripts/apiExtractor.js",
+     "scripts/jest/jest.config.js",
+     "scripts/jest/setup.ts",
+     "scripts/rollup/all-exports.json",
+     "scripts/rollup/assert-cjs-exports.cjs",
+     "scripts/rollup/assert-esm-exports.mjs",
+     "scripts/rollup/createRollupConfig.js",
+     "src/__tests__/__snapshots__/useFieldArray.test.tsx.snap",
+     "src/__tests__/__snapshots__/useWatch.test.tsx.snap",
+     "src/__tests__/controller.test.tsx",
+     "src/__tests__/form.test.tsx",
+     "src/__tests__/formStateSubscribe.server.test.tsx",
+     "src/__tests__/formStateSubscribe.test.tsx",
+     "src/__tests__/isPlainObject.test.ts",
+     "src/__tests__/logic/createFormControl.test.ts",
+     "src/__tests__/logic/generateId.test.ts",
+     "src/__tests__/logic/getCheckboxValue.test.ts",
+     "src/__tests__/logic/getDirtyFields.test.ts",
+     "src/__tests__/logic/getFieldValue.test.ts",
+     "src/__tests__/logic/getResolverOptions.test.ts",
+     "src/__tests__/logic/getValidateError.test.ts",
+     "src/__tests__/logic/getValidationModes.test.ts",
+     "src/__tests__/logic/hasPromiseValidation.test.ts",
+     "src/__tests__/logic/hasValidation.test.ts",
+     "src/__tests__/logic/isWatched.test.ts",
+     "src/__tests__/logic/iterateFieldsByAction.test.ts",
+     "src/__tests__/logic/schemaErrorLookup.test.ts",
+     "src/__tests__/logic/shouldRenderFormState.test.ts",
+     "src/__tests__/logic/unsetEmptyArray.test.ts",
+     "src/__tests__/logic/validateField.test.tsx",
+     "src/__tests__/type.test.tsx",
+     "src/__tests__/useController.test.tsx",
+     "src/__tests__/useFieldArray.test.tsx",
+     "src/__tests__/useFieldArray/append.test.tsx",
+     "src/__tests__/useFieldArray/focus.test.tsx",
+     "src/__tests__/useFieldArray/insert.test.tsx",
+     "src/__tests__/useFieldArray/move.test.tsx",
+     "src/__tests__/useFieldArray/prepend.test.tsx",
+     "src/__tests__/useFieldArray/remove.test.tsx",
+     "src/__tests__/useFieldArray/replace.test.tsx",
+     "src/__tests__/useFieldArray/swap.test.tsx",
+     "src/__tests__/useFieldArray/update.test.tsx",
+     "src/__tests__/useForm.test.tsx",
+     "src/__tests__/useForm/__snapshots__/watch.test.tsx.snap",
+     "src/__tests__/useForm/clearErrors.test.tsx",
+     "src/__tests__/useForm/formState.test.tsx",
+     "src/__tests__/useForm/getFieldState.test.tsx",
+     "src/__tests__/useForm/getValues.test.tsx",
+     "src/__tests__/useForm/handleSubmit.test.tsx",
+     "src/__tests__/useForm/register.test.tsx",
+     "src/__tests__/useForm/reset.test.tsx",
+     "src/__tests__/useForm/resetField.test.tsx",
+     "src/__tests__/useForm/resolver.test.tsx",
+     "src/__tests__/useForm/setError.test.tsx",
+     "src/__tests__/useForm/setFocus.test.tsx",
+     "src/__tests__/useForm/setValue.test.tsx",
+     "src/__tests__/useForm/subscribe.test.tsx",
+     "src/__tests__/useForm/trigger.test.tsx",
+     "src/__tests__/useForm/unregister.test.tsx",
+     "src/__tests__/useForm/useFormWithNullValues.test.tsx",
+     "src/__tests__/useForm/watch.test.tsx",
+     "src/__tests__/useFormContext.test.tsx",
+     "src/__tests__/useFormState.test.tsx",
+     "src/__tests__/useWatch.test.tsx",
+     "src/__tests__/utils/__snapshots__/flatten.test.ts.snap",
+     "src/__tests__/utils/append.test.ts",
+     "src/__tests__/utils/cloneObject.test.ts",
+     "src/__tests__/utils/convertToArrayPayload.test.ts",
+     "src/__tests__/utils/createSubject.test.ts",
+     "src/__tests__/utils/deepEqual.test.ts",
+     "src/__tests__/utils/extractFormValues.test.ts",
+     "src/__tests__/utils/fillBooleanArray.test.ts",
+     "src/__tests__/utils/flatten.test.ts",
+     "src/__tests__/utils/get.test.ts",
+     "src/__tests__/utils/insert.test.ts",
+     "src/__tests__/utils/isMessage.test.ts",
+     "src/__tests__/utils/isSelectInput.test.ts",
+     "src/__tests__/utils/isString.test.ts",
+     "src/__tests__/utils/live.test.ts",
+     "src/__tests__/utils/move.test.ts",
+     "src/__tests__/utils/noop.test.ts",
+     "src/__tests__/utils/objectHasFunction.test.ts",
+     "src/__tests__/utils/prepend.test.ts",
+     "src/__tests__/utils/set.test.ts",
+     "src/__tests__/utils/unset.test.ts",
+     "src/__tests__/utils/update.test.ts",
+     "src/__tests__/watch.server.test.tsx",
+     "src/__tests__/watch.test.tsx",
+     "src/__typetest__/errors.test-d.ts",
+     "src/__typetest__/form-state-subscribe.test-d.ts",
+     "src/__typetest__/form.test-d.ts",
+     "src/__typetest__/path/common.test-d.ts",
+     "src/__typetest__/path/eager.test-d.ts",
+     "src/__typetest__/use-form-context.test-d.ts",
+     "src/__typetest__/useController.test-d.ts",
+     "src/__typetest__/util.test-d.ts",
+     "src/__typetest__/watch.test-d.ts",
+     "src/constants.ts",
+     "src/controller.tsx",
+     "src/form.tsx",
+     "src/formStateSubscribe.tsx",
+     "src/index.ts",
+     "src/logic/appendErrors.ts",
+     "src/logic/createFormControl.ts",
+     "src/logic/generateId.ts",
+     "src/logic/generateWatchOutput.ts",
+     "src/logic/getDirtyFields.ts",
+     "src/logic/getFieldValue.ts",
+     "src/logic/getFieldValueAs.ts",
+     "src/logic/getFocusFieldName.ts",
+     "src/logic/getProxyFormState.ts",
+     "src/logic/getResolverOptions.ts",
+     "src/logic/getRuleValue.ts",
+     "src/logic/getValidateError.ts",
+     "src/logic/getValidationModes.ts",
+     "src/logic/getValueAndMessage.ts",
+     "src/logic/hasPromiseValidation.ts",
+     "src/logic/hasValidation.ts",
+     "src/logic/index.ts",
+     "src/logic/isNameInFieldArray.ts",
+     "src/logic/isWatched.ts",
+     "src/logic/iterateFieldsByAction.ts",
+     "src/logic/schemaErrorLookup.ts",
+     "src/logic/shouldRenderFormState.ts",
+     "src/logic/shouldSubscribeByName.ts",
+     "src/logic/skipValidation.ts",
+     "src/logic/updateFieldArrayRootError.ts",
+     "src/logic/validateField.ts",
+     "src/types/controller.ts",
+     "src/types/errors.ts",
+     "src/types/fieldArray.ts",
+     "src/types/fields.ts",
+     "src/types/form.ts",
+     "src/types/index.ts",
+     "src/types/path/common.ts",
+     "src/types/path/eager.ts",
+     "src/types/path/index.ts",
+     "src/types/resolvers.ts",
+     "src/types/utils.ts",
+     "src/types/validator.ts",
+     "src/types/watch.ts",
+     "src/useController.ts",
+     "src/useFieldArray.ts",
+     "src/useForm.ts",
+     "src/useFormContext.tsx",
+     "src/useFormControlContext.ts",
+     "src/useFormState.ts",
+     "src/useIsomorphicLayoutEffect.ts",
+     "src/useSubscribe.ts",
+     "src/useWatch.ts",
+     "src/utils/cloneObject.ts",
+     "src/utils/createSubject.ts",
+     "src/utils/deepEqual.ts",
+     "src/utils/extractFormValues.ts",
+     "src/utils/fillBooleanArray.ts",
+     "src/utils/flatten.ts",
+     "src/utils/get.ts",
+     "src/utils/isCheckBoxInput.ts",
+     "src/utils/isEmptyObject.ts",
+     "src/utils/isFileInput.ts",
+     "src/utils/isMessage.ts",
+     "src/utils/isMultipleSelect.ts",
+     "src/utils/isPrimitive.ts",
+     "src/utils/isRadioInput.ts",
+     "src/utils/isRadioOrCheckbox.ts",
+     "src/utils/isSelectInput.ts",
+     "src/utils/live.ts",
+     "src/utils/noop.ts",
+     "src/utils/omit.ts",
+     "src/utils/set.ts",
+     "src/utils/unset.ts",
+     "src/watch.tsx",
+     "tsconfig.json"
+    ]
+   },
+   "common_files": [
+    "src/logic/createFormControl.ts",
+    "src/types/form.ts"
+   ],
+   "eval_error": "Failed to write patch2.patch: ",
+   "cause": "setup",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 1
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MVGQD4G4P7WM7X0X4S3ZBA",
+      "title": "feat(handleSubmit): Pass submission context to handlers",
+      "owner": "agent2",
+      "state": "done",
+      "scope": [
+       "src/types/form.ts",
+       "src/logic/createFormControl.ts"
+      ],
+      "named": [
+       "src/types/form.ts",
+       "src/logic/createFormControl.ts"
+      ],
+      "claimed_at": 1793848794531
+     },
+     {
+      "id": "01M6MVGSVFG5QAMRT9RMKGQAB7",
+      "title": "Add onFinally callback to handleSubmit",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "src/logic/createFormControl.ts",
+       "src/types/form.ts"
+      ],
+      "named": [
+       "src/logic/createFormControl.ts",
+       "src/types/form.ts"
+      ],
+      "claimed_at": 1793848797039
+     }
+    ],
+    "named_common_files": [
+     "src/logic/createFormControl.ts",
+     "src/types/form.ts"
+    ],
+    "acts": {
+     "message": 23,
+     "accept": 1
+    },
+    "acts_directed": 14,
+    "gate": {
+     "allow:allowed": 7,
+     "deny:denied": 2,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "tried another edit (held)"
+     },
+     {
+      "seat": "agent1",
+      "holder": "agent2",
+      "next": "lane updated"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent1",
+      "merged_first": false
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent1",
+      "next": "wait_until_lane"
+     },
+     {
+      "agent": "agent1",
+      "next": "wait_until_lane"
+     }
+    ]
+   }
+  },
+  {
+   "pair": "/data/runs/logs/r7b-musterd/coop/typst_task/6554/f2_f6",
+   "task": "typst_task/6554",
+   "features": [
+    2,
+    6
+   ],
+   "arm": "claude_code_musterd",
+   "setting": "coop",
+   "passed": false,
+   "merge": "identical",
+   "strategy": "skip-merge-identical",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 1.6222536,
+   "steps": 95,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "crates/typst/src/foundations/str.rs"
+    ],
+    "agent2": [
+     "crates/typst/src/foundations/str.rs"
+    ]
+   },
+   "common_files": [
+    "crates/typst/src/foundations/str.rs"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 2
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 3
+    }
+   },
+   "musterd": {
+    "lanes": [
+     {
+      "id": "01M6MW4D8HFDKGB7QHN2PJ3M14",
+      "title": "Add indexed access to str.first and str.last",
+      "owner": "agent1",
+      "state": "done",
+      "scope": [
+       "crates/typst/src/foundations/str.rs"
+      ],
+      "named": [
+       "crates/typst/src/foundations/str.rs"
+      ],
+      "claimed_at": 1793849651845
+     },
+     {
+      "id": "01M6MW4E05W8NK6A4TEZ2YEQ94",
+      "title": "Add skip_whitespace parameter to str.first and str.last",
+      "owner": "agent2",
+      "state": "claimed",
+      "scope": [
+       "crates/typst/src/foundations/str.rs"
+      ],
+      "named": [
+       "crates/typst/src/foundations/str.rs"
+      ],
+      "claimed_at": 1793849440261
+     }
+    ],
+    "named_common_files": [
+     "crates/typst/src/foundations/str.rs"
+    ],
+    "acts": {
+     "message": 17,
+     "request_help": 2,
+     "accept": 4,
+     "handoff": 2,
+     "resolve": 1
+    },
+    "acts_directed": 18,
+    "gate": {
+     "allow:allowed": 4,
+     "deny:denied": 2,
+     "deny:denied_handover": 1
+    },
+    "holds": {
+     "held": 2,
+     "handover": 1
+    },
+    "after_held_refusal": [
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "tried another edit (held)"
+     },
+     {
+      "seat": "agent2",
+      "holder": "agent1",
+      "next": "sent a message to agent1"
+     }
+    ],
+    "shell_writes_to_named_files_heuristic": [],
+    "handover_follow": [
+     {
+      "agent": "agent2",
+      "merged_first": false
+     }
+    ],
+    "held_refusal_moves": [
+     {
+      "agent": "agent2",
+      "next": "bash"
+     },
+     {
+      "agent": "agent2",
+      "next": "message:message"
+     }
+    ]
+   }
+  }
+ ]
+}

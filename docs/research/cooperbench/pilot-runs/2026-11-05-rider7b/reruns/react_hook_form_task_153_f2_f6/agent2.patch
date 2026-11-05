@@ -1,0 +1,85 @@
+diff --git a/src/logic/createFormControl.ts b/src/logic/createFormControl.ts
+index f7079332..5c113dfa 100644
+--- a/src/logic/createFormControl.ts
++++ b/src/logic/createFormControl.ts
+@@ -1097,12 +1097,13 @@ export function createFormControl<
+   };
+ 
+   const handleSubmit: UseFormHandleSubmit<TFieldValues> =
+-    (onValid, onInvalid) => async (e) => {
++    (onValid, onInvalid, onFinally) => async (e) => {
+       if (e) {
+         e.preventDefault && e.preventDefault();
+         e.persist && e.persist();
+       }
+       let fieldValues = cloneObject(_formValues);
++      let hasError;
+ 
+       _subjects.state.next({
+         isSubmitting: true,
+@@ -1122,7 +1123,11 @@ export function createFormControl<
+         _subjects.state.next({
+           errors: {},
+         });
+-        await onValid(fieldValues as TFieldValues, e);
++        try {
++          await onValid(fieldValues as TFieldValues, e);
++        } catch (error) {
++          hasError = error;
++        }
+       } else {
+         if (onInvalid) {
+           await onInvalid({ ..._formState.errors }, e);
+@@ -1131,6 +1136,10 @@ export function createFormControl<
+         setTimeout(_focusError);
+       }
+ 
++      if (onFinally) {
++        await onFinally({ ..._formState });
++      }
++
+       _subjects.state.next({
+         isSubmitted: true,
+         isSubmitting: false,
+@@ -1138,6 +1147,10 @@ export function createFormControl<
+         submitCount: _formState.submitCount + 1,
+         errors: _formState.errors,
+       });
++
++      if (hasError) {
++        throw hasError;
++      }
+     };
+ 
+   const resetField: UseFormResetField<TFieldValues> = (name, options = {}) => {
+diff --git a/src/types/form.ts b/src/types/form.ts
+index 2f20133e..78971335 100644
+--- a/src/types/form.ts
++++ b/src/types/form.ts
+@@ -613,6 +613,7 @@ export type UseFormUnregister<TFieldValues extends FieldValues> = (
+  *
+  * @param onValid - callback function invoked after form pass validation
+  * @param onInvalid - callback function invoked when form failed validation
++ * @param onFinally - callback function invoked after submission attempt, before final formState update
+  *
+  * @returns callback - return callback function
+  *
+@@ -620,8 +621,9 @@ export type UseFormUnregister<TFieldValues extends FieldValues> = (
+  * ```tsx
+  * const onSubmit = (data) => console.log(data);
+  * const onError = (error) => console.log(error);
++ * const onFinally = (state) => console.log('cleanup', state);
+  *
+- * <form onSubmit={handleSubmit(onSubmit, onError)} />
++ * <form onSubmit={handleSubmit(onSubmit, onError, onFinally)} />
+  * ```
+  */
+ // eslint-disable-next-line @typescript-eslint/no-unused-vars
+@@ -635,6 +637,7 @@ export type UseFormHandleSubmit<
+     ? SubmitHandler<TTransformedValues>
+     : never,
+   onInvalid?: SubmitErrorHandler<TFieldValues>,
++  onFinally?: (formState: FormState<TFieldValues>) => unknown | Promise<unknown>,
+ ) => (e?: React.BaseSyntheticEvent) => Promise<void>;
+ 
+ /**

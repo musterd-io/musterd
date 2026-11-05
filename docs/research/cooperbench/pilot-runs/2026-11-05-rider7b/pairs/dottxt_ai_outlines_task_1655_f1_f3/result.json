@@ -1,0 +1,46 @@
+{
+  "repo": "dottxt_ai_outlines_task",
+  "task_id": 1655,
+  "features": [
+    1,
+    3
+  ],
+  "setting": "coop",
+  "run_id": "4afc2b9b",
+  "run_name": "r7b-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-05T02:49:41.338605",
+  "ended_at": "2026-11-05T03:00:18.524038",
+  "duration_seconds": 637.185433,
+  "agents": {
+    "agent1": {
+      "feature_id": 1,
+      "status": "Submitted",
+      "cost": 0.6235010999999998,
+      "steps": 40,
+      "input_tokens": 258,
+      "output_tokens": 9616,
+      "cache_read_tokens": 1250682,
+      "cache_write_tokens": 27542,
+      "patch_lines": 28,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 0.6721113,
+      "steps": 42,
+      "input_tokens": 322,
+      "output_tokens": 8523,
+      "cache_read_tokens": 1489876,
+      "cache_write_tokens": 25690,
+      "patch_lines": 28,
+      "error": null
+    }
+  },
+  "total_cost": 1.2956123999999998,
+  "total_steps": 82,
+  "messages_sent": 0,
+  "log_dir": "logs/r7b-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3"
+}

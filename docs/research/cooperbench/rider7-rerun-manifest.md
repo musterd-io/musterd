@@ -2,7 +2,7 @@
 
 **Lane:** `01M6MDRD86` (this page and the wake guard), goal `coordination-cost`, asked by nick ("write
 the manifest for the re-run", 2026-11-04 in session). The run is its own lane once spend is approved.
-**Status:** pre-registered 2026-11-04, before any pair ran on the ADR 804/805 build; spend decided the same evening (A: 10 pairs, hard stop $110). Nothing below
+**Status:** pre-registered 2026-11-04, before any pair ran on the ADR 804/805 build; spend decided the same evening (A: 10 pairs, hard stop $110). **Run 2026-11-05 02:49–05:32Z → [finding 032](../032-cooperbench-rider7-rerun.md)**: R7c acted, R7a and R7b did not; two errored pairs re-run once; neither guard fired; $25.04. Nothing below
 changes once a measured pair has run. **CooperBench:** `63b9d44`. **Before this:** [rider 7
 manifest](./rider7-manifest.md) → [finding 031](../031-cooperbench-rider7-smoke.md), stopped at the
 smoke pair; [ADR 804](../../decisions/804-wake-report-releases-the-reclaim-hold.md) and

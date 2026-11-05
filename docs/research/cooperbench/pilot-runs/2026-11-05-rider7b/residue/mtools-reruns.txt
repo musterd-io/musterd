@@ -1,0 +1,20 @@
+== r7b-rerun-jinja
+   musterd:team_inbox_check (plain)            7 $ 0.34
+   gate:edit-refused                           6 $ 0.20
+   musterd:team_inbox_check (wait)             5 $ 0.11
+   musterd:lane_board                          4 $ 0.08
+   musterd:lane_update                         2 $ 0.05
+   musterd:lane_open                           2 $ 0.03
+   musterd:team_status                         1 $ 0.02
+== r7b-rerun-rhf
+   musterd:team_inbox_check (plain)           11 $ 0.29
+   musterd:lane_board                          9 $ 0.20
+   musterd:team_inbox_check (wait)             6 $ 0.13
+   gate:edit-refused                           3 $ 0.07
+   other:ToolSearch                            2 $ 0.05
+   musterd:lane_update                         2 $ 0.05
+   musterd:team_status                         2 $ 0.04
+   musterd:lane_submit                         1 $ 0.03
+   musterd:lane_resolve                        1 $ 0.03
+   wait:bash-sleep                             1 $ 0.02
+   musterd:lane_open                           1 $ 0.02

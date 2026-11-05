@@ -1,0 +1,12 @@
+host — wake actuator  ◉ polling
+  1 seat(s) registered · every 10s · watchdog 3600s · Ctrl-C to stop
+  wake due: agent1 [batched] — request_help from agent2, waited 2m57s (lease 01M6MTPTY6KY2QS0ND99GDR3BR)
+  resume skipped for agent1: resume would re-ingest 721.8 KiB on claude-sonnet-4-5-20250929 for about $0.55 (bound $0.25) — fresh spawn
+  ⚡ woke agent1: spawn→roster 5.0s, session=fresh provenance=wake
+  run for agent1 (fresh) settled: exit=0 cost=$0.2757 wall=79.3s
+  wake cost recorded for agent1: $0.2757 (lease 01M6MTPTY6KY2QS0ND99GDR3BR)
+  wake due: agent1 [batched] — message from agent2, waited 2m32s (lease 01M6MTSE6YB51S58FKHCE7V4QB)
+  resume skipped for agent1: resume would re-ingest 501.6 KiB on claude-sonnet-4-5-20250929 for about $0.39 (bound $0.25) — fresh spawn
+  ⚡ woke agent1: spawn→roster 17.1s, session=fresh provenance=wake
+  run for agent1 (fresh) settled: exit=0 cost=$0.1421 wall=50.3s
+  wake cost recorded for agent1: $0.1421 (lease 01M6MTSE6YB51S58FKHCE7V4QB)

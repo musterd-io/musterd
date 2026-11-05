@@ -1,0 +1,93 @@
+{
+ "pairs_read": 1,
+ "wakes": 4,
+ "resumed": 0,
+ "failed": 0,
+ "unpriced_wakes": 1,
+ "first_call_usd": 2.57,
+ "first_call_priced_pairs": 1,
+ "wake_usd": 0.39,
+ "cost_usd_total": 2.96,
+ "waited_n": 4,
+ "waited_median_s": 153.2,
+ "rule": "R7a: wait-mode team_inbox_check calls (mtools.py) + wakes, <= 55 acted / >= 75 did not; R7b: cost_usd_total <= 15 / >= 18; R7c: waited_median_s <= 120 / >= 900, and 'did not' voids R7a and R7b",
+ "pairs": [
+  {
+   "pair": "/data/runs/logs/r7b-rerun-rhf/coop/react_hook_form_task/153/f2_f6",
+   "wakes": 4,
+   "resumed": 0,
+   "failed": 0,
+   "deferred": 0,
+   "exhausted": 0,
+   "unpriced_wakes": 1,
+   "first_call_usd": 2.56620855,
+   "wake_usd": 0.3904,
+   "waited_ms": [
+    99033,
+    144367,
+    162068,
+    181350
+   ],
+   "seats": [
+    {
+     "seat": "agent1",
+     "wakes": 3,
+     "cost_usd": 0.2431,
+     "waited_s": [
+      99.0,
+      144.4,
+      162.1
+     ],
+     "holds": [
+      {
+       "act_ts": 1793856234941,
+       "waited_s": 99.0,
+       "by_state": {
+        "present": 35.8,
+        "reclaimable": 40.1,
+        "passed": 23.1
+       }
+      },
+      {
+       "act_ts": 1793856244718,
+       "waited_s": 144.4,
+       "by_state": {
+        "present": 56.1,
+        "reclaimable": 40.1,
+        "passed": 48.2
+       }
+      },
+      {
+       "act_ts": 1793856138761,
+       "waited_s": 162.1,
+       "by_state": {
+        "present": 122.0,
+        "reclaimable": 40.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    },
+    {
+     "seat": "agent2",
+     "wakes": 1,
+     "cost_usd": 0.1473,
+     "waited_s": [
+      181.3
+     ],
+     "holds": [
+      {
+       "act_ts": 1793856168778,
+       "waited_s": 181.3,
+       "by_state": {
+        "present": 131.3,
+        "reclaimable": 50.1,
+        "passed": 0.0
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
