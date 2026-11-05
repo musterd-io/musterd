@@ -1,0 +1,46 @@
+{
+  "repo": "go_chi_task",
+  "task_id": 27,
+  "features": [
+    3,
+    4
+  ],
+  "setting": "coop",
+  "run_id": "663047f6",
+  "run_name": "r7c-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-05T19:19:43.048067",
+  "ended_at": "2026-11-05T19:31:26.190238",
+  "duration_seconds": 703.142171,
+  "agents": {
+    "agent1": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 1.0923974999999997,
+      "steps": 66,
+      "input_tokens": 386,
+      "output_tokens": 11659,
+      "cache_read_tokens": 2283240,
+      "cache_write_tokens": 61702,
+      "patch_lines": 191,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 4,
+      "status": "Submitted",
+      "cost": 1.1221101,
+      "steps": 57,
+      "input_tokens": 458,
+      "output_tokens": 12157,
+      "cache_read_tokens": 2633837,
+      "cache_write_tokens": 39528,
+      "patch_lines": 191,
+      "error": null
+    }
+  },
+  "total_cost": 2.2145075999999997,
+  "total_steps": 123,
+  "messages_sent": 0,
+  "log_dir": "logs/r7c-musterd/coop/go_chi_task/27/f3_f4"
+}

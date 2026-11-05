@@ -1,0 +1,127 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..37d76e758 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -176,26 +176,93 @@ impl Str {
+         self.0.len()
+     }
+ 
+-    /// Extracts the first grapheme cluster of the string.
+-    /// Fails with an error if the string is empty.
++    /// Extracts a grapheme cluster from the string by index from the start.
++    /// If no index is provided, extracts the first grapheme cluster.
++    /// Fails with an error if the string is empty or the index is out of bounds.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn first(
++        &self,
++        /// The character index to extract (0-based). If omitted, extracts the first character.
++        #[default]
++        index: Option<usize>,
++        /// Skip leading whitespace before selecting the grapheme.
++        #[named]
++        #[default(false)]
++        skip_whitespace: bool,
++    ) -> StrResult<Str> {
++        let s = if skip_whitespace {
++            let trimmed = self.0.trim_start();
++            if trimmed.is_empty() {
++                bail!(string_only_whitespace());
++            }
++            trimmed
++        } else {
++            self.0.as_str()
++        };
++
++        match index {
++            None => {
++                // Original behavior: get the first grapheme
++                s.graphemes(true)
++                    .next()
++                    .map(Into::into)
++                    .ok_or_else(string_is_empty)
++            }
++            Some(i) => {
++                // New behavior: get the i-th grapheme from the start
++                let graphemes: Vec<&str> = s.graphemes(true).collect();
++                graphemes
++                    .get(i)
++                    .map(|&s| s.into())
++                    .ok_or_else(|| {
++                        eco_format!("index {} out of bounds for string with {} characters", i, graphemes.len())
++                    })
++            }
++        }
+     }
+ 
+-    /// Extracts the last grapheme cluster of the string.
+-    /// Fails with an error if the string is empty.
++    /// Extracts a grapheme cluster from the string by index from the end.
++    /// If no index is provided, extracts the last grapheme cluster.
++    /// Fails with an error if the string is empty or the index is out of bounds.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next_back()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn last(
++        &self,
++        /// The character index to extract from the end (0-based). If omitted, extracts the last character.
++        #[default]
++        index: Option<usize>,
++        /// Skip trailing whitespace before selecting the grapheme.
++        #[named]
++        #[default(false)]
++        skip_whitespace: bool,
++    ) -> StrResult<Str> {
++        let s = if skip_whitespace {
++            let trimmed = self.0.trim_end();
++            if trimmed.is_empty() {
++                bail!(string_only_whitespace());
++            }
++            trimmed
++        } else {
++            self.0.as_str()
++        };
++
++        match index {
++            None => {
++                // Original behavior: get the last grapheme
++                s.graphemes(true)
++                    .next_back()
++                    .map(Into::into)
++                    .ok_or_else(string_is_empty)
++            }
++            Some(i) => {
++                // New behavior: get the i-th grapheme from the end
++                let graphemes: Vec<&str> = s.graphemes(true).collect();
++                let len = graphemes.len();
++                if i >= len {
++                    return Err(eco_format!("index {} out of bounds for string with {} characters", i, len));
++                }
++                Ok(graphemes[len - 1 - i].into())
++            }
++        }
+     }
+ 
+     /// Extracts the first grapheme cluster after the specified index. Returns
+@@ -835,6 +902,12 @@ fn string_is_empty() -> EcoString {
+     "string is empty".into()
+ }
+ 
++/// The error message when the string contains only whitespace.
++#[cold]
++fn string_only_whitespace() -> EcoString {
++    "string contains only whitespace".into()
++}
++
+ /// A regular expression.
+ ///
+ /// Can be used as a [show rule selector]($styling/#show-rules) and with

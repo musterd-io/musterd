@@ -1,0 +1,117 @@
+diff --git a/tiktoken/core.py b/tiktoken/core.py
+index 6bc9736..0209490 100644
+--- a/tiktoken/core.py
++++ b/tiktoken/core.py
+@@ -60,15 +60,26 @@ class Encoding:
+     # Encoding
+     # ====================
+ 
+-    def encode_ordinary(self, text: str) -> list[int]:
++    def encode_ordinary(self, text: str, *, chunk_size: int | None = None) -> list[int] | list[list[int]]:
+         """Encodes a string into tokens, ignoring special tokens.
+ 
+         This is equivalent to `encode(text, disallowed_special=())` (but slightly faster).
+ 
++        If `chunk_size` is provided, the text will be split into chunks of at most `chunk_size`
++        characters, and a list of token lists will be returned (one list per chunk).
++
+         ```
+         >>> enc.encode_ordinary("hello world")
+         [31373, 995]
++        >>> enc.encode_ordinary("hello world", chunk_size=5)
++        [[31373], [995]]
++        ```
+         """
++        if chunk_size is not None:
++            # Split text into chunks and encode each separately
++            chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
++            return [self.encode_ordinary(chunk) for chunk in chunks]
++
+         try:
+             return self._core_bpe.encode_ordinary(text)
+         except UnicodeEncodeError:
+@@ -82,7 +93,9 @@ class Encoding:
+         *,
+         allowed_special: Literal["all"] | AbstractSet[str] = set(),  # noqa: B006
+         disallowed_special: Literal["all"] | Collection[str] = "all",
+-    ) -> list[int]:
++        chunk_size: int | None = None,
++        return_repeated_pattern: bool = False,
++    ) -> list[int] | list[list[int]] | tuple[list[int], dict[tuple[int, int], int]] | list[tuple[list[int], dict[tuple[int, int], int]]]:
+         """Encodes a string into tokens.
+ 
+         Special tokens are artificial tokens used to unlock capabilities from a model,
+@@ -97,6 +110,14 @@ class Encoding:
+         - Setting `allowed_special` to "all" will cause this function to treat all text
+           corresponding to special tokens to be encoded as special tokens.
+ 
++        If `chunk_size` is provided, the text will be split into chunks of at most `chunk_size`
++        characters, and a list of token lists will be returned (one list per chunk).
++
++        If `return_repeated_pattern` is True, the function will track adjacent token pairs and
++        return a tuple of (tokens, patterns) where patterns is a dict of the top 3 most frequent
++        token pairs and their counts. When both `chunk_size` and `return_repeated_pattern` are
++        set, returns a list of tuples (one tuple per chunk).
++
+         ```
+         >>> enc.encode("hello world")
+         [31373, 995]
+@@ -108,8 +129,25 @@ class Encoding:
+         # Raises ValueError
+         >>> enc.encode("<|endoftext|>", disallowed_special=())
+         [27, 91, 437, 1659, 5239, 91, 29]
++        >>> enc.encode("hello world", chunk_size=5)
++        [[31373], [995]]
++        >>> enc.encode("sample text with repeated patterns", return_repeated_pattern=True)
++        ([31373, 995, 31373], {(31373, 995): 1, (995, 31373): 1})
+         ```
+         """
++        if chunk_size is not None:
++            # Split text into chunks and encode each separately
++            chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
++            return [
++                self.encode(
++                    chunk,
++                    allowed_special=allowed_special,
++                    disallowed_special=disallowed_special,
++                    return_repeated_pattern=return_repeated_pattern,
++                )
++                for chunk in chunks
++            ]
++
+         if allowed_special == "all":
+             allowed_special = self.special_tokens_set
+         if disallowed_special == "all":
+@@ -121,7 +159,7 @@ class Encoding:
+                 raise_disallowed_special_token(match.group())
+ 
+         try:
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
+         except UnicodeEncodeError:
+             # BPE operates on bytes, but the regex operates on unicode. If we pass a str that is
+             # invalid UTF-8 to Rust, it will rightfully complain. Here we do a quick and dirty
+@@ -130,7 +168,22 @@ class Encoding:
+             # string, but given that this is input we want to support, maybe that's okay.
+             # Also we use errors="replace" to handle weird things like lone surrogates.
+             text = text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
++
++        if return_repeated_pattern:
++            # Track adjacent token pairs and their frequencies
++            pair_counts: dict[tuple[int, int], int] = {}
++            for i in range(len(tokens) - 1):
++                pair = (tokens[i], tokens[i + 1])
++                pair_counts[pair] = pair_counts.get(pair, 0) + 1
++
++            # Get top 3 most frequent pairs
++            sorted_pairs = sorted(pair_counts.items(), key=lambda x: x[1], reverse=True)
++            top_3_patterns = dict(sorted_pairs[:3])
++
++            return tokens, top_3_patterns
++
++        return tokens
+ 
+     def encode_to_numpy(
+         self,

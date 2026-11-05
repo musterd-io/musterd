@@ -294,3 +294,11 @@ workspace carries. The instruction change removes a sentence the arm added and l
 guidance in force. Nothing is added that exists only for the benchmark; the hook command texts are
 musterd's own, pinned by `test_config.py`.
 
+**Read 2026-11-05 (second run, [finding 033](../033-cooperbench-rider7-rerun-b.md)).** The same ten
+pairs on the ADR 809/810 build, under the manifest's dated "Second run" section: R7c acted (median
+6.7 s over 25 wakes, `reclaimable` 0% of held time); R7d, ADR 809's read, acted (first-wake
+`reclaimable` 0.0 s on 13 of 13 seats, from ~40 s); R7b, ADR 810's read, part of it ($22.50 against
+finding 032's $25.04 — every wake `compacted`, $4.44 for 25; the first calls $18.06); R7a part of it
+(46 wait calls + 25 wakes = 71, plus 22 shell sleeps). No errors. The lane is a 7 s wake with context;
+the pair's cost is its first calls, which the lane does not touch.
+

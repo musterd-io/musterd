@@ -1,0 +1,118 @@
+diff --git a/dspy/adapters/types/tool.py b/dspy/adapters/types/tool.py
+index 843eceed1..458ee35fa 100644
+--- a/dspy/adapters/types/tool.py
++++ b/dspy/adapters/types/tool.py
+@@ -1,9 +1,11 @@
+ import asyncio
++import hashlib
+ import inspect
++import json
+ from typing import TYPE_CHECKING, Any, Callable, Type, get_origin, get_type_hints
+ 
+ from jsonschema import ValidationError, validate
+-from pydantic import BaseModel, TypeAdapter, create_model
++from pydantic import BaseModel, TypeAdapter, create_model, model_validator
+ 
+ from dspy.adapters.types.base_type import Type
+ from dspy.dsp.utils.settings import settings
+@@ -16,6 +18,25 @@ if TYPE_CHECKING:
+ _TYPE_MAPPING = {"string": str, "integer": int, "number": float, "boolean": bool, "array": list, "object": dict}
+ 
+ 
++def _canonicalize_args(args: Any) -> Any:
++    """Canonicalize tool call arguments for fingerprinting.
++
++    - Sort dict keys recursively
++    - Convert tuples to lists
++    - Trim whitespace from strings
++    - Preserve numeric and boolean types
++    """
++    if isinstance(args, dict):
++        return {k: _canonicalize_args(v) for k, v in sorted(args.items())}
++    elif isinstance(args, (list, tuple)):
++        return [_canonicalize_args(item) for item in args]
++    elif isinstance(args, str):
++        return args.strip()
++    else:
++        # Preserve numeric, boolean, None, etc.
++        return args
++
++
+ class Tool(Type):
+     """Tool class.
+ 
+@@ -258,9 +279,74 @@ class ToolCalls(Type):
+     class ToolCall(BaseModel):
+         name: str
+         args: dict[str, Any]
++        fingerprint: str | None = None
++        id: str | None = None
++
++        def __init__(self, **data):
++            super().__init__(**data)
++            # Compute fingerprint from tool name and canonicalized args
++            canonical_data = {
++                "name": self.name,
++                "args": _canonicalize_args(self.args)
++            }
++            canonical_json = json.dumps(canonical_data, sort_keys=True, separators=(",", ":"))
++            hash_obj = hashlib.sha256(canonical_json.encode('utf-8'))
++            fingerprint_hex = hash_obj.hexdigest()
++
++            # Set fingerprint and id using object.__setattr__ to bypass Pydantic's immutability
++            object.__setattr__(self, 'fingerprint', fingerprint_hex)
++            object.__setattr__(self, 'id', fingerprint_hex[:8])
+ 
+     tool_calls: list[ToolCall]
+ 
++    @model_validator(mode="before")
++    @classmethod
++    def validate_input(cls, data: Any) -> Any:
++        """Normalize various tool call formats into the canonical structure.
++
++        Handles:
++        - Single object: {"name": "foo", "args": {...}} -> {"tool_calls": [{...}]}
++        - Bare list: [{"name": "foo", "args": {...}}, ...] -> {"tool_calls": [...]}
++        - Canonical: {"tool_calls": [...]} -> unchanged
++        - JSON string: parsed then normalized
++        - Non-JSON string: returned unchanged
++        """
++        # Already a ToolCalls instance
++        if isinstance(data, cls):
++            return data
++
++        # Handle string input - try to parse as JSON
++        if isinstance(data, str):
++            try:
++                data = json.loads(data)
++            except (json.JSONDecodeError, ValueError):
++                # Not valid JSON, return as-is
++                return data
++
++        # Handle dict input
++        if isinstance(data, dict):
++            # Case 1: Already has tool_calls key
++            if "tool_calls" in data:
++                return data
++
++            # Case 2: Single tool call object (has name and args)
++            if "name" in data and "args" in data:
++                return {"tool_calls": [data]}
++
++            # Otherwise return as-is (will be validated by Pydantic)
++            return data
++
++        # Handle list input - wrap in tool_calls container
++        if isinstance(data, list):
++            # Verify it's a list of tool call dicts (basic check)
++            if data and all(isinstance(item, dict) and "name" in item and "args" in item for item in data):
++                return {"tool_calls": data}
++            # If not all items match, return as-is for Pydantic validation
++            return {"tool_calls": data}
++
++        # Return other types as-is for Pydantic validation
++        return data
++
+     @classmethod
+     def from_dict_list(cls, tool_calls_dicts: list[dict[str, Any]]) -> "ToolCalls":
+         """Convert a list of dictionaries to a ToolCalls instance.

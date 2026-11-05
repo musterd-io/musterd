@@ -1,0 +1,22 @@
+host — wake actuator  ◉ polling
+  1 seat(s) registered · every 10s · watchdog 3600s · Ctrl-C to stop
+  wake due: agent2 [batched] — message from agent1, waited 14s (lease 01M6PJHWG46HP6JTXPAQVW1JD5)
+  resume skipped for agent2: resume would re-ingest 365.6 KiB on claude-sonnet-4-5 for about $0.28 (bound $0.25) — compacted continuation: 10 turns kept, 1.4 KiB of 365.6 KiB (budget 48 KiB)
+  ⚡ woke agent2: spawn→roster 17.1s, session=compacted provenance=wake
+  run for agent2 (compacted) settled: exit=0 cost=$0.1944 wall=36.4s
+  wake cost recorded for agent2: $0.1944 (lease 01M6PJHWG46HP6JTXPAQVW1JD5)
+  wake due: agent2 [batched] — message from agent1, waited 13s (lease 01M6PJK0SXEK8ETS8EDZ6M9YF5)
+  resume skipped for agent2: resume would re-ingest 462.2 KiB on claude-sonnet-4-5-20250929 for about $0.35 (bound $0.25) — compacted continuation: 12 turns kept, 1.6 KiB of 462.2 KiB (budget 48 KiB)
+  ⚡ woke agent2: spawn→roster 13.1s, session=compacted provenance=wake
+  run for agent2 (compacted) settled: exit=0 cost=$0.1139 wall=45.8s
+  wake cost recorded for agent2: $0.1139 (lease 01M6PJK0SXEK8ETS8EDZ6M9YF5)
+  wake due: agent2 [batched] — message from agent1, waited 9s (lease 01M6PJMMPEC32MZBG48ZN8BV17)
+  resume skipped for agent2: resume would re-ingest 452.1 KiB on claude-sonnet-4-5-20250929 for about $0.35 (bound $0.25) — compacted continuation: 10 turns kept, 1.6 KiB of 452.1 KiB (budget 48 KiB)
+  ⚡ woke agent2: spawn→roster 13.0s, session=compacted provenance=wake
+  run for agent2 (compacted) settled: exit=0 cost=$0.0718 wall=20.9s
+  wake cost recorded for agent2: $0.0718 (lease 01M6PJMMPEC32MZBG48ZN8BV17)
+  wake due: agent2 [batched] — message from agent1, waited 2s (lease 01M6PJNB7JG4PF4BFR25F9DRDF)
+  resume skipped for agent2: resume would re-ingest 427.9 KiB on claude-sonnet-4-5-20250929 for about $0.33 (bound $0.25) — compacted continuation: 9 turns kept, 1.3 KiB of 427.9 KiB (budget 48 KiB)
+  ⚡ woke agent2: spawn→roster 13.0s, session=compacted provenance=wake
+  run for agent2 (compacted) settled: exit=0 cost=$0.0849 wall=29.4s
+  wake cost recorded for agent2: $0.0849 (lease 01M6PJNB7JG4PF4BFR25F9DRDF)

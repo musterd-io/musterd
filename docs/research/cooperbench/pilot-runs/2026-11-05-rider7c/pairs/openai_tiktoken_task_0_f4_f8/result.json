@@ -1,0 +1,46 @@
+{
+  "repo": "openai_tiktoken_task",
+  "task_id": 0,
+  "features": [
+    4,
+    8
+  ],
+  "setting": "coop",
+  "run_id": "79c2ae04",
+  "run_name": "r7c-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-05T19:34:29.469245",
+  "ended_at": "2026-11-05T19:45:32.841079",
+  "duration_seconds": 663.371834,
+  "agents": {
+    "agent1": {
+      "feature_id": 4,
+      "status": "Submitted",
+      "cost": 0.7093369499999999,
+      "steps": 39,
+      "input_tokens": 252,
+      "output_tokens": 10197,
+      "cache_read_tokens": 1407824,
+      "cache_write_tokens": 35541,
+      "patch_lines": 117,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 8,
+      "status": "Submitted",
+      "cost": 0.85774905,
+      "steps": 46,
+      "input_tokens": 314,
+      "output_tokens": 12295,
+      "cache_read_tokens": 1775711,
+      "cache_write_tokens": 37245,
+      "patch_lines": 117,
+      "error": null
+    }
+  },
+  "total_cost": 1.5670859999999998,
+  "total_steps": 85,
+  "messages_sent": 0,
+  "log_dir": "logs/r7c-musterd/coop/openai_tiktoken_task/0/f4_f8"
+}

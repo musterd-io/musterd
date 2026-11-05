@@ -1,0 +1,44 @@
+# Rider 7 re-run B — run log (lane 01M6PGAP73, rider7-rerun-manifest.md "Second run")
+
+- 2026-11-05 ~19:05Z: nick approved the spend in session. Manifest amendment #3919 (26f50b39) merged
+  before anything ran. Lane 01M6PGAP73 opened and claimed.
+- 19:2xZ: nick minted a 36 h deploy token on his mac (`fly tokens create deploy -a musterd-cooperbench
+  -x 36h`); written to `~/.fly/token` on `musterd-joiner-1` (0600, never printed); `fly machine list`
+  reaches the app. Only `cb-run-2` (`8175e6b907de58`) exists, stopped.
+- Image: `fly deploy --build-only --push` from `main` 26f50b39 (ADR 809 #3913, ADR 810 #3915, the
+  manifest amendment), `MUSTERD_REF=26f50b39`.
+- 18:59Z: image `deployment-01M6PGZ84WZTRZQHJ9P24WPPT5` pushed (the builder's release timed out after
+  the push, harmless). `fly machine update 8175e6b907de58 --image …` then `machine start`; on the
+  machine `MUSTERD_REF=26f50b39…`, `musterd 0.7.0`, and `continuationBrief.js` present in both the host
+  CLI (`/app/packages/cli/dist`) and the seat install (`/opt/musterd-seat`). Scripts `preflight-c.sh`,
+  `smokepair-c.sh`, `r7c.sh` are last night's with the `r7c-` prefix; the smoke-pair script also counts
+  `session=compacted` and the `compacted continuation:` log lines.
+- 19:3xZ: pre-flight started (`/data/runs/r7c-2026-11-05/preflight.log`).
+- 19:02Z: pre-flight 1 — api check ok; both smokes `Permission denied` on the swe_agent `trajectories`
+  directory: absent on the fresh image again (the pre-flight script carried last night's `chmod` but
+  not the `mkdir -p` that preceded it on the machine). Created 1777 by hand, script fixed, pre-flight
+  rerun (`preflight.1.log` keeps the first).
+- 19:03–19:06Z: pre-flight 2 — api check ok, `gate_smoke` PASS, `hold_smoke_697` PASS.
+- 19:1xZ: smoke pair started (`pallets_click` 2068, f1,f2, `MUSTERD_ARM_LANE=act`, guard pair cap $6):
+  gate per the manifest's second-run section — at least one `compacted continuation:` wake and
+  `reclaimable` < 10 s on each seat's first wake.
+- 19:07–19:19Z: smoke pair (`pallets_click` 2068) exit 0, 12 min, $0.26 of wakes under the guard. Gate
+  met: agent1's one wake was a compacted continuation — host log `resume would re-ingest 1 MiB on
+  claude-sonnet-4-5-20250929 for about $0.81 (bound $0.25) — compacted continuation: 64 turns kept,
+  7.3 KiB of 1 MiB (budget 48 KiB)`, `session=compacted`, spawn→roster 17.1 s; the pair report reads
+  `wakes 1 … compacted 1`, and the first wake's `reclaimable` hold 0.0 s (ADR 809). agent2 was not
+  woken (no act arrived after its first call ended). Both patches written.
+- 19:2xZ: the ten pairs started (`r7c.sh`: `run_arms.py --cap 110`, `wake_guard.py --pair-cap 6
+  --total-cap 110`, run name `r7c-musterd`, `-c 3`, `--no-auto-eval`, then `cooperbench eval`).
+- 19:20–20:15Z: the ten pairs ran and were evaluated; `run_arms` exit 0, "all done, spent $20.19" (the
+  guard's count of finished pairs; `rider7.py` reads $22.50 with every wake priced). No errors by the
+  manifest's rule (every agent Submitted, no evaluator error, no MCP absence), so no re-run. Neither
+  guard fired.
+- 20:2xZ: `readout.json`, `rider7.json`, `r7c.log`, `guard.log`, the pre-flight and smoke logs, each
+  pair's `*_host.log`, `musterd-residency.json`, `result.json` and patches, the smoke pair's host logs
+  and report, and the residue scripts' outputs (`residue/`: `mtools.py`, `sends.py`, `boardreads.py`
+  run on the machine over the agent streams) copied here; `firstwake.py` + `r7d.json` are the R7d read.
+  Agent streams and session transcripts stay on the clone's volume (`/data/runs/logs/r7c-*`).
+  Scanned for credentials before commit. `fly machine stop 8175e6b907de58` 20:3xZ.
+- Token: nick revokes the 36 h deploy token on his word after this lands; `~/.fly/token` deleted then.
+

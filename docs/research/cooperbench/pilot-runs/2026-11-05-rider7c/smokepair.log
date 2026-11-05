@@ -1,0 +1,6 @@
+[2026-11-05T19:06:57Z] smoke pair start (guard: pair cap $6)
+[2026-11-05T19:18:49Z] smoke pair exit=0
+[2026-11-05T19:18:49Z] /data/runs/logs/r7c-smoke/coop/pallets_click_task/2068/f1_f2/agent1_host.log: 1 due · 0 resumed · 0 fresh · 1 compacted · 1 brief-lines · 1 price-bound
+[2026-11-05T19:18:49Z] /data/runs/logs/r7c-smoke/coop/pallets_click_task/2068/f1_f2/agent2_host.log: 0 due · 0 resumed · 0 fresh · 0 compacted · 0 brief-lines · 0 price-bound
+[2026-11-05T19:18:49Z] /data/runs/logs/r7c-smoke/coop/pallets_click_task/2068/f1_f2/musterd-residency.json: wakes 1 resumed 0 compacted 1 failed 0 cost 0.26 reclaimable_s [0.0]
+{"pairs": {"/tmp/cb-musterd-07020c55-g2ww7pad": 0.2626}, "live_wake_usd": 0.26, "finished_usd": 0.0, "total_usd": 0.26, "pair_cap": 6.0, "total_cap": 110.0, "over_pair": [], "stop": null}

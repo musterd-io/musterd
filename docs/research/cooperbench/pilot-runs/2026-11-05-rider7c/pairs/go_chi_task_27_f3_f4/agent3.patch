@@ -1,0 +1,191 @@
+diff --git a/mux.go b/mux.go
+index 56fa4d2..0167126 100644
+--- a/mux.go
++++ b/mux.go
+@@ -3,11 +3,27 @@ package chi
+ import (
+ 	"context"
+ 	"fmt"
++	"log"
+ 	"net/http"
+ 	"strings"
+ 	"sync"
+ )
+ 
++var debugLogging bool
++
++// EnableDebugLogging turns on debug-level logging for route pattern handling.
++// This provides visibility into how patterns are parsed and processed, including
++// method detection from patterns like "GET /path".
++func EnableDebugLogging() {
++	debugLogging = true
++}
++
++func debugLog(format string, args ...interface{}) {
++	if debugLogging {
++		log.Printf("[chi debug] "+format, args...)
++	}
++}
++
+ var _ Router = &Mux{}
+ 
+ // Mux is a simple HTTP route multiplexer that parses a request path,
+@@ -107,26 +123,50 @@ func (mx *Mux) Use(middlewares ...func(http.Handler) http.Handler) {
+ // Handle adds the route `pattern` that matches any http method to
+ // execute the `handler` http.Handler.
+ func (mx *Mux) Handle(pattern string, handler http.Handler) {
++	debugLog("Handle called with pattern: %q", pattern)
++
+ 	parts := strings.SplitN(pattern, " ", 2)
+ 	if len(parts) == 2 {
+ 		methodStr := strings.ToUpper(parts[0])
+ 		path := parts[1]
++		debugLog("Pattern contains method - parsed method: %q, path: %q", methodStr, path)
+ 
+ 		method, ok := methodMap[methodStr]
+ 		if !ok {
+ 			panic("chi: invalid HTTP method specified in pattern: " + methodStr)
+ 		}
+ 
++		debugLog("Method %q mapped to methodTyp, registering route for path: %q", methodStr, path)
+ 		mx.handle(method, path, handler)
+ 		return
+ 	}
+ 
++	debugLog("No method in pattern, registering for all methods: %q", pattern)
+ 	mx.handle(mALL, pattern, handler)
+ }
+ 
+ // HandleFunc adds the route `pattern` that matches any http method to
+ // execute the `handlerFn` http.HandlerFunc.
+ func (mx *Mux) HandleFunc(pattern string, handlerFn http.HandlerFunc) {
++	debugLog("HandleFunc called with pattern: %q", pattern)
++
++	parts := strings.SplitN(pattern, " ", 2)
++	if len(parts) == 2 {
++		methodStr := strings.ToUpper(parts[0])
++		path := parts[1]
++		debugLog("Pattern contains method - parsed method: %q, path: %q", methodStr, path)
++
++		method, ok := methodMap[methodStr]
++		if !ok {
++			panic("chi: invalid HTTP method specified in pattern: " + methodStr)
++		}
++
++		debugLog("Method %q mapped to methodTyp, registering route for path: %q", methodStr, path)
++		mx.handle(method, path, handlerFn)
++		return
++	}
++
++	debugLog("No method in pattern, registering for all methods: %q", pattern)
+ 	mx.handle(mALL, pattern, handlerFn)
+ }
+ 
+diff --git a/mux_test.go b/mux_test.go
+index 9190cb5..f050396 100644
+--- a/mux_test.go
++++ b/mux_test.go
+@@ -715,6 +715,103 @@ func TestMuxHandlePatternValidation(t *testing.T) {
+ 	}
+ }
+ 
++func TestMuxHandleFuncPatternValidation(t *testing.T) {
++	testCases := []struct {
++		name           string
++		pattern        string
++		shouldPanic    bool
++		method         string // Method to be used for the test request
++		path           string // Path to be used for the test request
++		expectedBody   string // Expected response body
++		expectedStatus int    // Expected HTTP status code
++	}{
++		// Valid patterns
++		{
++			name:           "Valid pattern without HTTP method",
++			pattern:        "/api/users",
++			shouldPanic:    false,
++			method:         "GET",
++			path:           "/api/users",
++			expectedBody:   "all methods",
++			expectedStatus: http.StatusOK,
++		},
++		{
++			name:           "Valid pattern with HTTP GET",
++			pattern:        "GET /api/users/{id}",
++			shouldPanic:    false,
++			method:         "GET",
++			path:           "/api/users/123",
++			expectedBody:   "get user",
++			expectedStatus: http.StatusOK,
++		},
++		{
++			name:           "Valid pattern with HTTP POST",
++			pattern:        "POST /api/products",
++			shouldPanic:    false,
++			method:         "POST",
++			path:           "/api/products",
++			expectedBody:   "create product",
++			expectedStatus: http.StatusOK,
++		},
++		{
++			name:           "Valid pattern with HTTP DELETE and wildcard",
++			pattern:        "DELETE /admin/*",
++			shouldPanic:    false,
++			method:         "DELETE",
++			path:           "/admin/users/123",
++			expectedBody:   "delete admin",
++			expectedStatus: http.StatusOK,
++		},
++		{
++			name:           "Valid pattern with HTTP PUT and prefix",
++			pattern:        "PUT /api/v1/*",
++			shouldPanic:    false,
++			method:         "PUT",
++			path:           "/api/v1/resource",
++			expectedBody:   "put resource",
++			expectedStatus: http.StatusOK,
++		},
++		// Invalid patterns
++		{
++			name:        "Invalid pattern with unsupported method",
++			pattern:     "INVALID /api/endpoint",
++			shouldPanic: true,
++		},
++		{
++			name:        "Invalid pattern missing space",
++			pattern:     "GET/api/users",
++			shouldPanic: true,
++		},
++	}
++
++	for _, tc := range testCases {
++		t.Run(tc.name, func(t *testing.T) {
++			defer func() {
++				if r := recover(); r != nil && !tc.shouldPanic {
++					t.Errorf("Unexpected panic for pattern %s", tc.pattern)
++				}
++			}()
++
++			r := NewRouter()
++			r.HandleFunc(tc.pattern, func(w http.ResponseWriter, r *http.Request) {
++				w.Write([]byte(tc.expectedBody))
++			})
++
++			if !tc.shouldPanic {
++				// Use testRequest for valid patterns
++				ts := httptest.NewServer(r)
++				defer ts.Close()
++
++				resp, body := testRequest(t, ts, tc.method, tc.path, nil)
++				if body != tc.expectedBody || resp.StatusCode != tc.expectedStatus {
++					t.Errorf("Expected status %d and body %s; got status %d and body %s for pattern %s",
++						tc.expectedStatus, tc.expectedBody, resp.StatusCode, body, tc.pattern)
++				}
++			}
++		})
++	}
++}
++
+ func TestRouterFromMuxWith(t *testing.T) {
+ 	t.Parallel()
+ 

@@ -1,0 +1,116 @@
+diff --git a/src/logic/createFormControl.ts b/src/logic/createFormControl.ts
+index f7079332..e271346b 100644
+--- a/src/logic/createFormControl.ts
++++ b/src/logic/createFormControl.ts
+@@ -1097,7 +1097,7 @@ export function createFormControl<
+   };
+ 
+   const handleSubmit: UseFormHandleSubmit<TFieldValues> =
+-    (onValid, onInvalid) => async (e) => {
++    (onValid, onInvalid, onFinally) => async (e, context) => {
+       if (e) {
+         e.preventDefault && e.preventDefault();
+         e.persist && e.persist();
+@@ -1118,17 +1118,27 @@ export function createFormControl<
+ 
+       unset(_formState.errors, 'root');
+ 
+-      if (isEmptyObject(_formState.errors)) {
+-        _subjects.state.next({
+-          errors: {},
+-        });
+-        await onValid(fieldValues as TFieldValues, e);
+-      } else {
+-        if (onInvalid) {
+-          await onInvalid({ ..._formState.errors }, e);
++      let shouldRethrow: any;
++
++      try {
++        if (isEmptyObject(_formState.errors)) {
++          _subjects.state.next({
++            errors: {},
++          });
++          await onValid(fieldValues as TFieldValues, e, context);
++        } else {
++          if (onInvalid) {
++            await onInvalid({ ..._formState.errors }, e, context);
++          }
++          _focusError();
++          setTimeout(_focusError);
+         }
+-        _focusError();
+-        setTimeout(_focusError);
++      } catch (error) {
++        shouldRethrow = error;
++      }
++
++      if (onFinally) {
++        await onFinally({ ..._formState }, context);
+       }
+ 
+       _subjects.state.next({
+@@ -1138,6 +1148,10 @@ export function createFormControl<
+         submitCount: _formState.submitCount + 1,
+         errors: _formState.errors,
+       });
++
++      if (shouldRethrow) {
++        throw shouldRethrow;
++      }
+     };
+ 
+   const resetField: UseFormResetField<TFieldValues> = (name, options = {}) => {
+diff --git a/src/types/form.ts b/src/types/form.ts
+index 2f20133e..ae306ea1 100644
+--- a/src/types/form.ts
++++ b/src/types/form.ts
+@@ -71,9 +71,10 @@ export type ValidationModeFlags = {
+ 
+ export type CriteriaMode = 'firstError' | 'all';
+ 
+-export type SubmitHandler<TFieldValues extends FieldValues> = (
++export type SubmitHandler<TFieldValues extends FieldValues, TSubmitContext = unknown> = (
+   data: TFieldValues,
+   event?: React.BaseSyntheticEvent,
++  context?: TSubmitContext,
+ ) => unknown | Promise<unknown>;
+ 
+ export type FormSubmitHandler<TFieldValues extends FieldValues> = (payload: {
+@@ -84,9 +85,15 @@ export type FormSubmitHandler<TFieldValues extends FieldValues> = (payload: {
+   method?: 'post' | 'put' | 'delete';
+ }) => unknown | Promise<unknown>;
+ 
+-export type SubmitErrorHandler<TFieldValues extends FieldValues> = (
++export type SubmitErrorHandler<TFieldValues extends FieldValues, TSubmitContext = unknown> = (
+   errors: FieldErrors<TFieldValues>,
+   event?: React.BaseSyntheticEvent,
++  context?: TSubmitContext,
++) => unknown | Promise<unknown>;
++
++export type SubmitFinallyHandler<TFieldValues extends FieldValues, TSubmitContext = unknown> = (
++  formState: FormState<TFieldValues>,
++  context?: TSubmitContext,
+ ) => unknown | Promise<unknown>;
+ 
+ export type SetValueConfig = Partial<{
+@@ -628,14 +635,16 @@ export type UseFormUnregister<TFieldValues extends FieldValues> = (
+ export type UseFormHandleSubmit<
+   TFieldValues extends FieldValues,
+   TTransformedValues extends FieldValues | undefined = undefined,
++  TSubmitContext = unknown,
+ > = (
+   onValid: TTransformedValues extends undefined
+-    ? SubmitHandler<TFieldValues>
++    ? SubmitHandler<TFieldValues, TSubmitContext>
+     : TTransformedValues extends FieldValues
+-    ? SubmitHandler<TTransformedValues>
++    ? SubmitHandler<TTransformedValues, TSubmitContext>
+     : never,
+-  onInvalid?: SubmitErrorHandler<TFieldValues>,
+-) => (e?: React.BaseSyntheticEvent) => Promise<void>;
++  onInvalid?: SubmitErrorHandler<TFieldValues, TSubmitContext>,
++  onFinally?: SubmitFinallyHandler<TFieldValues, TSubmitContext>,
++) => (e?: React.BaseSyntheticEvent, context?: TSubmitContext) => Promise<void>;
+ 
+ /**
+  * Reset a field state and reference.
