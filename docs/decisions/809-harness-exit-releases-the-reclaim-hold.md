@@ -45,9 +45,10 @@ earlier in the seat's life.
    measured the order). A row with a live connection is never touched, and a row parked later than the
    settle window is a new session of the seat's own and keeps its hold. _(Amended 2026-11-05: and a
    row **created after the exit row** keeps its hold whenever it parks — every session of the exiting
-   run attached before its hook posted the exit, so `created_at <= ts` — no slack; both stamps are the
-   daemon's clock, in that order — is what names the run; the span alone let a session started after the exit and parked inside the minute go
-   with it; see Consequences.)_
+   run attached before its hook posted the exit, so `created_at <= ts` (+ 2 s ordering slack) is what
+   names the run; the span alone let a session started after the exit and parked inside the minute go
+   with it; see Consequences.)_ _(Amended 2026-11-05: later the same day, no slack — both stamps are the
+   daemon's clock, in a known order, so the bound is `created_at <= ts` exactly; see Consequences.)_
 3. **Only the act lane.** A seat on the interrupt or batched lane, or not enrolled, keeps today's
    grace: a person's exit-and-relaunch there is what ADR 010 is for, and ADR 804's first rejected option
    (skip the gate for everyone) stays rejected. The gate itself, its order in `deriveSeatPasses`, the
