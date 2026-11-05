@@ -19,6 +19,7 @@ import {
   answeredByAnyoneSql,
   laneSettledSql,
   resolvedThreadSql,
+  shownToRecipientSql,
   undischargedSql,
 } from './discharge.js';
 import type { MessageRow, MessageVisibility } from './rows.js';
@@ -448,39 +449,14 @@ export async function listInbox(
     // `where` — built above and shared with every other read here — drops in unchanged; the
     // correlated subqueries name it `messages.id` explicitly, because an unqualified `id` inside
     // an EXISTS would resolve to the inner alias and silently match every row against itself.
-    const pinnedAny = OBLIGATION_ACTS_ANY.map(() => '?').join(',');
-    const pinnedDirected = OBLIGATION_ACTS_DIRECTED.map(() => '?').join(',');
-    // ADR 505 §3: the one clause outside the act lists — a reviewer's `decline` that the daemon
-    // stamped as a review dispute is owed an answer by the lane's owner, so it is pinned like any
-    // obligation. Read off the server stamp (`isReviewDispute` is the in-memory twin), never the
-    // act alone: a plain `decline` is still an answer, owed to nobody.
-    //
-    // ADR 614: the review dispute's discharge is narrower than ADR 434's four shapes, as SPEC §Disputes
-    // says — it stays pinned until an `accept` or `decline` answers it (or its thread is resolved).
-    // The owner's `message` reply (shape 3) clears every other obligation and used to clear this one
-    // too, which let a concession or hold go unrecorded: 6 of 7 such replies in 30 days conceded.
+    // The predicate itself is `stillOwedSql` below — the ADR 811 skip reads the same one, so a row
+    // that stops the skip is exactly a row this page would pin.
     const pinned = await db.all<MessageRow>(
       `SELECT * FROM messages ${where}
-           AND (
-             ((act IN (${pinnedAny})
-               OR (to_kind = 'member' AND act IN (${pinnedDirected})))
-              ${undischargedSql('messages', '?')})
-             OR (to_kind = 'member' AND act = 'decline'
-                 AND json_extract(meta, '$.dispute.via') = ?
-                 AND NOT EXISTS (${answeredByAnyoneSql('messages')})
-                 AND NOT EXISTS (${resolvedThreadSql('messages')}))
-           )
-           ${laneSettledSql('messages')}
+           ${stillOwedSql()}
          ORDER BY created_at ASC, id ASC
          LIMIT ?`,
-      [
-        ...params,
-        ...OBLIGATION_ACTS_ANY,
-        ...OBLIGATION_ACTS_DIRECTED,
-        member.id,
-        REVIEW_DISPUTE_VIA,
-        opts.pinnedLimit ?? PINNED_DEFAULT_LIMIT,
-      ],
+      [...params, ...stillOwedParams(member.id), opts.pinnedLimit ?? PINNED_DEFAULT_LIMIT],
     );
     if (pinned.length === 0) return newest;
     const byId = new Map<string, MessageRow>();
@@ -527,24 +503,62 @@ export async function listInbox(
  */
 /** Unread count by the caller-supplied cursor — what a bounded read needs in order to say how much
  *  it could not carry. Counting is not marshalling: this stays cheap on a deep backlog. */
+/**
+ * The OBLIGATION class, still owed — "owed" spelled ONCE for the pinned set (ADR 429) and the ADR
+ * 811 skip. `AND (...)` clauses over an UNALIASED `messages` row, to append to a `WHERE`; the params
+ * are `stillOwedParams`. An act of the class (`ask` / `request_help` to anyone; `handoff` / `steer`
+ * / `challenge` / `defer` to this member) that no shape in `discharge.ts` has discharged, or a
+ * reviewer's `decline` the daemon stamped as a review dispute (ADR 505 §3) that no `accept` /
+ * `decline` has answered and whose thread is open — the dispute's discharge is narrower than ADR
+ * 434's four shapes, as SPEC §Disputes says (ADR 614: the owner's `message` reply, shape 3, used to
+ * clear it too, which let a concession or hold go unrecorded — 6 of 7 such replies in 30 days
+ * conceded). Read off the server stamp (`isReviewDispute` is the in-memory twin), never the act
+ * alone: a plain `decline` is still an answer, owed to nobody. Then `laneSettledSql`: an acceptance
+ * ask, handoff or pull whose lane has moved on asks nothing now.
+ */
+function stillOwedSql(): string {
+  const any = OBLIGATION_ACTS_ANY.map(() => '?').join(',');
+  const directed = OBLIGATION_ACTS_DIRECTED.map(() => '?').join(',');
+  return `AND (
+             ((act IN (${any})
+               OR (to_kind = 'member' AND act IN (${directed})))
+              ${undischargedSql('messages', '?')})
+             OR (to_kind = 'member' AND act = 'decline'
+                 AND json_extract(meta, '$.dispute.via') = ?
+                 AND NOT EXISTS (${answeredByAnyoneSql('messages')})
+                 AND NOT EXISTS (${resolvedThreadSql('messages')}))
+           )
+           ${laneSettledSql('messages')}`;
+}
+function stillOwedParams(memberId: string): unknown[] {
+  return [...OBLIGATION_ACTS_ANY, ...OBLIGATION_ACTS_DIRECTED, memberId, REVIEW_DISPUTE_VIA];
+}
+
 /** ADR 811: how old an unowed row must be before a skip may count it instead of carrying it. */
 export const STALE_UNOWED_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * ADR 811: find how far a reader's cursor may jump over STALE rows nobody owed them. A row is owed
- * when it is directed to the reader (`to_member`) or is an obligation act to the room (`ask`,
- * `request_help`, ADR 429's any-recipient class); such a row STOPS the skip whatever its age and
- * whether or not it was since answered — the ordinary read decides that. Everything else older
- * than `olderThanMs` (team status updates, lane broadcasts, the room's chatter, answers owed to
- * nobody) is passed over as a count. Nothing newer than the window is ever skipped: the fold and
- * the drain (ADR 433, ADR 287) still render those one line at a time.
+ * when it is an obligation STILL OPEN for this reader — `stillOwedSql`, the pinned set's own
+ * predicate (ADR 429/434/505/614), less what the reader was already shown (doorbell clause 7(iv),
+ * `shownToRecipientSql`); such a row STOPS the skip whatever its age. Everything else older than
+ * `olderThanMs` (team status updates, lane broadcasts, the room's chatter, answers owed to nobody,
+ * an ask someone answered, a steer this seat was shown, a plain message addressed to it — not an
+ * obligation, ADR 429) is passed over as a count. Nothing newer than the window is ever skipped:
+ * the fold and the drain (ADR 433, ADR 287) still render those one line at a time.
+ *
+ * The first landing (2026-11-05) stopped at ANY directed row or room obligation, answered or not.
+ * Measured the same day on the hub: the deep-backlog seats' oldest unread obligation was a room
+ * `ask` from 107 days before, long since answered — big-body's skip would pass 584 of 21,383 stale
+ * rows and stop there; wanderer's live skip passed 746 and a second one passed 0. An ordinary read
+ * past its limit marks nothing read, so the stopper held the cursor for good (ADR 811 amendment).
  *
  * Pure read: returns the row the cursor may advance to, how many rows that passes, and the row
  * that stopped it — or `null` when there is nothing stale and unowed to skip. The caller advances.
  */
 export async function skipStaleUnowed(
   db: Driver,
-  member: { id: string; team_id: string },
+  member: { id: string; team_id: string; name: string },
   cursor: { last_read_ts: number; last_read_message_id: string | null },
   opts: { now?: number; olderThanMs?: number } = {},
 ): Promise<{
@@ -562,7 +576,6 @@ export async function skipStaleUnowed(
     : [cursor.last_read_ts];
   const inbox = `team_id = ? AND (to_member = ? OR to_kind IN ('team','broadcast')) AND from_member != ? ${after}`;
   const inboxParams = [member.team_id, member.id, member.id, ...afterParams];
-  const owedActs = OBLIGATION_ACTS_ANY.map(() => '?').join(',');
   const stopper = await db.get<{
     id: string;
     act: string;
@@ -570,9 +583,11 @@ export async function skipStaleUnowed(
     created_at: number;
   }>(
     `SELECT id, act, from_member, created_at FROM messages
-      WHERE ${inbox} AND (to_member = ? OR act IN (${owedActs}))
+      WHERE ${inbox}
+      ${stillOwedSql()}
+      AND NOT EXISTS (${shownToRecipientSql('messages', '?')})
       ORDER BY created_at ASC, id ASC LIMIT 1`,
-    [...inboxParams, member.id, ...OBLIGATION_ACTS_ANY],
+    [...inboxParams, ...stillOwedParams(member.id), member.name],
   );
   const bound = stopper ? `AND (created_at < ? OR (created_at = ? AND id < ?))` : '';
   const boundParams = stopper ? [stopper.created_at, stopper.created_at, stopper.id] : [];

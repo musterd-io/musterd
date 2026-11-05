@@ -123,3 +123,18 @@ export function laneSettledSql(alias: string): string {
              AND (ln.owner_seat IS NOT NULL OR ln.state <> 'open'))
         ))`;
 }
+
+/**
+ * Doorbell contract clause 7(iv), as SQL: the act was already SHOWN to this recipient by an inbox
+ * read — an `inbox.rendered` audit row per (recipient, act), written by `recordRendered`. The inbox
+ * handler folds this after load; the ADR 811 skip needs it before load, so a steer or an urgent act
+ * the seat was shown months ago does not hold its cursor there for good. `target` is the recipient's
+ * NAME (the audit row's `target`), a `?`.
+ */
+export function shownToRecipientSql(alias: string, target: string): string {
+  return `SELECT 1 FROM audit ra
+     WHERE ra.team_id = ${alias}.team_id
+       AND ra.action = 'inbox.rendered'
+       AND ra.target = ${target}
+       AND json_extract(ra.detail, '$.act') = ${alias}.id`;
+}

@@ -2,6 +2,7 @@ import { makeEnvelope } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { recordRendered } from './audit.js';
 import { getCursor, setCursor } from './cursors.js';
 import { actDelivery, crossedBySeen } from './delivery.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
@@ -228,12 +229,54 @@ withDrivers('skipStaleUnowed (ADR 811)', (o) => {
     void team;
   });
 
-  it('a directed row stops the jump whatever its age', async () => {
+  it('an open directed obligation stops the jump whatever its age', async () => {
+    const { db, nick, now, at } = await stage();
+    await at('steer-60', 60, 'steer', { kind: 'member', name: 'nick' });
+    await at('s-50', 50, 'status_update', { kind: 'team' });
+    const floor = { last_read_ts: 0, last_read_message_id: null };
+    expect(await skipStaleUnowed(db, nick, floor, { now })).toBeNull();
+  });
+
+  // ADR 811 amendment (2026-11-05): "owed" is the pinned set's own predicate. A plain message
+  // addressed to the reader is not an obligation (ADR 429) — it is counted like the room's chatter.
+  it('a stale directed message is counted, not a stop', async () => {
     const { db, nick, now, at } = await stage();
     await at('dm-60', 60, 'message', { kind: 'member', name: 'nick' });
     await at('s-50', 50, 'status_update', { kind: 'team' });
     const floor = { last_read_ts: 0, last_read_message_id: null };
+    const skip = await skipStaleUnowed(db, nick, floor, { now });
+    expect(skip?.to.id).toBe('s-50');
+    expect(skip?.skipped).toBe(2);
+    expect(skip?.stopped_at).toBeNull();
+  });
+
+  // The hub, 2026-11-05: the deep-backlog seats' oldest unread obligation was a room ask from 107
+  // days before, answered long ago — the first landing stopped there and held the cursor for good.
+  it('a room ask someone has answered no longer stops the jump; an open one still does', async () => {
+    const { db, nick, now, at } = await stage();
+    await at('ask-100', 100, 'ask', { kind: 'team' }, { species: 'approve', tier: 'standard' });
+    await at('acc-99', 99, 'accept', { kind: 'team' }, { in_reply_to: 'ask-100' });
+    await at('s-90', 90, 'status_update', { kind: 'team' });
+    await at('ask-80', 80, 'ask', { kind: 'team' }, { species: 'approve', tier: 'standard' }); // open: the stop
+    await at('s-70', 70, 'status_update', { kind: 'team' });
+    const floor = { last_read_ts: 0, last_read_message_id: null };
+    const skip = await skipStaleUnowed(db, nick, floor, { now });
+    expect(skip?.to.id).toBe('s-90');
+    expect(skip?.skipped).toBe(3);
+    expect(skip?.stopped_at?.id).toBe('ask-80');
+  });
+
+  // Doorbell clause 7(iv): a steer the seat was already shown is discharged by having been shown.
+  it('a directed steer this seat was already shown no longer stops the jump', async () => {
+    const { db, team, nick, now, at } = await stage();
+    await at('steer-60', 60, 'steer', { kind: 'member', name: 'nick' });
+    await at('s-50', 50, 'status_update', { kind: 'team' });
+    const floor = { last_read_ts: 0, last_read_message_id: null };
     expect(await skipStaleUnowed(db, nick, floor, { now })).toBeNull();
+    await recordRendered(db, team.id, 'nick', [{ id: 'steer-60', act: 'steer' }]);
+    const skip = await skipStaleUnowed(db, nick, floor, { now });
+    expect(skip?.to.id).toBe('s-50');
+    expect(skip?.skipped).toBe(2);
   });
 
   it('nothing within the window is skipped; past it, up to the newest stale row', async () => {
