@@ -732,7 +732,7 @@ export async function liveNodeDrivers(
   }
   const leases = new Map([...best].map(([k, v]) => [k, v.name]));
   const had = await db.all<{ node: string | null }>(
-    'SELECT DISTINCT p.node AS node FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = \'human\' AND m.observer = 0 AND p.last_seen_at > ?',
+    "SELECT DISTINCT p.node AS node FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = 'human' AND m.observer = 0 AND p.last_seen_at > ?",
     [teamId, Date.now() - HAD_HUMAN_WINDOW_MS],
   );
   const hadHuman = new Set(had.map((h) => h.node ?? ''));
