@@ -120,6 +120,19 @@ function laneVerdict(payload: unknown): 'accept' | 'decline' | null {
 }
 
 /**
+ * A `device_key_admin` payload the wording knows: the standing-key passkey enrollment the web's
+ * enroll flow mints, and the refusal descriptor the app channel pairs with it (ADR 808 inc C).
+ * Read only as fixed enums; anything else on the act keeps the generic words.
+ */
+function passkeyEnroll(payload: unknown): 'approve' | 'reject' | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const p = payload as { action?: unknown; kind?: unknown; decision?: unknown };
+  if (p.action !== 'enroll' || p.kind !== 'passkey') return null;
+  if (p.decision === undefined) return 'approve';
+  return p.decision === 'reject' ? 'reject' : null;
+}
+
+/**
  * ADR 676 §6: the app's own fixed wording for each act on the closed list. A `Record` over the list,
  * so a new listed act fails to compile until it has words. Nothing an agent wrote reaches the
  * headline: the target is a server identifier (a lane id, a member name, a team slug) and the
@@ -147,7 +160,12 @@ const WORDING: Record<HighAuthorityAct, (target: string, payload: unknown) => st
   grant_issue: (target) => `Issue a grant to ${target}`,
   credential_mint: (target) => `Mint a credential for ${target}`,
   agent_create: (target) => `Create the agent ${target}`,
-  device_key_admin: (target) => `Change the device keys of ${target}`,
+  device_key_admin: (target, payload) => {
+    const enroll = passkeyEnroll(payload);
+    if (enroll === 'approve') return `Add a new passkey for ${target}`;
+    if (enroll === 'reject') return `Don't add a new passkey for ${target}`;
+    return `Change the device keys of ${target}`;
+  },
 };
 
 export function approvalWording(d: ApprovalDescriptor, payload: unknown): ApprovalWording {

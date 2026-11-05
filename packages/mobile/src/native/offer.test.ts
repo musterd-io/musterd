@@ -54,4 +54,23 @@ describe('showOffer', () => {
     });
     expect(shown?.wording.headline).not.toContain('safe');
   });
+
+  it('words a passkey-enrollment pair from its payloads, approve and refuse apart (ADR 808 inc C)', () => {
+    const keys = { act: 'device_key_admin', target: 'nick' };
+    const approve = showOffer(offer({ action: 'enroll', kind: 'passkey' }, keys), {
+      team: 'revive',
+      now: 1,
+    });
+    const reject = showOffer(
+      offer(
+        { action: 'enroll', kind: 'passkey', decision: 'reject' },
+        { ...keys, nonce: 'desc-nonce-0000000002' },
+      ),
+      { team: 'revive', now: 1 },
+    );
+    expect(approve?.wording.headline).toBe('Add a new passkey for nick');
+    expect(reject?.wording.headline).toBe("Don't add a new passkey for nick");
+    expect(approve?.signingBytes).toContain('device_key_admin');
+    expect(approve?.signingBytes).not.toBe(reject?.signingBytes);
+  });
 });
