@@ -90,6 +90,18 @@ export const ASK_WITHHOLD_KIND = 'ask-withhold' as const;
 export const GATE_REQUEST_KINDS = [...ENFORCEMENT_CLASS_KINDS, ASK_WITHHOLD_KIND] as const;
 export type GateRequestKind = (typeof GATE_REQUEST_KINDS)[number];
 
+/** ADR 803: how many extra paths one shell call may carry to Gate A in `also`. */
+export const GATE_ALSO_MAX = 16;
+
+/** One more matched path of a shell write (ADR 803 §2): its class, fingerprint, posture, and path. */
+export const GateTargetSchema = z.object({
+  class: z.string().min(1),
+  fingerprint: z.string().min(1),
+  posture: z.enum(ENFORCEMENT_POSTURES),
+  target: z.string(),
+});
+export type GateTarget = z.infer<typeof GateTargetSchema>;
+
 export const GateCheckRequestSchema = z.object({
   kind: z.enum(GATE_REQUEST_KINDS),
   class: z.string().min(1),
@@ -108,6 +120,13 @@ export const GateCheckRequestSchema = z.object({
     .string()
     .regex(/^[0-9a-f]{7,64}$/)
     .optional(),
+  /** ADR 803 §2: the other paths one `Bash` call writes that match a contended-surface class, beyond
+   *  the one this request names. The daemon weighs each like a file-tool write; the strictest result
+   *  decides the call, and one audit row records it. Contended-surface only. */
+  also: z.array(GateTargetSchema).max(GATE_ALSO_MAX).optional(),
+  /** ADR 803 §3: the call already ran — an opaque shell write changed this path. The daemon only says
+   *  whether the seat's lanes cover it (`allowed`) or not (`written_unowned`, audited); it cannot undo. */
+  after: z.literal(true).optional(),
 });
 export type GateCheckRequest = z.infer<typeof GateCheckRequestSchema>;
 
@@ -172,6 +191,9 @@ export const GATE_OUTCOMES = [
   // ADR 697: the first edit of a file after another seat's hold on it ended — refused once, naming
   // where the holder's work is, so the next edit starts from it.
   'denied_handover',
+  // ADR 803 §3: after the call, an opaque shell write had changed a `block` path no lane of the
+  // seat covers. Detected, not prevented: the call already ran.
+  'written_unowned',
 ] as const;
 export type GateOutcome = (typeof GATE_OUTCOMES)[number];
 

@@ -414,27 +414,42 @@ export async function adjudicateGate(
   member: MemberRow,
   req: GateCheckRequest,
 ): Promise<GateDecision> {
-  const ctx: GateContext = { srv, team, member, req };
-  const route = req.kind === 'role-route' ? await gateRoute(ctx) : undefined;
-  const { hold, ...decision }: GateDecision & HoldTag = route
-    ? route.decision
-    : req.kind === 'contended-surface'
-      ? await gateA(ctx)
-      : req.kind === 'ask-withhold'
-        ? await gateWithhold(ctx)
-        : await gateB(ctx);
+  if (req.after === true) return writtenCheck({ srv, team, member, req });
+  const route = req.kind === 'role-route' ? await gateRoute({ srv, team, member, req }) : undefined;
+  // ADR 803 §2: a shell call that writes several contended paths is weighed path by path, the
+  // strictest first as the hook sends them; the first deny decides, else the strictest allow.
+  let decided = req;
+  let result: GateDecision & HoldTag;
+  if (route) result = route.decision;
+  else if (req.kind === 'contended-surface') {
+    result = await gateA({ srv, team, member, req });
+    for (const more of req.also ?? []) {
+      if (result.decision === 'deny') break;
+      const { also: _also, ...base } = req;
+      const next: GateCheckRequest = { ...base, ...more };
+      const r = await gateA({ srv, team, member, req: next });
+      if (r.decision === 'deny' || (r.outcome === 'warned' && result.outcome === 'allowed')) {
+        result = r;
+        decided = next;
+      }
+    }
+  } else if (req.kind === 'ask-withhold') result = await gateWithhold({ srv, team, member, req });
+  else result = await gateB({ srv, team, member, req });
+  const { hold, ...decision } = result;
   const action = req.kind === 'contended-surface' ? 'lane.gate' : 'action.gate';
   await appendAudit(srv.db, team.id, {
     actor: member.name,
     action,
-    target: req.class,
+    target: decided.class,
     result: decision.decision === 'allow' ? 'allow' : 'deny',
     detail: {
-      class: req.class,
-      fingerprint: req.fingerprint,
-      posture: req.posture,
+      class: decided.class,
+      fingerprint: decided.fingerprint,
+      posture: decided.posture,
       tool: req.tool,
       outcome: decision.outcome,
+      // ADR 803: how many contended paths the one shell call wrote, when more than one.
+      ...(req.also?.length ? { targets: req.also.length + 1 } : {}),
       ...(decision.ask_ref ? { ask_ref: decision.ask_ref } : {}),
       // ADR 801: the seat's own blocking ask held this call — the Eval reads this cause.
       ...(req.kind === 'ask-withhold' ? { cause: 'ask_withhold' } : {}),
@@ -445,6 +460,49 @@ export async function adjudicateGate(
     },
   });
   return decision;
+}
+
+/**
+ * ADR 803 §3 — the after-call check of an opaque shell write. The hook saw `req.target` newly changed
+ * in the work tree after a `Bash` call it could not read, in a `block` contended surface. A lane of
+ * the seat covering it → `allowed`, no row (ownership was the point). Otherwise → `written_unowned`,
+ * one `lane.gate` row, and the repair the seat reads at once. Nothing else is touched: no hold
+ * refusal, no hand-over, no branch learning — the edit already happened.
+ */
+async function writtenCheck(ctx: GateContext): Promise<GateDecision> {
+  const { db } = ctx.srv;
+  const { id: teamId, slug } = ctx.team;
+  const { req } = ctx;
+  if (req.kind !== 'contended-surface') {
+    return { decision: 'allow', outcome: 'allowed', reason: '' };
+  }
+  const owned = await laneCoveringPath(db, teamId, slug, req.target, { owner: ctx.member.name });
+  if (owned) return { decision: 'allow', outcome: 'allowed', reason: '' };
+  const other = await laneCoveringPath(db, teamId, slug, req.target);
+  const whose = other
+    ? `It is covered by ${other.owner_seat ?? 'another seat'}'s lane "${other.title}".`
+    : 'No lane covers it.';
+  await appendAudit(db, teamId, {
+    actor: ctx.member.name,
+    action: 'lane.gate',
+    target: req.class,
+    result: 'allow',
+    detail: {
+      class: req.class,
+      fingerprint: req.fingerprint,
+      posture: req.posture,
+      tool: req.tool,
+      outcome: 'written_unowned',
+    },
+  });
+  return {
+    decision: 'allow',
+    outcome: 'written_unowned',
+    reason:
+      `written: that command changed '${req.target}', in the declared contended surface '${req.class}', ` +
+      `and no lane of yours covers it. ${whose} Revert it (git checkout -- ${req.target}) or claim a ` +
+      `lane that covers it (ADR 803).`,
+  };
 }
 
 /**

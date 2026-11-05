@@ -73,7 +73,23 @@ scripts. The gate's strongest class is the one most easily bypassed by accident.
 - `written_unowned` is a new audit outcome. It is additive: readers that classify by `result` and
   `hold` are unchanged (lazara's CooperBench readers, 2026-11-04).
 - One `git status` per opaque write-shaped call, in the seat's own workspace.
-- Follows-up: lane 01M6M9K8B6 builds this once this ADR is accepted.
+- Built 2026-11-04 (lane 01M6M9K8B6). How the build reads the Decision:
+  - `bashWriteTargets` lives in `packages/protocol/src/bashWrites.ts` and returns `{paths, opaque}`.
+    It also names the sources of `mv` and the operands of `git mv`: moving a file away writes it as
+    surely as `rm` does.
+  - Decision 2's "one audit row per call" is the `also` field on `POST /gate`: the hook sends the
+    call's matched paths in one request, `block` first, and the daemon stops at the first deny. A
+    `Bash` call that also matches a command class still has that class's own row, as before.
+  - The after-call check counts a path as written when `git status` shows it newly changed, or showed
+    it before and its mtime moved. It is the `after: true` request, which reads ownership only, never
+    a hold or a hand-over. When the daemon is unreachable after the call, it says nothing: it cannot
+    tell whose lane covers the path.
+  - Any command with a heredoc is opaque, not only one fed to an interpreter. Four automated security
+    reviews on 2026-11-04 each found another way a heredoc's body could be misplaced: quotes across
+    lines, arithmetic, substitutions, continuations. So the gate stops guessing where a body ends.
+    The named targets on its command lines are still weighed before the call, read both with and
+    without the bodies, so a misplaced body can add a target but never hide one. The cost is that a
+    body line which looks like a write to an unowned `block` path is refused too.
 
 ## Observability & Evaluation
 

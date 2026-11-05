@@ -17,6 +17,7 @@ export * from './residency.js';
 export * from './shift.js';
 export * from './shift.wire.js';
 export * from './workspace.js';
+export * from './bashWrites.js';
 export * from './enforcement.js';
 export * from './loops.js';
 export * from './pull.js';
