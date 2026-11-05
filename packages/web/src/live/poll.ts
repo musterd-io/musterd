@@ -57,7 +57,8 @@ function openView(p: OpenPoll, now: number): PollView {
   };
 }
 
-function headline(r: Extract<PollMeta, { state: 'closed' }>): string {
+/** How a closed poll came out, in a few words — the stage card's and /live's line. */
+export function headline(r: Extract<PollMeta, { state: 'closed' }>): string {
   const pick = (i: number) => `${i + 1} · ${r.options[i]}`;
   if (r.winners.length === 0) return 'No votes this time';
   if (r.winners.length > 1) return `It’s a tie: ${r.winners.map(pick).join(' and ')}`;

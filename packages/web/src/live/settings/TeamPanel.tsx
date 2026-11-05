@@ -20,6 +20,7 @@ import {
   withKnob,
   type Knob,
 } from './policyKnobs';
+import { PollPanel } from './PollPanel';
 import { hoursLine } from './YouPanel';
 
 /**
@@ -86,6 +87,8 @@ export function TeamPanel({
   const tz = hours?.timezone;
   return (
     <>
+      <PollPanel cfg={cfg} />
+
       <section className="lc-set__group" aria-labelledby="lc-set-hours">
         <h3 id="lc-set-hours" className="lc-set__h">
           Working hours

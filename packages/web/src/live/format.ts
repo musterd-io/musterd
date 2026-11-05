@@ -47,6 +47,9 @@ export function actTone(act: string): ActTone {
     // rides the lane tone and the cluster reads together.
     case 'goal':
       return 'lane';
+    // A Twitch poll's record (ADR 807) wears the accent, the colour the stream's tally leads with.
+    case 'poll':
+      return 'accent';
     case 'handoff':
     case 'lane_handoff':
       return 'handoff';
@@ -163,6 +166,41 @@ export function goalEvent(env: Pick<Envelope, 'act' | 'meta' | 'body'>): { title
   const title = typeof rec['title'] === 'string' ? rec['title'] : titleFromBody(env.body);
   if (!title) return null;
   return typeof rec['wave'] === 'string' ? { title, wave: rec['wave'] } : { title };
+}
+
+/**
+ * A Twitch poll's record (ADR 807 §9): the daemon's opening `message` and closing `resolve` carry
+ * `meta.poll`. Recovered like a Goal, so the stream reads one clean line (with a `poll` badge)
+ * instead of the composed `[poll] …` body. Null unless the meta is a well-formed poll.
+ */
+export function pollEvent(
+  env: Pick<Envelope, 'act' | 'meta' | 'body'>,
+): { title: string; state?: string } | null {
+  const p = env.meta?.['poll'];
+  if (!p || typeof p !== 'object') return null;
+  const r = p as Record<string, unknown>;
+  const question = r['question'];
+  const options = r['options'];
+  if (typeof question !== 'string' || !Array.isArray(options)) return null;
+  const pick = (i: number) => `${i + 1} · ${String(options[i] ?? '')}`;
+  if (r['state'] === 'open') {
+    const by = typeof r['opened_by'] === 'string' ? r['opened_by'] : null;
+    return by ? { title: `Poll: ${question}`, state: `asked by ${by}` } : { title: `Poll: ${question}` };
+  }
+  if (r['state'] !== 'closed') return null;
+  const winners = Array.isArray(r['winners']) ? (r['winners'] as number[]) : [];
+  const voters = typeof r['voters'] === 'number' ? r['voters'] : 0;
+  const votes = `${voters} ${voters === 1 ? 'vote' : 'votes'}`;
+  if (r['end'] === 'cancelled') return { title: `Poll cancelled: ${question}` };
+  if (r['end'] === 'interrupted')
+    return { title: `Poll ended when the stream dropped: ${question}`, state: votes };
+  const outcome =
+    winners.length === 0
+      ? 'no votes'
+      : winners.length > 1
+        ? `a tie, ${winners.map(pick).join(' and ')}`
+        : pick(winners[0]!);
+  return { title: `Poll closed: ${question} → ${outcome}`, state: votes };
 }
 
 /**

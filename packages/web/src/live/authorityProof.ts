@@ -1,5 +1,6 @@
 import { apiGet, apiPost, type LiveConfig } from './client';
 import type { ApprovalProof } from '@musterd/protocol';
+import type { PollSpec } from '@musterd/protocol/wire';
 import {
   humanAskAnswerApproval,
   requestDecisionApproval,
@@ -83,6 +84,21 @@ export async function authorityProofForPolicy(
   stored: Record<string, unknown>,
 ): Promise<ApprovalProof | null> {
   return authorityProofForDescriptor(cfg, 'admin.team_policy', cfg.team, stored);
+}
+
+/**
+ * Opening a Twitch poll mints its counts-only credential (`credential_mint`, ADR 807 §5). The payload is
+ * the one the daemon rebuilds, `{ action: 'poll_open', spec }`, so the caller signs the exact spec it
+ * sends (minutes included) and a poll proof can be nothing but a poll proof.
+ */
+export async function authorityProofForPoll(
+  cfg: LiveConfig,
+  spec: PollSpec,
+): Promise<ApprovalProof | null> {
+  return authorityProofForDescriptor(cfg, 'credential_mint', cfg.team, {
+    action: 'poll_open',
+    spec,
+  });
 }
 
 /**

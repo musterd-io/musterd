@@ -2985,3 +2985,13 @@ unchanged at 149.8 KB against 150.9. Total JS read 408.8 KB on this laptop again
 read 409.4 KB (`static` job, run 42076904027). Lazy-loading cannot move that total, so the budget
 is raised by 2 KB to clear CI's read.
 
+## 2026-11-05 — Twitch polls from /live: total JS RAISED 420,000 → 423,000 B, app CSS RAISED 20,300 → 21,000 B (lane 01M6ME5EPX4PMZ99JPF6BAT91R)
+
+ADR 807 increment 5. A human admin starts, ends and cancels a Twitch poll from settings' Team tab.
+The passkey signs the exact spec, and the panel shows the open poll's counts and the last result.
+The stream reads the poll's record as one line with a `poll` badge. The panel is `PollPanel.tsx`
+and its own `PollPanel.css` (0.7 KB gzip), both inside the already-lazy settings chunk. The record line is `pollEvent` in `format.ts`. It runs
+in the stream and is eager, so initial JS rose 0.3 KB, from 149.8 to 150.1 KB against 150.9. Total JS read 411.1 KB on this
+laptop against 410.2 KB, and app CSS read 19.8 KB, at its edge. Lazy-loading cannot move either
+total, so both are raised to clear CI's read.
+
