@@ -66,6 +66,10 @@ cost compounds under load.
   each poll before the reclaimable gate, releases a leaseless hold on a seat whose newest lease was
   reported within five minutes and minted before the row was last seen. Decision §1's "ends with the
   report" now reads: at the report, and on the next poll for anything the run parks after it.
+  Smoke pair 3 (01:27–01:37Z) then showed the parked row itself: a `cli` session stamped with the
+  wake's lease (the hooks inherit `MUSTERD_WAKE_LEASE`), created at the report's own second. The sweep
+  had excluded leased rows; it no longer does — any parked row of the seat seen since a recently
+  reported lease goes, leased or not (#3880).
 - _(2026-11-05)_ The first smoke pair on this build (rider 7 re-run, 23:46–00:30Z) still showed
   `reclaimable` ≈ 40 s on every wait. The daemon log says why: each wake ends with the MCP session's
   close, then an ~80 ms CLI claim and close (the SessionEnd capture hook, `musterd session end`), then

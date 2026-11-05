@@ -59,14 +59,18 @@ withDrivers('wakeHold', (openStore: () => Promise<Driver>) => {
          VALUES ('L1', ?, ?, 'A1', NULL, 'h', 'batched', 'reported', ?, ?, NULL, ?)`,
         [team.id, ada.id, now - 60_000, now + 60_000, now - 50_000],
       );
-      // The SessionEnd hook's row: parked after the report, no lease.
-      const late = await attach(db, ada.id, 'cli', 'c2', {});
+      // The SessionEnd hook's row: parked after the report, stamped with the wake's lease (the hook
+      // runs with MUSTERD_WAKE_LEASE set) — smoke pair 3 of the rider 7 re-run.
+      const late = await attach(db, ada.id, 'cli', 'c2', { wake_lease: 'L1' });
       await release(db, late.id, 45_000);
+      // And one with no lease at all (an interrupt-probe style claim after the report).
+      const bare = await attach(db, ada.id, 'cli', 'c5', {});
+      await release(db, bare.id, 45_000);
       // Bo has no reported lease: its hold stands.
       const other = await attach(db, bo.id, 'cli', 'c3', {});
       await release(db, other.id, 45_000);
       expect(await listReclaimableMemberIds(db, team.id, now)).toEqual(new Set([ada.id, bo.id]));
-      expect(await releaseLateWakeHolds(db, team.id, now)).toBe(1);
+      expect(await releaseLateWakeHolds(db, team.id, now)).toBe(2);
       expect(await listReclaimableMemberIds(db, team.id, now)).toEqual(new Set([bo.id]));
       // Outside the window the lease no longer speaks for new holds.
       const again = await attach(db, ada.id, 'cli', 'c4', {});
