@@ -65,6 +65,7 @@ without a second admin?
    hub operator on the hub's own loopback may mint a one-time recovery code for that member instead
    is a policy question that reverses part of nick's 2026-10-19 call, and it is not decided here.
    Follows-up: lane `01M6N3YGD4GNA1PGK90TZV5V5W` holds the proposal for nick to accept or decline.
+   _(Amended 2026-11-05: nick accepted the proposal that day. See the amendment below.)_
 
 ### Increments
 
@@ -85,6 +86,29 @@ without a second admin?
   increment D is decided. The page now says so plainly instead of offering a QR code.
 - The hub-relocation runbook keeps the 2026-11-04 procedure as history; a future switch should not
   need it.
+
+**2026-11-05 — increment D accepted and built (lane `01M6N3YGD4GNA1PGK90TZV5V5W`).** nick accepted
+the proposal in chat the day the ADR landed. The exception to ADR 662's 2026-10-19 fail-closed rule
+is one act with these bounds. `musterd authority recover <member>` is taken only on a hub, only
+from the hub machine's own loopback, and only with the daemon's recovery secret — a 0600 file the
+daemon writes beside its store on the first ask, readable by its own OS user and by nobody else,
+because on a hub that also runs agent seats (the box does) loopback alone would let a seat re-key a
+human. What the caller says about themself is recorded as a claim, never as the proof. It is refused
+while any key of the member's is known to sign somewhere the hub serves (a phone key, a platform
+key, or a passkey whose recorded relying party is a configured passkey hostname; a passkey from
+before origins were recorded does not count, since it may well be dead — the operator asks the
+member first). It is refused while another human admin holds such a key: then ADR 662's countersign
+applies unchanged, and the code is only for a team with nobody left who can vouch. One code is live
+per member, for five minutes, used once; the mint is audited (`device_key.recovery_code`) and
+announced to the whole team by the board seat, so a recovery nobody asked for is seen the minute it
+is minted. The code is an enrollment challenge: the registration that spends it is accepted only
+from the member it was minted for, signed in as themself (two factors: the code and their
+credential), needs no standing-key approval and no admin countersign, and re-checks at that moment
+that no usable key and no countersigner stands. The member redeems it on /live under Your passkeys
+("I have a recovery code"). The trade, stated to nick: the hub machine's own operator can re-key a
+human who has no other way back — no new reach, since they can already read the store, but a new
+act, now on the record. Falsifier: a recovery code minted or spent while a usable key or a
+countersigning admin stands, minted without the secret, or spent by anyone but the member.
 
 ## Observability & Evaluation
 

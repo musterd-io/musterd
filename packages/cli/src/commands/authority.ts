@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { userInfo } from 'node:os';
 import {
   ApprovalProofSchema,
   PolicyOverrideSchema,
@@ -7,13 +9,16 @@ import {
 } from '@musterd/protocol';
 import { flagStr, GLOBAL_FLAGS, rejectUnknownFlags, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
+import { machineStatePath } from '../machinePaths.js';
+import { theme } from '../render/theme.js';
 import { success } from '../render/ui.js';
-import { resolve } from './helpers.js';
+import { resolve, resolveRead } from './helpers.js';
 
 const USAGE =
   'usage: musterd authority enroll [--confirmed-by <admin> --countersign-proof <json>]\n' +
   '       musterd authority keys\n' +
   '       musterd authority revoke <key-id>\n' +
+  '       musterd authority recover <member>   (on the hub machine, ADR 808)\n' +
   '       musterd authority approve --act <act> --target <target> --payload <json>';
 
 /**
@@ -631,6 +636,43 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     for (const k of keys) {
       process.stdout.write(`${k.id}  ${k.kind}  ${k.revoked_at ? 'revoked' : 'active'}\n`);
     }
+    return 0;
+  }
+
+  if (sub === 'recover') {
+    // ADR 808 inc D: the hub's operator mints a one-time passkey recovery code for a member none
+    // of whose keys sign anywhere this hub serves. The daemon takes it only from this machine's
+    // loopback and only on the hub, refuses while any usable key stands, and tells the team.
+    const who = parsed.positionals[1];
+    if (!who) throw new CliError(USAGE, 2);
+    const { team, http } = resolveRead(parsed.flags, { claimSeatPerRequest: true });
+    // The daemon's recovery secret (0600 beside its store) is the proof this is the daemon's own
+    // OS user, not merely a local process — on a hub that also runs agent seats, loopback is not
+    // enough. The daemon writes the file on the first ask; a second ask then carries it.
+    const secretPath = machineStatePath('MUSTERD_RECOVERY_SECRET', 'recovery.secret');
+    let operatorSecret: string | undefined;
+    try {
+      operatorSecret = readFileSync(secretPath, 'utf8').trim();
+    } catch {
+      operatorSecret = undefined;
+    }
+    const minted = await http.issueRecoveryCode(team, {
+      ...(operatorSecret ? { operator_secret: operatorSecret } : {}),
+      member: who,
+      issued_by: userInfo().username,
+    });
+    if (json) return printJson(minted);
+    const where = minted.redeem_at
+      ? `${minted.redeem_at}/live?team=${encodeURIComponent(team)}`
+      : '/live';
+    process.stdout.write(
+      success(`recovery code for ${who} — it expires in 5 minutes and works once`, {
+        next: `${who} opens ${where} → Settings → Your passkeys → "I have a recovery code", pastes it, and enrolls a passkey there`,
+      }) +
+        '\n' +
+        `  ${minted.code}\n` +
+        `  ${theme.meta('The team was told a recovery code was minted; the audit row records the daemon secret as the proof and your OS user as a claim.')}\n`,
+    );
     return 0;
   }
 

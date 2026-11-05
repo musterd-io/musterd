@@ -183,6 +183,7 @@ export type AuditAction =
   | 'device_key.enrolled'
   | 'device_key.revoked'
   | 'device_key.enrollment_challenge'
+  | 'device_key.recovery_code'
   // ADR 088: an interrupt-class act was surfaced to a busy agent at a tool boundary (delivery, not
   // send — `urgent.flagged` audits the send). One row per (recipient, act): who grabbed the mic, when,
   // at whom. The raised→read pair (this row, then the recipient's inbox read of `detail.act`) is the
@@ -860,6 +861,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'authority.refused': 'actor',
   'authority.approved': 'actor',
   'device_key.enrolled': 'actor',
+  'device_key.recovery_code': 'actor',
   'device_key.revoked': 'actor',
   'device_key.enrollment_challenge': 'actor',
   'interrupt.raised': 'target',
