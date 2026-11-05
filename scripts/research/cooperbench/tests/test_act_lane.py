@@ -94,8 +94,8 @@ def test_act_lane_enrolls_starts_the_host_and_waits_for_the_seat(wired, act, tmp
     tomb = json.loads(envs[0].files["/workspace/repo/.musterd/declined.json"])
     assert tomb["declined"][0]["surface"] == "musterd:self-heal"
     assert ad.HARNESS_LIVE_PROBE in cmds
-    # The probe must not match itself: a bare 'claude' pattern sits in the grep's own cmdline.
-    assert "'[c]laude'" in ad.HARNESS_LIVE_PROBE
+    # The probe judges argv[0] only: neither its own pattern nor a launcher's MUSTERD_LAUNCH_SURFACE=claude-code counts.
+    assert "$1 ~ /(^|" in ad.HARNESS_LIVE_PROBE and "claude$/" in ad.HARNESS_LIVE_PROBE
     assert (tmp_path / "logs" / "agent1_host.log").exists()
 
 
