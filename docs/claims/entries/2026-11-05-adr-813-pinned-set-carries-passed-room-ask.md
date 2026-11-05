@@ -16,11 +16,12 @@ cost: "one CI round on #3936; an ADR title and a lane acceptance line that contr
 status: amended
 falsifier: "a bounded unread read (listInbox with unreadOnly and a cursor) that returns an open room obligation created before the cursor — that would show the pinned set is not cursor-bounded"
 passed_by:
-  - self: I wrote the claim from ADR 429's summary ("an act waiting on the reader cannot fall off the page") without reading the pinned SELECT, whose WHERE carries the cursor clause
   - acceptance: lane 01M6PVMWMG was submitted with the criterion "the four stay pinned"; big-body checked the landed test against it and declined
 ---
 
-ADR 813's first draft argued that passing a room obligation with the cursor loses nothing because
+The claim was written from ADR 429's summary ("an act waiting on the reader cannot fall off the
+page") without reading the pinned SELECT, whose WHERE carries the cursor clause. ADR 813's first
+draft argued that passing a room obligation with the cursor loses nothing because
 the pinned set (ADR 429) carries every open obligation into every bounded read "regardless of the
 cursor". It does not: the pinned SELECT in `listInbox` is built on the same `where` as the unread
 page, cursor clause included, so a pin lifts an open obligation out of the UNREAD range only. A row
