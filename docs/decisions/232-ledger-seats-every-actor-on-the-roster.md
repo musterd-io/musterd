@@ -270,6 +270,15 @@ plist with no install verb — hand-authored plists walk past `install`, which i
 jobs on the live machine") is met on this machine once the three installs are re-run and the one
 seat is added; the census is still warn-only and stays so.
 
+**2026-11-05 — a joiner's service seat speaks to the hub (lane 01M6MZ1888).** When the revive hub
+moved off the laptop (2026-11-04) the laptop's daemon became a joiner, and every service tick kept
+aiming its hub-minted token at that local daemon: the auto-refresher's presence touch and bounce
+announcement, the guardian's policy read and its resolve of a cleared raise, all answered `invalid
+service token`. The token lives in the hub's store; a joiner's never holds it. `serviceSeatAuth`
+now prefers the hub named in `node.json` for the seat's team over the installed daemon, seat.json
+and the machine default; the daemon-facing calls (health, bounce) are untouched. Falsifier: a
+service log line `invalid service token` on a machine whose `node.json` names a hub for that team.
+
 ## Observability & Evaluation
 
 **Traces.** All on existing rails, which is the point of the design: a service seat's actions are
