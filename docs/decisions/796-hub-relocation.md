@@ -86,6 +86,16 @@ still cannot enroll.
   `01M6HWV7AF12X6T0VVPYSGM0SC` (repoint and relabel), lane `01M6HWV9E48ECHG1M77GX5HNDG` (security
   preconditions), lane `01M6HWVB7F56DF6WPPMZT662RP` (rehearsal), lane
   `01M6HWVD5J3APBQJ9PDFT5JDW5` (the switch).
+- 2026-11-04 (lane `01M6MG78J7`, fifty): the carry rules, from rehearsal 1's replica-only list.
+  Each machine projects the roster under its own ids, so the check now names rows by team slug and
+  member name (`NATURAL_KEYS`), and skips the node-local `local_node` and `host_liveness`. Run on
+  that day's stores, only three tables still held box-only rows:
+
+  | Box-only rows | Rule |
+  | --- | --- |
+  | `grants`: 3 standing seat grants (gptbot, mason, resident), issued by nick on the box 2026-10-29 | **Carry.** Copy the rows into the new hub with `team_id` mapped to its team, plus their 3 `grant.issue` audit rows, before the wake pause lifts. The seats' bindings hold the tokens, so the copied hashes keep them working |
+  | `agent_bootstrap_credentials`: 1 `legacy` `team-key-compatibility` row | **Not carried.** It is the joiner's compatibility row for the team key, and the copied hub store holds the team's own |
+  | `audit`: `residency.wake_exhausted` (39,907), `store.pruned` (83), presence and claim rows (5) | **Not carried.** Node-local operation records. The box's replica file is set aside for history, like the laptop's store |
 
 ## Observability & Evaluation
 
