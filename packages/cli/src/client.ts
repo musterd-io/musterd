@@ -1604,6 +1604,18 @@ export class HttpClient {
     }>;
   }
 
+  /** ADR 808 inc D: the hub operator mints a passkey recovery code for a member (loopback only). */
+  async issueRecoveryCode(
+    slug: string,
+    body: { member: string; issued_by?: string },
+  ): Promise<{ code: string; expires_at: number; redeem_at: string | null }> {
+    return this.request('POST', `/teams/${slug}/authority/recoveries`, body) as Promise<{
+      code: string;
+      expires_at: number;
+      redeem_at: string | null;
+    }>;
+  }
+
   /** ADR 662 decision 6: this human's device keys (public halves only). */
   async listDeviceKeys(slug: string): Promise<{ keys: DeviceKeySummary[] }> {
     return this.request('GET', `/teams/${slug}/authority/keys`) as Promise<{

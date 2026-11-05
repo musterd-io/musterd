@@ -3,6 +3,7 @@ import type { LiveConfig } from '../client';
 import {
   enrollPasskey,
   enrollPasskeyViaPhone,
+  enrollPasskeyWithRecoveryCode,
   enrollRefusal,
   fetchMyDeviceKeys,
   revokeDeviceKey,
@@ -32,6 +33,7 @@ export function Passkeys({
   const [keys, setKeys] = useState<DeviceKey[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [recoveryCode, setRecoveryCode] = useState('');
   const [note, setNote] = useState<SheetNote>(null);
   const refresh = useCallback(async () => {
     try {
@@ -92,6 +94,23 @@ export function Passkeys({
       await enrollPasskeyViaPhone(cfg, me, () =>
         setNote({ tone: 'ok', text: 'sent to your phone — approve it there, then come back here' }),
       );
+      setNote({ tone: 'ok', text: 'passkey enrolled — it signs your high-authority acts from now on' });
+      await refresh();
+      onEnrolled?.();
+    } catch (e) {
+      setNote({ tone: 'err', text: enrollRefusal(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ADR 808 inc D: no key signs anywhere and no phone — the hub's operator minted a code.
+  const enrollWithCode = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await enrollPasskeyWithRecoveryCode(cfg, me, recoveryCode);
+      setRecoveryCode('');
       setNote({ tone: 'ok', text: 'passkey enrolled — it signs your high-authority acts from now on' });
       await refresh();
       onEnrolled?.();
@@ -178,6 +197,36 @@ export function Passkeys({
           {elsewhereOrigins.length > 0 ? ' on that origin' : ' elsewhere'}
           {phones > 0 ? ' or from your paired phone' : ''}; open musterd there to add one.
         </p>
+      )}
+      {noneSignHere && phones === 0 && (
+        <form
+          className="lc-keys__recover"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void enrollWithCode();
+          }}
+        >
+          <label className="lc-set__hint" htmlFor="lc-keys-recovery">
+            I have a recovery code from the hub operator
+          </label>
+          <input
+            id="lc-keys-recovery"
+            className="lc-set__input"
+            value={recoveryCode}
+            onChange={(e) => setRecoveryCode(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="paste the code"
+            disabled={busy}
+          />
+          <button
+            type="submit"
+            className="lc-set__btn lc-set__btn--go"
+            disabled={busy || recoveryCode.trim().length < 16}
+          >
+            {busy ? 'Waiting for your passkey…' : 'Enroll a passkey with this code'}
+          </button>
+        </form>
       )}
       {noneSignHere && phones > 0 && (
         <button

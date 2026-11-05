@@ -292,6 +292,7 @@ import {
   getParkedProof,
   getPasskeysForDescriptor,
   issueEnrollmentChallenge,
+  issueRecoveryCode,
   listDeviceKeys,
   requireAuthority,
   revokeKeyGuarded,
@@ -1447,6 +1448,12 @@ const RevokeKeyBody = z.object({
 
 // Passkey enrollment (decision 5/6): the browser's registration over the server-minted
 // challenge — the challenge's one use and the credential's birth are the same event.
+/** ADR 808 inc D: whom the hub's operator is recovering, and who they are (an OS user name). */
+const RecoveryCodeBody = z.object({
+  member: z.string().min(1).max(128),
+  issued_by: z.string().min(1).max(128).optional(),
+});
+
 const PasskeyEnrollBody = z.object({
   actor: z.string().min(1),
   challenge: z.string().min(16),
@@ -5651,6 +5658,64 @@ export async function handleHttp(
         if (!proof) throw new MusterdError('not_found', 'no approval parked for that nonce yet');
         return sendJson(res, 200, { proof });
       }
+      // ADR 808 inc D: the hub's operator, on the hub's own loopback, mints a one-time passkey
+      // recovery code for a member none of whose keys sign anywhere this hub serves. The code is an
+      // enrollment challenge the member redeems on /live; the registration that spends it needs no
+      // standing-key approval and no admin countersign. nick accepted the policy on 2026-11-05.
+      if (method === 'POST' && rest === '/authority/recoveries') {
+        requireLocalPeer(ctx, req, 'minting a passkey recovery code');
+        const team = await requireTeam(ctx.db, slug);
+        if (await joinerEnrollment(ctx.db, team.id, team.slug))
+          throw new MusterdError(
+            'validation',
+            'a recovery code is minted on the hub machine, not on a joiner — run this on the hub',
+          );
+        const body = parseOrBadRequest(RecoveryCodeBody, await readJson(req));
+        const target = await getMemberByName(ctx.db, team.id, body.member);
+        if (!target || target.left_at !== null || target.kind !== 'human')
+          throw new MusterdError('validation', `no human member "${body.member}" on ${slug}`);
+        const hosts = webauthnExpectedOrigins(ctx).map((o) => new URL(o).hostname);
+        const minted = await issueRecoveryCode(ctx.db, {
+          teamId: team.id,
+          member: target,
+          issuedBy: body.issued_by ?? 'operator',
+          hosts,
+        });
+        if (!minted.ok) {
+          const why: Record<typeof minted.reason, string> = {
+            agent_member: 'only a human has passkeys to recover',
+            usable_key_stands: `${target.name} still has a key that signs somewhere this hub serves (a phone, or a passkey on a configured origin) — use it, or revoke it first`,
+            recovery_live: `a recovery code for ${target.name} is already live; wait for it to expire (5 minutes)`,
+          };
+          throw new MusterdError('validation', why[minted.reason]);
+        }
+        // Said on the record: the board speaks it to the whole team, so a recovery nobody asked
+        // for is seen the minute it is minted (ADR 646 voice).
+        try {
+          const voice = await boardSeat(ctx.db, team);
+          if (voice) {
+            const env = makeEnvelope({
+              id: ulid(),
+              team: team.slug,
+              from: voice.name,
+              to: { kind: 'team' },
+              act: 'message',
+              body: `A passkey recovery code was minted for ${target.name} on the hub machine by ${body.issued_by ?? 'the operator'}; it expires in 5 minutes. If nobody asked for this, revoke ${target.name}'s next passkey.`,
+              meta: {
+                device_key_recovery: { member: target.name, issued_by: body.issued_by ?? null },
+              },
+            });
+            await routeEnvelope(ctx, team, voice, env, undefined, true);
+          }
+        } catch {
+          // the announcement is a courtesy; the audit row is the record
+        }
+        return sendJson(res, 201, {
+          code: minted.code,
+          expires_at: minted.expiresAt,
+          redeem_at: browserOriginOf(ctx.config.webauthnOrigins),
+        });
+      }
       if (method === 'POST' && rest === '/authority/passkeys') {
         const team = await requireTeam(ctx.db, slug);
         const body = parseOrBadRequest(PasskeyEnrollBody, await readJson(req));
@@ -5686,6 +5751,7 @@ export async function handleHttp(
                 }
               : undefined,
           expectedOrigins: webauthnExpectedOrigins(ctx),
+          recoveryHosts: webauthnExpectedOrigins(ctx).map((o) => new URL(o).hostname),
           registration: {
             attestationObject: Buffer.from(body.registration.attestation_object, 'base64url'),
             clientDataJson: body.registration.client_data_json,

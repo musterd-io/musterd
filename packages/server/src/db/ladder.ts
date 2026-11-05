@@ -1293,6 +1293,30 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
       await d.exec(`ALTER TABLE device_keys ADD COLUMN IF NOT EXISTS rp_id TEXT`);
     },
   },
+  {
+    // v143 — ADR 808 inc D (lane 01M6N3YGD4): a passkey RECOVERY code is an enrollment challenge
+    // the hub's operator minted on the hub's own loopback for a member none of whose keys can sign
+    // anywhere; the registration that spends it needs no standing-key approval and no admin
+    // countersign. `recovery` marks such a row, `issued_by` is the operator's OS user. Ordinary
+    // challenges stay 0 / null.
+    version: 143,
+    sqlite: (db) => {
+      const cols = db
+        .prepare(`SELECT name FROM pragma_table_info('enrollment_codes')`)
+        .pluck()
+        .all();
+      if (!cols.includes('recovery'))
+        db.exec(`ALTER TABLE enrollment_codes ADD COLUMN recovery INTEGER NOT NULL DEFAULT 0`);
+      if (!cols.includes('issued_by'))
+        db.exec(`ALTER TABLE enrollment_codes ADD COLUMN issued_by TEXT`);
+    },
+    postgres: async (d) => {
+      await d.exec(
+        `ALTER TABLE enrollment_codes ADD COLUMN IF NOT EXISTS recovery INTEGER NOT NULL DEFAULT 0`,
+      );
+      await d.exec(`ALTER TABLE enrollment_codes ADD COLUMN IF NOT EXISTS issued_by TEXT`);
+    },
+  },
 ];
 
 /** The interrupt window's text guard (interruptCandidates.ts): a necessary condition for a row to

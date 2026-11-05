@@ -235,6 +235,91 @@ export async function issueEnrollmentChallenge(
   return { challenge, expiresAt: now + ENROLLMENT_CODE_TTL_MS };
 }
 
+const RECOVERY_CODE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * ADR 808 inc D: does any of this member's active keys sign somewhere the hub serves? A phone key
+ * signs from the app; a passkey signs on its relying party, which must be one of the hub's
+ * configured passkey hostnames — and a passkey from before origins were recorded (`rpId` null)
+ * is taken as usable, never as lost. Only when this is false may a recovery code be minted.
+ */
+export function usableKeyStands(keys: readonly DeviceKey[], hosts: readonly string[]): boolean {
+  return keys.some(
+    (k) =>
+      k.revokedAt === null &&
+      (k.kind === 'phone' ||
+        k.kind === 'platform' ||
+        (k.kind === 'passkey' && (k.rpId === null || hosts.includes(k.rpId)))),
+  );
+}
+
+/**
+ * ADR 808 inc D: mint a one-time passkey recovery code for a member whose every key is bound to an
+ * origin this hub no longer serves. The caller has already established that it runs on the hub's
+ * own machine (the route's loopback check) — the same trust `node join` carries. Five minutes, one
+ * live code per member, sha256 stored, audited with the operator's OS user. The code is an
+ * enrollment challenge: the registration that spends it (`enrollPasskeyGuarded`) needs no
+ * standing-key approval and no admin countersign, but re-checks that no usable key stands.
+ */
+export async function issueRecoveryCode(
+  db: Driver,
+  input: {
+    teamId: string;
+    member: { id: string; name: string; kind: string };
+    issuedBy: string;
+    hosts: readonly string[];
+    now?: number;
+  },
+): Promise<
+  | { ok: true; code: string; expiresAt: number }
+  | { ok: false; reason: 'agent_member' | 'usable_key_stands' | 'recovery_live' }
+> {
+  const now = input.now ?? Date.now();
+  if (input.member.kind !== 'human') return { ok: false, reason: 'agent_member' };
+  const keys = await listDeviceKeys(db, input.teamId, input.member.id);
+  if (usableKeyStands(keys, input.hosts)) return { ok: false, reason: 'usable_key_stands' };
+  const live = await db.get<{ code_hash: string }>(
+    `SELECT code_hash FROM enrollment_codes
+      WHERE team_id = ? AND member_id = ? AND recovery = 1 AND used_at IS NULL AND expires_at >= ?`,
+    [input.teamId, input.member.id, now],
+  );
+  if (live) return { ok: false, reason: 'recovery_live' };
+  const code = randomBytes(24).toString('base64url');
+  const codeHash = createHash('sha256').update(code, 'utf8').digest('hex');
+  const expiresAt = now + RECOVERY_CODE_TTL_MS;
+  await db.run(
+    `INSERT INTO enrollment_codes
+       (code_hash, team_id, member_id, expires_at, used_at, node_id, ceremony_origin, ceremony_rp_id, recovery, issued_by)
+     VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 1, ?)`,
+    [codeHash, input.teamId, input.member.id, expiresAt, input.issuedBy],
+  );
+  await appendAudit(db, input.teamId, {
+    actor: input.member.name,
+    action: 'device_key.recovery_code',
+    target: input.member.name,
+    result: 'allow',
+    detail: { issued_by: input.issuedBy, expires_at: expiresAt },
+  });
+  return { ok: true, code, expiresAt };
+}
+
+/** Is this challenge a live recovery code of this member's (ADR 808 inc D)? Read, not spent. */
+async function recoveryChallengeStands(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+  challenge: string,
+  now: number,
+): Promise<boolean> {
+  const codeHash = createHash('sha256').update(challenge, 'utf8').digest('hex');
+  const row = await db.get<{ code_hash: string }>(
+    `SELECT code_hash FROM enrollment_codes
+      WHERE team_id = ? AND code_hash = ? AND member_id = ? AND recovery = 1 AND used_at IS NULL AND expires_at >= ?`,
+    [teamId, codeHash, memberId, now],
+  );
+  return row !== undefined && row !== null;
+}
+
 /** Spend a ceremony challenge: valid, unused, unexpired, and this member's. One use. */
 export async function consumeEnrollmentChallenge(
   db: Driver,
@@ -269,7 +354,7 @@ export async function consumeEnrollmentChallenge(
 }
 
 export type EnrollKeyResult =
-  | { ok: true; key: DeviceKey; via: 'ceremony' | 'approval' }
+  | { ok: true; key: DeviceKey; via: 'ceremony' | 'approval' | 'recovery' }
   | { ok: false; reason: string };
 
 /**
@@ -866,6 +951,9 @@ export async function enrollPasskeyGuarded(
     expectedNodeId?: string | undefined;
     ceremonyOrigin?: string | undefined;
     countersignExpectedOrigins?: readonly string[] | undefined;
+    /** ADR 808 inc D: the hostnames of this hub's configured passkey origins, for the recovery
+     *  re-check that no usable key stands; omitted, a recovery code is not honoured. */
+    recoveryHosts?: readonly string[] | undefined;
     now?: number;
   },
 ): Promise<EnrollKeyResult> {
@@ -885,7 +973,18 @@ export async function enrollPasskeyGuarded(
     return { ok: false, reason: 'bad_registration' };
   }
   const active = await activeDeviceKeys(db, input.teamId, input.member.id);
-  if (active.length > 0) {
+  // ADR 808 inc D: a recovery code the hub's operator minted stands in for both the standing-key
+  // approval and the admin countersign — only while no key of this member's signs anywhere the
+  // hub serves, re-checked here at the moment of spending.
+  const recovery =
+    input.recoveryHosts !== undefined &&
+    (await recoveryChallengeStands(db, input.teamId, input.member.id, input.challenge, now));
+  if (recovery && usableKeyStands(active, input.recoveryHosts!)) {
+    return { ok: false, reason: 'usable_key_stands' };
+  }
+  if (recovery) {
+    // nothing more to prove: the operator's loopback act is the authority (audited at mint)
+  } else if (active.length > 0) {
     const check = await requireAuthority(db, {
       teamId: input.teamId,
       audience: input.audience,
@@ -956,7 +1055,7 @@ export async function enrollPasskeyGuarded(
     action: 'device_key.enrolled',
     target: input.member.name,
     result: 'allow',
-    detail: { key_id: key.id, kind: 'passkey', via: 'ceremony' },
+    detail: { key_id: key.id, kind: 'passkey', via: recovery ? 'recovery' : 'ceremony' },
   });
-  return { ok: true, key, via: 'ceremony' };
+  return { ok: true, key, via: recovery ? 'recovery' : 'ceremony' };
 }

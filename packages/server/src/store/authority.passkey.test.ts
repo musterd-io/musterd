@@ -10,6 +10,8 @@ import {
   enrollPasskeyGuarded,
   getParkedProof,
   issueEnrollmentChallenge,
+  issueRecoveryCode,
+  usableKeyStands,
   requireAuthority,
   storePasskeyProof,
 } from './authority.js';
@@ -340,5 +342,120 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
     };
     const enrolled = await attempt({ confirmer: root, isAdmin: true, proof });
     expect(enrolled.ok).toBe(true);
+  });
+  it('ADR 808 inc D: a recovery code enrolls past dead-origin passkeys, once, and never past a usable key', async () => {
+    const db = await openStore();
+    const team = await createTeam(db, { slug: 'revive' });
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+    const hosts = ['hub.example.ts.net'];
+
+    // nick's standing passkeys were made on the laptop hub (rp_id localhost): dead on this hub.
+    for (const id of ['dead-1', 'dead-2']) {
+      await enrollDeviceKey(db, {
+        teamId: team.id,
+        memberId: nick.id,
+        publicKey: generateKeyPairSync('ed25519')
+          .publicKey.export({ format: 'der', type: 'spki' })
+          .toString('base64url'),
+        kind: 'passkey',
+        credentialId: id,
+        origin: 'http://localhost:4849',
+        rpId: 'localhost',
+      });
+    }
+    expect(
+      usableKeyStands(
+        await (await import('./authority.js')).listDeviceKeys(db, team.id, nick.id),
+        hosts,
+      ),
+    ).toBe(false);
+
+    // A fabricated registration on the hub's origin — the ceremony alone anchors nothing (ADR 662),
+    // and with keys standing the ordinary path demands their approval.
+    const { publicKey } = generateKeyPairSync('ed25519');
+    const jwk = publicKey.export({ format: 'jwk' }) as { x: string };
+    const cose = encMap([
+      [encInt(1), encInt(1)],
+      [encInt(3), encInt(-8)],
+      [encInt(-1), encInt(6)],
+      [encInt(-2), encBytes(Buffer.from(jwk.x, 'base64url'))],
+    ]);
+    const credId = Buffer.from('recovered-credential');
+    const rpHash = createHash('sha256').update('hub.example.ts.net').digest();
+    const regAuthData = Buffer.concat([
+      rpHash,
+      Buffer.from([0x45]),
+      Buffer.from([0, 0, 0, 0]),
+      Buffer.alloc(16),
+      Buffer.from([0, credId.length]),
+      credId,
+      cose,
+    ]);
+    const attestationObject = encMap([
+      [encText('fmt'), encText('none')],
+      [encText('attStmt'), encMap([])],
+      [encText('authData'), encBytes(regAuthData)],
+    ]);
+    const clientData = (challenge: string) =>
+      JSON.stringify({
+        type: 'webauthn.create',
+        challenge,
+        origin: 'https://hub.example.ts.net',
+        crossOrigin: false,
+      });
+    const attempt = (challenge: string, recoveryHosts?: string[]) =>
+      enrollPasskeyGuarded(db, {
+        teamId: team.id,
+        audience: team.slug,
+        member: nick,
+        challenge,
+        expectedOrigins: ['https://hub.example.ts.net'],
+        ...(recoveryHosts ? { recoveryHosts } : {}),
+        registration: { attestationObject, clientDataJson: clientData(challenge) },
+      });
+
+    const ordinary = await issueEnrollmentChallenge(db, {
+      teamId: team.id,
+      memberId: nick.id,
+      actor: 'nick',
+    });
+    expect((await attempt(ordinary.challenge, hosts)).ok).toBe(false);
+
+    const minted = await issueRecoveryCode(db, {
+      teamId: team.id,
+      member: nick,
+      issuedBy: 'ops',
+      hosts,
+    });
+    if (!minted.ok) throw new Error(minted.reason);
+    // One live code per member.
+    expect(
+      await issueRecoveryCode(db, { teamId: team.id, member: nick, issuedBy: 'ops', hosts }),
+    ).toEqual({
+      ok: false,
+      reason: 'recovery_live',
+    });
+    // A daemon that does not pass its hosts does not honour the code.
+    expect((await attempt(minted.code)).ok).toBe(false);
+    const enrolled = await attempt(minted.code, hosts);
+    expect(enrolled).toMatchObject({ ok: true, via: 'recovery' });
+    // Spent: the same code enrolls nothing again.
+    expect((await attempt(minted.code, hosts)).ok).toBe(false);
+
+    // Now a passkey on this hub's origin stands: no further recovery code is minted.
+    expect(
+      await issueRecoveryCode(db, { teamId: team.id, member: nick, issuedBy: 'ops', hosts }),
+    ).toEqual({
+      ok: false,
+      reason: 'usable_key_stands',
+    });
+    // A phone key alone also counts as usable; an agent cannot be recovered.
+    const ada = (await addMember(db, team, { name: 'ada', kind: 'agent', role: '' })).row;
+    expect(
+      await issueRecoveryCode(db, { teamId: team.id, member: ada, issuedBy: 'ops', hosts }),
+    ).toEqual({
+      ok: false,
+      reason: 'agent_member',
+    });
   });
 });

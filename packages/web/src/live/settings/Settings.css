@@ -710,3 +710,22 @@
   padding: 2px 8px;
   font-size: 11.5px;
 }
+/* ADR 808 inc D: the recovery-code field, shown only when no key signs anywhere and no phone. */
+.lc-keys__recover {
+  display: grid;
+  gap: var(--lc-3);
+  margin: 0 0 var(--lc-4);
+}
+.lc-set__input {
+  min-height: 28px;
+  padding: 0 var(--lc-4);
+  border: 1px solid rgba(120, 96, 60, 0.4);
+  border-radius: var(--lc-r-sm);
+  background: #fffaf0;
+  color: var(--lc-text);
+  font: 400 12.5px/1 var(--font-sans);
+}
+.lc-set__input:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 1px;
+}

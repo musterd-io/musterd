@@ -59,6 +59,8 @@ export function enrollRefusal(e: unknown): string {
       'and it prints what the admin runs on the hub'
     );
   }
+  if (/usable_key_stands/.test(text))
+    return 'a recovery code is for when no key of yours signs anywhere — one still does, so use it, or revoke it first';
   if (/bad_challenge/.test(text)) return 'the enrollment code expired — try again';
   return text;
 }
@@ -126,18 +128,31 @@ export async function enrollPasskeyViaPhone(
   return registerPasskey(cfg, member, approval);
 }
 
+/**
+ * ADR 808 inc D: enroll a passkey here with a RECOVERY code the hub's operator minted, for a human
+ * none of whose keys sign anywhere the hub serves. The code is the ceremony's challenge; the daemon
+ * waives the standing-key approval and the admin countersign for it, once, within five minutes.
+ */
+export async function enrollPasskeyWithRecoveryCode(
+  cfg: LiveConfig,
+  member: string,
+  code: string,
+): Promise<DeviceKey> {
+  if (!navigator.credentials?.create) throw new Error('passkeys are unavailable in this browser');
+  return registerPasskey(cfg, member, null, code.trim());
+}
+
 /** The registration ceremony itself, with whatever approval the caller collected (or none). */
 async function registerPasskey(
   cfg: LiveConfig,
   member: string,
   approval: ApprovalProof | null,
+  recoveryCode?: string,
 ): Promise<DeviceKey> {
   const teamPath = `/teams/${encodeURIComponent(cfg.team)}/authority`;
-  const { challenge } = await apiPost<{ challenge: string }>(
-    cfg,
-    `${teamPath}/enrollment-challenges`,
-    {},
-  );
+  const challenge =
+    recoveryCode ??
+    (await apiPost<{ challenge: string }>(cfg, `${teamPath}/enrollment-challenges`, {})).challenge;
   let cred: PublicKeyCredential | null;
   try {
     cred = (await navigator.credentials.create({
