@@ -82,6 +82,13 @@ malicious".
   token on the stream machine (740's Consequences already name him for that).
 - A future step that acts on the winner, for example by opening a lane, hangs off the closed record.
   It is not built here.
+- _(2026-11-04, increment 2, lane 01M6ME50JK)_ The daemon keeps only the token's hash, so it cannot
+  return the token minted at open. Each `GET /polls/open` by the broadcast seat mints a fresh `mspoll_`
+  and replaces the stored hash; the previous one stops working. A restarted stream machine simply reads
+  a new token, and there is still exactly one live token per poll, dead at close. The stream machine
+  reports Twitch's live state on `POST /teams/:slug/stream/live` (broadcast seat, leaseless) as well as
+  inside each counts report, so the open gate works before any poll exists. End and cancel are
+  hub-local for now (a joiner gets `hub_local_required`); relaying them is a later op.
 
 ## Observability & Evaluation
 

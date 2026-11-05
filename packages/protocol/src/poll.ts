@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { POLL_ENDS, POLL_LIMITS } from './poll.wire.js';
 
-/** Twitch polls (ADR 807): the schemas over `poll.wire.ts`'s shapes. */
+/** Twitch polls (ADR 807): the schemas over `poll.wire.ts`'s shapes, which this re-exports. */
+export * from './poll.wire.js';
 
 const text = (max: number) =>
   z

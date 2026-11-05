@@ -1263,6 +1263,20 @@ CREATE TABLE IF NOT EXISTS slack_install_requests (
   PRIMARY KEY (team_id, member_id, day)
 )`,
   },
+  {
+    // v141 — ADR 807 (lane 01M6ME50JK): Twitch polls, held by the hub. One open poll per team (the
+    // partial unique index). `token_sha256` is the current `mspoll_` token's hash only — the
+    // broadcast seat's read mints a fresh one (hard rule 5). `end_reason` is null while open.
+    // `stream_liveness` is the stream machine's last word on whether Twitch shows the channel live:
+    // the open gate and the 90 s interrupt both read it. Team-owned.
+    version: 141,
+    sqlite: (db) => {
+      for (const sql of POLLS_SQL) db.exec(sql);
+    },
+    postgres: async (d) => {
+      for (const sql of POLLS_SQL) await d.exec(sql);
+    },
+  },
 ];
 
 /** The interrupt window's text guard (interruptCandidates.ts): a necessary condition for a row to
@@ -1374,6 +1388,33 @@ const HOLDS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS holds (
 )`;
 const HOLDS_INDEX_SQL =
   'CREATE INDEX IF NOT EXISTS idx_holds_team_expires ON holds(team_id, expires_at)';
+
+const POLLS_SQL = [
+  `CREATE TABLE IF NOT EXISTS polls (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  question TEXT NOT NULL,
+  options_json TEXT NOT NULL,
+  minutes INTEGER NOT NULL,
+  opened_by TEXT NOT NULL,
+  opened_at BIGINT NOT NULL,
+  closes_at BIGINT NOT NULL,
+  counts_json TEXT NOT NULL,
+  voters INTEGER NOT NULL DEFAULT 0,
+  post_failed INTEGER NOT NULL DEFAULT 0,
+  token_sha256 TEXT NOT NULL,
+  open_msg_id TEXT,
+  end_reason TEXT CHECK (end_reason IN ('deadline', 'ended', 'cancelled', 'interrupted')),
+  closed_at BIGINT
+)`,
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_polls_one_open ON polls(team_id) WHERE end_reason IS NULL',
+  `CREATE TABLE IF NOT EXISTS stream_liveness (
+  team_id TEXT PRIMARY KEY REFERENCES teams(id),
+  live INTEGER NOT NULL,
+  reported_at BIGINT NOT NULL,
+  offline_since BIGINT
+)`,
+];
 
 /** The SQLite view of a ladder: what `migrations.ts` / `traceDb.ts` append after their legacy entries. */
 export function sqliteLadder(

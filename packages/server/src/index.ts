@@ -32,6 +32,7 @@ import { startRosterWatcher } from './projection/watcher.js';
 import { startLaneWatch, sweepLaneWatches } from './protocol/laneWatch.js';
 import { startPrWatch } from './protocol/prWatch.js';
 import { routeEnvelope } from './protocol/route.js';
+import { startPollWatch } from './protocol/pollWatch.js';
 import { startShiftWatch } from './protocol/shiftWatch.js';
 import { startSeedsIngest } from './seeds/ingest.js';
 import { appendAudit } from './store/audit.js';
@@ -410,6 +411,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let stopLaneWatch: (() => void) | null = null;
   let stopPrWatch: (() => void) | null = null;
   let stopShiftWatch: (() => void) | null = null;
+  let stopPollWatch: (() => void) | null = null;
   let stopDigest: (() => void) | null = null;
   let stopSync: (() => void) | null = null;
   let stopPull: (() => void) | null = null;
@@ -522,6 +524,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           if (loops.has('pr_watch')) stopPrWatch = startPrWatch(opCtx);
           // ADR 792: a shift stops on hours, budget or no work, and the board says so.
           if (loops.has('shift_watch')) stopShiftWatch = startShiftWatch(opCtx);
+          // ADR 807: a Twitch poll closes at its deadline, or after its stream is offline 90 s.
+          if (loops.has('poll_watch')) stopPollWatch = startPollWatch(opCtx);
           // ADR 494 §5: the morning digest, posted at each team's working-hours start.
           if (loops.has('digest')) stopDigest = startDigestSchedule(opCtx);
           if (loops.has('sync_push')) stopSync = startSyncPush(opCtx);
@@ -699,6 +703,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopLaneWatch?.();
         stopPrWatch?.();
         stopShiftWatch?.();
+        stopPollWatch?.();
         pulses.dispose();
         stopDigest?.();
         stopSync?.();

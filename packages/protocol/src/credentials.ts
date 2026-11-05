@@ -58,6 +58,11 @@ export const TOKEN_PREFIXES = {
    * revokes the whole chain (stolen-refresh detection).
    */
   oauth_refresh: 'msrt_',
+  /**
+   * A Twitch poll's counts token (ADR 807 §5): reports one poll's vote counts and nothing else, and
+   * dies with the poll. Only the broadcast observer seat is handed it.
+   */
+  poll: 'mspoll_',
 } as const;
 export type TokenKind = keyof typeof TOKEN_PREFIXES;
 

@@ -693,6 +693,7 @@ import { isReloadOf } from './hub.js';
 import { handleMcpRoute } from './mcpHttp.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 import { checkRateLimit, handleOAuthRoutes } from './oauth.js';
+import { handlePollRoutes } from './polls.js';
 import { putPortrait } from './portraits.js';
 import {
   agentConnectUrl,
@@ -9262,6 +9263,18 @@ export async function handleHttp(
       // it; the reason string is bounded and the actor is stamped, so abuse is visible and
       // revocable. The reader is any readable seat too — the streamwatch service seat reads it on
       // a crash, and the content is the stream's own operational state, never team traffic.
+      // ADR 807: Twitch polls and the stream's liveness report (transport/polls.ts).
+      if (
+        await handlePollRoutes(ctx, req, res, method, slug, rest, {
+          bearer,
+          actingSeat,
+          agentSessionLease,
+          readJson,
+          sendJson,
+          assertSeatCanRead,
+        })
+      )
+        return;
       if (method === 'POST' && rest === '/stream/epitaph') {
         const { team, member } = await authMember(
           ctx.db,
