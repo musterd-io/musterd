@@ -4,7 +4,11 @@
 set -euo pipefail
 RUNTIME="$HOME/.musterd/runtime"
 cd "$RUNTIME"
-git fetch -q origin main
+# The /live publisher (live.sh, a worktree of this checkout) fetches the same ref every minute;
+# two fetches at once lose a ref lock ("cannot lock ref refs/remotes/origin/main", seen 2026-11-05).
+# Under set -e that killed the tick, so a fetch gets three tries before it is a failure.
+fetch_main() { local n; for n in 1 2 3; do git fetch -q origin main && return 0; sleep 2; done; return 1; }
+fetch_main
 git merge -q --ff-only origin/main
 head="$(git rev-parse HEAD)"
 built="$(node -p 'try{require(process.argv[1]).ref||""}catch(e){""}' "$RUNTIME/packages/cli/dist/build.json" 2>/dev/null || true)"
