@@ -784,6 +784,57 @@ describe('team_inbox_check handler', () => {
     expect(text(r)).not.toContain('Call again with limit: 50 to');
   });
 
+  it('ADR 811: past its limit, the check asks the daemon to skip stale unowed rows, refetches, and leads with the count', async () => {
+    const mk = (id: string, ts: number) =>
+      makeEnvelope({
+        id,
+        team: 'dawn',
+        from: 'nick',
+        to: { kind: 'team' },
+        act: 'message',
+        body: id,
+        ts,
+      });
+    const messages = Array.from({ length: 5 }, (_, i) => mk(`n${i}`, 1000 + i));
+    let fetches = 0;
+    let skips = 0;
+    const handler = capture(
+      registerInboxCheck,
+      inboxClient({
+        // First fetch: far past the limit. After the skip: caught up.
+        fetchInbox: (async () => ({
+          messages,
+          cursor: null,
+          unread_remaining: ++fetches === 1 ? 20_000 : 0,
+        })) as any,
+        skipStale: (async () => {
+          skips++;
+          return { skipped: 19_412, skipped_through: Date.UTC(2026, 9, 29), stopped_at: null };
+        }) as any,
+      }),
+    );
+    const r = await handler({ unread_only: true, limit: 50 });
+    expect(skips).toBe(1);
+    expect(fetches).toBe(2);
+    expect(text(r)).toContain('Skipped 19412 stale unread older than a week that nobody owed you');
+    expect(text(r)).toContain('through 2026-10-29');
+    expect(
+      (r as { structuredContent?: { skipped_stale?: number } }).structuredContent?.skipped_stale,
+    ).toBe(19_412);
+  });
+
+  it('ADR 811: a client without the skip (an older adapter or daemon) checks as before', async () => {
+    const handler = capture(
+      registerInboxCheck,
+      inboxClient({
+        fetchInbox: (async () => ({ messages: [], cursor: null, unread_remaining: 12 })) as any,
+      }),
+    );
+    const r = await handler({ unread_only: true, limit: 5 });
+    expect(text(r)).toContain('12 older unread not shown');
+    expect(text(r)).not.toContain('Skipped');
+  });
+
   it('a complete fetch past the limit digests the oldest rows and walks the cursor over them', async () => {
     // Lane 01M2GT874Y: with the cursor held entirely on any elision, a seat past its limit never
     // advanced. Now the oldest unread render as digest lines and the watermark passes them.

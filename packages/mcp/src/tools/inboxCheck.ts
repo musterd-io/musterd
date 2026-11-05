@@ -719,7 +719,11 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         // walks what is left one line at a time, so nothing newer than the window is ever skipped.
         let skippedStale: { skipped: number; skipped_through?: number } | null = null;
         if ((fetched.unread_remaining ?? 0) > (args.limit ?? 50)) {
-          const skip = await client.skipStale().catch(() => null);
+          // Resolved inside the promise chain: a client without the method (a test double, an
+          // older adapter) and a daemon without the route both land in the catch.
+          const skip = await Promise.resolve()
+            .then(() => client.skipStale())
+            .catch(() => null);
           if (skip && skip.skipped > 0) {
             skippedStale = skip;
             fetched = await client.fetchInbox(args.unread_only ?? true, args.limit ?? 50);
