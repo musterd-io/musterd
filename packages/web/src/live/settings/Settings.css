@@ -702,3 +702,11 @@
 .lc-keys .lc-set__btn {
   justify-self: start;
 }
+/* ADR 808 inc B: the per-key revoke sits at the row's end, quiet until hovered. */
+.lc-keys__key > span:nth-child(2) {
+  flex: 1;
+}
+.lc-keys__revoke {
+  padding: 2px 8px;
+  font-size: 11.5px;
+}
