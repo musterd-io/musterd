@@ -161,12 +161,35 @@ describe('startPollRuntime (ADR 807)', () => {
     expect(r.calls[0]!.body).toEqual({ live: true });
     expect(r.calls[2]!.body).toMatchObject({ live: true });
     expect(r.posted[0]).toContain('nick wants to ask you: What next?');
-    // After a good reading, a later unanswered check keeps the last answer instead of going offline.
+    r.rt.stop();
+  });
+
+  it('stops refreshing liveness once the last answered check is past the grace, keeps the votes, and resumes on an answer', async () => {
+    const r = rig();
+    r.set({ live: true, poll: POLL });
+    await r.rt.tick(); // answered live at t=2_000
+    await settle();
     r.liveAnswer(null);
+    r.rt.onChat('U1', '!vote 1');
+    const countsCalls = () => r.calls.filter((c) => c.path.endsWith('/counts'));
+    // Inside the 90 s grace the last answer still stands.
+    r.advance(60_000);
+    await r.rt.tick();
+    expect(countsCalls()).toHaveLength(2);
+    // Past it: no counts and no live report, so the hub sees silence.
+    r.advance(31_000);
+    const before = r.calls.length;
+    await r.rt.tick();
     r.advance(30_000);
     await r.rt.tick();
-    expect(r.calls.filter((c) => c.path === '/stream/live')).toHaveLength(1);
-    expect(r.calls.at(-1)!.body).toMatchObject({ live: true });
+    expect(r.calls.slice(before).map((c) => c.path)).toEqual(['/polls/open', '/polls/open']);
+    // A vote cast while silent is kept, and goes up with the first answered check.
+    r.rt.onChat('U2', '!vote 2');
+    r.liveAnswer(true);
+    r.advance(30_000);
+    await r.rt.tick();
+    expect(r.calls.filter((c) => c.path === '/stream/live').at(-1)!.body).toEqual({ live: true });
+    expect(countsCalls().at(-1)!.body).toMatchObject({ counts: [1, 1], voters: 2, live: true });
     r.rt.stop();
   });
 
