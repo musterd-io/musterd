@@ -81,6 +81,11 @@ export async function releaseLateWakeHolds(
  *  to a new session, and its hold stands. */
 export const EXIT_SETTLE_MS = 60_000;
 
+/** Ordering slack between a presence row's `created_at` and the audit row's `ts`: both are stamped
+ *  by this daemon's clock, in that order (the hook's own CLI claim is the session that posts the
+ *  attestation), so the slack only covers a row inserted in the same millisecond. */
+export const EXIT_ORDER_SLACK_MS = 2_000;
+
 /**
  * ADR 809: a harness exit releases the reclaim hold on the act lane. The seat's first session on
  * a CooperBench pair is not a wake — the arm starts `claude -p` itself — so no lease is minted, no
@@ -95,10 +100,12 @@ export const EXIT_SETTLE_MS = 60_000;
  * Each poll: for every seat with a `residency.session_ended` row within `windowMs`, enrolled on this
  * team with an effective `lane: act`, release the parked rows last seen between the grace before that
  * row's `ts` (the MCP session, which closes first) and `EXIT_SETTLE_MS` after it (the hook's own CLI
- * claim). A live connection, a row parked outside that span (a later session of the seat's own), a
- * seat on any other lane, and an unenrolled seat are untouched: on the interrupt and batched lanes a
- * person's exit-and-relaunch keeps the reclaim grace it has today (ADR 804's first rejected option,
- * still rejected).
+ * claim) — **and created no later than that row** (amended 2026-11-05, big-body's acceptance read):
+ * every session of the exiting run attached before its hook posted the exit, and a session the
+ * seat's person starts after it is new whatever it does inside the settle window, so its hold
+ * stands. A live connection, a row parked outside that span, a seat on any other lane, and an
+ * unenrolled seat are untouched: on the interrupt and batched lanes a person's exit-and-relaunch
+ * keeps the reclaim grace it has today (ADR 804's first rejected option, still rejected).
  */
 export async function releaseExitedSessionHolds(
   db: Driver,
@@ -126,8 +133,15 @@ export async function releaseExitedSessionHolds(
     const res = await db.run(
       `UPDATE presence SET held_until = ?
          WHERE member_id = ? AND conn_id IS NULL AND held_until IS NOT NULL AND held_until > ?
-           AND last_seen_at >= ? AND last_seen_at <= ?`,
-      [now, member.id, now, exit.ts - graceMs, exit.ts + EXIT_SETTLE_MS],
+           AND last_seen_at >= ? AND last_seen_at <= ? AND created_at <= ?`,
+      [
+        now,
+        member.id,
+        now,
+        exit.ts - graceMs,
+        exit.ts + EXIT_SETTLE_MS,
+        exit.ts + EXIT_ORDER_SLACK_MS,
+      ],
     );
     released += res.changes ?? 0;
   }

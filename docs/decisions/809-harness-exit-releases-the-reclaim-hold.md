@@ -43,7 +43,11 @@ earlier in the seat's life.
 2. **Only the exiting run's rows.** The span covers the harness's MCP session, which closes before the
    hook posts, and the hook's own CLI claim, which closes after it (ADR 804's second amendment
    measured the order). A row with a live connection is never touched, and a row parked later than the
-   settle window is a new session of the seat's own and keeps its hold.
+   settle window is a new session of the seat's own and keeps its hold. _(Amended 2026-11-05: and a
+   row **created after the exit row** keeps its hold whenever it parks — every session of the exiting
+   run attached before its hook posted the exit, so `created_at <= ts` (+ 2 s ordering slack) is what
+   names the run; the span alone let a session started after the exit and parked inside the minute go
+   with it; see Consequences.)_
 3. **Only the act lane.** A seat on the interrupt or batched lane, or not enrolled, keeps today's
    grace: a person's exit-and-relaunch there is what ADR 010 is for, and ADR 804's first rejected option
    (skip the gate for everyone) stays rejected. The gate itself, its order in `deriveSeatPasses`, the
@@ -63,6 +67,11 @@ earlier in the seat's life.
 
 ## Consequences
 
+- _(2026-11-05, acceptance read)_ big-body declined the first landing (#3909) on decision 2's promise:
+  a person's session started after the exit and parked within the 60 s settle window fell inside the
+  span and was released with the run. The exiting run is now also named by creation time — its MCP
+  session and its hook's CLI claim both attached before the attestation was posted, a later session
+  did not — and the test parks such a session inside the window and shows its hold standing.
 - An act-lane seat's first wake can be leased on the host's next poll after its attended session
   exits, instead of up to 45 s later. On finding 032's timelines that is the whole remaining
   `reclaimable` share; what is left of a wait is the seat's own running session (`present`) and the
