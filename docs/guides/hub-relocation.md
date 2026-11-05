@@ -106,6 +106,53 @@ rule. On the day: copy the box's standing seat grants into the new hub before th
 Re-run `inventory.ts --replica <box store> --hub <new hub store>` first: any table it lists that the
 ADR does not name stops the switch.
 
+## The switch (2026-11-04, 17:06–18:25 PT, lane `01M6HWVD5J`)
+
+revive's hub moved to `musterd-joiner-1`, on nick's accept (ask `01M6MKKYEE`, A2 from the phone).
+The hub is `http://100.115.152.1:4849` (tailnet only), and `/live` is at `…/live?team=revive`.
+
+| Step | Time |
+| --- | --- |
+| Snapshot of the stopped hub, WAL checkpointed (710 MB) | 2.4 s |
+| Compress (`zstd -3`, to 115 MB) | 0.5 s |
+| Copy to the box | 26 s |
+| Inventory compare on the box, before boot | `mismatches: []` (72 tables) |
+| Laptop rejoin, replay to the hub head (465,807 events) | ~6 min |
+
+The hub was down for ~25 min: the daemon stopped at 17:06, and seats could reach the box at about 17:30. Most of the rest of the 80 minutes went to the surprises below.
+
+What the plan did not say, and what the switch did instead:
+
+- **The daemon refuses a plaintext non-loopback bind.** The box daemon listens on `127.0.0.1:4849`,
+  `tailscale serve --tcp 4849 tcp://localhost:4849` (as root) exposes it on the tailnet, and
+  `MUSTERD_ALLOWED_HOSTS` names `100.115.152.1` and the ts.net name. This is how the laptop hub was
+  exposed too.
+- **Joiners do not hold agent seat credentials**, so a seat must talk to the hub, not to its local
+  joiner. Every seat's workspace binding and both host registries were repointed at the hub: the box's
+  to `http://localhost:4849`, the laptop's to `http://100.115.152.1:4849`. The box's seats already
+  talked to the laptop hub directly for the same reason.
+- **Every seat's session lease died** with the old hub. Sessions re-occupy on `/mcp` reload or
+  restart.
+- **`/live` is served by the hub now.** The published bundle was copied to `~/.musterd/live/web` on the
+  box, and the daemon runs with `--web-root`. The browser holds a watching seat per origin, so sign in
+  once (seat + credential) at the new address. Passkeys do not work over plain http: follow-up.
+- **`node join` must reach the joining machine's own daemon.** An exported `MUSTERD_SERVER` sent it to
+  the hub, which refused (`a hub does not enroll elsewhere`). Prefix the variable per command.
+- **delta-2 could not repoint**: its image predates `node repoint`. It still points at the laptop and
+  holds its unpushed events. Follow-up.
+- The 3 standing seat grants were carried with their `grant.issue` rows (ADR 796 carry rules). The
+  box's replica, its `node.json`, `config.json` and `host-registry.json` are set aside in
+  `~/.musterd/pre-switch-2026-11-04/`. The laptop's old store and bindings are in
+  `~/.musterd/backups/2026-11-04-hub/`. Keep both for 30 days.
+
+Checked after: `musterd status` and the team tools through the hub; `/live` on the hub; wakes leased
+on both machines (izzo and ghost on the laptop; lazara due on the box, deferred for a live local
+session); a question to nick reached his phone and his answer came back.
+
+Follows-up: lane `01M6MRAVRF` (HTTPS and passkeys for `/live`, delta-2, relay credential rotation, the
+Tailscale rule, a `localhost:4849/live` forward, the box's `/live` publisher, the laptop
+auto-refresher, lazara's credential).
+
 ## Credentials on the box (the revocation list)
 
 Each credential that lives on `musterd-joiner-1`, and the one step that revokes it. On a compromise,
