@@ -26,7 +26,7 @@ function rig(t0 = 2_000, ready = true) {
     const path = String(url).replace('http://hub/teams/revive', '');
     const auth = String((init?.headers as Record<string, string>)['authorization']);
     calls.push({ path, auth, ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}) });
-    if (path === '/polls/open') {
+    if (path === '/polls/open?token=1') {
       const r = reply as { poll: { poll_token?: string } | null };
       return Response.json(
         r.poll ? { ...r, poll: { ...r.poll, poll_token: `mspoll_${++tokens}` } } : r,
@@ -129,7 +129,7 @@ describe('startPollRuntime (ADR 807)', () => {
     await settle();
     expect(r.calls.map((c) => c.path)).toEqual([
       '/stream/live',
-      '/polls/open',
+      '/polls/open?token=1',
       `/polls/${POLL.id}/counts`,
     ]);
     expect(r.calls[0]!.body).toEqual({ live: true });
@@ -155,7 +155,7 @@ describe('startPollRuntime (ADR 807)', () => {
     await settle();
     expect(r.calls.map((c) => c.path)).toEqual([
       '/stream/live',
-      '/polls/open',
+      '/polls/open?token=1',
       `/polls/${POLL.id}/counts`,
     ]);
     expect(r.calls[0]!.body).toEqual({ live: true });
@@ -182,7 +182,10 @@ describe('startPollRuntime (ADR 807)', () => {
     await r.rt.tick();
     r.advance(30_000);
     await r.rt.tick();
-    expect(r.calls.slice(before).map((c) => c.path)).toEqual(['/polls/open', '/polls/open']);
+    expect(r.calls.slice(before).map((c) => c.path)).toEqual([
+      '/polls/open?token=1',
+      '/polls/open?token=1',
+    ]);
     // A vote cast while silent is kept, and goes up with the first answered check.
     r.rt.onChat('U2', '!vote 2');
     r.liveAnswer(true);

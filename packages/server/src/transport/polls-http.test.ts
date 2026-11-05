@@ -146,9 +146,13 @@ withDrivers('polls-http (ADR 807)', (_o, kind) => {
     expect((await call('GET', '/teams/dawn/polls/open', nick)).json.poll).not.toHaveProperty(
       'poll_token',
     );
-    const read = await call('GET', '/teams/dawn/polls/open', stream);
+    const read = await call('GET', '/teams/dawn/polls/open?token=1', stream);
     const token = read.json.poll.poll_token as string;
     expect(token).toMatch(/^mspoll_/);
+    // The /broadcast page reads on the same seat to draw the tally: without `token=1` it gets no
+    // token and mints none, so it never replaces the one the stream machine is about to report on.
+    const page = await call('GET', '/teams/dawn/polls/open', stream);
+    expect(page.json.poll).not.toHaveProperty('poll_token');
 
     const report = { poll_id: id, counts: [2, 1], voters: 3, live: true, post_failed: false };
     expect(

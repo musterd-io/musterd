@@ -3,7 +3,7 @@ import type { ChatApi } from './twitchChat.js';
 import { startPollHandler, type CountsReply, type PollHandler } from './twitchPoll.js';
 
 /**
- * The stream machine's poll loop (ADR 807). Every `tickMs` it reads `GET /polls/open` on the run's
+ * The stream machine's poll loop (ADR 807). Every `tickMs` it reads `GET /polls/open?token=1` on the run's
  * observer seat, and every `liveMs` it asks Twitch (through the bot) whether the channel is live and
  * reports `POST /stream/live`. A new poll starts a handler; each read's fresh `mspoll_` token goes
  * straight to that handler's counts report; a closed poll's record (`last`) posts the result.
@@ -82,7 +82,7 @@ export function startPollRuntime(deps: PollRuntimeDeps) {
       }
       // No poll is read or counted before the first answered liveness check.
       if (lastLiveAt === -Infinity) return;
-      const res = await seat('/polls/open');
+      const res = await seat('/polls/open?token=1');
       if (!res.ok) return;
       const parsed = OpenPollReplySchema.safeParse(await res.json());
       if (!parsed.success) return;

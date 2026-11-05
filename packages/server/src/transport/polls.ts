@@ -24,7 +24,8 @@ import { HubUnreachableError } from '../sync/hubDiagnosis.js';
  * - `POST /polls` — a human admin opens the team's poll, with A2 proof for `credential_mint`; a joiner
  *   relays it to the hub (ADR 728). `bearer_unenrolled` is refused: a passkey is the point.
  * - `POST /polls/:id/end` and `/cancel` — a human admin, on the hub. No proof: nothing is minted.
- * - `GET /polls/open` — any member that can read; the broadcast observer seat alone gets the token.
+ * - `GET /polls/open` — any member that can read; the broadcast observer seat gets the token only
+ *   when it asks (`?token=1`), so the /broadcast page's reads on that seat mint nothing.
  * - `POST /polls/:id/counts` — the `mspoll_` token only, and integers only (`PollCountsSchema`).
  * - `POST /stream/live` — the broadcast observer seat says whether Twitch shows the channel live.
  */
@@ -115,7 +116,12 @@ export async function handlePollRoutes(
   if (method === 'GET' && rest === '/polls/open') {
     const { team, member } = await auth();
     h.assertSeatCanRead(member);
-    const broadcast = member.observer === 1 && resolveObserverScope(member) === 'broadcast';
+    // The token is minted only on an explicit `token=1` from the broadcast seat (the stream
+    // machine). The /broadcast page reads on that same seat to draw the tally, and each mint
+    // replaces the last token, so a page read must not mint one.
+    const wantsToken = new URL(req.url ?? '/', 'http://x').searchParams.get('token') === '1';
+    const broadcast =
+      wantsToken && member.observer === 1 && resolveObserverScope(member) === 'broadcast';
     h.sendJson(res, 200, await openPollReply(ctx.db, team.id, { broadcast }, Date.now()));
     return true;
   }

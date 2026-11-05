@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import broadcastCss from '../live/Broadcast.css?url';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { StreamAskBanner } from '../live/StreamAskBanner';
 import { WindDownCard } from '../live/WindDownCard';
+import { usePoll } from '../live/usePoll';
 import { OfficeScene } from '../live/OfficeScene';
 import { teamContact } from '../live/teamContact';
 import { broadcastSeat, type LiveConfig } from '../live/client';
@@ -231,6 +232,9 @@ interface BroadcastWindow {
  *   every /live viewer relies on is untouched — the always-animate carve-out reaches only pages a
  *   human deliberately opened to stream from (packages/web/AGENTS.md, ADR 151).
  */
+// The Twitch poll card (ADR 807): its own chunk, fetched the first time a poll is on screen.
+const PollCard = lazy(() => import('../live/PollCard'));
+
 function BroadcastPage() {
   const [cfg, setCfg] = useState<LiveConfig | null>(null);
   const [team, setTeam] = useState<string | null>(null);
@@ -272,6 +276,7 @@ function BroadcastPage() {
     setError('the observer seat this capture was handed was refused — restart the capture');
   }, []);
 
+  const poll = usePoll(cfg);
   const stream = useLiveStream(cfg, {
     onCredentialInvalid: recoverObserver,
   });
@@ -358,6 +363,11 @@ function BroadcastPage() {
               />
             </div>
             <WindDownCard cfg={cfg} />
+            {poll && (
+              <Suspense fallback={null}>
+                <PollCard view={poll} scale={stage.h / DEFAULT_STAGE.h} />
+              </Suspense>
+            )}
           </>
         )}
         {/* Operator diagnostics, not stream chrome: the two states where there is no office to look
