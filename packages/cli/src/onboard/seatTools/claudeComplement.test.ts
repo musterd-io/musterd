@@ -45,6 +45,25 @@ describe('claudeComplement (ADR 794 §2)', () => {
     expect(out.undeny).toContain('mcp__claude_ai_Slack');
   });
 
+  it('denies an ambiguous normalized prefix even when granted', () => {
+    const out = claudeComplement(declared({ mcp_servers: ['a_b'] }), {
+      ...human,
+      mcpServers: ['a_b'],
+      ambiguousMcpServers: ['a_b'],
+    });
+    expect(out.deny).toContain('mcp__a_b');
+    expect(out.undeny).not.toContain('mcp__a_b');
+  });
+
+  it('does not normalize a raw grant into a different server identity', () => {
+    const out = claudeComplement(declared({ mcp_servers: ['a+b'] }), {
+      ...human,
+      mcpServers: ['a_b'],
+    });
+    expect(out.deny).toContain('mcp__a_b');
+    expect(out.undeny).not.toContain('mcp__a_b');
+  });
+
   it('with no declared set, everything in the human layer is off', () => {
     const out = claudeComplement(emptyDeclaredSet(), human);
     expect(Object.values(out.enabledPlugins)).toEqual([false, false]);

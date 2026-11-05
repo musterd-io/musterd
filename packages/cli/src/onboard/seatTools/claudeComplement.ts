@@ -18,7 +18,8 @@ export function claudeComplement(declared: DeclaredSet, human: HumanLayer): Clau
   const floor = new Set(declared.deniedSkills);
   const plugins = new Set(declared.claude_plugins);
   const skills = new Set(declared.skills.filter((s) => !floor.has(s)));
-  const servers = new Set(declared.mcp_servers);
+  const servers = new Set(declared.mcp_servers.filter((name) => /^[A-Za-z0-9_-]+$/.test(name)));
+  const ambiguous = new Set(human.ambiguousMcpServers ?? []);
 
   const enabledPlugins: Record<string, boolean> = {};
   for (const id of [...new Set([...plugins, ...human.plugins])].sort()) {
@@ -26,11 +27,11 @@ export function claudeComplement(declared: DeclaredSet, human: HumanLayer): Clau
   }
   const deny = [
     ...human.skills.filter((s) => !skills.has(s)).map((s) => `Skill(${s})`),
-    ...human.mcpServers.filter((m) => !servers.has(m)).map((m) => `mcp__${m}`),
+    ...human.mcpServers.filter((m) => !servers.has(m) || ambiguous.has(m)).map((m) => `mcp__${m}`),
   ].sort();
   const undeny = [
     ...[...skills].map((s) => `Skill(${s})`),
-    ...[...servers].map((m) => `mcp__${m}`),
+    ...[...servers].filter((m) => !ambiguous.has(m)).map((m) => `mcp__${m}`),
   ].sort();
   return { enabledPlugins, deny, undeny };
 }

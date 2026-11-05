@@ -15,6 +15,8 @@ export interface HumanLayer {
   skills: string[];
   /** MCP tool prefixes: user-config servers by key, claude.ai connectors as `claude_ai_<Name>`. */
   mcpServers: string[];
+  /** Prefixes shared by distinct server names cannot safely be granted individually. */
+  ambiguousMcpServers?: string[];
   /** False when any source exists but could not be read. A complement built from an incomplete
    *  layer may add entries but never removes one. */
   complete: boolean;
@@ -25,7 +27,7 @@ export const SYNCED_SKILL_NAMESPACE = 'anthropic-skills';
 
 /** A claude.ai connector's display name as its tool prefix: `claude.ai Gmail` → `claude_ai_Gmail`. */
 export function connectorPrefix(displayName: string): string {
-  return displayName.replace(/[\s.]/g, '_');
+  return displayName.replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
 export function readClaudeHumanLayer(fs: FsSeam, env: NodeJS.ProcessEnv): HumanLayer {
@@ -76,19 +78,35 @@ export function readClaudeHumanLayer(fs: FsSeam, env: NodeJS.ProcessEnv): HumanL
   }
 
   const mcpServers = new Set<string>();
+  const namesByPrefix = new Map<string, Set<string>>();
+  const addServer = (name: string, source: string) => {
+    const prefix = connectorPrefix(name);
+    mcpServers.add(prefix);
+    const names = namesByPrefix.get(prefix) ?? new Set<string>();
+    names.add(`${source}:${name}`);
+    namesByPrefix.set(prefix, names);
+  };
   const state = readJson(claudeJson);
   const user = state?.['mcpServers'];
-  if (user && typeof user === 'object') for (const name of Object.keys(user)) mcpServers.add(name);
+  if (user && typeof user === 'object')
+    for (const name of Object.keys(user)) addServer(name, 'user');
   const connectors = state?.['claudeAiMcpEverConnected'];
   if (Array.isArray(connectors)) {
-    for (const name of connectors)
-      if (typeof name === 'string') mcpServers.add(connectorPrefix(name));
+    for (const name of connectors) if (typeof name === 'string') addServer(name, 'connector');
   }
 
   return {
     plugins: [...plugins].sort(),
     skills: [...skills].sort(),
     mcpServers: [...mcpServers].sort(),
+    ...([...namesByPrefix.values()].some((names) => names.size > 1)
+      ? {
+          ambiguousMcpServers: [...namesByPrefix]
+            .filter(([, names]) => names.size > 1)
+            .map(([name]) => name)
+            .sort(),
+        }
+      : {}),
     complete,
   };
 }
