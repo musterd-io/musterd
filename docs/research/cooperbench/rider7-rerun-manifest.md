@@ -118,3 +118,40 @@ On `musterd-cooperbench`, in one session, the deploy token already on `musterd-j
 | A live wake guard, $6 a pair | this manifest, from finding 031's $14.34 unseen by the spend guard |
 | Pairs and hard stop (A: 10 / $110, B: 5 / $55) | **A — nick, 2026-11-04, via the app (question 01M6MDX3PW): 10 `core` pairs, hard stop $110** |
 | Finding number | 032 |
+
+## Second run — the ADR 809 / ADR 810 build (amended 2026-11-05, before the run)
+
+nick approved the spend 2026-11-05 ~19:05Z in session, after finding 032's two gaps landed as
+[ADR 809](../../decisions/809-harness-exit-releases-the-reclaim-hold.md) (#3913, the seat's own
+attended session no longer holds its first wake) and
+[ADR 810](../../decisions/810-compacted-continuation.md) (#3915, a wake over the price bound carries a
+compacted brief). Everything above stands: the same ten `core` pairs, `-c 3`, `MUSTERD_ARM_LANE=act`,
+the pair policy with `resume_max_usd 0.25`, `run_arms.py --cap 110` and `wake_guard.py --pair-cap 6
+--total-cap 110`, the error rule, the procedure — on `main` at or after `e6b3a58d`, pinned in every
+pair by `MUSTERD_REF`. Written before the run; the rules below are read once from the composite (errors
+re-run once in place), with the pre-registered scripts unchanged (`rider7.py` now also reports
+`compacted`).
+
+**R7a, R7c** as above, reported; not the decision.
+
+**R7b — model dollars over the ten pairs**, the ADR 810 read. Baseline finding 032's **$25.04**
+(composite) and its wake dollars **$4.72** over 26 wakes. ADR 810 **acted** if R7b ≤ **$18**
+(finding 028's $18.45 beaten); **did not** if ≥ **$25**; between, part of it. Beside it, reported:
+the share of wakes `compacted` (expected: nearly every wake past the first), wake dollars, and the
+median wake cost. A compacted wake that costs more than finding 032's fresh median ($0.19) by more
+than its brief's priced bytes is the mechanism's falsifier (ADR 810 Observability).
+
+**R7d — the first-wake reclaimable hold**, the ADR 809 read. For each seat, the `reclaimable` share
+of its FIRST wake's wait (`timeline.py` over the pair daemon's `report residency`; finding 032 read
+~40 s, the 45 s grace). ADR 809 **acted** if the median first-wake `reclaimable` share is < **10 s**;
+**did not** if ≥ **30 s**; between, part of it. Beside it: `reclaimable` on every later wake (ADR 804,
+expected ≈ 0 as before).
+
+**Smoke pair gate (amends step 4):** the one smoke pair must show at least one wake logged
+`compacted continuation: …` with `session: compacted` on its report, and `reclaimable` < 10 s on each
+seat's first wake. A smoke pair that shows neither stops the run until the cause is fixed on `main`.
+
+**Spend:** finding 032's run cost $25.04 model + $1.85 errors + ~$12 of smoke pairs; the hard stop
+stays $110. Fly: the clone `cb-run-2` on a new image; a new deploy token on `musterd-joiner-1`, revoked
+at the end as before. Finding **033**; lane opened at the run.
+
