@@ -108,6 +108,15 @@ export async function driverForSeat(
         // No browser_sessions table yet (pre-ADR-722 daemon).
       }
     }
+    // ADR 799 §3: the node had a connected human within 24h and none is live now — the
+    // driver clears to null rather than reviving the seat's stale attested label.
+    const had = await db.get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM presence p JOIN members m ON m.id = p.member_id WHERE p.team_id = ? AND m.kind = 'human' AND m.observer = 0 AND p.last_seen_at > ? AND ${seat.node === null ? 'p.node IS NULL' : 'p.node = ?'}`,
+      seat.node === null
+        ? [teamId, Date.now() - 24 * 60 * 60 * 1000]
+        : [teamId, Date.now() - 24 * 60 * 60 * 1000, seat.node],
+    );
+    if ((had?.n ?? 0) > 0) return null;
   }
   const row = await db.get<{ driver: string | null }>(
     'SELECT driver FROM presence WHERE team_id = ? AND member_id = ? AND held_until IS NULL AND driver IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1',
