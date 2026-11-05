@@ -120,7 +120,7 @@ function heredocTags(
 /** Heredoc bodies are data, not commands: drop them (the line with the `<<` stays). `open` when a
  *  body never reaches its tag, or a delimiter is not a plain name — then where the body ends is a
  *  guess, and the caller treats the command as unread. */
-function stripHeredocs(command: string): { text: string; open: boolean } {
+function stripHeredocs(command: string): { text: string; open: boolean; unsure: boolean } {
   // Fail closed (security reviews, 2026-11-04): where a heredoc's body ends depends on bash's whole
   // grammar — continuations, arithmetic, subscripts, substitutions, quotes across lines — and four
   // rounds of review each found another way to misplace it. So a command with any heredoc is opaque:
@@ -145,9 +145,19 @@ function stripHeredocs(command: string): { text: string; open: boolean } {
     if (opened.tags.length > 0 && quote !== null) ambiguous = true;
     pending.push(...opened.tags);
   }
+  // Unsure where a body ends: then a dropped line may have been a command, so the caller also reads
+  // the command unstripped and weighs both sets of targets — a misplaced body can add a target,
+  // never hide one (security review, 2026-11-04).
+  const unsure =
+    hasHeredoc &&
+    (ambiguous ||
+      pending.length > 0 ||
+      quote !== null ||
+      /\(\(|\$\[|\[\[|\$\{|\$\(|`|\\\n|[<>]\(/.test(command));
   return {
     text: out.join('\n'),
     open: hasHeredoc || ambiguous || pending.length > 0 || quote !== null,
+    unsure,
   };
 }
 
@@ -573,7 +583,18 @@ function readGit(reader: Reader, args: readonly Word[], dir: string | undefined)
 function readLine(reader: Reader, command: string, dir: string | undefined, depth: number): void {
   const stripped = stripHeredocs(command);
   if (stripped.open) reader.opaque = true;
-  const { pieces, unclosed } = tokenize(stripped.text);
+  if (stripped.unsure && stripped.text !== command)
+    readPieces(reader, tokenize(command), dir, depth);
+  readPieces(reader, tokenize(stripped.text), dir, depth);
+}
+
+/** Read tokenized simple commands, following a literal `cd`. */
+function readPieces(
+  reader: Reader,
+  { pieces, unclosed }: { pieces: Piece[]; unclosed: boolean },
+  dir: string | undefined,
+  depth: number,
+): void {
   if (unclosed) reader.opaque = true;
   let cwd = dir;
   let words: Word[] = [];
