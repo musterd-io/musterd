@@ -64,8 +64,9 @@ export interface ChatSocket {
 export interface ChatApi {
   /** Post one line to the channel's chat as the bot. False when Twitch refused or dropped it. */
   post(text: string): Promise<boolean>;
-  /** Whether Twitch reports the channel live right now. */
-  live(): Promise<boolean>;
+  /** Whether Twitch reports the channel live right now; null when Twitch could not be asked or did
+   *  not answer — never a guessed false. */
+  live(): Promise<boolean | null>;
 }
 
 export interface ChatReaderDeps {
@@ -211,13 +212,14 @@ export function startChatReader(deps: ChatReaderDeps): () => void {
       }
     },
     live: async () => {
-      if (!ids) return false;
+      if (!ids) return null;
       try {
         const r = await helix(`/streams?user_id=${encodeURIComponent(ids.broadcaster)}`);
-        if (!r.ok) return false;
-        return (((await r.json()) as { data?: unknown[] }).data ?? []).length > 0;
+        if (!r.ok) return null;
+        const data = ((await r.json()) as { data?: unknown }).data;
+        return Array.isArray(data) ? data.length > 0 : null;
       } catch {
-        return false;
+        return null;
       }
     },
   };

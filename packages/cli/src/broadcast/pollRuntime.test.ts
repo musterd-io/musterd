@@ -17,6 +17,7 @@ const POLL = {
 function rig(t0 = 2_000, ready = true) {
   let t = t0;
   let chatReady = ready;
+  let liveAnswer: boolean | null = true;
   let reply: unknown = { live: true, poll: null };
   let tokens = 0;
   const calls: { path: string; auth: string; body?: unknown }[] = [];
@@ -39,7 +40,9 @@ function rig(t0 = 2_000, ready = true) {
     team: 'revive',
     seatToken: 'mscr_seat',
     chat: () =>
-      chatReady ? { post: async (l) => (posted.push(l), true), live: async () => true } : null,
+      chatReady
+        ? { post: async (l) => (posted.push(l), true), live: async () => liveAnswer }
+        : null,
     log: () => {},
     fetch: fetchFn as unknown as typeof fetch,
     now: () => t,
@@ -52,6 +55,7 @@ function rig(t0 = 2_000, ready = true) {
     set: (r: unknown) => (reply = r),
     advance: (ms: number) => (t += ms),
     ready: () => (chatReady = true),
+    liveAnswer: (a: boolean | null) => (liveAnswer = a),
   };
 }
 
@@ -131,6 +135,38 @@ describe('startPollRuntime (ADR 807)', () => {
     expect(r.calls[0]!.body).toEqual({ live: true });
     expect(r.calls[2]!.body).toMatchObject({ live: true, post_failed: false });
     expect(r.posted[0]).toContain('nick wants to ask you: What next?');
+    r.rt.stop();
+  });
+
+  it('treats an unanswered Twitch check as unknown, not offline, and recovers on the next answer', async () => {
+    const r = rig();
+    r.set({ live: true, poll: POLL });
+    r.liveAnswer(null);
+    await r.rt.tick();
+    r.advance(5_000);
+    await r.rt.tick();
+    await settle();
+    // No live=false, no counts, no poll read, nothing posted while Twitch has not answered.
+    expect(r.calls).toEqual([]);
+    expect(r.posted).toEqual([]);
+    r.liveAnswer(true);
+    r.advance(5_000);
+    await r.rt.tick();
+    await settle();
+    expect(r.calls.map((c) => c.path)).toEqual([
+      '/stream/live',
+      '/polls/open',
+      `/polls/${POLL.id}/counts`,
+    ]);
+    expect(r.calls[0]!.body).toEqual({ live: true });
+    expect(r.calls[2]!.body).toMatchObject({ live: true });
+    expect(r.posted[0]).toContain('nick wants to ask you: What next?');
+    // After a good reading, a later unanswered check keeps the last answer instead of going offline.
+    r.liveAnswer(null);
+    r.advance(30_000);
+    await r.rt.tick();
+    expect(r.calls.filter((c) => c.path === '/stream/live')).toHaveLength(1);
+    expect(r.calls.at(-1)!.body).toMatchObject({ live: true });
     r.rt.stop();
   });
 
