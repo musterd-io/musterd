@@ -102,3 +102,8 @@ export function forYouCount(rows: TeamRows): number {
 export function modelLine(m: AppMember): string | null {
   return m.state === 'away' ? null : m.model;
 }
+
+/** An asker's portrait digest (ADR 797), from the roster's members present or away; null for a stranger. */
+export function portraitOf(rows: TeamRows, name: string): string | null {
+  return [...rows.present, ...rows.offline].find((m) => m.name === name)?.portrait ?? null;
+}

@@ -1,24 +1,32 @@
 import { StyleSheet, Text, View } from 'react-native';
+import type { PairingPin } from '../native/pairingPin';
 import type { AppForYou } from '../native/team';
+import { usePortrait } from './memberRow';
 import { Squish } from './motion';
 import { ago, Seat } from './seat';
 import { font, radius, space, usePalette } from './theme';
 
 /**
- * One thing waiting on you (ADR 814 decision 3): the asker's letter, the question in one line,
+ * One thing waiting on you (ADR 814 decision 3): the asker's portrait (their letter until it loads), the question in one line,
  * "asker · kind · ago" under it, and a mustard chip — Answer for a question, Review for the rest.
  * Tapping the row opens the ask.
  */
 export function ForYouRow({
   item,
   now,
+  pin,
+  portrait,
   onPress,
 }: {
   item: AppForYou;
   now: number;
+  pin: PairingPin;
+  /** The asker's portrait digest from the roster (`portraitOf`); the letter until it loads. */
+  portrait: string | null;
   onPress: () => void;
 }) {
   const p = usePalette();
+  const face = usePortrait(pin, portrait);
   const chip = item.kind === 'question' ? 'Answer' : 'Review';
   return (
     <Squish
@@ -27,7 +35,7 @@ export function ForYouRow({
       onPress={onPress}
       style={styles.row}
     >
-      <Seat name={item.from} agent size={26} />
+      <Seat name={item.from} agent size={30} portrait={face} />
       <View style={styles.text}>
         <Text numberOfLines={1} style={[styles.summary, { color: p.text }]}>
           {item.summary}
