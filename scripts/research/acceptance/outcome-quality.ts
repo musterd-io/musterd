@@ -342,7 +342,7 @@ function main(argv: string[]): void {
     process.env['MUSTERD_DB'] ?? join(homedir(), '.musterd', 'musterd.db'),
     { readOnly: true },
   );
-  const team = db.prepare('select id from teams where name = ?').get(teamName) as
+  const team = db.prepare('select id from teams where slug = ?').get(teamName) as
     | { id: string }
     | undefined;
   if (!team) throw new Error(`no team named ${teamName} in this DB`);
