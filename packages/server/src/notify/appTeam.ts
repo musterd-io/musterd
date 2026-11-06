@@ -2,10 +2,13 @@ import type { Lane, LaneState, MemberSummary } from '@musterd/protocol';
 import {
   APP_FOR_YOU_MAX,
   APP_FOR_YOU_SUMMARY_MAX,
+  APP_MOMENT_TEXT_MAX,
+  APP_MOMENTS_MAX,
   APP_ROSTER_MAX,
   type AppForYou,
   type AppMember,
   type AppMemberState,
+  type AppMoment,
 } from '@musterd/protocol/app-channel';
 import { shortModel } from '@musterd/protocol/model';
 import { ASK_TIER_DEFAULTS, askSpeciesOf, askTierHolds, askTierOf } from '@musterd/protocol/wire';
@@ -225,4 +228,145 @@ export function liveAsks<A extends AskLike>(
         : ASK_TIER_DEFAULTS[tier].timeout_ms;
     return ask.ts + timeout > now || askTierHolds(tier);
   });
+}
+
+/** A lane as `appMoments` needs it: who owns it, when it was claimed and landed, who asked for it. */
+export interface MomentLaneLike {
+  id: string;
+  title: string;
+  owner_seat: string | null;
+  goal_id: string | null;
+  state: LaneState;
+  claimed_at: number | null;
+  resolved_at: number | null;
+  /** `requested.by`: the person the lane was done for, if one is named. */
+  requested_by: string | null;
+  /** From the `lane.closed` audit row: a counterpart accepted it (ADR 192). Unknown if absent. */
+  verified: boolean | undefined;
+}
+
+/** A read-scoped act from today as `appMoments` needs it. */
+export interface MomentActLike {
+  id: string;
+  act: string;
+  from: string;
+  from_kind: string;
+  ts: number;
+  body: string;
+  meta: Record<string, unknown> | null;
+  to_kind: string;
+  /** For an accept or decline: the lane of the `lane_review` ask it answered, else null. */
+  review_lane: string | null;
+}
+
+/** Meta keys a person's plain chat line may carry; any other key marks a notice, not talk. */
+const SAID_META = new Set(['mentions', 'model', 'model_source', 'surface', 'in_reply_to']);
+
+function oneLine(body: string): string | null {
+  const line = (body.split('\n')[0] ?? '').replace(/\s+/g, ' ').trim();
+  if (!line) return null;
+  return line.length > APP_MOMENT_TEXT_MAX
+    ? `${line.slice(0, APP_MOMENT_TEXT_MAX - 1).trimEnd()}…`
+    : line;
+}
+
+/**
+ * The day's moments for the phone's feed (ADR 819 decision 1): lanes landed and started, goals
+ * finished, verdicts on the viewer's own lanes, and people's team messages. `acts` must already be
+ * read through the viewer's read scope; lanes are the team's board, which every member sees. Polls
+ * are not folded yet: the roster's own `poll` already shows an open one to an admin.
+ */
+export function appMoments(input: {
+  lanes: readonly MomentLaneLike[];
+  goals: readonly { id: string; title: string }[];
+  acts: readonly MomentActLike[];
+  since: number;
+  viewer: string | null;
+}): AppMoment[] {
+  const goalName = new Map(
+    input.goals.map((g) => [g.id, g.title.split(' — ')[0]!.trim()] as const),
+  );
+  const nameOf = (id: string | null) => (id ? (goalName.get(id) ?? null) : null);
+  const byId = new Map(input.lanes.map((l) => [l.id, l] as const));
+  const out: AppMoment[] = [];
+  for (const l of input.lanes) {
+    if (!l.owner_seat) continue;
+    const lane = { id: l.id, title: l.title };
+    if (l.state === 'done' && l.resolved_at !== null && l.resolved_at >= input.since)
+      out.push({
+        id: `landed:${l.id}`,
+        kind: 'landed',
+        member: l.owner_seat,
+        lane,
+        goal: nameOf(l.goal_id),
+        text: null,
+        accepted: l.verified === true,
+        ts: l.resolved_at,
+      });
+    if (l.claimed_at !== null && l.claimed_at >= input.since)
+      out.push({
+        id: `started:${l.id}`,
+        kind: 'started',
+        member: l.owner_seat,
+        lane,
+        goal: nameOf(l.goal_id),
+        text: null,
+        ts: l.claimed_at,
+      });
+  }
+  for (const a of input.acts) {
+    if (a.ts < input.since) continue;
+    const meta = a.meta ?? {};
+    const outcome = meta['goal_outcome'] as { goal_id?: unknown; outcome?: unknown } | undefined;
+    if (outcome && typeof outcome.goal_id === 'string') {
+      out.push({
+        id: a.id,
+        kind: 'goal',
+        member: a.from,
+        lane: null,
+        goal: nameOf(outcome.goal_id) ?? outcome.goal_id,
+        text: typeof outcome.outcome === 'string' ? oneLine(outcome.outcome) : null,
+        ts: a.ts,
+      });
+      continue;
+    }
+    if ((a.act === 'accept' || a.act === 'decline') && a.review_lane) {
+      const l = byId.get(a.review_lane);
+      const mine =
+        l &&
+        input.viewer !== null &&
+        (l.requested_by === input.viewer || l.owner_seat === input.viewer);
+      if (!l || !mine) continue;
+      out.push({
+        id: a.id,
+        kind: 'verdict',
+        member: a.from,
+        lane: { id: l.id, title: l.title },
+        goal: nameOf(l.goal_id),
+        text: oneLine(a.body),
+        accepted: a.act === 'accept',
+        ts: a.ts,
+      });
+      continue;
+    }
+    if (
+      a.act === 'message' &&
+      a.to_kind === 'team' &&
+      a.from_kind === 'human' &&
+      Object.keys(meta).every((k) => SAID_META.has(k))
+    ) {
+      const text = oneLine(a.body);
+      if (text)
+        out.push({
+          id: a.id,
+          kind: 'said',
+          member: a.from,
+          lane: null,
+          goal: null,
+          text,
+          ts: a.ts,
+        });
+    }
+  }
+  return out.sort((a, b) => b.ts - a.ts || (a.id < b.id ? -1 : 1)).slice(0, APP_MOMENTS_MAX);
 }
