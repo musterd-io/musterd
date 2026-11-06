@@ -135,8 +135,10 @@ enrolled under harness `musterd`), and then wake polls. On the team server, the 
 `offline · wakeable` until its first wake.
 
 In hub mode the log first shows `tailnet up · hub <name> → <ip>`, `dropping root → seat`, the
-joiner daemon coming up, `enrolled at http://<ip>:4849`, and `host key honoured by this daemon`
-once the hub's first sync tick has carried the key over; the hub's roster then shows the seat
+joiner daemon coming up, and `enrolled at http://<ip>:4849`; the host loop's polls 401 until
+the hub's first sync tick has carried the host key over, then succeed (there is deliberately
+no separate key probe — probing the wake-lease claim endpoint minted and stranded the cold
+boot's first lease, lane 01M6RZ0NRA); the hub's roster then shows the seat
 `wakeable` on this machine's host label. Nothing on the hub needs running by hand — no
 `node trust`: the machine's rows are the host's, not a human's (ADR 689 d5). The one piece of
 delta's friction that stays (docs/perf/cloud-seat.md finding 4): the cloned team home is

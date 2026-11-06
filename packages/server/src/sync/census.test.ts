@@ -235,11 +235,10 @@ withDrivers('census', (_o, kind) => {
       ).toEqual({ n: 0 });
     });
 
-    it('ADR 816: fly.machine_start crosses hub → joiner as a ledger row; fly.machine_stop stays hub-local', async () => {
-      // The cold first-lease TTL is decided where leases mint — in hub mode the seat machine's
-      // own joiner daemon — from the hub's start row. Measured live 2026-11-06 before this
-      // crossing existed: no fly.* row on the joiner at all, the cold lease never fired, and the
-      // first lease expired warm at 120 s (lane 01M6RZ0NRA).
+    it('ADR 816: fly.machine_start and fly.machine_stop both stay hub-local (lane 01M6RZ0NRA)', async () => {
+      // The start row briefly crossed to serve a cold first-lease TTL on the joiner; rounds 4–5
+      // (2026-11-06) falsified that TTL's premise and it was reverted, leaving the crossing with
+      // no reader. Nothing off the hub reads either verb, so neither crosses.
       const ht = await hubTeam();
       await appendAudit(hub.store, ht.id, {
         actor: null,
@@ -260,7 +259,7 @@ withDrivers('census', (_o, kind) => {
         await joiner.store.get(
           "SELECT COUNT(*) AS n FROM audit WHERE action = 'fly.machine_start'",
         ),
-      ).toEqual({ n: 1 });
+      ).toEqual({ n: 0 });
       expect(
         await joiner.store.get("SELECT COUNT(*) AS n FROM audit WHERE action = 'fly.machine_stop'"),
       ).toEqual({ n: 0 });
