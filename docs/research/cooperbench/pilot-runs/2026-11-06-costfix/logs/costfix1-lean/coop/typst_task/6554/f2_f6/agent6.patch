@@ -1,0 +1,106 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..deef15ef7 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -179,23 +179,74 @@ impl Str {
+     /// Extracts the first grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
++    pub fn first(
++        &self,
++        /// The character index to extract (0-based). If omitted, extracts the
++        /// first character.
++        #[default]
++        index: Option<usize>,
++        /// Whether to skip leading whitespace.
++        #[named]
++        #[default(false)]
++        skip_whitespace: bool,
++    ) -> StrResult<Str> {
++        if self.0.is_empty() {
++            return Err(string_is_empty());
++        }
++        let s = if skip_whitespace {
++            self.0.trim_start_matches(char::is_whitespace)
++        } else {
++            self.0.as_str()
++        };
++        if let Some(i) = index {
++            let graphemes: Vec<&str> = s.graphemes(true).collect();
++            return graphemes
++                .get(i)
++                .copied()
++                .map(Into::into)
++                .ok_or_else(|| out_of_bounds_char(i, graphemes.len()));
++        }
++        s.graphemes(true)
+             .next()
+             .map(Into::into)
+-            .ok_or_else(string_is_empty)
++            .ok_or_else(string_is_only_whitespace)
+     }
+ 
+     /// Extracts the last grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
++    pub fn last(
++        &self,
++        /// The character index to extract (0-based). If omitted, extracts the
++        /// last character. Counts from the back of the string.
++        #[default]
++        index: Option<usize>,
++        /// Whether to skip trailing whitespace.
++        #[named]
++        #[default(false)]
++        skip_whitespace: bool,
++    ) -> StrResult<Str> {
++        if self.0.is_empty() {
++            return Err(string_is_empty());
++        }
++        let s = if skip_whitespace {
++            self.0.trim_end_matches(char::is_whitespace)
++        } else {
++            self.0.as_str()
++        };
++        if let Some(i) = index {
++            let graphemes: Vec<&str> = s.graphemes(true).collect();
++            return graphemes
++                .len()
++                .checked_sub(i + 1)
++                .map(|j| graphemes[j])
++                .map(Into::into)
++                .ok_or_else(|| out_of_bounds_char(i, graphemes.len()));
++        }
++        s.graphemes(true)
+             .next_back()
+             .map(Into::into)
+-            .ok_or_else(string_is_empty)
++            .ok_or_else(string_is_only_whitespace)
+     }
+ 
+     /// Extracts the first grapheme cluster after the specified index. Returns
+@@ -835,6 +886,18 @@ fn string_is_empty() -> EcoString {
+     "string is empty".into()
+ }
+ 
++/// The out of bounds access error message for character indices.
++#[cold]
++fn out_of_bounds_char(index: usize, len: usize) -> EcoString {
++    eco_format!("index {index} out of bounds for string with {len} characters")
++}
++
++/// The error message when a string contains only whitespace.
++#[cold]
++fn string_is_only_whitespace() -> EcoString {
++    "string contains only whitespace".into()
++}
++
+ /// A regular expression.
+ ///
+ /// Can be used as a [show rule selector]($styling/#show-rules) and with

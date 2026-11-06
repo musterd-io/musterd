@@ -1,0 +1,30 @@
+{
+  "repo": "samuelcolvin_dirty_equals_task",
+  "task_id": 43,
+  "features": [
+    2,
+    3
+  ],
+  "setting": "solo",
+  "run_id": "6e03dc03",
+  "run_name": "costfix2-solo",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T21:20:06.972186",
+  "ended_at": "2026-11-06T21:21:12.136503",
+  "duration_seconds": 65.164317,
+  "agent": {
+    "status": "Submitted",
+    "cost": 0.123217,
+    "steps": 4,
+    "input_tokens": 8,
+    "output_tokens": 2708,
+    "cache_read_tokens": 74550,
+    "cache_write_tokens": 10823,
+    "patch_lines": 115,
+    "error": null
+  },
+  "total_cost": 0.123217,
+  "total_steps": 4,
+  "log_dir": "logs/costfix2-solo/solo/samuelcolvin_dirty_equals_task/43/f2_f3"
+}

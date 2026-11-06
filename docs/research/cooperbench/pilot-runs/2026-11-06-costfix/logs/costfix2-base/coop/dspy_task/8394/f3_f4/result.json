@@ -1,0 +1,46 @@
+{
+  "repo": "dspy_task",
+  "task_id": 8394,
+  "features": [
+    3,
+    4
+  ],
+  "setting": "coop",
+  "run_id": "dab5e36f",
+  "run_name": "costfix2-base",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T21:45:37.671507",
+  "ended_at": "2026-11-06T21:49:22.786015",
+  "duration_seconds": 225.114508,
+  "agents": {
+    "agent2": {
+      "feature_id": 4,
+      "status": "Submitted",
+      "cost": 0.33970659999999997,
+      "steps": 19,
+      "input_tokens": 30,
+      "output_tokens": 5469,
+      "cache_read_tokens": 527908,
+      "cache_write_tokens": 24925,
+      "patch_lines": 293,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 0.4138609999999999,
+      "steps": 18,
+      "input_tokens": 26,
+      "output_tokens": 5948,
+      "cache_read_tokens": 429060,
+      "cache_write_tokens": 41797,
+      "patch_lines": 293,
+      "error": null
+    }
+  },
+  "total_cost": 0.7535675999999999,
+  "total_steps": 37,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix2-base/coop/dspy_task/8394/f3_f4"
+}

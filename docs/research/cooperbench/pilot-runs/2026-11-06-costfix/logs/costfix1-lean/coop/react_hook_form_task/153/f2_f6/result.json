@@ -1,0 +1,46 @@
+{
+  "repo": "react_hook_form_task",
+  "task_id": 153,
+  "features": [
+    2,
+    6
+  ],
+  "setting": "coop",
+  "run_id": "a1f820f8",
+  "run_name": "costfix1-lean",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T19:39:17.167200",
+  "ended_at": "2026-11-06T19:46:33.875068",
+  "duration_seconds": 436.707868,
+  "agents": {
+    "agent1": {
+      "feature_id": 2,
+      "status": "Submitted",
+      "cost": 0.29333139999999996,
+      "steps": 18,
+      "input_tokens": 30,
+      "output_tokens": 4748,
+      "cache_read_tokens": 463782,
+      "cache_write_tokens": 21099,
+      "patch_lines": 130,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 6,
+      "status": "Submitted",
+      "cost": 0.36861820000000006,
+      "steps": 24,
+      "input_tokens": 42,
+      "output_tokens": 6004,
+      "cache_read_tokens": 674551,
+      "cache_write_tokens": 22692,
+      "patch_lines": 130,
+      "error": null
+    }
+  },
+  "total_cost": 0.6619496,
+  "total_steps": 42,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix1-lean/coop/react_hook_form_task/153/f2_f6"
+}

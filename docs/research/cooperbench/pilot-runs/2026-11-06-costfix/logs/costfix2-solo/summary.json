@@ -1,0 +1,263 @@
+{
+  "run_name": "costfix2-solo",
+  "completed_at": "2026-11-06T21:30:40.471683",
+  "pass_rate": null,
+  "total_tasks": 50,
+  "completed": 50,
+  "skipped": 0,
+  "failed": 0,
+  "total_cost": 8.947536799999998,
+  "total_time_seconds": 4909.20170712471,
+  "results": [
+    {
+      "task": "dottxt_ai_outlines_task/1655/6,7",
+      "status": "done",
+      "cost": 0.12435500000000002
+    },
+    {
+      "task": "dottxt_ai_outlines_task/1655/7,10",
+      "status": "done",
+      "cost": 0.1020132
+    },
+    {
+      "task": "dottxt_ai_outlines_task/1706/4,6",
+      "status": "done",
+      "cost": 0.14109480000000002
+    },
+    {
+      "task": "dottxt_ai_outlines_task/1706/5,8",
+      "status": "done",
+      "cost": 0.24212060000000002
+    },
+    {
+      "task": "dspy_task/8394/3,4",
+      "status": "done",
+      "cost": 0.2509688
+    },
+    {
+      "task": "dspy_task/8394/3,5",
+      "status": "done",
+      "cost": 0.316295
+    },
+    {
+      "task": "go_chi_task/26/1,2",
+      "status": "done",
+      "cost": 0.16276900000000002
+    },
+    {
+      "task": "go_chi_task/56/1,5",
+      "status": "done",
+      "cost": 0.36237020000000003
+    },
+    {
+      "task": "huggingface_datasets_task/3997/2,4",
+      "status": "done",
+      "cost": 0.1658966
+    },
+    {
+      "task": "huggingface_datasets_task/6252/4,6",
+      "status": "done",
+      "cost": 0.07211319999999999
+    },
+    {
+      "task": "llama_index_task/18813/1,5",
+      "status": "done",
+      "cost": 0.112225
+    },
+    {
+      "task": "llama_index_task/18813/2,5",
+      "status": "done",
+      "cost": 0.1274122
+    },
+    {
+      "task": "openai_tiktoken_task/0/2,9",
+      "status": "done",
+      "cost": 0.1379304
+    },
+    {
+      "task": "openai_tiktoken_task/0/3,6",
+      "status": "done",
+      "cost": 0.0945758
+    },
+    {
+      "task": "openai_tiktoken_task/0/6,8",
+      "status": "done",
+      "cost": 0.0965458
+    },
+    {
+      "task": "pallets_click_task/2068/1,6",
+      "status": "done",
+      "cost": 0.15173040000000002
+    },
+    {
+      "task": "pallets_click_task/2068/2,10",
+      "status": "done",
+      "cost": 0.1421232
+    },
+    {
+      "task": "pallets_click_task/2068/5,7",
+      "status": "done",
+      "cost": 0.1354024
+    },
+    {
+      "task": "pallets_click_task/2068/5,11",
+      "status": "done",
+      "cost": 0.1544152
+    },
+    {
+      "task": "pallets_click_task/2068/6,7",
+      "status": "done",
+      "cost": 0.1380632
+    },
+    {
+      "task": "pallets_click_task/2068/7,10",
+      "status": "done",
+      "cost": 0.10262559999999998
+    },
+    {
+      "task": "pallets_click_task/2800/1,3",
+      "status": "done",
+      "cost": 0.2207934
+    },
+    {
+      "task": "pallets_click_task/2800/1,7",
+      "status": "done",
+      "cost": 0.1848132
+    },
+    {
+      "task": "pallets_click_task/2800/2,7",
+      "status": "done",
+      "cost": 0.227113
+    },
+    {
+      "task": "pallets_click_task/2800/6,7",
+      "status": "done",
+      "cost": 0.2968906
+    },
+    {
+      "task": "pallets_click_task/2956/1,8",
+      "status": "done",
+      "cost": 0.28972559999999997
+    },
+    {
+      "task": "pallets_jinja_task/1465/2,3",
+      "status": "done",
+      "cost": 0.10570639999999999
+    },
+    {
+      "task": "pallets_jinja_task/1465/2,6",
+      "status": "done",
+      "cost": 0.09208840000000001
+    },
+    {
+      "task": "pallets_jinja_task/1559/1,8",
+      "status": "done",
+      "cost": 0.29141419999999996
+    },
+    {
+      "task": "pallets_jinja_task/1559/4,8",
+      "status": "done",
+      "cost": 0.32366759999999994
+    },
+    {
+      "task": "pallets_jinja_task/1559/4,10",
+      "status": "done",
+      "cost": 0.174472
+    },
+    {
+      "task": "pallets_jinja_task/1559/6,9",
+      "status": "done",
+      "cost": 0.12115900000000002
+    },
+    {
+      "task": "pallets_jinja_task/1621/1,6",
+      "status": "done",
+      "cost": 0.2146528
+    },
+    {
+      "task": "pallets_jinja_task/1621/2,9",
+      "status": "done",
+      "cost": 0.22204979999999996
+    },
+    {
+      "task": "pallets_jinja_task/1621/3,5",
+      "status": "done",
+      "cost": 0.1257026
+    },
+    {
+      "task": "pallets_jinja_task/1621/4,5",
+      "status": "done",
+      "cost": 0.1395156
+    },
+    {
+      "task": "pallets_jinja_task/1621/4,10",
+      "status": "done",
+      "cost": 0.27460039999999997
+    },
+    {
+      "task": "pallets_jinja_task/1621/6,7",
+      "status": "done",
+      "cost": 0.1778384
+    },
+    {
+      "task": "pillow_task/25/1,5",
+      "status": "done",
+      "cost": 0.19478679999999998
+    },
+    {
+      "task": "pillow_task/25/2,3",
+      "status": "done",
+      "cost": 0.1056422
+    },
+    {
+      "task": "pillow_task/290/2,3",
+      "status": "done",
+      "cost": 0.2082988
+    },
+    {
+      "task": "pillow_task/290/3,5",
+      "status": "done",
+      "cost": 0.2672468
+    },
+    {
+      "task": "pillow_task/290/4,5",
+      "status": "done",
+      "cost": 0.242248
+    },
+    {
+      "task": "pillow_task/68/1,5",
+      "status": "done",
+      "cost": 0.1617716
+    },
+    {
+      "task": "samuelcolvin_dirty_equals_task/43/2,3",
+      "status": "done",
+      "cost": 0.123217
+    },
+    {
+      "task": "samuelcolvin_dirty_equals_task/43/3,7",
+      "status": "done",
+      "cost": 0.1266694
+    },
+    {
+      "task": "typst_task/6554/1,9",
+      "status": "done",
+      "cost": 0.09401140000000001
+    },
+    {
+      "task": "typst_task/6554/4,9",
+      "status": "done",
+      "cost": 0.16584639999999998
+    },
+    {
+      "task": "typst_task/6554/5,9",
+      "status": "done",
+      "cost": 0.1727004
+    },
+    {
+      "task": "typst_task/6554/7,8",
+      "status": "done",
+      "cost": 0.2698494
+    }
+  ]
+}

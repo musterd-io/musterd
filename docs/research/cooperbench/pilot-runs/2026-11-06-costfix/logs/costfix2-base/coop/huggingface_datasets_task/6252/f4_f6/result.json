@@ -1,0 +1,46 @@
+{
+  "repo": "huggingface_datasets_task",
+  "task_id": 6252,
+  "features": [
+    4,
+    6
+  ],
+  "setting": "coop",
+  "run_id": "a69811de",
+  "run_name": "costfix2-base",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T21:45:37.750360",
+  "ended_at": "2026-11-06T21:48:28.649829",
+  "duration_seconds": 170.899469,
+  "agents": {
+    "agent2": {
+      "feature_id": 6,
+      "status": "Submitted",
+      "cost": 0.23851579999999997,
+      "steps": 12,
+      "input_tokens": 18,
+      "output_tokens": 2026,
+      "cache_read_tokens": 221944,
+      "cache_write_tokens": 30707,
+      "patch_lines": 36,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 4,
+      "status": "Submitted",
+      "cost": 0.2502604,
+      "steps": 14,
+      "input_tokens": 18,
+      "output_tokens": 2477,
+      "cache_read_tokens": 221267,
+      "cache_write_tokens": 31279,
+      "patch_lines": 36,
+      "error": null
+    }
+  },
+  "total_cost": 0.4887762,
+  "total_steps": 26,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix2-base/coop/huggingface_datasets_task/6252/f4_f6"
+}

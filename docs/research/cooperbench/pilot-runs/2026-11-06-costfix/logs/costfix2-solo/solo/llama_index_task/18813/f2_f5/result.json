@@ -1,0 +1,30 @@
+{
+  "repo": "llama_index_task",
+  "task_id": 18813,
+  "features": [
+    2,
+    5
+  ],
+  "setting": "solo",
+  "run_id": "59aa421b",
+  "run_name": "costfix2-solo",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T20:35:30.029787",
+  "ended_at": "2026-11-06T20:36:44.026559",
+  "duration_seconds": 73.996772,
+  "agent": {
+    "status": "Submitted",
+    "cost": 0.1274122,
+    "steps": 5,
+    "input_tokens": 10,
+    "output_tokens": 2903,
+    "cache_read_tokens": 91036,
+    "cache_write_tokens": 10221,
+    "patch_lines": 118,
+    "error": null
+  },
+  "total_cost": 0.1274122,
+  "total_steps": 5,
+  "log_dir": "logs/costfix2-solo/solo/llama_index_task/18813/f2_f5"
+}

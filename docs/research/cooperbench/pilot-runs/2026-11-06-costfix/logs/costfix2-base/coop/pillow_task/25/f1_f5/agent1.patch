@@ -1,0 +1,92 @@
+diff --git a/Tests/test_image.py b/Tests/test_image.py
+index c2e850c36..29a27791f 100644
+--- a/Tests/test_image.py
++++ b/Tests/test_image.py
+@@ -1180,3 +1180,32 @@ class TestRegistry:
+     def test_encode_registry_fail(self) -> None:
+         with pytest.raises(OSError):
+             Image._getencoder("RGB", "DoesNotExist", ("args",), extra=("extra",))
++
++
++@pytest.mark.parametrize("mode", ("RGB", "RGBA", "L", "P"))
++def test_save_mark_corners(mode: str, tmp_path: Path) -> None:
++    im = Image.new(mode, (10, 8), "white")
++    out = tmp_path / "temp.png"
++    im.save(out, mark_corners=True)
++
++    # The original image is not modified
++    assert im.getpixel((0, 0)) == im.getpixel((5, 5))
++
++    with Image.open(out) as reloaded:
++        rgb = reloaded.convert("RGB")
++        assert rgb.getpixel((0, 0))[0] > 50
++        if mode != "L":
++            assert rgb.getpixel((0, 0)) == (255, 0, 0)
++            assert rgb.getpixel((9, 7)) == (255, 0, 0)
++        assert rgb.getpixel((5, 5)) != rgb.getpixel((0, 0))
++
++
++def test_save_mark_corners_file_object() -> None:
++    im = Image.new("RGB", (4, 4), "blue")
++    b = io.BytesIO()
++    im.save(b, "PNG", mark_corners=True)
++    b.seek(0)
++    with Image.open(b) as reloaded:
++        assert reloaded.getpixel((0, 0)) == (255, 0, 0)
++        assert reloaded.getpixel((3, 3)) == (255, 0, 0)
++        assert reloaded.getpixel((1, 1)) == (0, 0, 255)
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 233df592c..ee51454cb 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -2499,6 +2499,11 @@ class Image:
+              red = Image.new("RGB", (1, 1), "#f00")
+              red.save("out.mpo", xmp=b"test")
+ 
++           ``mark_corners=True`` may also be passed to set the top-left and
++           bottom-right pixels of the saved image to red, as a simple marker
++           that the image has been processed. The original image is not
++           modified.
++
+              # Saving XMP data to the second frame of an image
+              from PIL import Image
+              black = Image.new("RGB", (1, 1))
+@@ -2540,10 +2545,37 @@ class Image:
+                 msg = f"unknown file extension: {ext}"
+                 raise ValueError(msg) from e
+ 
++        from . import ImageFile
++
+         # may mutate self!
+-        self._ensure_mutable()
++        if isinstance(self, ImageFile.ImageFile) and os.path.abspath(
++            filename
++        ) == os.path.abspath(self.filename):
++            self._ensure_mutable()
++        else:
++            self.load()
+ 
+         save_all = params.pop("save_all", None)
++
++        if params.pop("mark_corners", False):
++            # Mark a copy so that the original image is left untouched
++            marked = self.copy()
++            if marked.mode == "P":
++                red: float | tuple[int, ...] = (255, 0, 0)
++            else:
++                from . import ImageColor
++
++                red = ImageColor.getcolor("red", marked.mode)
++            width, height = marked.size
++            if width and height:
++                marked.putpixel((0, 0), red)
++                marked.putpixel((width - 1, height - 1), red)
++            if save_all is not None:
++                params["save_all"] = save_all
++            marked.encoderinfo = getattr(self, "encoderinfo", {})
++            marked.save(fp if not open_fp else filename, format, **params)
++            return
++
+         self.encoderinfo = {**getattr(self, "encoderinfo", {}), **params}
+         self.encoderconfig: tuple[Any, ...] = ()
+ 

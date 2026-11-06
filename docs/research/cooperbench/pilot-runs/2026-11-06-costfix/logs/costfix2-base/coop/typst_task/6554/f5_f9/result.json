@@ -1,0 +1,46 @@
+{
+  "repo": "typst_task",
+  "task_id": 6554,
+  "features": [
+    5,
+    9
+  ],
+  "setting": "coop",
+  "run_id": "1c3abf5b",
+  "run_name": "costfix2-base",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T22:38:38.211511",
+  "ended_at": "2026-11-06T22:43:28.419191",
+  "duration_seconds": 290.20768,
+  "agents": {
+    "agent1": {
+      "feature_id": 5,
+      "status": "Submitted",
+      "cost": 0.24580580000000002,
+      "steps": 17,
+      "input_tokens": 26,
+      "output_tokens": 4523,
+      "cache_read_tokens": 374609,
+      "cache_write_tokens": 16064,
+      "patch_lines": 93,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 9,
+      "status": "Submitted",
+      "cost": 0.2177278,
+      "steps": 19,
+      "input_tokens": 30,
+      "output_tokens": 3434,
+      "cache_read_tokens": 431239,
+      "cache_write_tokens": 12536,
+      "patch_lines": 93,
+      "error": null
+    }
+  },
+  "total_cost": 0.4635336,
+  "total_steps": 36,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix2-base/coop/typst_task/6554/f5_f9"
+}

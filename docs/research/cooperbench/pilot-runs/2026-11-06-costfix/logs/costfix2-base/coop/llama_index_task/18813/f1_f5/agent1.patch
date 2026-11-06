@@ -1,0 +1,92 @@
+diff --git a/llama-index-core/llama_index/core/base/llms/types.py b/llama-index-core/llama_index/core/base/llms/types.py
+index dedf4ad1e..6e5923fc2 100644
+--- a/llama-index-core/llama_index/core/base/llms/types.py
++++ b/llama-index-core/llama_index/core/base/llms/types.py
+@@ -10,6 +10,7 @@ from typing import (
+     Annotated,
+     Any,
+     AsyncGenerator,
++    Callable,
+     Generator,
+     List,
+     Literal,
+@@ -54,6 +55,16 @@ class TextBlock(BaseModel):
+     text: str
+ 
+ 
++def _validate_buffer(data_buffer: BytesIO, method_name: str) -> BytesIO:
++    """Raise a ValueError if the buffer is empty, otherwise rewind and return it."""
++    data_buffer.seek(0, 2)
++    size = data_buffer.tell()
++    data_buffer.seek(0)
++    if size == 0:
++        raise ValueError(f"{method_name} returned zero bytes")
++    return data_buffer
++
++
+ class ImageBlock(BaseModel):
+     block_type: Literal["image"] = "image"
+     image: bytes | None = None
+@@ -118,12 +129,13 @@ class ImageBlock(BaseModel):
+             as_base64 (bool): whether the resolved image should be returned as base64-encoded bytes
+ 
+         """
+-        return resolve_binary(
++        data_buffer = resolve_binary(
+             raw_bytes=self.image,
+             path=self.path,
+             url=str(self.url) if self.url else None,
+             as_base64=as_base64,
+         )
++        return _validate_buffer(data_buffer, "resolve_image")
+ 
+ 
+ class AudioBlock(BaseModel):
+@@ -170,20 +182,30 @@ class AudioBlock(BaseModel):
+             guess = filetype.guess(audio_data)
+             self.format = guess.extension if guess else None
+ 
+-    def resolve_audio(self, as_base64: bool = False) -> BytesIO:
++    def resolve_audio(
++        self,
++        as_base64: bool = False,
++        on_resolve: Optional[Callable[[int], None]] = None,
++    ) -> BytesIO:
+         """
+         Resolve an audio such that PIL can read it.
+ 
+         Args:
+             as_base64 (bool): whether the resolved audio should be returned as base64-encoded bytes
++            on_resolve (Optional[Callable[[int], None]]): optional callback invoked with
++                the byte size of the resolved audio buffer
+ 
+         """
+-        return resolve_binary(
++        buf = resolve_binary(
+             raw_bytes=self.audio,
+             path=self.path,
+             url=str(self.url) if self.url else None,
+             as_base64=as_base64,
+         )
++        _validate_buffer(buf, "resolve_audio")
++        if on_resolve is not None:
++            on_resolve(len(buf.getvalue()))
++        return buf
+ 
+ class DocumentBlock(BaseModel):
+     block_type: Literal["document"] = "document"
+@@ -215,12 +237,13 @@ class DocumentBlock(BaseModel):
+         """
+         Resolve a document such that it is represented by a BufferIO object.
+         """
+-        return resolve_binary(
++        data_buffer = resolve_binary(
+             raw_bytes=self.data,
+             path=self.path,
+             url=str(self.url) if self.url else None,
+             as_base64=False,
+         )
++        return _validate_buffer(data_buffer, "resolve_document")
+ 
+     def _get_b64_string(self, data_buffer: BytesIO) -> str:
+         """

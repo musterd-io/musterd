@@ -1,0 +1,46 @@
+{
+  "repo": "dottxt_ai_outlines_task",
+  "task_id": 1655,
+  "features": [
+    1,
+    3
+  ],
+  "setting": "coop",
+  "run_id": "d8d4195e",
+  "run_name": "costfix1-base",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T19:25:37.560067",
+  "ended_at": "2026-11-06T19:29:50.278821",
+  "duration_seconds": 252.718754,
+  "agents": {
+    "agent1": {
+      "feature_id": 1,
+      "status": "Submitted",
+      "cost": 0.2235814,
+      "steps": 18,
+      "input_tokens": 26,
+      "output_tokens": 3674,
+      "cache_read_tokens": 363437,
+      "cache_write_tokens": 15462,
+      "patch_lines": 31,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 0.16725779999999998,
+      "steps": 14,
+      "input_tokens": 20,
+      "output_tokens": 2286,
+      "cache_read_tokens": 272339,
+      "cache_write_tokens": 13398,
+      "patch_lines": 31,
+      "error": null
+    }
+  },
+  "total_cost": 0.3908392,
+  "total_steps": 32,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix1-base/coop/dottxt_ai_outlines_task/1655/f1_f3"
+}

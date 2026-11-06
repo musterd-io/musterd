@@ -1,0 +1,205 @@
+diff --git a/src/jinja2/loaders.py b/src/jinja2/loaders.py
+index d7d9bd04..03816922 100644
+--- a/src/jinja2/loaders.py
++++ b/src/jinja2/loaders.py
+@@ -4,6 +4,8 @@ sources.
+ import importlib.util
+ import os
+ import sys
++import threading
++import time
+ import typing as t
+ import weakref
+ import zipimport
+@@ -170,16 +172,23 @@ class FileSystemLoader(BaseLoader):
+     :param encoding: Use this encoding to read the text from template
+         files.
+     :param followlinks: Follow symbolic links in the path.
++    :param auto_reload: Monitor the search paths for changes and remove
++        affected templates from the cache of every environment using
++        this loader.
+ 
+     .. versionchanged:: 2.8
+         Added the ``followlinks`` parameter.
+     """
+ 
++    #: Seconds between two scans of the search paths.
++    poll_interval: float = 1.0
++
+     def __init__(
+         self,
+         searchpath: t.Union[str, os.PathLike, t.Sequence[t.Union[str, os.PathLike]]],
+         encoding: str = "utf-8",
+         followlinks: bool = False,
++        auto_reload: bool = True,
+     ) -> None:
+         if not isinstance(searchpath, abc.Iterable) or isinstance(searchpath, str):
+             searchpath = [searchpath]
+@@ -187,10 +196,158 @@ class FileSystemLoader(BaseLoader):
+         self.searchpath = [os.fspath(p) for p in searchpath]
+         self.encoding = encoding
+         self.followlinks = followlinks
++        self.auto_reload = auto_reload
++        self._environments: "weakref.WeakSet[Environment]" = weakref.WeakSet()
++        self._mtimes: t.Optional[t.Dict[str, float]] = None
++        self._monitor_lock = threading.Lock()
++        self._monitor_thread: t.Optional[threading.Thread] = None
++
++    def _register_environment(self, environment: "Environment") -> None:
++        if not self.auto_reload or environment in self._environments:
++            return
++
++        self._environments.add(environment)
++        self._start_monitor()
++
++    def _start_monitor(self) -> None:
++        with self._monitor_lock:
++            if self._monitor_thread is not None:
++                return
++
++            self._mtimes = self._scan()
++            ref = weakref.ref(self)
++            interval = self.poll_interval
++
++            def run() -> None:
++                while True:
++                    time.sleep(interval)
++                    loader = ref()
++
++                    if loader is None:
++                        return
++
++                    try:
++                        loader._poll()
++                    except Exception:
++                        pass
++
++                    del loader
++
++            thread = threading.Thread(
++                target=run, name="jinja2-FileSystemLoader-monitor", daemon=True
++            )
++            self._monitor_thread = thread
++            thread.start()
++
++    def _scan(self) -> t.Dict[str, float]:
++        """Map the absolute path of every file in the search paths to its
++        modification time.
++        """
++        mtimes: t.Dict[str, float] = {}
++
++        for searchpath in self.searchpath:
++            walk_dir = os.walk(searchpath, followlinks=self.followlinks)
++
++            for dirpath, _, filenames in walk_dir:
++                for filename in filenames:
++                    path = os.path.abspath(os.path.join(dirpath, filename))
++
++                    try:
++                        mtimes[path] = os.path.getmtime(path)
++                    except OSError:
++                        continue
++
++        return mtimes
++
++    def _poll(self) -> None:
++        """Scan the search paths once and invalidate templates whose files
++        were added, modified, or deleted since the last scan.
++        """
++        if not self._environments:
++            return
++
++        new = self._scan()
++        old = self._mtimes or {}
++        self._mtimes = new
++        changed = [p for p, m in new.items() if old.get(p) != m]
++        changed.extend(p for p in old if p not in new)
++
++        if changed:
++            self._on_template_changed(changed)
++
++    def _path_to_template_names(self, path: str) -> t.List[str]:
++        names = []
++        path = os.path.normcase(os.path.abspath(path))
++
++        for searchpath in self.searchpath:
++            root = os.path.normcase(os.path.abspath(searchpath))
++
++            try:
++                rel = os.path.relpath(path, root)
++            except ValueError:
++                continue
++
++            if rel == os.curdir or rel == os.pardir or rel.startswith(
++                os.pardir + os.path.sep
++            ):
++                continue
++
++            name = rel.replace(os.path.sep, "/")
++
++            if name not in names:
++                names.append(name)
++
++        return names
++
++    def _on_template_changed(self, file_paths: t.List[str]) -> None:
++        """Remove the templates for the given changed file paths from the
++        cache of every environment using this loader.
++        """
++        names = set()
++
++        for path in file_paths:
++            try:
++                names.update(self._path_to_template_names(path))
++            except Exception:
++                continue
++
++        if not names:
++            return
++
++        for environment in list(self._environments):
++            cache = getattr(environment, "cache", None)
++
++            if cache is None:
++                continue
++
++            for key in list(cache.keys()):
++                try:
++                    loader_ref, name = key
++                except (TypeError, ValueError):
++                    continue
++
++                if loader_ref() is self and name in names:
++                    try:
++                        del cache[key]
++                    except KeyError:
++                        pass
++
++    @internalcode
++    def load(
++        self,
++        environment: "Environment",
++        name: str,
++        globals: t.Optional[t.MutableMapping[str, t.Any]] = None,
++    ) -> "Template":
++        self._register_environment(environment)
++        return super().load(environment, name, globals)
+ 
+     def get_source(
+         self, environment: "Environment", template: str
+     ) -> t.Tuple[str, str, t.Callable[[], bool]]:
++        self._register_environment(environment)
++        # Normalize the template path before splitting it into pieces.
++        template = os.path.normpath(template)
+         pieces = split_template_path(template)
+         for searchpath in self.searchpath:
+             filename = os.path.join(searchpath, *pieces)
+@@ -326,6 +483,8 @@ class PackageLoader(BaseLoader):
+     def get_source(
+         self, environment: "Environment", template: str
+     ) -> t.Tuple[str, str, t.Optional[t.Callable[[], bool]]]:
++        # Normalize the template path before splitting it into pieces.
++        template = os.path.normpath(template)
+         p = os.path.join(self._template_root, *split_template_path(template))
+         up_to_date: t.Optional[t.Callable[[], bool]]
+ 

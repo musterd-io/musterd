@@ -1,0 +1,136 @@
+diff --git a/outlines/backends/xgrammar.py b/outlines/backends/xgrammar.py
+index fcb1672d..aa4ddbd7 100644
+--- a/outlines/backends/xgrammar.py
++++ b/outlines/backends/xgrammar.py
+@@ -1,6 +1,6 @@
+ """Backend class for XGrammar."""
+ 
+-from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, Callable, Optional
+ 
+ from outlines.backends.base import BaseBackend
+ from outlines.models import SteerableModel
+@@ -22,18 +22,23 @@ class XGrammarLogitsProcessor(OutlinesLogitsProcessor):
+ 
+     """
+ 
+-    def __init__(self, compiled_grammar: str):
++    def __init__(
++        self, compiled_grammar: str, max_batch_size: Optional[int] = None
++    ):
+         """
+         Parameters
+         ----------
+         compiled_grammar: str
+             The compiled grammar to use to create the logits processor.
++        max_batch_size: int, optional
++            Maximum allowed batch size. If None, no limit is enforced.
+ 
+         """
+         import xgrammar as xgr
+ 
+         self.xgr = xgr
+         self.compiled_grammar = compiled_grammar
++        self.max_batch_size = max_batch_size
+         self.xgrammar_logits_processor = None
+         super().__init__("torch")
+ 
+@@ -44,6 +49,13 @@ class XGrammarLogitsProcessor(OutlinesLogitsProcessor):
+     def process_logits(self, input_ids: TensorType, logits: TensorType) -> TensorType:
+         """Bias the logits."""
+         if self.xgrammar_logits_processor is None:
++            if self.max_batch_size is not None:
++                batch_size = self.tensor_adapter.shape(logits)[0]
++                if batch_size > self.max_batch_size:
++                    raise ValueError(
++                        f"Batch size {batch_size} exceeds maximum allowed "
++                        f"batch size {self.max_batch_size}"
++                    )
+             self.xgrammar_logits_processor = self.xgr.contrib.hf.LogitsProcessor(
+                 self.compiled_grammar
+             )
+@@ -79,7 +91,9 @@ class XGrammarBackend(BaseBackend):
+         self.grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+ 
+     def get_json_schema_logits_processor(
+-        self, json_schema: str
++        self,
++        json_schema: str,
++        validate_grammar: Optional[Callable[[str], None]] = None,
+     ) -> "LogitsProcessor":
+         """Create a logits processor from a JSON schema.
+ 
+@@ -87,6 +101,9 @@ class XGrammarBackend(BaseBackend):
+         ----------
+         json_schema: str
+             The JSON schema to create a logits processor from.
++        validate_grammar: Optional[Callable[[str], None]]
++            Optional callable to validate the grammar before compilation.
++            Should raise an exception if validation fails.
+ 
+         Returns
+         -------
+@@ -94,18 +111,27 @@ class XGrammarBackend(BaseBackend):
+             The logits processor to use to constrain the generation.
+ 
+         """
++        if validate_grammar is not None:
++            validate_grammar(json_schema)
+         compiled_grammar = self.grammar_compiler.compile_json_schema(
+             json_schema
+         )
+         return XGrammarLogitsProcessor(compiled_grammar)
+ 
+-    def get_regex_logits_processor(self, regex: str) -> "LogitsProcessor":
++    def get_regex_logits_processor(
++        self,
++        regex: str,
++        validate_grammar: Optional[Callable[[str], None]] = None,
++    ) -> "LogitsProcessor":
+         """Create a logits processor from a regex.
+ 
+         Parameters
+         ----------
+         regex: str
+             The regex to create a logits processor from.
++        validate_grammar: Optional[Callable[[str], None]]
++            Optional callable to validate the grammar before compilation.
++            Should raise an exception if validation fails.
+ 
+         Returns
+         -------
+@@ -113,16 +139,25 @@ class XGrammarBackend(BaseBackend):
+             The logits processor to use to constrain the generation.
+ 
+         """
++        if validate_grammar is not None:
++            validate_grammar(regex)
+         compiled_grammar = self.grammar_compiler.compile_regex(regex)
+         return XGrammarLogitsProcessor(compiled_grammar)
+ 
+-    def get_cfg_logits_processor(self, grammar: str) -> "LogitsProcessor":
++    def get_cfg_logits_processor(
++        self,
++        grammar: str,
++        validate_grammar: Optional[Callable[[str], None]] = None,
++    ) -> "LogitsProcessor":
+         """Create a logits processor from a context-free grammar.
+ 
+         Parameters
+         ----------
+         grammar: str
+             The context-free grammar to create a logits processor from.
++        validate_grammar: Optional[Callable[[str], None]]
++            Optional callable to validate the grammar before compilation.
++            Should raise an exception if validation fails.
+ 
+         Returns
+         -------
+@@ -130,5 +165,7 @@ class XGrammarBackend(BaseBackend):
+             The logits processor to use to constrain the generation.
+ 
+         """
++        if validate_grammar is not None:
++            validate_grammar(grammar)
+         compiled_grammar = self.grammar_compiler.compile_grammar(grammar)
+         return XGrammarLogitsProcessor(compiled_grammar)

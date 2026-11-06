@@ -1,0 +1,85 @@
+diff --git a/Tests/test_image.py b/Tests/test_image.py
+index c2e850c36..8014334c5 100644
+--- a/Tests/test_image.py
++++ b/Tests/test_image.py
+@@ -235,6 +235,32 @@ class TestImage:
+             with pytest.raises(ValueError):
+                 im.save(temp_file)
+ 
++    def test_dry_run(self, tmp_path: Path) -> None:
++        temp_file = tmp_path / "temp.png"
++        im = hopper()
++        im.save(temp_file, dry_run=True)
++        assert not os.path.exists(temp_file)
++
++        im = Image.new("CMYK", (10, 10))
++        with pytest.raises(OSError):
++            im.save(tmp_path / "temp.png", dry_run=True)
++        assert not os.path.exists(tmp_path / "temp.png")
++
++    def test_save_preserve_readonly(self, tmp_path: Path) -> None:
++        data = bytearray(b"\xff")
++        im = Image.frombuffer("L", (1, 1), data, "raw", "L", 0, 1)
++        assert im.readonly
++
++        im.save(tmp_path / "temp.bmp", preserve_readonly=True)
++        assert im.readonly
++        data[0] = 64
++        assert im.getpixel((0, 0)) == 64
++
++        im.save(tmp_path / "temp2.bmp")
++        assert not im.readonly
++        data[0] = 128
++        assert im.getpixel((0, 0)) == 64
++
+     def test_internals(self) -> None:
+         im = Image.new("L", (100, 100))
+         im.readonly = 1
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 233df592c..97fa32e06 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -2505,6 +2505,13 @@ class Image:
+              red = Image.new("RGB", (1, 1), "#f00")
+              red.encoderinfo = {"xmp": b"test"}
+              black.save("out.mpo", save_all=True, append_images=[red])
++        :param dry_run: If True, process the image for saving but don't write
++           it to disk. Any errors that would occur during saving are still
++           raised.
++        :param preserve_readonly: If True, the image's ``readonly`` state is
++           kept, so that an image created with :py:func:`~PIL.Image.frombuffer`
++           continues to reflect changes to the underlying buffer after saving.
++           Defaults to False, in which case a readonly image is copied first.
+         :returns: None
+         :exception ValueError: If the output format could not be determined
+            from the file name.  Use the format option to solve this.
+@@ -2540,10 +2547,15 @@ class Image:
+                 msg = f"unknown file extension: {ext}"
+                 raise ValueError(msg) from e
+ 
+-        # may mutate self!
+-        self._ensure_mutable()
++        preserve_readonly = params.pop("preserve_readonly", False)
++        if preserve_readonly:
++            self.load()
++        else:
++            # may mutate self!
++            self._ensure_mutable()
+ 
+         save_all = params.pop("save_all", None)
++        dry_run = params.pop("dry_run", False)
+         self.encoderinfo = {**getattr(self, "encoderinfo", {}), **params}
+         self.encoderconfig: tuple[Any, ...] = ()
+ 
+@@ -2559,7 +2571,10 @@ class Image:
+             save_handler = SAVE[format.upper()]
+ 
+         created = False
+-        if open_fp:
++        if dry_run:
++            open_fp = False
++            fp = io.BytesIO()
++        elif open_fp:
+             created = not os.path.exists(filename)
+             if params.get("append", False):
+                 # Open also for reading ("+"), because TIFF save_all

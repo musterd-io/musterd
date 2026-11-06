@@ -1,0 +1,118 @@
+diff --git a/llama-index-core/llama_index/core/base/llms/types.py b/llama-index-core/llama_index/core/base/llms/types.py
+index dedf4ad1e..8a4eab347 100644
+--- a/llama-index-core/llama_index/core/base/llms/types.py
++++ b/llama-index-core/llama_index/core/base/llms/types.py
+@@ -10,6 +10,7 @@ from typing import (
+     Annotated,
+     Any,
+     AsyncGenerator,
++    Callable,
+     Generator,
+     List,
+     Literal,
+@@ -36,6 +37,18 @@ from llama_index.core.schema import ImageDocument
+ from llama_index.core.utils import resolve_binary
+ 
+ 
++def _check_max_bytes(
++    data_buffer: BytesIO, max_bytes: Optional[int], method_name: str
++) -> int:
++    """Return the buffer size, raising a ValueError if it exceeds max_bytes."""
++    size = data_buffer.getbuffer().nbytes
++    if max_bytes is not None and size > max_bytes:
++        raise ValueError(
++            f"{method_name} exceeds maximum allowed size ({size} > {max_bytes})"
++        )
++    return size
++
++
+ class MessageRole(str, Enum):
+     """Message role."""
+ 
+@@ -110,20 +123,25 @@ class ImageBlock(BaseModel):
+             guess = filetype.guess(img_data)
+             self.image_mimetype = guess.mime if guess else None
+ 
+-    def resolve_image(self, as_base64: bool = False) -> BytesIO:
++    def resolve_image(
++        self, as_base64: bool = False, max_bytes: Optional[int] = None
++    ) -> BytesIO:
+         """
+         Resolve an image such that PIL can read it.
+ 
+         Args:
+             as_base64 (bool): whether the resolved image should be returned as base64-encoded bytes
++            max_bytes (Optional[int]): if set, raise a ValueError when the resolved buffer exceeds this size
+ 
+         """
+-        return resolve_binary(
++        data_buffer = resolve_binary(
+             raw_bytes=self.image,
+             path=self.path,
+             url=str(self.url) if self.url else None,
+             as_base64=as_base64,
+         )
++        _check_max_bytes(data_buffer, max_bytes, "resolve_image")
++        return data_buffer
+ 
+ 
+ class AudioBlock(BaseModel):
+@@ -170,20 +188,31 @@ class AudioBlock(BaseModel):
+             guess = filetype.guess(audio_data)
+             self.format = guess.extension if guess else None
+ 
+-    def resolve_audio(self, as_base64: bool = False) -> BytesIO:
++    def resolve_audio(
++        self,
++        as_base64: bool = False,
++        max_bytes: Optional[int] = None,
++        on_resolve: Optional[Callable[[int], None]] = None,
++    ) -> BytesIO:
+         """
+         Resolve an audio such that PIL can read it.
+ 
+         Args:
+             as_base64 (bool): whether the resolved audio should be returned as base64-encoded bytes
++            max_bytes (Optional[int]): if set, raise a ValueError when the resolved buffer exceeds this size
++            on_resolve (Optional[Callable[[int], None]]): callback invoked with the final byte size of the resolved buffer
+ 
+         """
+-        return resolve_binary(
++        data_buffer = resolve_binary(
+             raw_bytes=self.audio,
+             path=self.path,
+             url=str(self.url) if self.url else None,
+             as_base64=as_base64,
+         )
++        size = _check_max_bytes(data_buffer, max_bytes, "resolve_audio")
++        if on_resolve is not None:
++            on_resolve(size)
++        return data_buffer
+ 
+ class DocumentBlock(BaseModel):
+     block_type: Literal["document"] = "document"
+@@ -211,16 +240,22 @@ class DocumentBlock(BaseModel):
+ 
+         return self
+ 
+-    def resolve_document(self) -> BytesIO:
++    def resolve_document(self, max_bytes: Optional[int] = None) -> BytesIO:
+         """
+         Resolve a document such that it is represented by a BufferIO object.
++
++        Args:
++            max_bytes (Optional[int]): if set, raise a ValueError when the resolved buffer exceeds this size
++
+         """
+-        return resolve_binary(
++        data_buffer = resolve_binary(
+             raw_bytes=self.data,
+             path=self.path,
+             url=str(self.url) if self.url else None,
+             as_base64=False,
+         )
++        _check_max_bytes(data_buffer, max_bytes, "resolve_document")
++        return data_buffer
+ 
+     def _get_b64_string(self, data_buffer: BytesIO) -> str:
+         """

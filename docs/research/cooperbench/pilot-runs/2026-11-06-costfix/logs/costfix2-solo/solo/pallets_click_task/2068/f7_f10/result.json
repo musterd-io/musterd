@@ -1,0 +1,30 @@
+{
+  "repo": "pallets_click_task",
+  "task_id": 2068,
+  "features": [
+    7,
+    10
+  ],
+  "setting": "solo",
+  "run_id": "0cc7c537",
+  "run_name": "costfix2-solo",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T20:45:35.759465",
+  "ended_at": "2026-11-06T20:46:34.321003",
+  "duration_seconds": 58.561538,
+  "agent": {
+    "status": "Submitted",
+    "cost": 0.10262559999999998,
+    "steps": 4,
+    "input_tokens": 8,
+    "output_tokens": 1998,
+    "cache_read_tokens": 72568,
+    "cache_write_tokens": 9624,
+    "patch_lines": 86,
+    "error": null
+  },
+  "total_cost": 0.10262559999999998,
+  "total_steps": 4,
+  "log_dir": "logs/costfix2-solo/solo/pallets_click_task/2068/f7_f10"
+}

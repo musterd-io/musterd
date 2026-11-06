@@ -1,0 +1,93 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..61bb6020b 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -179,22 +179,58 @@ impl Str {
+     /// Extracts the first grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
++    pub fn first(
++        &self,
++        /// A string of characters to strip from the start of the string before
++        /// extracting the first grapheme cluster.
++        #[named]
++        strip: Option<Str>,
++        /// Number of characters to return as an array. If omitted, returns a
++        /// single string.
++        #[named]
++        count: Option<i64>,
++    ) -> StrResult<Value> {
++        let s = match &strip {
++            Some(chars) if !chars.is_empty() => {
++                self.0.trim_start_matches(|c: char| chars.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        if let Some(count) = count {
++            return take_graphemes(s, count, false);
++        }
++        s.graphemes(true)
+             .next()
+-            .map(Into::into)
++            .map(|c| Value::Str(c.into()))
+             .ok_or_else(string_is_empty)
+     }
+ 
+     /// Extracts the last grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
++    pub fn last(
++        &self,
++        /// A string of characters to strip from the end of the string before
++        /// extracting the last grapheme cluster.
++        #[named]
++        strip: Option<Str>,
++        /// Number of characters to return as an array. If omitted, returns a
++        /// single string.
++        #[named]
++        count: Option<i64>,
++    ) -> StrResult<Value> {
++        let s = match &strip {
++            Some(chars) if !chars.is_empty() => {
++                self.0.trim_end_matches(|c: char| chars.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        if let Some(count) = count {
++            return take_graphemes(s, count, true);
++        }
++        s.graphemes(true)
+             .next_back()
+-            .map(Into::into)
++            .map(|c| Value::Str(c.into()))
+             .ok_or_else(string_is_empty)
+     }
+ 
+@@ -811,6 +847,21 @@ fn captures_to_dict(cap: regex::Captures) -> Dict {
+     }
+ }
+ 
++/// Extracts `count` grapheme clusters from the start or end of a string.
++fn take_graphemes(s: &str, count: i64, from_end: bool) -> StrResult<Value> {
++    if count < 1 {
++        bail!("count must be at least 1");
++    }
++    let graphemes: Vec<&str> = s.graphemes(true).collect();
++    let len = graphemes.len();
++    let n = usize::try_from(count).unwrap_or(usize::MAX);
++    if n > len {
++        bail!("not enough characters (requested {count}, but string only has {len})");
++    }
++    let slice = if from_end { &graphemes[len - n..] } else { &graphemes[..n] };
++    Ok(Value::Array(slice.iter().map(|&g| Value::Str(g.into())).collect()))
++}
++
+ /// The out of bounds access error message.
+ #[cold]
+ fn out_of_bounds(index: i64, len: usize) -> EcoString {

@@ -1,0 +1,12 @@
+{
+  "run_name": "costfix-smoke-lean",
+  "completed_at": "2026-11-06T19:23:30.639227",
+  "pass_rate": null,
+  "total_tasks": 1,
+  "completed": 1,
+  "skipped": 0,
+  "failed": 0,
+  "total_cost": 0.5975543999999999,
+  "total_time_seconds": 135.53796243667603,
+  "results": []
+}

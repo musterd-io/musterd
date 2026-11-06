@@ -1,0 +1,115 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..6147888d8 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -179,23 +179,75 @@ impl Str {
+     /// Extracts the first grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn first(
++        &self,
++        /// Number of grapheme clusters to extract from the start of the
++        /// string. Fails if this exceeds the string's length.
++        #[named]
++        #[default(1)]
++        repeat: i64,
++        /// A set of characters to strip from the start of the string before
++        /// extracting.
++        #[named]
++        strip: Option<Str>,
++    ) -> StrResult<Str> {
++        let repeat = check_repeat(repeat)?;
++        let s = match &strip {
++            Some(set) if !set.is_empty() => {
++                self.0.trim_start_matches(|c| set.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        if s.is_empty() {
++            return Err(string_is_empty());
++        }
++        let mut end = 0;
++        let mut count = 0;
++        for g in s.graphemes(true).take(repeat) {
++            end += g.len();
++            count += 1;
++        }
++        if count < repeat {
++            return Err(not_enough_characters(repeat, s.graphemes(true).count()));
++        }
++        Ok(s[..end].into())
+     }
+ 
+     /// Extracts the last grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next_back()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn last(
++        &self,
++        /// Number of grapheme clusters to extract from the end of the
++        /// string. Fails if this exceeds the string's length.
++        #[named]
++        #[default(1)]
++        repeat: i64,
++        /// A set of characters to strip from the end of the string before
++        /// extracting.
++        #[named]
++        strip: Option<Str>,
++    ) -> StrResult<Str> {
++        let repeat = check_repeat(repeat)?;
++        let s = match &strip {
++            Some(set) if !set.is_empty() => {
++                self.0.trim_end_matches(|c| set.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        if s.is_empty() {
++            return Err(string_is_empty());
++        }
++        let mut start = s.len();
++        let mut count = 0;
++        for g in s.graphemes(true).rev().take(repeat) {
++            start -= g.len();
++            count += 1;
++        }
++        if count < repeat {
++            return Err(not_enough_characters(repeat, s.graphemes(true).count()));
++        }
++        Ok(s[start..].into())
+     }
+ 
+     /// Extracts the first grapheme cluster after the specified index. Returns
+@@ -835,6 +887,22 @@ fn string_is_empty() -> EcoString {
+     "string is empty".into()
+ }
+ 
++/// Validates the `repeat` argument of `str.first` and `str.last`.
++fn check_repeat(repeat: i64) -> StrResult<usize> {
++    if repeat < 1 {
++        return Err("repeat must be at least 1".into());
++    }
++    Ok(usize::try_from(repeat).unwrap_or(usize::MAX))
++}
++
++/// The error message when a string has fewer characters than requested.
++#[cold]
++fn not_enough_characters(requested: usize, available: usize) -> EcoString {
++    eco_format!(
++        "not enough characters (requested {requested}, but string only has {available})"
++    )
++}
++
+ /// A regular expression.
+ ///
+ /// Can be used as a [show rule selector]($styling/#show-rules) and with

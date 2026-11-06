@@ -1,0 +1,30 @@
+{
+  "repo": "pallets_jinja_task",
+  "task_id": 1559,
+  "features": [
+    1,
+    8
+  ],
+  "setting": "solo",
+  "run_id": "0c8d4fd2",
+  "run_name": "costfix2-solo",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T20:56:35.852798",
+  "ended_at": "2026-11-06T20:58:24.521355",
+  "duration_seconds": 108.668557,
+  "agent": {
+    "status": "Submitted",
+    "cost": 0.29141419999999996,
+    "steps": 7,
+    "input_tokens": 14,
+    "output_tokens": 7588,
+    "cache_read_tokens": 177241,
+    "cache_write_tokens": 20830,
+    "patch_lines": 346,
+    "error": null
+  },
+  "total_cost": 0.29141419999999996,
+  "total_steps": 7,
+  "log_dir": "logs/costfix2-solo/solo/pallets_jinja_task/1559/f1_f8"
+}

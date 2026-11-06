@@ -1,0 +1,14 @@
+[2026-11-06T19:21:08Z] smoke start: base, lean, solo (claude-opus-5-5)
+[2026-11-06T19:23:41Z] base exit=0
+[2026-11-06T19:23:41Z] lean exit=0
+[2026-11-06T19:23:41Z] solo exit=0
+[2026-11-06T19:24:02Z] base eval exit=0
+[2026-11-06T19:24:23Z] lean eval exit=0
+[2026-11-06T19:24:43Z] solo eval exit=0
+[2026-11-06T19:24:44Z] base: cost 0.614 both_passed True merge identical patches {'agent2.patch': 4147, 'agent3.patch': 4147}
+[2026-11-06T19:24:44Z] lean: cost 0.598 both_passed False merge identical patches {'agent2.patch': 4207, 'agent3.patch': 4207}
+[2026-11-06T19:24:44Z] solo: cost 0.143 both_passed False merge None patches {'solo.patch': 4137}
+[2026-11-06T19:24:44Z] base init musterd tools: agent1_stream.jsonl 32; agent2_stream.jsonl 32; 
+[2026-11-06T19:24:44Z] base lanes: 36
+[2026-11-06T19:24:44Z] lean init musterd tools: agent1_stream.jsonl 26; agent2_stream.jsonl 26; 
+[2026-11-06T19:24:44Z] lean lanes: 39

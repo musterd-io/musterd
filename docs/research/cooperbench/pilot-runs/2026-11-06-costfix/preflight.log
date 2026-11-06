@@ -1,0 +1,4 @@
+[2026-11-06T19:19:53Z] musterd 0.7.1 · MUSTERD_REF=4a1422cc4204be0680f0c7e23f558e9e2f05667c · claude 2.1.307 (Claude Code) · df 52G free
+[2026-11-06T19:19:58Z] api check: ok
+[2026-11-06T19:19:58Z] arm tests: /opt/cb-venv/bin/python3: No module named pytest
+[2026-11-06T19:19:58Z] preflight done

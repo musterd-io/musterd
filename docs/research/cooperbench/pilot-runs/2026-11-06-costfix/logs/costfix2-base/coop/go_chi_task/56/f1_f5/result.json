@@ -1,0 +1,46 @@
+{
+  "repo": "go_chi_task",
+  "task_id": 56,
+  "features": [
+    1,
+    5
+  ],
+  "setting": "coop",
+  "run_id": "24d16f93",
+  "run_name": "costfix2-base",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T22:56:54.661157",
+  "ended_at": "2026-11-06T23:00:45.161447",
+  "duration_seconds": 230.50029,
+  "agents": {
+    "agent2": {
+      "feature_id": 5,
+      "status": "Submitted",
+      "cost": 0.45797499999999997,
+      "steps": 19,
+      "input_tokens": 32,
+      "output_tokens": 7221,
+      "cache_read_tokens": 517560,
+      "cache_write_tokens": 41983,
+      "patch_lines": 371,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 1,
+      "status": "Submitted",
+      "cost": 0.41731660000000004,
+      "steps": 22,
+      "input_tokens": 38,
+      "output_tokens": 8253,
+      "cache_read_tokens": 654623,
+      "cache_write_tokens": 24236,
+      "patch_lines": 371,
+      "error": null
+    }
+  },
+  "total_cost": 0.8752916,
+  "total_steps": 41,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix2-base/coop/go_chi_task/56/f1_f5"
+}

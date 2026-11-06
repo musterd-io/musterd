@@ -1,0 +1,27 @@
+
+cooperbench costfix-smoke-solo (solo)
+task: samuelcolvin_dirty_equals_task/43 features: [2, 3]
+agent: claude_code
+model: claude-opus-5-5
+
+  solo starting...
+mini_swe_agent_v2.environment: DEBUG: Starting container with command: docker   
+run -d --name minisweagent-982a184c -w /workspace/repo --entrypoint /bin/bash   
+--rm akhatua/cooperbench-samuelcolvin-dirty-equals:task43 -c 'sleep 2h'         
+mini_swe_agent_v2.environment: INFO: Started container minisweagent-982a184c    
+with ID 173ddfdee060ee92887bf6501bdd3002e6de4718c32da626fe2df94b9310aa22        
+[11/06/26 19:21:15] INFO     Started container                     docker.py:108
+                             minisweagent-982a184c with ID                      
+                             173ddfdee060ee92887bf6501bdd3002e6de4              
+                             718c32da626fe2df94b9310aa22                        
+
+  agent    feature    status        cost    steps    lines  
+  solo     2,3        Submitted    $0.14        5      117  
+
+total: $0.14 time: 73s
+
+runs:  1 completed
+cost:  $0.14
+time:  1m 13s (agent: 1m 13s)
+
+logs: logs/costfix-smoke-solo/solo

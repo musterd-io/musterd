@@ -1,0 +1,103 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 7b97bfb..d7f320e 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -485,11 +485,15 @@ class Editor:
+         env: cabc.Mapping[str, str] | None = None,
+         require_save: bool = True,
+         extension: str = ".txt",
++        working_dir: str | None = None,
++        escape_shell: bool = False,
+     ) -> None:
+         self.editor = editor
+         self.env = env
+         self.require_save = require_save
+         self.extension = extension
++        self.working_dir = working_dir
++        self.escape_shell = escape_shell
+ 
+     def get_editor(self) -> str:
+         if self.editor is not None:
+@@ -515,8 +519,36 @@ class Editor:
+             environ = os.environ.copy()
+             environ.update(self.env)
+ 
++        cwd: str | None = None
++
++        if self.working_dir is not None:
++            cwd = os.fspath(self.working_dir)
++
++            if not os.path.isdir(cwd):
++                raise ClickException(
++                    _("{editor}: Working directory {dir!r} does not exist").format(
++                        editor=editor, dir=cwd
++                    )
++                )
++
++            # Resolve a relative filename before changing directories so
++            # it still points at the same file for the editor.
++            filename = os.path.abspath(filename)
++
++        if self.escape_shell:
++            import shlex
++
++            try:
++                editor_cmd = " ".join(shlex.quote(arg) for arg in shlex.split(editor))
++            except ValueError:
++                editor_cmd = shlex.quote(editor)
++
++            command = f"{editor_cmd} {shlex.quote(filename)}"
++        else:
++            command = f'{editor} "{filename}"'
++
+         try:
+-            c = subprocess.Popen(f'{editor} "{filename}"', env=environ, shell=True)
++            c = subprocess.Popen(command, env=environ, shell=True, cwd=cwd)
+             exit_code = c.wait()
+             if exit_code != 0:
+                 raise ClickException(
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e14e670..520059a 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -650,6 +650,8 @@ def edit(
+     require_save: bool = True,
+     extension: str = ".txt",
+     filename: str | None = None,
++    working_dir: str | None = None,
++    escape_shell: bool = False,
+ ) -> t.AnyStr | None:
+     r"""Edits the given text in the defined editor.  If an editor is given
+     (should be the full path to the executable but the regular operating
+@@ -677,10 +679,30 @@ def edit(
+     :param filename: if provided it will edit this file instead of the
+                      provided text contents.  It will not use a temporary
+                      file as an indirection in that case.
++    :param working_dir: if provided, the editor process is started with
++                        this directory as its current working directory.
++    :param escape_shell: if this is true, the filename and the editor
++                         command arguments are escaped with
++                         :func:`shlex.quote` before being passed to the
++                         shell, so that special shell characters are
++                         treated literally.
++
++    .. versionchanged:: 8.2
++        Added the ``working_dir`` parameter.
++
++    .. versionchanged:: 8.2
++        Added the ``escape_shell`` parameter.
+     """
+     from ._termui_impl import Editor
+ 
+-    ed = Editor(editor=editor, env=env, require_save=require_save, extension=extension)
++    ed = Editor(
++        editor=editor,
++        env=env,
++        require_save=require_save,
++        extension=extension,
++        working_dir=working_dir,
++        escape_shell=escape_shell,
++    )
+ 
+     if filename is None:
+         return ed.edit(text)

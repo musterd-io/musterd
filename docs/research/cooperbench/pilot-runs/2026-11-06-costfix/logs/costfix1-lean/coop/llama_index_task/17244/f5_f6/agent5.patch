@@ -1,0 +1,51 @@
+diff --git a/llama-index-core/llama_index/core/base/llms/types.py b/llama-index-core/llama_index/core/base/llms/types.py
+index 00e30cf23..ffafc4eed 100644
+--- a/llama-index-core/llama_index/core/base/llms/types.py
++++ b/llama-index-core/llama_index/core/base/llms/types.py
+@@ -55,6 +55,7 @@ class ImageBlock(BaseModel):
+     url: AnyUrl | str | None = None
+     image_mimetype: str | None = None
+     detail: str | None = None
++    encoding: Literal["base64", "raw"] = "base64"
+ 
+     @field_validator("url", mode="after")
+     @classmethod
+@@ -75,14 +76,34 @@ class ImageBlock(BaseModel):
+         if not self.image:
+             return self
+ 
+-        if not self.image_mimetype:
+-            guess = filetype.guess(self.image)
+-            self.image_mimetype = guess.mime if guess else None
++        self.get_image_mimetype()
+ 
+-        self.image = base64.b64encode(self.image)
++        if self.encoding == "base64":
++            self.image = base64.b64encode(self.image)
+ 
+         return self
+ 
++    def get_image_mimetype(self) -> str | None:
++        """Return the image mimetype, guessing and caching it when not set.
++
++        The guess only uses in-memory image data: the path or the URL are
++        never loaded, to avoid resource-intense operations.
++        """
++        if self.image_mimetype:
++            return self.image_mimetype
++
++        if self.image:
++            guess = filetype.guess(self.image)
++            if guess is None:
++                # the stored image data might be base64-encoded
++                try:
++                    guess = filetype.guess(base64.b64decode(self.image, validate=True))
++                except Exception:
++                    guess = None
++            self.image_mimetype = guess.mime if guess else None
++
++        return self.image_mimetype
++
+     def resolve_image(self, as_base64: bool = False) -> BytesIO:
+         """Resolve an image such that PIL can read it.
+ 

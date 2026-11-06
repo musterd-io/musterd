@@ -1,0 +1,13 @@
+skipping 49 already evaluated
+
+cooperbench eval costfix2-base
+runs: 1
+backend: docker
+
+  evaluating go_chi_task/56 [1,5]
+✓ pass both features
+
+  passed       1       
+  failed       0       
+  pass rate    100.0%  
+

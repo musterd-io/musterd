@@ -1,0 +1,195 @@
+diff --git a/Tests/test_image_quantize.py b/Tests/test_image_quantize.py
+index bd9db362c..7789bfcec 100644
+--- a/Tests/test_image_quantize.py
++++ b/Tests/test_image_quantize.py
+@@ -85,3 +85,68 @@ def test_transparent_colors_equal():
+     converted = im.quantize()
+     converted_px = converted.load()
+     assert converted_px[0, 0] == converted_px[0, 1]
++
++
++def test_quantize_error_threshold():
++    image = hopper()
++
++    # No threshold uses the requested number of colors
++    converted = image.quantize(64)
++    assert len(converted.getcolors()) == 64
++
++    # A loose threshold uses fewer colors
++    loose = image.quantize(64, error_threshold=1000)
++    assert len(loose.getcolors()) < 64
++    assert image._quantize_error(loose) <= 1000
++
++    # An unreachable threshold falls back to the maximum number of colors
++    strict = image.quantize(64, error_threshold=0)
++    assert len(strict.getcolors()) == 64
++
++
++def test_quantize_error_threshold_invalid():
++    with pytest.raises(ValueError):
++        hopper().quantize(error_threshold=-1)
++
++
++def test_quantize_lightness_factor():
++    image = hopper()
++    default = image.quantize(16)
++    unchanged = image.quantize(16, lightness_factor=1.0)
++    assert default.getpalette() == unchanged.getpalette()
++
++    brighter = image.quantize(16, lightness_factor=1.5)
++    darker = image.quantize(16, lightness_factor=0.5)
++    for d, b, k in zip(default.getpalette(), brighter.getpalette(),
++                       darker.getpalette()):
++        assert b == min(255, round(d * 1.5))
++        assert k == round(d * 0.5)
++
++
++def test_quantize_lightness_factor_clamped():
++    palette = hopper().quantize(16, lightness_factor=100).getpalette()
++    assert all(0 <= v <= 255 for v in palette)
++
++
++def test_quantize_lightness_factor_rgba_keeps_alpha():
++    image = hopper("RGBA")
++    default = image.quantize(16)
++    darker = image.quantize(16, lightness_factor=0.5)
++    assert default.im.getpalette("RGBA", "RGBA")[3::4] == darker.im.getpalette(
++        "RGBA", "RGBA"
++    )[3::4]
++
++
++def test_quantize_lightness_factor_with_palette():
++    image = hopper()
++    palette = image.quantize(8)
++    original = palette.getpalette()
++    brighter = image.quantize(palette=palette, lightness_factor=1.2)
++    assert palette.getpalette() == original
++    assert brighter.getpalette()[:3] == [min(255, round(v * 1.2)) for v in original[:3]]
++
++
++@pytest.mark.parametrize("factor", (0, -1))
++def test_quantize_lightness_factor_invalid(factor):
++    with pytest.raises(ValueError):
++        hopper().quantize(lightness_factor=factor)
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 0fca3fa5c..2506df05b 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -1048,7 +1048,16 @@ class Image:
+                 new_im.info["transparency"] = trns
+         return new_im
+ 
+-    def quantize(self, colors=256, method=None, kmeans=0, palette=None, dither=1):
++    def quantize(
++        self,
++        colors=256,
++        method=None,
++        kmeans=0,
++        palette=None,
++        dither=1,
++        error_threshold=None,
++        lightness_factor=1.0,
++    ):
+         """
+         Convert the image to 'P' mode with the specified number
+         of colors.
+@@ -1073,12 +1082,26 @@ class Image:
+            mode "RGB" to "P" or from "RGB" or "L" to "1".
+            Available methods are :data:`NONE` or :data:`FLOYDSTEINBERG` (default).
+            Default: 1 (legacy setting)
++        :param error_threshold: Maximum acceptable mean square error between
++           the original image and the quantized version. If given, the fewest
++           number of colors (up to ``colors``) that meets this threshold is
++           used. If the threshold cannot be met, ``colors`` colors are used.
++           Default: None (always use ``colors`` colors)
++        :param lightness_factor: Brightness adjustment applied to the palette
++           after quantization. Values greater than 1.0 brighten the image,
++           values less than 1.0 darken it. Must be greater than 0.
++           Default: 1.0 (no change)
+         :returns: A new image
+ 
+         """
+ 
+         self.load()
+ 
++        if lightness_factor <= 0:
++            raise ValueError("lightness_factor must be greater than 0")
++        if error_threshold is not None and error_threshold < 0:
++            raise ValueError("error_threshold must be non-negative")
++
+         if method is None:
+             # defaults:
+             method = MEDIANCUT
+@@ -1104,17 +1127,71 @@ class Image:
+             im = self.im.convert("P", dither, palette.im)
+             new_im = self._new(im)
+             new_im.palette = palette.palette.copy()
++            if lightness_factor != 1.0:
++                new_im._adjust_palette_lightness(lightness_factor)
+             return new_im
+ 
++        if error_threshold is None:
++            im = self._quantize_colors(colors, method, kmeans)
++        else:
++            # Binary search for the fewest colors meeting the threshold
++            im = self._quantize_colors(colors, method, kmeans)
++            if self._quantize_error(im) <= error_threshold:
++                low, high = 1, colors - 1
++                while low <= high:
++                    mid = (low + high) // 2
++                    candidate = self._quantize_colors(mid, method, kmeans)
++                    if self._quantize_error(candidate) <= error_threshold:
++                        im = candidate
++                        high = mid - 1
++                    else:
++                        low = mid + 1
++
++        if lightness_factor != 1.0:
++            im._adjust_palette_lightness(lightness_factor)
++
++        return im
++
++    def _quantize_colors(self, colors, method, kmeans):
+         im = self._new(self.im.quantize(colors, method, kmeans))
+ 
+         from . import ImagePalette
+ 
+         mode = im.im.getpalettemode()
+         im.palette = ImagePalette.ImagePalette(mode, im.im.getpalette(mode, mode))
+-
+         return im
+ 
++    def _quantize_error(self, quantized):
++        """Mean square error between this image and a quantized version."""
++        from . import ImageChops
++
++        mode = self.mode if self.mode in ("L", "RGB", "RGBA") else "RGB"
++        original = self if self.mode == mode else self.convert(mode)
++        diff = ImageChops.difference(original, quantized.convert(mode))
++        histogram = diff.histogram()
++        bands = len(mode)
++        total = sum((i % 256) ** 2 * count for i, count in enumerate(histogram))
++        pixels = diff.size[0] * diff.size[1] * bands
++        return total / pixels if pixels else 0
++
++    def _adjust_palette_lightness(self, factor):
++        from . import ImagePalette
++
++        mode = self.im.getpalettemode()
++        channels = len(mode)
++        data = bytearray(self.im.getpalette(mode, mode))
++        for i in range(len(data)):
++            # Leave the alpha channel unchanged
++            if mode == "RGBA" and i % channels == 3:
++                continue
++            data[i] = max(0, min(255, int(round(data[i] * factor))))
++        if mode == "RGBA":
++            self.im.putpalette("RGBX", bytes(data))
++            self.im.putpalettealphas(bytes(data[3::4]))
++        else:
++            self.im.putpalette(mode, bytes(data))
++        self.palette = ImagePalette.ImagePalette(mode, self.im.getpalette(mode, mode))
++
+     def copy(self):
+         """
+         Copies this image. Use this method if you wish to paste things

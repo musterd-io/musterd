@@ -1,0 +1,35 @@
+{
+  "repo": "go_chi_task",
+  "task_id": 27,
+  "features": [
+    3,
+    4
+  ],
+  "setting": "coop",
+  "apply_status": {
+    "agent1": "applied",
+    "agent2": "applied"
+  },
+  "merge": {
+    "status": "identical",
+    "strategy": "skip-merge-identical",
+    "diff": "diff --git a/debug.go b/debug.go\nnew file mode 100644\nindex 0000000..311fe82\n--- /dev/null\n+++ b/debug.go\n@@ -0,0 +1,27 @@\n+package chi\n+\n+import (\n+\t\"log\"\n+\t\"os\"\n+\t\"sync/atomic\"\n+)\n+\n+// debugEnabled reports whether debug-level logging is turned on.\n+var debugEnabled int32\n+\n+// debugLogger is the logger used for debug-level output.\n+var debugLogger = log.New(os.Stderr, \"chi: \", log.LstdFlags)\n+\n+// EnableDebugLogging turns on debug-level logging of route pattern\n+// handling, such as pattern parsing and HTTP method detection. It is off\n+// by default.\n+func EnableDebugLogging() {\n+\tatomic.StoreInt32(&debugEnabled, 1)\n+}\n+\n+// debugLogf writes a debug-level log line when debug logging is enabled.\n+func debugLogf(format string, args ...interface{}) {\n+\tif atomic.LoadInt32(&debugEnabled) == 1 {\n+\t\tdebugLogger.Printf(\"[DEBUG] \"+format, args...)\n+\t}\n+}\ndiff --git a/mux.go b/mux.go\nindex 56fa4d2..026b7f3 100644\n--- a/mux.go\n+++ b/mux.go\n@@ -105,29 +105,45 @@ func (mx *Mux) Use(middlewares ...func(http.Handler) http.Handler) {\n }\n \n // Handle adds the route `pattern` that matches any http method to\n-// execute the `handler` http.Handler.\n+// execute the `handler` http.Handler. The pattern may optionally be\n+// prefixed with an HTTP method and a space, e.g. \"GET /users/{id}\" or\n+// \"POST /api/*\" for prefix matching.\n func (mx *Mux) Handle(pattern string, handler http.Handler) {\n+\tdebugLogf(\"Handle: registering pattern %q\", pattern)\n+\tmethod, path := mx.parsePattern(\"Handle\", pattern)\n+\tmx.handle(method, path, handler)\n+}\n+\n+// HandleFunc adds the route `pattern` that matches any http method to\n+// execute the `handlerFn` http.HandlerFunc. Like Handle, the pattern may\n+// optionally be prefixed with an HTTP method, e.g. \"GET /users/*\".\n+func (mx *Mux) HandleFunc(pattern string, handlerFn http.HandlerFunc) {\n+\tdebugLogf(\"HandleFunc: registering pattern %q\", pattern)\n+\tmethod, path := mx.parsePattern(\"HandleFunc\", pattern)\n+\tmx.handle(method, path, handlerFn)\n+}\n+\n+// parsePattern splits an optional \"METHOD \" prefix off of `pattern`,\n+// returning the method type and the remaining route path. Patterns without\n+// a method match all http methods.\n+func (mx *Mux) parsePattern(caller, pattern string) (methodTyp, string) {\n \tparts := strings.SplitN(pattern, \" \", 2)\n \tif len(parts) == 2 {\n \t\tmethodStr := strings.ToUpper(parts[0])\n-\t\tpath := parts[1]\n+\t\tpath := strings.TrimLeft(parts[1], \" \")\n \n \t\tmethod, ok := methodMap[methodStr]\n \t\tif !ok {\n+\t\t\tdebugLogf(\"%s: invalid HTTP method %q in pattern %q\", caller, methodStr, pattern)\n \t\t\tpanic(\"chi: invalid HTTP method specified in pattern: \" + methodStr)\n \t\t}\n \n-\t\tmx.handle(method, path, handler)\n-\t\treturn\n+\t\tdebugLogf(\"%s: detected method %q with path %q\", caller, methodStr, path)\n+\t\treturn method, path\n \t}\n \n-\tmx.handle(mALL, pattern, handler)\n-}\n-\n-// HandleFunc adds the route `pattern` that matches any http method to\n-// execute the `handlerFn` http.HandlerFunc.\n-func (mx *Mux) HandleFunc(pattern string, handlerFn http.HandlerFunc) {\n-\tmx.handle(mALL, pattern, handlerFn)\n+\tdebugLogf(\"%s: no method in pattern, matching all methods for path %q\", caller, pattern)\n+\treturn mALL, pattern\n }\n \n // Method adds the route `pattern` that matches `method` http method to\n"
+  },
+  "feature1": {
+    "passed": false,
+    "output": "Note: switching to '9436cc85db0d35be06e66b91b4f74bbc0295b07b'.\n\nYou are in 'detached HEAD' state. You can look around, make experimental\nchanges and commit them, and you can discard any commits you make in this\nstate without impacting any branches by switching back to a branch.\n\nIf you want to create a new branch to retain commits you create, you may\ndo so (now or later) by using -c with the switch command. Example:\n\n  git switch -c <new-branch-name>\n\nOr undo this operation with:\n\n  git switch -\n\nTurn off this advice by setting config variable advice.detachedHead to false\n\nHEAD is now at 9436cc8 go 1.22 ci (#898)\nHEAD is now at 9436cc8 go 1.22 ci (#898)\nReset to base: 9436cc85db0d35be06e66b91b4f74bbc0295b07b\nEnsuring clean repository state...\nHEAD is now at 9436cc8 go 1.22 ci (#898)\nApplying feature patch...\nFeature patch applied successfully.\nApplying test patch...\nTest patch applied successfully.\nAnalyzing test patch for test functions...\nFound test functions to run: ^(TestDebugLogging|TestErrorLogging|TestFormatLogging)$\nRunning Go tests...\nCleaning up repository...\nResetting to HEAD (HEAD) and cleaning...\nHEAD is now at 9436cc8 go 1.22 ci (#898)\nRemoving debug.go\nRemoving logging_test.go\nRepository cleaned.\n",
+    "exit_code": 1,
+    "tests_passed": 0,
+    "tests_failed": 0
+  },
+  "feature2": {
+    "passed": true,
+    "output": "HEAD is now at 9436cc8 go 1.22 ci (#898)\nHEAD is now at 9436cc8 go 1.22 ci (#898)\nReset to base: 9436cc85db0d35be06e66b91b4f74bbc0295b07b\nEnsuring clean repository state...\nHEAD is now at 9436cc8 go 1.22 ci (#898)\nApplying feature patch...\nFeature patch applied successfully.\nApplying test patch...\nTest patch applied successfully.\nAnalyzing test patch for test functions...\nFound test functions to run: ^(TestServerBaseContext|TestPrefixPatterns)$\nRunning Go tests...\n=== RUN   TestServerBaseContext\n--- PASS: TestServerBaseContext (0.00s)\n=== RUN   TestPrefixPatterns\n=== RUN   TestPrefixPatterns/GET_prefix_match\n=== RUN   TestPrefixPatterns/POST_prefix_match\n--- PASS: TestPrefixPatterns (0.00s)\n    --- PASS: TestPrefixPatterns/GET_prefix_match (0.00s)\n    --- PASS: TestPrefixPatterns/POST_prefix_match (0.00s)\nPASS\nok  \tgithub.com/go-chi/chi/v5\t0.006s\ntesting: warning: no tests to run\nPASS\nok  \tgithub.com/go-chi/chi/v5/middleware\t0.003s [no tests to run]\nTest execution completed!\nCleaning up repository...\nResetting to HEAD (HEAD) and cleaning...\nHEAD is now at 9436cc8 go 1.22 ci (#898)\nRemoving debug.go\nRepository cleaned.\n",
+    "exit_code": 0,
+    "tests_passed": 4,
+    "tests_failed": 0
+  },
+  "both_passed": false,
+  "error": null,
+  "evaluated_at": "2026-11-06T19:54:02.471476"
+}

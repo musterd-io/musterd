@@ -1,0 +1,12 @@
+{
+  "run_name": "costfix-smoke-solo",
+  "completed_at": "2026-11-06T19:22:28.087273",
+  "pass_rate": null,
+  "total_tasks": 1,
+  "completed": 1,
+  "skipped": 0,
+  "failed": 0,
+  "total_cost": 0.1426668,
+  "total_time_seconds": 73.15104937553406,
+  "results": []
+}

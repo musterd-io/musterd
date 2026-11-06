@@ -1,0 +1,46 @@
+{
+  "repo": "pallets_click_task",
+  "task_id": 2068,
+  "features": [
+    6,
+    7
+  ],
+  "setting": "coop",
+  "run_id": "60b18376",
+  "run_name": "costfix2-base",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T22:00:07.987472",
+  "ended_at": "2026-11-06T22:02:25.907704",
+  "duration_seconds": 137.920232,
+  "agents": {
+    "agent2": {
+      "feature_id": 7,
+      "status": "Submitted",
+      "cost": 0.19530360000000002,
+      "steps": 13,
+      "input_tokens": 20,
+      "output_tokens": 3252,
+      "cache_read_tokens": 295418,
+      "cache_write_tokens": 14220,
+      "patch_lines": 164,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 6,
+      "status": "Submitted",
+      "cost": 0.25046440000000003,
+      "steps": 17,
+      "input_tokens": 26,
+      "output_tokens": 4420,
+      "cache_read_tokens": 389827,
+      "cache_write_tokens": 16799,
+      "patch_lines": 164,
+      "error": null
+    }
+  },
+  "total_cost": 0.44576800000000005,
+  "total_steps": 30,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix2-base/coop/pallets_click_task/2068/f6_f7"
+}
