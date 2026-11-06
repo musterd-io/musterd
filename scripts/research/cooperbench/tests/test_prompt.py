@@ -44,4 +44,7 @@ def test_lean_block_keeps_the_shape_and_names_one_integrator():
     assert "joins you to the team" in base and "joins you to the team" not in lean
     assert "One of you integrates" in lean and "One of you integrates" not in base
     assert lean.rstrip().splitlines()[-1] == base.rstrip().splitlines()[-1]
-    assert all(len(line) <= 80 for line in lean.splitlines())
+    # Only the lines the lean arm adds are held to 80 columns; the tool table above them is the
+    # baseline's own, unchanged.
+    added = [line for line in lean.splitlines() if line not in base.splitlines()]
+    assert added and all(len(line) <= 80 for line in added)
