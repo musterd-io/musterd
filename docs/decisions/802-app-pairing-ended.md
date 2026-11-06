@@ -99,10 +99,13 @@ weakening decision 3: the phone never trusts, and never distinguishes, anything 
   pairing enrolls a kind `phone` device key and records it on the binding, and nothing revoked that
   key when the binding ended — nick's /live said "your 3 paired phones also sign" with one phone
   paired, one key per pairing round since Oct 29, each still standing authority for `device_key_admin`
-  and the recovery guard's "usable key stands". Because a supersession is derived, not recorded, the
-  fix is a sweep over the member's app bindings (`revokePhoneKeysOfEndedBindings`), run when a pairing
-  is confirmed, when one is revoked, and when the member's keys are listed; each revocation is audited
-  `device_key.revoked` with `via: binding_superseded` or `binding_revoked`.
+  and the recovery guard's "usable key stands". Three closes, by big-body's review of the first
+  landing (#3967): a revoked pairing revokes its phone key in the same transaction (`revokeBinding`);
+  the authority boundary refuses a phone key whose pairing is superseded or revoked at the spend
+  (`requireAuthority`, `activeDeviceKeys`), since a supersession is derived from the daemon key and no
+  row records it; and a sweep (`revokePhoneKeysOfEndedBindings`) runs once at daemon boot for rows
+  from before, and when a pairing is confirmed. Each revocation is audited `device_key.revoked` with
+  `via: binding_superseded` or `binding_revoked`. A read never revokes.
 
 ## Observability & Evaluation
 

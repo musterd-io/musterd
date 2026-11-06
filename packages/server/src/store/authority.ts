@@ -11,6 +11,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
+import { phoneKeyPairingEnded } from './appPairing.js';
 import { appendAudit } from './audit.js';
 import { listMembers } from './members.js';
 import { resolveCapabilities } from './rows.js';
@@ -152,12 +153,27 @@ export async function listDeviceKeys(
 }
 
 /** The member's keys that can still sign: enrolled and not revoked. */
+/** A phone key whose pairing was superseded or revoked. A key with no binding row (test fixtures,
+ *  pre-pairing enrollments) is left as it was: the lifecycle this closes is the pairing's. */
+async function pairingOver(db: Driver, teamId: string, keyId: string): Promise<boolean> {
+  const ended = await phoneKeyPairingEnded(db, teamId, keyId);
+  return ended === 'superseded' || ended === 'revoked';
+}
+
 export async function activeDeviceKeys(
   db: Driver,
   teamId: string,
   memberId: string,
 ): Promise<DeviceKey[]> {
-  return (await listDeviceKeys(db, teamId, memberId)).filter((k) => k.revokedAt === null);
+  const live = (await listDeviceKeys(db, teamId, memberId)).filter((k) => k.revokedAt === null);
+  // Lane 01M6Q1RDTK: a phone key whose pairing has ended is not standing authority, whether or
+  // not the sweep has caught up with it — derived here, where "usable key stands" is decided.
+  const out: DeviceKey[] = [];
+  for (const k of live) {
+    if (k.kind === 'phone' && (await pairingOver(db, teamId, k.id))) continue;
+    out.push(k);
+  }
+  return out;
 }
 
 export async function getDeviceKey(
@@ -715,6 +731,10 @@ export async function requireAuthority(
   if (!key || key.memberId !== input.presenter.id)
     return refuse('descriptor_mismatch', `the signing key is not ${input.presenter.name}'s`);
   if (key.revokedAt !== null) return refuse('key_revoked');
+  // Lane 01M6Q1RDTK: a phone key signs only while its pairing stands. A superseded pairing is a
+  // derived fact (the daemon key changed), so it is checked here, at the spend, not left to a sweep.
+  if (key.kind === 'phone' && (await pairingOver(db, input.teamId, key.id)))
+    return refuse('key_revoked');
   // Decision 5: a software key's private half is readable by any same-user process,
   // so it never qualifies as A2 — however valid its signature is.
   if (key.kind === 'software') return refuse('assurance_too_low');

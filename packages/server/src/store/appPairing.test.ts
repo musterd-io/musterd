@@ -1,9 +1,10 @@
 import { createHash, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
 import { descriptorSigningBytes, type ApprovalDescriptor } from '@musterd/protocol';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import {
+  __setAppChannelKeysForTest,
   generateAppChannelKeys,
   generatePhoneReceiveKey,
   sealToDaemon,
@@ -20,7 +21,9 @@ import {
   stagedAppKeys,
   startAppPairing,
   UNKNOWN_DAEMON_KEY,
+  phoneKeyPairingEnded,
   revokePhoneKeysOfEndedBindings,
+  revokePhoneKeysOfEndedBindingsEverywhere,
 } from './appPairing.js';
 import { listAuditByAction } from './audit.js';
 import {
@@ -30,7 +33,7 @@ import {
   listDeviceKeys,
   requireAuthority,
 } from './authority.js';
-import { confirmPairing, recordPairingIdentity } from './channelBindings.js';
+import { confirmPairing, recordPairingIdentity, revokeBinding } from './channelBindings.js';
 import { getChannelSettings } from './channelSettings.js';
 import { addMember } from './members.js';
 import { createTeam } from './teams.js';
@@ -77,6 +80,9 @@ async function setup() {
   const team = await createTeam(db, { slug: 'revive' });
   const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
   const daemon = await generateAppChannelKeys();
+  // Lane 01M6Q1RDTK: the authority boundary reads the daemon's current key to decide whether a
+  // phone key's pairing stands; in-memory tests must see these keys, not the home directory's.
+  __setAppChannelKeysForTest(daemon);
   return { db, team, nick, daemon };
 }
 
@@ -123,6 +129,7 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
   beforeEach(() => {
     openStore = o;
   });
+  afterEach(() => __setAppChannelKeysForTest(null));
 
   it('QR → sealed attested request → standing key approves → binding with the phone keys', async () => {
     const { db, team, nick, daemon } = await setup();
@@ -563,6 +570,95 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
       ).resolves.toEqual([]);
       expect((await listAuditByAction(db, team.id, 'device_key.revoked', 100)).length).toBe(2);
       void same;
+    });
+
+    it('a phone key is over when its pairing is superseded or revoked, live while it stands, unpaired with no binding', async () => {
+      const { db, team, nick } = await setup();
+      const mk = async (n: string) =>
+        (
+          await enrollDeviceKey(db, {
+            teamId: team.id,
+            memberId: nick.id,
+            publicKey: `pk-${n}`,
+            kind: 'phone',
+          })
+        ).id;
+      const kSame = await mk('same');
+      const kOld = await mk('old');
+      const kGone = await mk('gone');
+      const kNone = await mk('none');
+      await bind(db, team.id, nick.id, { daemon: 'K1', deviceKeyId: kSame });
+      await bind(db, team.id, nick.id, { daemon: 'K0', deviceKeyId: kOld });
+      await bind(db, team.id, nick.id, { daemon: 'K1', status: 'revoked', deviceKeyId: kGone });
+      await expect(phoneKeyPairingEnded(db, team.id, kSame, { current: 'K1' })).resolves.toBeNull();
+      await expect(phoneKeyPairingEnded(db, team.id, kOld, { current: 'K1' })).resolves.toBe(
+        'superseded',
+      );
+      await expect(phoneKeyPairingEnded(db, team.id, kGone, { current: 'K1' })).resolves.toBe(
+        'revoked',
+      );
+      await expect(phoneKeyPairingEnded(db, team.id, kNone, { current: 'K1' })).resolves.toBe(
+        'unpaired',
+      );
+    });
+
+    it('revoking a pairing revokes its phone key in the same transaction', async () => {
+      const { db, team, nick } = await setup();
+      const k = (
+        await enrollDeviceKey(db, {
+          teamId: team.id,
+          memberId: nick.id,
+          publicKey: 'pk-r',
+          kind: 'phone',
+        })
+      ).id;
+      const b = await bind(db, team.id, nick.id, { daemon: 'K1', deviceKeyId: k });
+      const r = await revokeBinding(db, {
+        teamId: team.id,
+        memberId: nick.id,
+        actor: 'nick',
+        bindingId: b,
+      });
+      expect(r.ok).toBe(true);
+      expect((await getDeviceKey(db, team.id, k))?.revokedAt).not.toBeNull();
+      const audited = await listAuditByAction(db, team.id, 'device_key.revoked', 100);
+      expect(audited.length).toBe(1);
+      expect(JSON.parse(audited[0]!.detail as string)).toMatchObject({
+        key_id: k,
+        via: 'binding_revoked',
+        binding: b,
+      });
+    });
+
+    it('the boot sweep covers every member and reports what it revoked', async () => {
+      const { db, team, nick } = await setup();
+      const ada = (await addMember(db, team, { name: 'Ada', kind: 'human' })).row;
+      const kN = (
+        await enrollDeviceKey(db, {
+          teamId: team.id,
+          memberId: nick.id,
+          publicKey: 'pk-n',
+          kind: 'phone',
+        })
+      ).id;
+      const kA = (
+        await enrollDeviceKey(db, {
+          teamId: team.id,
+          memberId: ada.id,
+          publicKey: 'pk-a',
+          kind: 'phone',
+        })
+      ).id;
+      await bind(db, team.id, nick.id, { daemon: 'K1', status: 'revoked', deviceKeyId: kN });
+      await bind(db, team.id, ada.id, { daemon: 'K1', status: 'revoked', deviceKeyId: kA });
+      await expect(revokePhoneKeysOfEndedBindingsEverywhere(db)).resolves.toEqual({
+        members: 2,
+        keys: 2,
+      });
+      await expect(revokePhoneKeysOfEndedBindingsEverywhere(db)).resolves.toEqual({
+        members: 2,
+        keys: 0,
+      });
     });
 
     it('backfills an old row once: current if paired after the key file, else unknown (superseded)', async () => {
