@@ -45,8 +45,11 @@ export interface Connection {
    */
   surface?: string;
   send: (frame: WSServerFrame) => void;
-  /** Force-close the underlying socket (used to displace a superseded same-identity session). */
-  close?: () => void;
+  /** Force-close the underlying socket (used to displace a superseded same-identity session). An
+   *  optional code + reason ride the close frame (ADR 722 §4: a signed-out browser is told so). */
+  close?: (code?: number, reason?: string) => void;
+  /** ADR 722 §3: the hosted browser session whose `msat_` claimed this socket; null otherwise. */
+  browserSession?: string | null;
   // P3.2 claim-handshake fields (ADR 077): set while the connection is awaiting admin approval.
   /** Pending request id while the WS is held open awaiting admin decide; cleared on occupation. */
   awaitingClaim?: string | null;
@@ -122,6 +125,18 @@ export class Hub {
     for (const conn of [...this.byConn.values()]) {
       if (conn.teamId !== teamId) continue;
       conn.close?.();
+      this.remove(conn.connId);
+      n++;
+    }
+    return n;
+  }
+
+  /** ADR 722 §4: close every socket a browser session opened, with the stable signed-out reason. */
+  closeSession(sessionId: string, code: number, reason: string): number {
+    let n = 0;
+    for (const conn of [...this.byConn.values()]) {
+      if (conn.browserSession !== sessionId) continue;
+      conn.close?.(code, reason);
       this.remove(conn.connId);
       n++;
     }

@@ -1358,6 +1358,42 @@ INSERT INTO node_humans (team_id, node_key, first_seen_at)
   created_at BIGINT NOT NULL
 )`,
   },
+  {
+    // v146 — ADR 722 §1–4 (lane 01M5WX0ZXM, Cloud 4 inc 1): hosted /live sign-in. `signin_states`
+    // is the one-time, ten-minute state behind the console round trip (the `state` only as a
+    // sha256; `mode` signin | invite | link; `member_id` pins a link to the member who started it;
+    // `invite_id` + `name` carry an invite the start already checked — never the secret).
+    // `browser_sessions` is the `__Host-musterd_s` cookie's row: the `mbs_` secret only as a
+    // sha256, 14 d absolute, 3 d idle (read against `last_used_at`), per-session `revoked_at`,
+    // and a `label` that is a user-agent family, never the full string. Both team-owned.
+    version: 146,
+    sql: `CREATE TABLE IF NOT EXISTS signin_states (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  state_hash TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  member_id TEXT,
+  invite_id TEXT,
+  name TEXT,
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  consumed_at BIGINT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signin_states_hash ON signin_states(team_id, state_hash);
+CREATE TABLE IF NOT EXISTS browser_sessions (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  secret_hash TEXT NOT NULL,
+  label TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  last_used_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  revoked_at BIGINT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_browser_sessions_hash ON browser_sessions(team_id, secret_hash);
+CREATE INDEX IF NOT EXISTS idx_browser_sessions_member ON browser_sessions(team_id, member_id, revoked_at)`,
+  },
 ];
 
 /** The interrupt window's text guard (interruptCandidates.ts): a necessary condition for a row to

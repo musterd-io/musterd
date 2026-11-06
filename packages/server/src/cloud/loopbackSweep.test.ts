@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { addMember } from '../store/members.js';
 import { createTeam } from '../store/teams.js';
+import { LIVE_SESSION_ROUTES } from '../transport/liveSession.js';
 import { bootCloud, hostRequest } from './testing.js';
 
 /**
@@ -11,7 +12,7 @@ import { bootCloud, hostRequest } from './testing.js';
  * answer 2xx. Each row carries the gate it exercises, and the table is checked against the source
  * — a new call site of a former shortcut without a row here fails the suite.
  */
-type Gate = 'requireLocalPeer' | 'authProvision' | 'authAdmin' | 'tls' | 'console';
+type Gate = 'requireLocalPeer' | 'authProvision' | 'authAdmin' | 'tls' | 'console' | 'session';
 interface Row {
   gate: Gate;
   method: 'GET' | 'POST';
@@ -72,6 +73,12 @@ const ROWS: Row[] = [
   { gate: 'tls', method: 'POST', path: '/mcp/revive', want: 403 },
   // Team creation: a console token (§4.3), which this caller does not have.
   { gate: 'console', method: 'POST', path: '/teams', want: 401 },
+  // ADR 722: hosted /live sign-in. Plain http from loopback is refused before anything else.
+  { gate: 'session', method: 'GET', path: '/live/signin/start', want: 403 },
+  { gate: 'session', method: 'POST', path: '/live/signin/start', want: 403 },
+  { gate: 'session', method: 'POST', path: '/live/signin/callback', want: 403 },
+  { gate: 'session', method: 'POST', path: '/live/session/token', want: 403 },
+  { gate: 'session', method: 'POST', path: '/live/signout', want: 403 },
 ];
 
 const src = (rel: string) =>
@@ -87,6 +94,7 @@ describe('loopback audit — behavioural (1C task 9, spec §8.3)', () => {
     // Call sites, not the definitions (`function requireLocalPeer(`, `function authProvision(`).
     expect(rows('requireLocalPeer')).toBe(calls(http, /(?<!function )requireLocalPeer\(\s*ctx/g));
     expect(rows('authProvision')).toBe(calls(http, /await authProvision\(ctx, slug, req,\s*\{/g));
+    expect(rows('session')).toBe(LIVE_SESSION_ROUTES.length);
     expect(rows('tls')).toBe(
       calls(src('oauth.ts'), /requireTlsPeer\(ctx, req,/g) +
         calls(src('mcpHttp.ts'), /isTlsPeer\(ctx, req\)/g),

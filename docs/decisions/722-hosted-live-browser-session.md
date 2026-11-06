@@ -145,6 +145,19 @@ ADR 698 shipped the verifier (`verifyIdentityStatement`) and the binding (`membe
   rotating the credential that every one of their CLIs uses.
 - Self-hosted behaviour and its tests do not change; the loopback audit (§8.3) gains the four new
   routes.
+- _(2026-11-06, lane 01M5WX0ZXM, the server half.)_ Three choices the Decision left open, made
+  inside its lines:
+  - **The console origin** is the origin of `MUSTERD_CONSOLE_JWKS_URL`: the console publishes its
+    keys on its own origin, so no new setting is needed. The callback's `Origin` check and the
+    `/handback` redirect both use it.
+  - **The invite** is checked (and charged on a miss) at `start`, and the state record carries the
+    invite's **id** and the chosen name, never the secret. The callback re-checks that the invite
+    is still live and the name still free before admitting.
+  - **A session's chains** are ordinary `msat_` chains on one per-team client (`cid_live_<team>`)
+    whose `scope` is `session:<id>`; that scope is how a revoke finds them and how a WS claim knows
+    which session opened the socket. The refresh half is minted but never handed out.
+
+  Follows-up: 01M3Z458B261P8DW8VX4A7XCHG
 
 ## Observability & Evaluation
 

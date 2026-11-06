@@ -304,6 +304,12 @@ import {
 import { matchGoalQuery, matchLaneQuery, readBoardQuery } from '../store/boardQuery.js';
 import { DAEMON_SERVICE_SEATS } from '../store/boardSeat.js';
 import {
+  getBrowserSession,
+  listBrowserSessions,
+  revokeBrowserSession,
+  revokeBrowserSessionsForMember,
+} from '../store/browserSessions.js';
+import {
   createCalendarEntry,
   deleteCalendarEntry,
   listCalendar,
@@ -696,6 +702,7 @@ import { passkeyApprovePage, passkeyEnrollPage } from './authorityPages.js';
 import { assertMoverOf, assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
 import { scrubForReader } from './broadcastScrub.js';
 import { isReloadOf } from './hub.js';
+import { endSessions, handleLiveSessionRoutes } from './liveSession.js';
 import { handleMcpRoute } from './mcpHttp.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 import { checkRateLimit, handleOAuthRoutes } from './oauth.js';
@@ -3565,6 +3572,8 @@ export async function handleHttp(
     // (`/oauth/:team/...`, `/mcp/:team`) because a phone app configures one URL and no headers.
     // Handled before the /teams routes; each returns true when the path belonged to it.
     if (await handleOAuthRoutes(ctx, req, res, method, path, url)) return;
+    // ADR 722: hosted /live sign-in — four cookie routes on the team's own host (Cloud only).
+    if (await handleLiveSessionRoutes(rootCtx, req, res, method, path, url)) return;
     if (await handleMcpRoute(ctx, req, res, method, path, url)) return;
 
     const teamMatch = path.match(/^\/teams\/([^/]+)(\/.*)?$/);
@@ -12236,6 +12245,13 @@ export async function handleHttp(
         // ADR 446 §3: rotation kills the seat's phone sessions too — the old mscr_ is dead, so
         // every msat_/msrt_ chain minted under it dies with it (admin revoke-all rides this path).
         const oauthRevoked = await revokeAllForMember(ctx.db, team.id, target.id);
+        // ADR 722 §4: and every browser session of theirs, with its open tabs told why.
+        const sessionsRevoked = await revokeBrowserSessionsForMember(ctx.db, team.id, target.id);
+        await endSessions(ctx, team, sessionsRevoked, {
+          by: 'rotate',
+          actor: actor.name,
+          member: target,
+        });
         // The actor is the authenticated human admin. `detail` never carries the secret or its hash.
         await appendAudit(ctx.db, team.id, {
           actor: actor.name,
@@ -12254,6 +12270,39 @@ export async function handleHttp(
           });
         }
         return sendJson(res, 200, { member: target.name, credential });
+      }
+
+      // ── Browser sessions (ADR 722 §4) ────────────────────────────────────────────────────────
+      // A member sees their own signed-in browsers; an admin sees anyone's. Revoking one closes
+      // its open tabs. Never the secret or its hash — the list is the summary rows.
+      const sessionsMatch = rest.match(/^\/members\/([^/]+)\/sessions(?:\/([^/]+))?$/);
+      if (sessionsMatch && (method === 'GET' || method === 'DELETE')) {
+        const team = await requireTeam(ctx.db, slug);
+        const { member: caller } = await authHuman(ctx, slug, req);
+        const targetName = decodeURIComponent(sessionsMatch[1]!);
+        const target = await getMemberByName(ctx.db, team.id, targetName);
+        const self = target?.id === caller.id;
+        if (!target || target.left_at !== null || (!self && !resolveCapabilities(caller).is_admin))
+          throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
+        const sessionId = sessionsMatch[2] ? decodeURIComponent(sessionsMatch[2]) : null;
+        if (method === 'GET' && sessionId === null)
+          return sendJson(res, 200, {
+            sessions: await listBrowserSessions(ctx.db, team.id, target.id),
+          });
+        if (method === 'DELETE' && sessionId !== null) {
+          const row = await getBrowserSession(ctx.db, team.id, sessionId);
+          if (!row || row.member_id !== target.id)
+            throw new MusterdError('not_found', 'no such browser session');
+          if (await revokeBrowserSession(ctx.db, team.id, sessionId))
+            await endSessions(ctx, team, [sessionId], {
+              by: self ? 'self' : 'admin',
+              actor: caller.name,
+              member: target,
+            });
+          res.writeHead(204);
+          res.end();
+          return;
+        }
       }
 
       // ── Halt as revocation (ADR 501) ─────────────────────────────────────────────────────────
