@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  FadeIn,
   FadeOut,
   useAnimatedStyle,
   useReducedMotion,
@@ -11,7 +10,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import { BUBBLE_MS, bubbleText } from '../native/floor';
+import type { Desk, DeskProp } from '../native/floor';
 import type { PairingPin } from '../native/pairingPin';
 import type { AppMember } from '../native/team';
 import { Icon } from './icon';
@@ -25,30 +24,37 @@ import { font, radius, space, usePalette } from './theme';
 /** /live's floor, warm wood under cream light, so the phone and the office read as one place. */
 const WOOD_TOP = '#F3D3A0';
 const WOOD_BOTTOM = '#E2AE6C';
-const FLOOR_HEIGHT = 176;
-const FACE = 40;
+const INK = '#4A2E0A';
+const INK_SOFT = '#7A5428';
+const FACE = 32;
+const LOUNGE_FACE = 24;
+const LOUNGE_MAX = 8;
 
 /**
- * The live floor at the top of Now (ADR 819, the alive design): each member who is here at a desk
- * as their portrait with /live's state dot, one speech bubble at a time, a glow at a desk when its
- * member lands a lane, and the bell over the room when a goal finishes. Motion budget: one bubble
- * change every BUBBLE_MS, one glow at a time; Reduce Motion freezes the bubble and stills the glow.
+ * The live floor at the top of Now (ADR 819), laid out as /live's office (`office-scene/seating.ts`):
+ * members with work at desks, two to a row, each with their face and state dot, their name, what
+ * they are on, and the prop that says their state (◎ review, a blocked sticky, ! asking, ! you in
+ * mustard); members between tasks on the lounge sofa; the board with what landed today. A landing
+ * glows its member's desk (one at a time); a finished goal rings the bell. The floor's height is
+ * what it holds, never a fixed box. Reduce Motion stills the glow.
  */
 export function Floor({
   desks,
-  more,
+  moreDesks,
+  lounge,
   live,
-  askingYou,
+  landed,
   glowing,
   bell,
   pin,
   onPressMember,
 }: {
-  desks: AppMember[];
-  more: number;
+  desks: Desk[];
+  moreDesks: number;
+  lounge: AppMember[];
   live: boolean;
-  /** Members with something in your For you: their bubble says "asking you →". */
-  askingYou: ReadonlySet<string>;
+  /** Lanes landed today: the board's count. */
+  landed: number;
   /** The member whose desk glows now, or null. */
   glowing: string | null;
   /** A goal just finished: the bell rings over the room. */
@@ -58,33 +64,17 @@ export function Floor({
 }) {
   const p = usePalette();
   const reduce = useReducedMotion();
-  const talkers = useMemo(
-    () => desks.filter((m) => bubbleText(m, askingYou.has(m.name)) !== null),
-    [desks, askingYou],
-  );
-  const [turn, setTurn] = useState(0);
-  useEffect(() => {
-    if (reduce || talkers.length < 2) return;
-    const t = setInterval(() => setTurn((n) => n + 1), BUBBLE_MS);
-    return () => clearInterval(t);
-  }, [reduce, talkers.length]);
-  // Someone asking you speaks first and is never rotated away for long.
-  const mine = talkers.find((m) => askingYou.has(m.name));
-  const speaker =
-    talkers.length === 0 ? null : mine && turn % 2 === 0 ? mine : talkers[turn % talkers.length]!;
-
-  const rows =
-    desks.length > 4
-      ? [desks.slice(0, Math.ceil(desks.length / 2)), desks.slice(Math.ceil(desks.length / 2))]
-      : [desks];
+  const empty = desks.length === 0 && lounge.length === 0;
+  const rows: Desk[][] = [];
+  for (let i = 0; i < desks.length; i += 2) rows.push(desks.slice(i, i + 2));
 
   return (
     <View
-      style={[styles.floor, { borderColor: 'rgba(122,90,6,0.18)' }]}
+      style={styles.floor}
       accessibilityLabel={
-        desks.length === 0
-          ? 'The floor. Nobody is at a desk.'
-          : `The floor. ${desks.length + more} here${live ? ', live' : ''}.`
+        empty
+          ? 'The office. Nobody is in.'
+          : `The office. ${desks.length + moreDesks} at desks, ${lounge.length} in the lounge, ${landed} landed today.`
       }
     >
       <Svg style={StyleSheet.absoluteFill} accessible={false}>
@@ -96,6 +86,7 @@ export function Floor({
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#wood)" />
       </Svg>
+
       <View style={styles.top}>
         {live ? (
           <View style={styles.live} accessibilityLabel="Live">
@@ -105,10 +96,16 @@ export function Floor({
             <Text style={styles.liveText}>LIVE</Text>
           </View>
         ) : (
-          <View />
+          <Text style={styles.quietTag}>the office</Text>
         )}
-        {more > 0 ? <Text style={styles.more}>{`+${more}`}</Text> : null}
+        <View style={styles.board} accessibilityLabel={`${landed} landed today`}>
+          <Icon name="pin.fill" color={p.danger} size={10} />
+          <Text style={styles.boardText}>
+            <Text style={styles.boardCount}>{landed}</Text> landed today
+          </Text>
+        </View>
       </View>
+
       {bell ? (
         <Animated.View
           {...(reduce ? {} : { entering: ZoomIn.springify().damping(12) })}
@@ -119,50 +116,82 @@ export function Floor({
           <Icon name="bell.fill" color={p.accentText} size={22} />
         </Animated.View>
       ) : null}
-      {desks.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>A quiet room. Nobody’s at a desk right now.</Text>
-        </View>
-      ) : (
-        <View style={styles.rows}>
-          {rows.map((row, r) => (
-            <View key={r} style={styles.row}>
-              {row.map((m) => (
-                <Desk
-                  key={m.name}
-                  member={m}
-                  pin={pin}
-                  glowing={glowing === m.name}
-                  bubble={speaker?.name === m.name ? bubbleText(m, askingYou.has(m.name)) : null}
-                  reduce={reduce}
-                  onPress={onPressMember}
-                />
-              ))}
-            </View>
+
+      {empty ? <Text style={styles.emptyText}>A quiet office. Nobody’s in right now.</Text> : null}
+
+      {rows.map((row, r) => (
+        <View key={r} style={styles.deskRow}>
+          {row.map((d) => (
+            <DeskCard
+              key={d.member.name}
+              desk={d}
+              pin={pin}
+              glowing={glowing === d.member.name}
+              reduce={reduce}
+              onPress={onPressMember}
+            />
           ))}
+          {row.length === 1 ? <View style={styles.deskGap} /> : null}
         </View>
-      )}
+      ))}
+      {moreDesks > 0 ? <Text style={styles.more}>{`+${moreDesks} more at desks`}</Text> : null}
+
+      {lounge.length > 0 ? (
+        <View style={styles.lounge}>
+          <Icon name="sofa.fill" color={INK_SOFT} size={13} />
+          <Text style={styles.loungeLabel}>lounge</Text>
+          <View style={styles.loungeFaces}>
+            {lounge.slice(0, LOUNGE_MAX).map((m, i) => (
+              <LoungeFace
+                key={m.name}
+                member={m}
+                pin={pin}
+                first={i === 0}
+                onPress={onPressMember}
+              />
+            ))}
+          </View>
+          {lounge.length > LOUNGE_MAX ? (
+            <Text style={styles.loungeMore}>{`+${lounge.length - LOUNGE_MAX}`}</Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function Desk({
-  member,
+function propLook(prop: DeskProp, p: ReturnType<typeof usePalette>) {
+  switch (prop) {
+    case 'review':
+      return { text: '◎ review', bg: p.tint, fg: p.accentText };
+    case 'blocked':
+      return { text: 'blocked', bg: '#FDE7A7', fg: p.danger };
+    case 'asking':
+      return { text: '! asking', bg: '#FFF1DB', fg: p.warning };
+    case 'asking-you':
+      return { text: '! you', bg: p.accent, fg: p.onAccent };
+    default:
+      return null;
+  }
+}
+
+function DeskCard({
+  desk,
   pin,
   glowing,
-  bubble,
   reduce,
   onPress,
 }: {
-  member: AppMember;
+  desk: Desk;
   pin: PairingPin;
   glowing: boolean;
-  bubble: { text: string; mine: boolean } | null;
   reduce: boolean;
   onPress: (m: AppMember) => void;
 }) {
   const p = usePalette();
-  const face = usePortrait(pin, member.portrait);
+  const m = desk.member;
+  const face = usePortrait(pin, m.portrait);
+  const look = propLook(desk.prop, p);
   const glow = useSharedValue(0);
   useEffect(() => {
     if (!glowing) {
@@ -173,126 +202,159 @@ function Desk({
       ? 1
       : withSequence(
           withTiming(1, { duration: GLOW_MS * 0.3 }),
-          withTiming(0.85, { duration: GLOW_MS * 0.4 }),
+          withTiming(0.8, { duration: GLOW_MS * 0.4 }),
           withTiming(0, { duration: GLOW_MS * 0.3 }),
         );
   }, [glowing, reduce, glow]);
-  const ring = useAnimatedStyle(() => ({
-    opacity: glow.value,
-    transform: [{ scale: 1 + glow.value * 0.18 }],
-  }));
+  const light = useAnimatedStyle(() => ({ opacity: glow.value }));
   return (
     <Squish
       accessibilityRole="button"
-      accessibilityLabel={`${member.name}, ${member.label}`}
-      onPress={() => onPress(member)}
+      accessibilityLabel={`${m.name}, ${m.label}${desk.cue ? `, ${desk.cue}` : ''}`}
+      onPress={() => onPress(m)}
       style={styles.desk}
     >
-      <View style={styles.bubbleSlot} pointerEvents="none">
-        {bubble ? (
-          <Animated.View
-            key={`${member.name}:${bubble.text}`}
-            {...(reduce ? {} : { entering: FadeIn.duration(220), exiting: FadeOut.duration(180) })}
-            style={[
-              styles.bubble,
-              { backgroundColor: bubble.mine ? p.accent : 'rgba(255,255,255,0.94)' },
-            ]}
+      <Animated.View pointerEvents="none" style={[styles.deskGlow, light]} />
+      <View>
+        <Seat name={m.name} agent={m.kind === 'agent'} size={FACE} portrait={face} />
+        <StateDot state={m.state} size={10} />
+      </View>
+      <View style={styles.deskWords}>
+        <View style={styles.deskLine1}>
+          <Text numberOfLines={1} style={styles.deskName}>
+            {m.name}
+          </Text>
+          {look ? (
+            <View style={[styles.prop, { backgroundColor: look.bg }]}>
+              <Text style={[styles.propText, { color: look.fg }]}>{look.text}</Text>
+            </View>
+          ) : null}
+        </View>
+        {desk.cue ? (
+          <Text
+            numberOfLines={1}
+            style={[styles.cue, desk.prop === 'blocked' ? { color: p.danger } : null]}
           >
-            <Text
-              numberOfLines={1}
-              style={[styles.bubbleText, { color: bubble.mine ? p.onAccent : p.text }]}
-            >
-              {bubble.text}
-            </Text>
-          </Animated.View>
+            {desk.cue}
+          </Text>
         ) : null}
       </View>
-      <View>
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.glow, { backgroundColor: 'rgba(255,236,170,0.95)' }, ring]}
-        />
-        <Seat name={member.name} agent={member.kind === 'agent'} size={FACE} portrait={face} />
-        <StateDot state={member.state} size={11} />
-      </View>
-      <View style={styles.deskTop} />
-      <Text numberOfLines={1} style={styles.name}>
-        {member.name}
-      </Text>
+    </Squish>
+  );
+}
+
+function LoungeFace({
+  member,
+  pin,
+  first,
+  onPress,
+}: {
+  member: AppMember;
+  pin: PairingPin;
+  first: boolean;
+  onPress: (m: AppMember) => void;
+}) {
+  const face = usePortrait(pin, member.portrait);
+  return (
+    <Squish
+      accessibilityRole="button"
+      accessibilityLabel={`${member.name}, between tasks`}
+      onPress={() => onPress(member)}
+      style={[styles.loungeFace, first ? null : { marginLeft: -6 }]}
+    >
+      <Seat name={member.name} agent={member.kind === 'agent'} size={LOUNGE_FACE} portrait={face} />
     </Squish>
   );
 }
 
 const styles = StyleSheet.create({
   floor: {
-    height: FLOOR_HEIGHT,
     borderRadius: radius.lg,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: space.sm,
-    paddingTop: space.sm,
+    borderColor: 'rgba(122,90,6,0.18)',
+    padding: space.sm + 2,
+    gap: space.sm,
   },
-  top: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    minHeight: 18,
-    paddingHorizontal: 4,
-  },
+  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   live: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderRadius: radius.pill,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  liveDot: { width: 6, height: 6, borderRadius: 3 },
-  liveText: { fontFamily: font.bold, fontSize: 10, letterSpacing: 0.8, color: '#7A2E12' },
-  more: { fontFamily: font.semibold, fontSize: 12, color: '#6B4210' },
-  bell: {
-    position: 'absolute',
-    top: space.sm,
-    alignSelf: 'center',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  rows: { flex: 1, justifyContent: 'space-evenly' },
-  row: { flexDirection: 'row', justifyContent: 'space-evenly' },
-  desk: { alignItems: 'center', width: 72 },
-  bubbleSlot: { height: 22, width: 72, alignItems: 'center', marginBottom: 3 },
-  bubble: {
-    position: 'absolute',
-    bottom: 0,
-    alignSelf: 'center',
-    maxWidth: 150,
+    backgroundColor: 'rgba(255,255,255,0.75)',
     borderRadius: radius.pill,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  liveText: { fontFamily: font.bold, fontSize: 10.5, letterSpacing: 0.8, color: '#7A2E12' },
+  quietTag: { fontFamily: font.semibold, fontSize: 11, color: INK_SOFT },
+  board: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFF8EB',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    transform: [{ rotate: '-1.5deg' }],
     shadowColor: '#5A3A0A',
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
   },
-  bubbleText: { fontFamily: font.medium, fontSize: 10.5 },
-  glow: {
+  boardText: { fontFamily: font.medium, fontSize: 11, color: INK },
+  boardCount: { fontFamily: font.bold },
+  bell: { position: 'absolute', top: space.sm, left: 0, right: 0, alignItems: 'center' },
+  emptyText: {
+    fontFamily: font.medium,
+    fontSize: 13,
+    color: INK,
+    textAlign: 'center',
+    paddingVertical: space.lg,
+  },
+  deskRow: { flexDirection: 'row', gap: space.sm },
+  deskGap: { flex: 1 },
+  desk: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    backgroundColor: 'rgba(255,248,235,0.78)',
+    borderRadius: radius.sm + 2,
+    borderBottomWidth: 3,
+    borderBottomColor: 'rgba(110,62,18,0.32)',
+    paddingHorizontal: space.sm,
+    paddingVertical: 7,
+    overflow: 'hidden',
+  },
+  deskGlow: {
     position: 'absolute',
-    left: -6,
-    top: -6,
-    width: FACE + 12,
-    height: FACE + 12,
-    borderRadius: (FACE + 12) / 2,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,226,140,0.95)',
   },
-  deskTop: {
-    width: 46,
-    height: 5,
-    borderRadius: 3,
-    marginTop: 3,
-    backgroundColor: 'rgba(110,62,18,0.35)',
+  deskWords: { flex: 1, minWidth: 0, gap: 1 },
+  deskLine1: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  deskName: { flexShrink: 1, fontFamily: font.semibold, fontSize: 12.5, color: INK },
+  prop: { borderRadius: radius.pill, paddingHorizontal: 5, paddingVertical: 1 },
+  propText: { fontFamily: font.bold, fontSize: 9.5 },
+  cue: { fontFamily: font.regular, fontSize: 11, color: INK_SOFT },
+  more: { fontFamily: font.medium, fontSize: 11, color: INK_SOFT, textAlign: 'center' },
+  lounge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(122,74,30,0.14)',
+    borderRadius: radius.pill,
+    paddingHorizontal: space.sm + 2,
+    paddingVertical: 5,
   },
-  name: { fontFamily: font.medium, fontSize: 10.5, color: '#4A2E0A', marginTop: 2, maxWidth: 70 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.lg },
-  emptyText: { fontFamily: font.medium, fontSize: 13, color: '#5A3A0A', textAlign: 'center' },
+  loungeLabel: { fontFamily: font.semibold, fontSize: 11, color: INK_SOFT },
+  loungeFaces: { flexDirection: 'row', alignItems: 'center', marginLeft: 2 },
+  loungeFace: { borderRadius: LOUNGE_FACE / 2, borderWidth: 1.5, borderColor: '#F6E3C2' },
+  loungeMore: { fontFamily: font.semibold, fontSize: 11, color: INK_SOFT },
 });

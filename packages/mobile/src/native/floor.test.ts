@@ -1,14 +1,6 @@
 import type { AppMember, AppMoment } from '@musterd/protocol/app-channel';
 import { describe, expect, it } from 'vitest';
-import {
-  BUBBLE_MS,
-  FLOOR_MAX,
-  bubbleText,
-  floorDesks,
-  glowQueue,
-  momentWords,
-  newLandings,
-} from './floor';
+import { FLOOR_MAX, glowQueue, landedToday, momentWords, newLandings, officeLayout } from './floor';
 
 /** The live floor at the top of Now (ADR 819, the alive design): pure rules, so each has a case. */
 
@@ -40,53 +32,6 @@ const landed = (id: string, member = 'cider', ts = 1): AppMoment => ({
   ts,
 });
 
-describe('floorDesks: who sits on the floor', () => {
-  it('seats at most eight, most recently active first, and counts the rest', () => {
-    const present = Array.from({ length: 11 }, (_, i) => member({ name: `m${i}`, since: i }));
-    const { desks, more } = floorDesks(present);
-    expect(FLOOR_MAX).toBe(8);
-    expect(desks.map((d) => d.name)).toEqual(['m10', 'm9', 'm8', 'm7', 'm6', 'm5', 'm4', 'm3']);
-    expect(more).toBe(3);
-  });
-
-  it('keeps the roster’s order for members with no lane time', () => {
-    const { desks } = floorDesks([
-      member({ name: 'b', since: null }),
-      member({ name: 'a', since: 5 }),
-      member({ name: 'c', since: null }),
-    ]);
-    expect(desks.map((d) => d.name)).toEqual(['a', 'b', 'c']);
-  });
-
-  it('is an empty room when nobody is here', () => {
-    expect(floorDesks([])).toEqual({ desks: [], more: 0 });
-  });
-});
-
-describe('bubbleText: one short line over a desk', () => {
-  it('says what a working member is on, cut short', () => {
-    expect(bubbleText(member({ name: 'a', title: 'x'.repeat(40) }), false)).toEqual({
-      text: `${'x'.repeat(27)}…`,
-      mine: false,
-    });
-  });
-
-  it('says asking you, in mustard, only when they are asking you', () => {
-    const m = member({ name: 'miley', state: 'asking', label: 'asking nick' });
-    expect(bubbleText(m, true)).toEqual({ text: 'asking you →', mine: true });
-    expect(bubbleText(m, false)).toEqual({ text: 'asking nick', mine: false });
-  });
-
-  it('names review and blocked, and says nothing between tasks or away', () => {
-    expect(bubbleText(member({ name: 'a', state: 'review' }), false)?.text).toBe(
-      'waiting for review',
-    );
-    expect(bubbleText(member({ name: 'a', state: 'blocked' }), false)?.text).toBe('blocked');
-    expect(bubbleText(member({ name: 'a', state: 'between' }), false)).toBeNull();
-    expect(bubbleText(member({ name: 'a', state: 'away' }), false)).toBeNull();
-  });
-});
-
 describe('newLandings: celebrate only what you were here for', () => {
   it('celebrates nothing on the first load', () => {
     expect(newLandings(null, [landed('a')])).toEqual([]);
@@ -111,10 +56,6 @@ describe('glowQueue: one glow at a time', () => {
       landed('5', 'izzo'),
     ];
     expect(glowQueue(burst)).toEqual(['cider', 'izzo', 'wallow', 'izzo']);
-  });
-
-  it('rotates bubbles no faster than every three seconds', () => {
-    expect(BUBBLE_MS).toBeGreaterThanOrEqual(3_000);
   });
 });
 
@@ -165,5 +106,62 @@ describe('momentWords: what a moment row says', () => {
     expect(
       momentWords({ ...base, kind: 'said', member: 'nick', lane: null, text: 'lunch at 1' }),
     ).toMatchObject({ lead: 'nick', line: 'lunch at 1', full: false });
+  });
+});
+
+describe('officeLayout: the floor as /live’s office lays it out', () => {
+  it('seats everyone with work at desks, most recent first, at most eight, and sends the rest to the lounge', () => {
+    const present = [
+      member({ name: 'lounger', state: 'between', since: null, title: null, source: null }),
+      ...Array.from({ length: 10 }, (_, i) => member({ name: `w${i}`, since: i })),
+    ];
+    const { desks, moreDesks, lounge } = officeLayout(present, new Set());
+    expect(FLOOR_MAX).toBe(8);
+    expect(desks.map((d) => d.member.name)).toEqual([
+      'w9',
+      'w8',
+      'w7',
+      'w6',
+      'w5',
+      'w4',
+      'w3',
+      'w2',
+    ]);
+    expect(moreDesks).toBe(2);
+    expect(lounge.map((m) => m.name)).toEqual(['lounger']);
+  });
+
+  it('says on each desk what its member is on, cut short', () => {
+    const [d] = officeLayout([member({ name: 'a', title: 'x'.repeat(40) })], new Set()).desks;
+    expect(d).toMatchObject({ cue: `${'x'.repeat(23)}…`, prop: null });
+  });
+
+  it('puts the state on the desk as /live does: review, blocked, asking, asking you', () => {
+    const layout = officeLayout(
+      [
+        member({ name: 'r', state: 'review', since: 4 }),
+        member({ name: 'b', state: 'blocked', since: 3 }),
+        member({ name: 'q', state: 'asking', label: 'asking nick', since: 2 }),
+        member({ name: 'y', state: 'asking', label: 'asking nick', since: 1 }),
+      ],
+      new Set(['y']),
+    );
+    expect(layout.desks.map((d) => [d.member.name, d.prop])).toEqual([
+      ['r', 'review'],
+      ['b', 'blocked'],
+      ['q', 'asking'],
+      ['y', 'asking-you'],
+    ]);
+  });
+
+  it('is an empty room when nobody is here', () => {
+    expect(officeLayout([], new Set())).toEqual({ desks: [], moreDesks: 0, lounge: [] });
+  });
+});
+
+describe('landedToday: the board’s count', () => {
+  it('counts the day’s landings', () => {
+    const goal: AppMoment = { ...landed('g'), kind: 'goal', lane: null };
+    expect(landedToday([landed('a'), landed('b'), goal])).toBe(2);
   });
 });
