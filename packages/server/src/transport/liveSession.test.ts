@@ -19,7 +19,7 @@ import {
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import { createTeam } from '../store/teams.js';
 import { SESSION_COOKIE, SIGNIN_COOKIE, SIGNED_OUT_CLOSE_CODE } from './liveSession.js';
-import { __resetOAuthBucketsForTest } from './oauth.js';
+import { __resetOAuthBucketsForTest, __setCimdResolverForTest } from './oauth.js';
 
 /**
  * ADR 722 §1–4 against a real Cloud server and the test issuer: the falsifier list in its
@@ -747,6 +747,60 @@ describe('hosted /live sign-in (ADR 722)', () => {
       // A connect state is not a grant: it cannot skip the callback.
       const raw = await startConnect(client_id);
       expect((await confirm(raw, 'allow')).status).toBe(403);
+    });
+
+    it('a native app on an ephemeral loopback port and a CIMD client both get through Allow (ADR 743, ADR 470)', async () => {
+      // Native: registered without a port, authorizing from whatever port it got.
+      const reg = await call('POST', '/oauth/revive/register', {
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          redirect_uris: ['http://127.0.0.1/callback/x'],
+          client_name: 'Codex',
+        }),
+      });
+      const nativeId = (JSON.parse(reg.body) as { client_id: string }).client_id;
+      const native = 'http://127.0.0.1:53111/callback/x';
+      const go = async (client_id: string, redirect: string) => {
+        const st = await call('POST', '/oauth/revive/authorize', {
+          headers: formHeaders,
+          body: form({ ...authorizeFields(client_id, { redirect_uri: redirect }), via: 'musterd' }),
+        });
+        expect(st.status).toBe(303);
+        const cb = await postCallback({
+          state: cookieValue(st, SIGNIN_COOKIE)!,
+          statement: statement(),
+        });
+        expect(cb.status).toBe(200);
+        const r = await confirm(cookieValue(cb, SIGNIN_COOKIE)!, 'allow');
+        expect(r.status).toBe(302);
+        expect(String(r.headers['location']).startsWith(`${redirect}?code=`)).toBe(true);
+      };
+      await go(nativeId, native);
+      // CIMD: no registration row; the metadata document is the registration.
+      const cimdId = 'https://chatgpt.example/oauth/client.json';
+      __setCimdResolverForTest(async (id) => ({
+        client_id: id,
+        client_name: 'ChatGPT',
+        redirect_uris: [REDIRECT],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+      }));
+      try {
+        await go(cimdId, REDIRECT);
+      } finally {
+        __setCimdResolverForTest();
+      }
+    });
+
+    it('refuses Allow when the client was deregistered between sign-in and the click', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      await seed.run('DELETE FROM oauth_clients WHERE client_id = ?', [client_id]);
+      const r = await confirm(grant, 'allow');
+      expect(r.status).toBe(403);
+      expect(r.headers['location']).toBeUndefined();
+      expect(await refusals()).toContain('client_gone');
     });
 
     it('refuses Allow when the member left between sign-in and the click', async () => {

@@ -37,7 +37,7 @@ import {
   mintTokenPair,
   revokeChainsForSession,
 } from '../store/oauth.js';
-import { getClient, issueCode, type OAuthClientSource } from '../store/oauth.js';
+import { issueCode, type OAuthClientSource } from '../store/oauth.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import {
   consumeSigninState,
@@ -46,7 +46,7 @@ import {
 } from '../store/signinStates.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { isCimdClientId } from './cimd.js';
-import { isTlsPeer } from './oauth.js';
+import { connectClientStill, isTlsPeer } from './oauth.js';
 
 /**
  * Hosted `/live` sign-in (ADR 722 §1–4) — the four routes a browser session lives on.
@@ -255,18 +255,9 @@ export async function beginConnectSignin(
   return { location: handbackUrl(env, s.state), cookie: signinCookie(s.state) };
 }
 
-/** The client, if it is still registered with exactly this redirect (ADR 446 §5's exact match). */
-async function clientStill(
-  env: Env,
-  request: ConnectStart,
-): Promise<{ client_name: string } | null> {
-  try {
-    const client = await getClient(env.ctx.db, env.team.id, request.client_id);
-    const uris = JSON.parse(client.redirect_uris) as unknown;
-    return Array.isArray(uris) && uris.includes(request.redirect_uri) ? client : null;
-  } catch {
-    return null;
-  }
+/** The client, if authorize would still accept it with this redirect (ADR 820, ADR 470, ADR 743). */
+function clientStill(env: Env, request: ConnectStart): Promise<{ client_name: string } | null> {
+  return connectClientStill(env.ctx.db, env.team.id, request.client_id, request.redirect_uri);
 }
 
 const parseConnect = (raw: string | null): ConnectStart | null => {

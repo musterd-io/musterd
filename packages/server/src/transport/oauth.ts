@@ -1226,18 +1226,24 @@ export async function handleOAuthRoutes(
 }
 
 /** Unknown client on the browser legs is a musterd-shaped 401, not a redirect (never bounce). */
-async function getClientOrOAuth(
-  db: Driver,
-  teamId: string,
-  clientId: string,
-  res: ServerResponse,
-): Promise<{
+interface ResolvedClient {
   client_id: string;
   client_name: string;
   redirect_uris: string;
   client_source: 'dcr' | 'cimd';
   client_id_host?: string;
-} | null> {
+}
+
+/**
+ * The one client resolver: a DCR registration first, then a CIMD metadata document on a DCR miss
+ * (ADR 470). Throws the OAuth-shaped refusal; `getClientOrOAuth` answers it, and ADR 820's
+ * rechecks use the same path so a client that passed authorize cannot fail them on source alone.
+ */
+async function resolveClient(
+  db: Driver,
+  teamId: string,
+  clientId: string,
+): Promise<ResolvedClient> {
   try {
     const row = await getClient(db, teamId, clientId);
     return {
@@ -1247,17 +1253,10 @@ async function getClientOrOAuth(
       client_source: 'dcr',
     };
   } catch (err) {
-    if (!(err instanceof MusterdError && err.code === 'not_found')) {
-      sendOAuthError(res, err);
-      return null;
-    }
+    if (!(err instanceof MusterdError && err.code === 'not_found')) throw err;
   }
-
   const unknownClient = () => new MusterdError('not_found', 'unknown OAuth client for this team');
-  if (!isCimdClientId(clientId)) {
-    sendOAuthError(res, unknownClient());
-    return null;
-  }
+  if (!isCimdClientId(clientId)) throw unknownClient();
   try {
     const metadata = await cimdResolver(clientId);
     if (metadata.client_id !== clientId) throw unknownClient();
@@ -1270,12 +1269,41 @@ async function getClientOrOAuth(
       client_id_host: new URL(clientId).hostname,
     };
   } catch (err) {
-    sendOAuthError(
-      res,
-      err instanceof CimdResolverCapacityError
-        ? new MusterdError('rate_limited', 'client metadata lookup is busy; retry shortly')
-        : unknownClient(),
-    );
+    throw err instanceof CimdResolverCapacityError
+      ? new MusterdError('rate_limited', 'client metadata lookup is busy; retry shortly')
+      : unknownClient();
+  }
+}
+
+async function getClientOrOAuth(
+  db: Driver,
+  teamId: string,
+  clientId: string,
+  res: ServerResponse,
+): Promise<ResolvedClient | null> {
+  try {
+    return await resolveClient(db, teamId, clientId);
+  } catch (err) {
+    sendOAuthError(res, err);
+    return null;
+  }
+}
+
+/**
+ * ADR 820: is this client still one the authorize step would accept, with this redirect? The same
+ * resolver (DCR or CIMD) and the same redirect rule (exact, or ADR 743's loopback port) as
+ * authorize, so a request that started cannot be refused later on source or port alone.
+ */
+export async function connectClientStill(
+  db: Driver,
+  teamId: string,
+  clientId: string,
+  redirectUri: string,
+): Promise<{ client_name: string } | null> {
+  try {
+    const client = await resolveClient(db, teamId, clientId);
+    return registeredRedirect(client, redirectUri) ? client : null;
+  } catch {
     return null;
   }
 }
