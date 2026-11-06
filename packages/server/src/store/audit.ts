@@ -411,6 +411,11 @@ export type AuditAction =
   | 'residency.continuation_held'
   | 'residency.woke'
   | 'residency.wake_failed'
+  // ADR 816: the fly watch started / stopped a mapped Fly seat machine. Actor null (a daemon
+  // decision); detail: { app, machine, host, seat?, reason? ('idle' | 'no_poll' on stop),
+  // status? (the Fly HTTP status, on failure — result 'deny' when the call failed) }.
+  | 'fly.machine_start'
+  | 'fly.machine_stop'
   | 'residency.wake_exhausted'
   // ADR 463 §2 — sponsor-host provisions, actor null (a host or the daemon's sweep): claimed by a
   // host, reported ready / failed (detail.reason), cancelled unclaimed. ADR 689 decision 3: they
@@ -934,6 +939,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'incident.route_unfilled': 'none',
   'residency.enrolled': 'actor',
   'residency.revoked': 'actor',
+  'fly.machine_start': 'none',
+  'fly.machine_stop': 'none',
   'residency.wake_leased': 'none',
   'residency.wake_gate': 'none',
   'residency.dispatch_suppressed': 'none',

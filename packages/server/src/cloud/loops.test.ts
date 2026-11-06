@@ -24,6 +24,9 @@ describe('which background loops a server runs (1C task 8)', () => {
         'lane_watch',
         'shift_watch',
         'poll_watch',
+        // ADR 816: reads the database and one fixed Fly origin; inert without its hub-local
+        // token + mapping, which a Cloud server simply does not configure until one operates it.
+        'fly_watch',
       ].sort(),
     );
   });
