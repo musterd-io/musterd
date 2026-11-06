@@ -142,6 +142,22 @@ public final class MusterdPushSubscriber: BaseExpoAppDelegateSubscriber,
     SharedStore.savePushToken(token: token, environment: environment)
   }
 
+  /// The live nudge (ADR 819): a content-free background push says a lane landed or a goal
+  /// finished. In front, the app pulls its roster now (the same `onDelivery` an open list
+  /// refreshes on); otherwise it is dropped, and the next open pulls anyway.
+  public func application(
+    _ application: UIApplication,
+    didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+    fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+    if application.applicationState == .active {
+      DispatchQueue.main.async {
+        PendingAnswers.emitter?.sendEvent("onDelivery")
+      }
+    }
+    completionHandler(.noData)
+  }
+
   /// Kick registration again from JavaScript. Categories are replaced with the one this
   /// app owns; nothing else in the app registers a category.
   public static func prepare(_ application: UIApplication) {
