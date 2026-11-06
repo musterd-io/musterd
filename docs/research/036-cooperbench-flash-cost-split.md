@@ -1,4 +1,4 @@
-# 036 — Where musterd's 2.8× goes on the flash run: coordination turns, not duplicated feature work — $9.59 of the $15.90 gap is calls that issue a musterd tool, $5.92 of it inbox checks
+# 036 — Where musterd's 2.8× goes on the flash run: coordination turns and a heavier preamble, not duplicated feature work
 
 > **Status:** 2026-11-06, lane 01M6S2NF8R (lazara), asked for by nick in session ("yes go ahead",
 > 2026-11-06). **No model spend**: log arithmetic over [finding 035](./035-cooperbench-flash-comparison.md)'s
@@ -53,8 +53,11 @@ not that all of the cost was coordination overhead.
 
 Within coordination, by tool (issued $, calls/pair): `team_inbox_check` **$5.92 / 5.3**, `team_send`
 $1.74 / 2.5, `lane_open` $0.84 / 1.2, `lane_update` $0.39 / 0.6, `lane_resolve` $0.36 / 0.5,
-`lane_board` $0.32 / 0.4. Of 330 inbox checks, 214 were wait-mode (135 `wait`, 79 `until_lane`), 116
-plain reads.
+`lane_board` $0.32 / 0.4. Of the 336 inbox checks, **100 are each session's first call** (the prompt makes
+`team_inbox_check` the first action): **$3.14** of the $5.92. A session's first call carries the
+one-time write of its whole uncached context, and some call would pay it whatever tool it issued, so
+that $3.14 is mostly the preamble's cost (below), not the inbox check's. The other 236 are **218
+wait-mode checks ($2.61)** and 18 plain reads ($0.17).
 
 **Cross-cut — the larger preamble.** musterd's sessions start 7.1k tokens heavier (its MCP tools and
 guidance). Written once per session at $5/MTok and re-read on every later call at $0.20, that is
@@ -70,8 +73,8 @@ guidance). Written once per session at $5/MTok and re-read on every later call a
 2. **The gap is turns, not tokens per turn.** musterd makes 4× solo's calls per pair (25.0 vs 6.3),
    and every call re-reads a context that starts 7.1k tokens larger. Coordination calls are 43% of
    musterd's calls (10.7 of 25.0) and 39% of its dollars.
-3. **Inbox checks are the single largest line** ($5.92, 24% of the arm): 5.3 per pair, two thirds of
-   them waiting on the partner.
+3. **Waiting is a smaller line than the tool total suggests:** 218 wait-mode inbox checks, 4.4 per
+   pair, cost $2.61 (11% of the arm). The rest of the inbox line is the first call's preamble write.
 4. **One integrator instead of two would save little** — at most about half of $2.57, ~5% of the arm.
    This is smaller than the guess in the session plan that opened this lane; it goes down the list.
 
@@ -81,13 +84,15 @@ Ceilings are upper bounds from this split, not predictions; they overlap.
 
 | Candidate | Ceiling on flash | Risk recorded elsewhere |
 | --- | --- | --- |
-| Fewer inbox/wait turns (one wait that returns the partner's push, not repeated checks) | ≲ $5.9 (24%) | Finding 034: telling the seat to *end its turn* when waiting deadlocked 10 of 10 pairs — the fix must keep the seat in one blocking call, not end it |
-| Smaller preamble: load only the musterd tools a CooperBench seat uses up front, trim guidance | ≲ $5.2 (21%) | ADR 741 made lane tools always-load for latency (ToolSearch detours cost $105 in a week); a deferred tool costs a ToolSearch turn when needed |
+| Fewer wait turns (one wait that returns the partner's push, not repeated checks) | ≲ $2.6 (11%) | Finding 034: telling the seat to *end its turn* when waiting deadlocked 10 of 10 pairs — the fix must keep the seat in one blocking call, not end it |
+| Smaller preamble (the 7.1k-token difference; its parts are not split here) | ≲ $5.2 (21%) | ADR 741 made lane tools always-load for latency (ToolSearch detours cost $105 in a week); a deferred tool costs a ToolSearch turn when needed |
 | Fewer coordination writes (`team_send` 2.5/pair, `lane_update` 0.6) | ≲ $2.1 (9%) | Finding 025: the status updates dropped once guidance stopped asking; the remaining sends carry hand-off content |
 | One integrator | ≲ $1.3 (5%) | Team harness's lead-integrator design lost 28 pairs to no integration (finding 035) |
 
-The next lane (01M6S2NP0X, cost-fix pre-registration) should test the first two, developed on the
-10 `core` pairs only, with `flash` read once at the end.
+Neither ceiling is reachable whole: the preamble holds the tools the seats do use, and the waits
+are how the pair hears its partner. The next lane (01M6S2NP0X, cost-fix pre-registration) sizes the
+preamble's parts and decides what to test, developed on the 10 `core` pairs only, with `flash` read
+once at the end.
 
 ## Limits
 
