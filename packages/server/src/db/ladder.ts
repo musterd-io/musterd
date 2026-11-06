@@ -1338,6 +1338,26 @@ INSERT INTO node_humans (team_id, node_key, first_seen_at)
    GROUP BY p.team_id, COALESCE(p.node, '')
   ON CONFLICT(team_id, node_key) DO NOTHING`,
   },
+  {
+    // v145 — ADR 769 (lane 01M64SXW85): a HELD enrollment. Past genesis, a member with no usable
+    // key whose registration verifies but needs an admin's countersign has it held against the
+    // enrollment code, keyed by the code's hash. Written once and never updated; it lives as long
+    // as its code (the vouch route reads it only while the code is unspent and unexpired).
+    // `digest` is sha256 over the canonical JSON of the other identity fields; the admin's vouch
+    // signs it, so no field can be swapped after the admin looked.
+    version: 145,
+    sql: `CREATE TABLE IF NOT EXISTS held_enrollments (
+  code_hash TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  member_id TEXT NOT NULL,
+  credential_id TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  origin TEXT,
+  rp_id TEXT,
+  digest TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+)`,
+  },
 ];
 
 /** The interrupt window's text guard (interruptCandidates.ts): a necessary condition for a row to

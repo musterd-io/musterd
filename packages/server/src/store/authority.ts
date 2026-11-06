@@ -13,7 +13,7 @@ import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { phoneKeyPairingEnded } from './appPairing.js';
 import { appendAudit } from './audit.js';
-import { listMembers } from './members.js';
+import { getMemberByName, listMembers } from './members.js';
 import { resolveCapabilities } from './rows.js';
 import {
   assertionFailure,
@@ -404,8 +404,83 @@ export async function consumeEnrollmentChallenge(
 }
 
 export type EnrollKeyResult =
-  | { ok: true; key: DeviceKey; via: 'ceremony' | 'approval' | 'recovery' }
-  | { ok: false; reason: string };
+  | { ok: true; key: DeviceKey; via: 'ceremony' | 'approval' | 'recovery' | 'vouch' }
+  | {
+      ok: false;
+      reason: string;
+      /** ADR 769: the registration verified and is held for an admin's vouch. */
+      held?: { enrollmentDigest: string; expiresAt: number };
+    };
+
+/**
+ * ADR 769: the identity of a held enrollment, and the digest an admin's vouch signs. Every field
+ * that could be swapped after the admin looked is in it: team, member, the enrollment code it
+ * spends, the credential id, the public key, and the origin and relying party it was made on.
+ */
+export interface HeldEnrollmentFields {
+  teamId: string;
+  memberId: string;
+  codeHash: string;
+  credentialId: string;
+  publicKey: string;
+  origin: string | null;
+  rpId: string | null;
+}
+
+export function heldEnrollmentDigest(f: HeldEnrollmentFields): string {
+  return payloadDigest({
+    team: f.teamId,
+    member: f.memberId,
+    challenge_hash: f.codeHash,
+    credential_id: f.credentialId,
+    spki: f.publicKey,
+    origin: f.origin,
+    rp_id: f.rpId,
+  });
+}
+
+/**
+ * ADR 769: hold a verified registration against its live enrollment code, for an admin to vouch.
+ * Written once: a second hold of the same registration returns the same digest, a different
+ * registration on the same code is refused. Nothing is enrolled and the code is not spent.
+ */
+async function holdEnrollment(
+  db: Driver,
+  f: HeldEnrollmentFields,
+  binding: { nodeId: string | null; ceremonyOrigin: string | null; ceremonyRpId: string | null },
+  now: number,
+): Promise<
+  { ok: true; enrollmentDigest: string; expiresAt: number } | { ok: false; reason: string }
+> {
+  const code = await db.get<{ expires_at: number }>(
+    `SELECT expires_at FROM enrollment_codes
+      WHERE team_id = ? AND code_hash = ? AND member_id = ? AND used_at IS NULL AND expires_at >= ?
+        AND node_id IS ? AND ceremony_origin IS ? AND ceremony_rp_id IS ?`,
+    [
+      f.teamId,
+      f.codeHash,
+      f.memberId,
+      now,
+      binding.nodeId,
+      binding.ceremonyOrigin,
+      binding.ceremonyRpId,
+    ],
+  );
+  if (!code) return { ok: false, reason: 'bad_challenge' };
+  const digest = heldEnrollmentDigest(f);
+  await db.run(
+    `INSERT INTO held_enrollments
+       (code_hash, team_id, member_id, credential_id, public_key, origin, rp_id, digest, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (code_hash) DO NOTHING`,
+    [f.codeHash, f.teamId, f.memberId, f.credentialId, f.publicKey, f.origin, f.rpId, digest, now],
+  );
+  const held = await db.get<{ digest: string }>(
+    `SELECT digest FROM held_enrollments WHERE team_id = ? AND code_hash = ?`,
+    [f.teamId, f.codeHash],
+  );
+  if (held?.digest !== digest) return { ok: false, reason: 'already_held' };
+  return { ok: true, enrollmentDigest: digest, expiresAt: Number(code.expires_at) };
+}
 
 /**
  * Enroll a raw-public-key device key for a human (decision 6: a new key never authorizes
@@ -1006,8 +1081,13 @@ export async function enrollPasskeyGuarded(
     ceremonyOrigin?: string | undefined;
     countersignExpectedOrigins?: readonly string[] | undefined;
     /** ADR 808 inc D: the hostnames of this hub's configured passkey origins, for the recovery
-     *  re-check that no usable key stands; omitted, a recovery code is not honoured. */
+     *  re-check that no usable key stands; omitted, a recovery code is not honoured. ADR 769:
+     *  the same hosts decide whether the member has a usable key (standing-key approval) or not
+     *  (admin countersign); omitted, the countersign is read only at zero active keys. */
     recoveryHosts?: readonly string[] | undefined;
+    /** ADR 769: with no countersign, hold the verified registration for an admin's vouch and
+     *  return its digest instead of only refusing. Opt-in, so older clients see no change. */
+    hold?: boolean | undefined;
     now?: number;
   },
 ): Promise<EnrollKeyResult> {
@@ -1044,9 +1124,25 @@ export async function enrollPasskeyGuarded(
   ) {
     return { ok: false, reason: 'countersign_required' };
   }
+  // ADR 769: a member with no USABLE key (none that signs where this hub serves) cannot sign the
+  // standing-key approval, so an admin's countersign is the path, not only at zero keys. Without
+  // the hub's hosts, fall back to the zero-key rule.
+  const hosts = input.recoveryHosts;
+  const noUsableKey = hosts !== undefined ? !usableKeyStands(active, hosts) : active.length === 0;
+  const codeHash = createHash('sha256').update(input.challenge, 'utf8').digest('hex');
+  const made = registrationOrigin(input.registration.clientDataJson);
+  const heldFields: HeldEnrollmentFields = {
+    teamId: input.teamId,
+    memberId: input.member.id,
+    codeHash,
+    credentialId: verified.credentialId,
+    publicKey: verified.publicKeySpki,
+    origin: made.origin,
+    rpId: made.rpId,
+  };
   if (recovery) {
     // nothing more to prove: the operator's loopback act is the authority (audited at mint)
-  } else if (active.length > 0) {
+  } else if (!noUsableKey) {
     const check = await requireAuthority(db, {
       teamId: input.teamId,
       audience: input.audience,
@@ -1070,6 +1166,24 @@ export async function enrollPasskeyGuarded(
     );
     if (anyTeamKey) {
       const cs = input.countersign;
+      if (!cs && input.hold) {
+        const held = await holdEnrollment(
+          db,
+          heldFields,
+          {
+            nodeId: input.expectedNodeId ?? null,
+            ceremonyOrigin: input.ceremonyOrigin ?? null,
+            ceremonyRpId: input.expectedRpId ?? null,
+          },
+          now,
+        );
+        if (!held.ok) return { ok: false, reason: held.reason };
+        return {
+          ok: false,
+          reason: 'countersign_required',
+          held: { enrollmentDigest: held.enrollmentDigest, expiresAt: held.expiresAt },
+        };
+      }
       if (
         !cs ||
         cs.confirmer.kind !== 'human' ||
@@ -1078,6 +1192,9 @@ export async function enrollPasskeyGuarded(
       ) {
         return { ok: false, reason: 'countersign_required' };
       }
+      // ADR 769: the countersign names the exact registration (its held-enrollment digest), so a
+      // parked proof cannot enroll some other key for this member; and it must be a real
+      // signature from a key that signs here, never an unenrolled admin's bearer pass.
       const check = await requireAuthority(db, {
         teamId: input.teamId,
         audience: input.audience,
@@ -1085,12 +1202,19 @@ export async function enrollPasskeyGuarded(
         credential: 'human',
         act: 'device_key_admin',
         target: input.member.name,
-        payload: { action: 'enroll', kind: 'passkey', member: input.member.name },
+        payload: {
+          action: 'enroll',
+          kind: 'passkey',
+          member: input.member.name,
+          key: heldEnrollmentDigest(heldFields),
+        },
         proof: cs.proof,
         expectedOrigins: input.countersignExpectedOrigins ?? input.expectedOrigins,
         now,
       });
       if (!check.ok) return { ok: false, reason: check.reason };
+      const signer = await countersignerKeyUsable(db, input.teamId, check, hosts);
+      if (signer !== 'ok') return { ok: false, reason: signer };
     }
   }
   const spent = await consumeEnrollmentChallenge(db, {
@@ -1109,7 +1233,7 @@ export async function enrollPasskeyGuarded(
     publicKey: verified.publicKeySpki,
     kind: 'passkey',
     credentialId: verified.credentialId,
-    ...registrationOrigin(input.registration.clientDataJson),
+    ...made,
     now,
   });
   await appendAudit(db, input.teamId, {
@@ -1120,4 +1244,129 @@ export async function enrollPasskeyGuarded(
     detail: { key_id: key.id, kind: 'passkey', via: recovery ? 'recovery' : 'ceremony' },
   });
   return { ok: true, key, via: recovery ? 'recovery' : 'ceremony' };
+}
+
+/**
+ * ADR 769: a countersign or vouch counts only as a real signature (A2) by a key that is still
+ * standing and, when the hub's hosts are known, signs where this hub serves. An admin with no
+ * enrolled key passes `requireAuthority` as `bearer_unenrolled`: that is no countersign.
+ */
+async function countersignerKeyUsable(
+  db: Driver,
+  teamId: string,
+  check: AuthorityCheck & { ok: true },
+  hosts: readonly string[] | undefined,
+): Promise<'ok' | 'countersigner_unenrolled' | 'countersigner_key_unusable'> {
+  if (check.assurance !== 'A2') return 'countersigner_unenrolled';
+  const key = await getDeviceKey(db, teamId, check.keyId);
+  if (!key || key.revokedAt !== null) return 'countersigner_key_unusable';
+  if (hosts !== undefined && !usableKeyStands([key], hosts)) return 'countersigner_key_unusable';
+  return 'ok';
+}
+
+/**
+ * ADR 769: an admin vouches for a member's held enrollment, and it is enrolled. One transaction;
+ * every check runs inside it at commit time: the member still has no usable key, the code is
+ * unspent and unexpired, the held record recomputes to the digest the admin signed, the admin is a
+ * different human, admin now, signing with a standing key that signs here. Then the code is spent
+ * and the key inserted together — a failed insert rolls the spend back, and a second vouch or a
+ * replay finds the code spent.
+ */
+export async function vouchPasskeyGuarded(
+  db: Driver,
+  input: {
+    teamId: string;
+    audience: string;
+    admin: { id: string; name: string; kind: string };
+    /** The admin's capability resolved by the caller at this moment. */
+    adminIsAdmin: boolean;
+    memberName: string;
+    enrollmentDigest: string;
+    proof?: ApprovalProof | undefined;
+    /** The hostnames of this hub's configured passkey origins. */
+    hosts: readonly string[];
+    expectedOrigins?: readonly string[] | undefined;
+    now?: number;
+  },
+): Promise<EnrollKeyResult> {
+  const now = input.now ?? Date.now();
+  return db.tx(async (t) => {
+    const member = await getMemberByName(t, input.teamId, input.memberName);
+    if (!member || member.kind !== 'human' || member.left_at !== null)
+      return { ok: false, reason: 'no_member' };
+    if (input.admin.kind !== 'human' || !input.adminIsAdmin || input.admin.id === member.id)
+      return { ok: false, reason: 'not_a_countersigner' };
+    const held = await t.get<{
+      code_hash: string;
+      credential_id: string;
+      public_key: string;
+      origin: string | null;
+      rp_id: string | null;
+      digest: string;
+      used_at: number | null;
+      expires_at: number;
+    }>(
+      `SELECT h.code_hash, h.credential_id, h.public_key, h.origin, h.rp_id, h.digest,
+              c.used_at, c.expires_at
+         FROM held_enrollments h
+         JOIN enrollment_codes c ON c.team_id = h.team_id AND c.code_hash = h.code_hash
+        WHERE h.team_id = ? AND h.member_id = ? AND h.digest = ?`,
+      [input.teamId, member.id, input.enrollmentDigest],
+    );
+    if (!held) return { ok: false, reason: 'no_held_enrollment' };
+    if (held.used_at !== null) return { ok: false, reason: 'already_spent' };
+    if (Number(held.expires_at) < now) return { ok: false, reason: 'expired' };
+    const fields: HeldEnrollmentFields = {
+      teamId: input.teamId,
+      memberId: member.id,
+      codeHash: held.code_hash,
+      credentialId: held.credential_id,
+      publicKey: held.public_key,
+      origin: held.origin,
+      rpId: held.rp_id,
+    };
+    if (heldEnrollmentDigest(fields) !== held.digest)
+      return { ok: false, reason: 'held_record_altered' };
+    if (usableKeyStands(await activeDeviceKeys(t, input.teamId, member.id), input.hosts))
+      return { ok: false, reason: 'usable_key_stands' };
+    const check = await requireAuthority(t, {
+      teamId: input.teamId,
+      audience: input.audience,
+      presenter: input.admin,
+      credential: 'human',
+      act: 'device_key_admin',
+      target: member.name,
+      payload: { action: 'enroll', kind: 'passkey', member: member.name, key: held.digest },
+      proof: input.proof,
+      expectedOrigins: input.expectedOrigins,
+      now,
+    });
+    if (!check.ok) return { ok: false, reason: check.reason };
+    const signer = await countersignerKeyUsable(t, input.teamId, check, input.hosts);
+    if (signer !== 'ok') return { ok: false, reason: signer };
+    const spent = await t.run(
+      `UPDATE enrollment_codes SET used_at = ?
+        WHERE team_id = ? AND code_hash = ? AND member_id = ? AND used_at IS NULL AND expires_at >= ?`,
+      [now, input.teamId, held.code_hash, member.id, now],
+    );
+    if (spent.changes === 0) return { ok: false, reason: 'already_spent' };
+    const key = await enrollDeviceKey(t, {
+      teamId: input.teamId,
+      memberId: member.id,
+      publicKey: held.public_key,
+      kind: 'passkey',
+      credentialId: held.credential_id,
+      origin: held.origin,
+      rpId: held.rp_id,
+      now,
+    });
+    await appendAudit(t, input.teamId, {
+      actor: member.name,
+      action: 'device_key.enrolled',
+      target: member.name,
+      result: 'allow',
+      detail: { key_id: key.id, kind: 'passkey', via: 'vouch', vouched_by: input.admin.name },
+    });
+    return { ok: true, key, via: 'vouch' };
+  });
 }

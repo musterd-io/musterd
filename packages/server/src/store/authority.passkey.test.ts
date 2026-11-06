@@ -321,7 +321,23 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
       reason: 'countersign_required',
     });
 
-    // Root, a human admin with a standing key, countersigns — now it enrolls.
+    // ADR 769: the countersign names this exact registration. Held first, its digest is what the
+    // admin signs; a countersign over the bare member, as before, enrolls nothing.
+    const held = await enrollPasskeyGuarded(db, {
+      teamId: team.id,
+      audience: team.slug,
+      member: nick,
+      challenge: issued.challenge,
+      expectedOrigins: ['https://example.com'],
+      hold: true,
+      registration: {
+        attestationObject,
+        clientDataJson: clientData('webauthn.create', issued.challenge),
+      },
+    });
+    if (held.ok || !held.held) throw new Error('expected the registration to be held');
+
+    // Root, a human admin with a standing key, countersigns over the digest — now it enrolls.
     const d = await buildDescriptor(db, {
       teamId: team.id,
       audience: team.slug,
@@ -329,7 +345,12 @@ withDrivers('passkey authenticator (ADR 662 decision 5)', (o) => {
       actor: 'root',
       act: 'device_key_admin',
       target: 'nick',
-      payload: { action: 'enroll', kind: 'passkey', member: 'nick' },
+      payload: {
+        action: 'enroll',
+        kind: 'passkey',
+        member: 'nick',
+        key: held.held.enrollmentDigest,
+      },
     });
     const proof = {
       key_id: rootKey.id,

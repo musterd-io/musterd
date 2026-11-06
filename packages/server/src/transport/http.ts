@@ -288,6 +288,7 @@ import {
   buildDescriptor,
   enrollKeyGuarded,
   enrollPasskeyGuarded,
+  vouchPasskeyGuarded,
   getDescriptorByNonce,
   getParkedProof,
   getPasskeysForDescriptor,
@@ -1506,6 +1507,14 @@ const PasskeyEnrollBody = z.object({
     attestation_object: z.string().min(1),
     client_data_json: z.string().min(1),
   }),
+  /** ADR 769: with no countersign, hold the registration for an admin's vouch (202 + digest). */
+  hold: z.boolean().optional(),
+});
+/** ADR 769: an admin vouches for a member's held passkey enrollment. */
+const PasskeyVouchBody = z.object({
+  member: z.string().min(1),
+  enrollment_digest: z.string().regex(/^[0-9a-f]{64}$/),
+  approval: ApprovalProofSchema,
 });
 const ChannelSettingsBody = z.object({
   deliver: z.boolean(),
@@ -5813,11 +5822,22 @@ export async function handleHttp(
               : undefined,
           expectedOrigins: webauthnExpectedOrigins(ctx),
           recoveryHosts: webauthnExpectedOrigins(ctx).map((o) => new URL(o).hostname),
+          hold: body.hold,
           registration: {
             attestationObject: Buffer.from(body.registration.attestation_object, 'base64url'),
             clientDataJson: body.registration.client_data_json,
           },
         });
+        if (!result.ok && result.held) {
+          // ADR 769: verified and held, not enrolled. The member's sheet shows the check code
+          // (`vouchCheckCode` of this digest) and asks an admin to vouch.
+          return sendJson(res, 202, {
+            held: {
+              enrollment_digest: result.held.enrollmentDigest,
+              expires_at: result.held.expiresAt,
+            },
+          });
+        }
         if (!result.ok) {
           throw new MusterdError(
             result.reason === 'agent_credential' ? 'forbidden' : 'validation',
@@ -5825,6 +5845,39 @@ export async function handleHttp(
           );
         }
         return sendJson(res, 201, { key: { id: result.key.id, kind: result.key.kind } });
+      }
+      // ADR 769: an admin vouches for a member's held passkey enrollment — on the hub only (ADR
+      // 728 §4: the countersign is served from the hub's origin). The caller is the admin.
+      if (method === 'POST' && rest === '/authority/passkeys/vouch') {
+        const { team, member: admin } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(admin);
+        await requireHubLocalOnly(ctx, team, 'a passkey vouch');
+        const body = parseOrBadRequest(PasskeyVouchBody, await readJson(req));
+        const origins = webauthnExpectedOrigins(ctx);
+        const result = await vouchPasskeyGuarded(ctx.db, {
+          teamId: team.id,
+          audience: team.slug,
+          admin,
+          adminIsAdmin: admin.kind === 'human' && resolveCapabilities(admin).is_admin,
+          memberName: body.member,
+          enrollmentDigest: body.enrollment_digest,
+          proof: body.approval,
+          hosts: origins.map((o) => new URL(o).hostname),
+          expectedOrigins: origins,
+        });
+        if (!result.ok) {
+          const code =
+            result.reason === 'agent_credential'
+              ? 'forbidden'
+              : result.reason === 'no_member' || result.reason === 'no_held_enrollment'
+                ? 'not_found'
+                : 'validation';
+          throw new MusterdError(code, `passkey vouch refused (${result.reason})`);
+        }
+        return sendJson(res, 201, {
+          key: { id: result.key.id, kind: result.key.kind },
+          member: body.member,
+        });
       }
 
       // ADR 662 decision 6 — the device-key lifecycle. Every step names the caller's own
