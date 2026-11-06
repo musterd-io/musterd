@@ -84,16 +84,71 @@ the member who put it there, the model when the member is an agent, and the time
 the lanes and acts that cite it, and an act can cite a Drawer item by id. That is the difference from
 a shared drive: the team can see why a document changed.
 
-## Questions for nick
+## Decided by nick, 2026-11-06
 
-1. **The name.** "Drawer" is new to the glossary (`docs/glossary/terms.ts`), and a new canonical noun
-   needs a row and its "Not" column. Keep "Drawer"?
-2. **Size and kinds.** A per-file cap for the dogfood (100 MB?) and any kinds to refuse (executables?).
-3. **Who may delete.** Anyone on the team, the member who added it, or an owner only? Deletion is
-   recorded either way.
-4. **Agents' reach.** Do agents read and write documents and files from day one, or read first?
-5. **Public links.** Will a Drawer item ever need a link for someone off the team, like the watch links
-   of [ADR 616](../../decisions/616-demo-audiences-read-at-broadcast-grade.md)? Not for the dogfood, but it shapes the ids.
+1. **Permissions.** Everyone on the team adds, reads and updates. Only a **human admin** deletes. An
+   agent never deletes, and neither does a person who is not an admin.
+2. **Updates strike through.** An update never erases. Text that changed stays visible, struck
+   through, with the new text beside it and the member who made the change. *(sloane's reading of
+   "strikethrough to update": confirm.)* This fits the versioned shape above: each save is a version,
+   and a document shows what each save struck and added. A file is replaced the same way: the old
+   file stays, marked replaced, until an admin deletes it.
+3. **Sharing is a requirement.** Members need easy ways to share a document or a file, including with
+   people off the team. That changes the design in three places:
+   - **Links that leave the team.** A share link reaches someone who is not a member. It needs a
+     reachable address (a hosted team, or the relay a local team uses for reach), an expiry, and a way
+     to revoke it. [ADR 616](../../decisions/616-demo-audiences-read-at-broadcast-grade.md)'s watch
+     links are the nearest precedent. big-body reads the security half before it is designed.
+   - **The record.** Each share is an act: who shared what, with whom, and until when.
+   - **Privacy.** A shared item leaves the team's machine. `PRIVACY.md` says so in the same PR that
+     ships sharing.
+4. **The name stays open.** nick likes "Drawer" and wants others weighed (below).
+
+## Names to weigh
+
+Each is weighed against the office the product already draws ([ADR 578](../../decisions/578-the-office-and-knowledge-work.md))
+and the glossary's rule of one word per concept. The office scene on `/live` already has a bookshelf
+that opens the wiki ([ADR 747](../../decisions/747-team-wiki-read-from-the-team-repo.md)) and draws
+filing cabinets (`packages/web/src/live/office-scene/render.ts`), so any office-object name can open
+from something already in the room.
+
+| Name | For | Against |
+| --- | --- | --- |
+| **Drawer** | nick's word; one cabinet drawer in the office opens it; short, ownable | It reads as one person's drawer; "team drawer" may be needed at first |
+| **Cabinet** | The whole filing cabinet, shared by the room; files and folders fit it | Formal; also a word for a government |
+| **Files** | Nobody asks what it means; the noun people already search for | Generic; documents people edit together are more than files |
+| **Binder** | Pages people add to and annotate over time, a good fit for strike-through updates | Reads as paper documents and fits files less well |
+| **Locker** | Ownable, an office object | Reads as private storage, the opposite of a shared place |
+
+sloane's recommendation: **Drawer** for the dogfood, for its brevity and because it is the word nick
+reaches for. Re-check it after two weeks against what members called it unprompted in acts.
+"Shelf" is out: the wiki's bookshelf already has that word.
+
+## Storage and its cost
+
+This is pricing advice, and the call is nick's ([ADR 461](../../decisions/461-pricing-and-business-model.md)).
+
+- **On your own computers, storage costs musterd nothing.** The Drawer's files sit on the team's own
+  disk. ADR 461 §1 keeps the team layer free and uncapped there, so a local Drawer is free. The cap
+  is a disk-safety default the team can change. It is never a price.
+- **On musterd Cloud, we pay for every byte.** Cloudflare R2 lists object storage at about
+  **$0.015 per GB-month**, with 10 GB a month free and no egress fees (Cloudflare's own page).
+  Amazon S3 Standard is about **$0.023 per GB-month**, plus egress (third-party guides citing AWS's
+  US East rates; AWS's own page not read). Both read 2026-11-06. At R2's rate, 10 GB a team for a year
+  costs about $1.80 before requests.
+- **Proposed:** Drawer storage on Cloud counts against the free allowance ADR 461 §2 already defines.
+  Paid plans include more, and an org plan sets its own. That keeps one meter, the one Cloud already
+  needs, and a person can forecast it. The amounts come from design partners, like every other number
+  in ADR 461 §5.
+- **For the dogfood:** our team runs on our own hub, so the dogfood costs nothing in storage. A
+  per-file cap of 100 MB and no refused types is enough to learn from. Executables and archives are
+  the first kinds to reconsider once sharing reaches people off the team.
+
+## Questions still open
+
+1. **The name**, from the table above.
+2. **Agents' reach.** Agents add, read and update from day one, as members do. Confirm that the
+   strike-through record is enough to trust an agent's update.
 
 ## The dogfood, and how we would know
 
@@ -111,7 +166,7 @@ a shared drive: the team can see why a document changed.
 
 ## Next steps
 
-1. nick answers the five questions.
+1. nick picks the name and confirms the reading of "strikethrough to update".
 2. miley designs the surfaces (`/live`, phone, the MCP tools' names and shape within the context
    budgets CI checks); an engineer designs the store and the wire.
 3. Any protocol change and any new dependency get their ADR before code (AGENTS.md hard rules 1 and 6).
