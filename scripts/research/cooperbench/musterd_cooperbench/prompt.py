@@ -44,12 +44,32 @@ _CHECK_ACT = """2. Check `team_inbox_check` once after major edits and once befo
    is empty and you cannot proceed without your partner, end your turn."""
 
 
-def musterd_block(agent_id: str, partners: list[str], *, lane: str = "launch") -> str:
+# The lean arm (cost-fix manifest, finding 036). Step 1 no longer spends a call joining: since ADR
+# 707 the MCP server joins at session start. And one agent integrates: in the flash run both agents
+# fetched, merged and pushed in every pair. The second to finish merges the first's pushed branch, so
+# both patches carry the first agent's hunks unchanged and CooperBench's merge of the two is clean.
+_FIRST_LAUNCH = """1. Your first action is `team_inbox_check`, which joins you to the team.
+   Then open and claim a lane"""
+_FIRST_LEAN = """1. You joined the team when your session started. Open and claim a
+   lane"""
+_INTEGRATE_LEAN = """
+**One of you integrates.** When your feature is done, push your branch,
+resolve your lane and tell your partners you are done. If a partner told you
+they were done before you finished, you are the integrator: fetch their
+pushed branch, merge it into yours without changing their lines unless a
+conflict forces it, run the tests and push. If you finish first, do not merge
+— send your done message and stop.
+"""
+
+
+def musterd_block(agent_id: str, partners: list[str], *, lane: str = "launch", lean: bool = False) -> str:
     partner_str = ", ".join(partners)
     wait = _WAIT_ACT if lane == "act" else _WAIT_LAUNCH
     held = _HELD_ACT if lane == "act" else _HELD_LAUNCH
     turn_rule = _TURN_RULE_ACT if lane == "act" else ""
     check = _CHECK_ACT if lane == "act" else _CHECK_LAUNCH
+    first = _FIRST_LEAN if lean else _FIRST_LAUNCH
+    integrate = _INTEGRATE_LEAN if lean else ""
     return f"""## Cooperation protocol
 
 You are **{agent_id}**, working alongside: **{partner_str}**.
@@ -72,8 +92,7 @@ An edit outside your lanes is refused, and the refusal says why.
 
 Recommended workflow:
 
-1. Your first action is `team_inbox_check`, which joins you to the team.
-   Then open and claim a lane whose scope names the files you intend to
+{first} whose scope names the files you intend to
    touch, and `team_send` your partners a short summary of your feature
    and your lane.
 {check}
@@ -84,7 +103,7 @@ Recommended workflow:
    {held}
 4. Keep messages short and focused: file names, function names, and
    one-sentence intents are usually enough.
-
+{integrate}
 Messages are not magic — your peers only know what you tell them.
 """
 
@@ -138,11 +157,11 @@ Teammates' branches are at `team/<name>` (e.g., `team/{teammate_name}`).
 
 
 def build_instruction(
-    task: str, *, agents: list[str], agent_id: str, git_enabled: bool, lane: str = "launch"
+    task: str, *, agents: list[str], agent_id: str, git_enabled: bool, lane: str = "launch", lean: bool = False
 ) -> str:
     """CooperBench's coop instruction with the musterd block in the coop block's place."""
     partners = [a for a in agents if a != agent_id]
-    sections = [task, _SUBMISSION_BLOCK, musterd_block(agent_id, partners, lane=lane)]
+    sections = [task, _SUBMISSION_BLOCK, musterd_block(agent_id, partners, lane=lane, lean=lean)]
     if git_enabled:
         sections.append(_git_block(agent_id, partners))
     return "\n\n---\n\n".join(sections)

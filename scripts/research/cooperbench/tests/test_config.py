@@ -64,3 +64,15 @@ def test_the_gate_leaves_bash_ungated():
     # `**` matches a Bash call by its whole command string; gating Bash refused git diff (e2e run 2).
     assert "Bash" not in cfg.GATE_MATCHER.split("|")
     assert set(cfg.GATE_MATCHER.split("|")) == {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+
+
+def test_lean_disallowed_tools_are_hot_tools_the_flash_run_never_called():
+    # Finding 036: these six were always loaded and never called; the tools the seats did call stay.
+    hot = Path(__file__).resolve().parents[4] / "packages/mcp/src/toolNames.ts"
+    src = hot.read_text()
+    block = src[src.index("export const HOT_TOOLS = [") :]
+    block = block[: block.index("]")]
+    for tool in cfg.LEAN_DISALLOWED:
+        assert tool.startswith("mcp__musterd__") and f"'{tool[len('mcp__musterd__'):]}'" in block
+    for used in ("team_inbox_check", "team_send", "lane_open", "lane_update", "lane_resolve", "lane_board", "lane_submit"):
+        assert f"mcp__musterd__{used}" not in cfg.LEAN_DISALLOWED

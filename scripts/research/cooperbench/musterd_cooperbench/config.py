@@ -60,6 +60,17 @@ PERMISSION_FLOOR = ["Read", "Edit", "Write", "MultiEdit", "Glob", "Grep", "Bash"
 # be; it catches a bare `sleep N` (Claude Code's prefix rule), not a sleep inside a loop — the
 # guidance covers that, and `mtools.py` still counts it.
 ACT_LANE_DENY = ["Bash(sleep:*)"]
+# The lean arm (cost-fix manifest): the six always-loaded musterd tools no seat called in the flash
+# run (finding 036; team_join is redundant since ADR 707 joins at session start). Removing them takes
+# their schemas (~3.1 KB) out of every call's context; lane_submit stays (called once in 100 sessions).
+LEAN_DISALLOWED = [
+    "mcp__musterd__team_join",
+    "mcp__musterd__team_status",
+    "mcp__musterd__team_next",
+    "mcp__musterd__lane_claim",
+    "mcp__musterd__team_memory_read",
+    "mcp__musterd__team_memory_save",
+]
 
 # musterd's own matcher is "Edit|Write|MultiEdit|NotebookEdit|Bash". The arm leaves Bash out on purpose.
 # It gates every path with one `**` class (agents declare their own scopes), and the gate matches a

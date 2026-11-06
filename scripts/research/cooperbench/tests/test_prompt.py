@@ -35,3 +35,13 @@ def test_no_scope_is_ever_given_to_the_agent():
     # Lanes are agent-declared (nick, 2026-10-19): the instruction names no file to edit.
     text = build_instruction("TASK", agents=["agent1", "agent2"], agent_id="agent1", git_enabled=False)
     assert ".py" not in text.replace("patch.txt", "")
+
+
+def test_lean_block_keeps_the_shape_and_names_one_integrator():
+    # Cost-fix manifest (finding 036): same coaching shape, no join call, one integrator.
+    base, lean = musterd_block("agent1", ["agent2"]), musterd_block("agent1", ["agent2"], lean=True)
+    assert _shape(lean) == _shape(base)
+    assert "joins you to the team" in base and "joins you to the team" not in lean
+    assert "One of you integrates" in lean and "One of you integrates" not in base
+    assert lean.rstrip().splitlines()[-1] == base.rstrip().splitlines()[-1]
+    assert all(len(line) <= 80 for line in lean.splitlines())
