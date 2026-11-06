@@ -94,8 +94,10 @@ export function waitingLine(waiting: { to: string | null; since: number }, now: 
 /**
  * The actions that make sense for a seat as the roster shows it (nick, build 44: "shouldn't all
  * the buttons be contextual?"; build 45: "what happened to the check inbox and other actions?").
- * Check inbox and Resume are always there: a sleeping seat reads them when it wakes or comes back.
- * Start only for a seat that is not live, Stop only for one that is, Check PR only with a lane.
+ * Check inbox is always there: a sleeping seat reads it when it wakes or comes back. Resume ("pick
+ * up your lane", ADR 779) only for a seat that is not live: on a live one it is noise next to Stop
+ * (nick, build 61). Start only for a seat that is not live, Stop only for one that is, Check PR
+ * only with a lane.
  * Start on a seat nothing can wake would do nothing now, so it is left off.
  */
 export function seatActions(seat: {
@@ -108,7 +110,7 @@ export function seatActions(seat: {
     ...(!seat.online && seat.wakeable ? (['start'] as const) : []),
     'check_inbox',
     ...(lane ? (['check_pr'] as const) : []),
-    'resume',
+    ...(!seat.online ? (['resume'] as const) : []),
     ...(seat.online ? (['stop'] as const) : []),
   ];
 }

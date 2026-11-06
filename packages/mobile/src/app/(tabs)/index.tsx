@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import Animated, { LinearTransition } from 'react-native-reanimated';
+import Animated, { Easing, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AsksView } from '../../native/asks';
 import { heldBody, refusalLine } from '../../native/notice';
@@ -22,7 +22,7 @@ import { Breathe, Rise, Squish } from '../../ui/motion';
 import { Notice, SectionLabel } from '../../ui/notice';
 import { OfflineFold } from '../../ui/offlineFold';
 import { confirmPairAgain } from '../../ui/pairAgain';
-import { SPRING } from '../../ui/springs';
+import { GLIDE } from '../../ui/springs';
 import { font, radius, space, usePalette } from '../../ui/theme';
 
 /**
@@ -459,6 +459,7 @@ export default function AsksScreen() {
             {paired && pin ? (
               <OfflineFold
                 members={rows.offline}
+                pin={pin}
                 open={showOffline}
                 onToggle={() => setShowOffline((o) => !o)}
               >
@@ -511,8 +512,10 @@ export default function AsksScreen() {
         }
         renderItem={({ item }) =>
           pin ? (
-            // A re-sort slides the row to its new place instead of redrawing it.
-            <Animated.View layout={LinearTransition.springify().damping(SPRING.settle.damping)}>
+            // A re-sort glides the row to its new place: eased, no overshoot (nick, build 61).
+            <Animated.View
+              layout={LinearTransition.duration(GLIDE.duration).easing(Easing.out(Easing.cubic))}
+            >
               <MemberRow member={item} pin={pin} now={now} onPress={setSheet} />
             </Animated.View>
           ) : null
@@ -552,7 +555,7 @@ const styles = StyleSheet.create({
   pollText: { flex: 1, fontFamily: font.semibold, fontSize: 12.5 },
   pollLive: { fontFamily: font.regular, fontSize: 11 },
   quiet: { fontFamily: font.regular, fontSize: 12.5, paddingVertical: 4 },
-  hairline: { height: StyleSheet.hairlineWidth, marginLeft: 28 + space.sm + 2 },
+  hairline: { height: StyleSheet.hairlineWidth, marginLeft: 34 + space.sm + 2 },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   pill: {
     alignSelf: 'flex-start',

@@ -327,10 +327,11 @@ describe('quick action copy', () => {
 
   it('offers only what fits the seat', () => {
     const lane = { id: 'L1', title: 'phone' };
+    // A live seat is at work: Resume ("pick up your lane", ADR 779) is noise next to Stop
+    // (nick, build 61: "members that are working/online have both a stop and resume button").
     expect(seatActions({ online: true, wakeable: true, lane })).toEqual([
       'check_inbox',
       'check_pr',
-      'resume',
       'stop',
     ]);
     expect(seatActions({ online: false, wakeable: true, lane })).toEqual([
