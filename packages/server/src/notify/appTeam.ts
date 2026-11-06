@@ -8,6 +8,7 @@ import {
   type AppMemberState,
 } from '@musterd/protocol/app-channel';
 import { shortModel } from '@musterd/protocol/model';
+import { ASK_TIER_DEFAULTS, askSpeciesOf, askTierHolds, askTierOf } from '@musterd/protocol/wire';
 
 /**
  * The team for the phone (ADR 814 decision 2), folded by the rule /live's team column uses
@@ -169,4 +170,59 @@ export function appForYou(items: readonly ForYouSource[]): AppForYou[] {
         ts: i.ts,
       };
     });
+}
+
+/** An ask as `liveAsks` needs it: its id, when, its thread, its meta (species, tier, lane_review). */
+export interface AskLike {
+  id: string;
+  ts: number;
+  thread: string | null;
+  meta: Record<string, unknown> | null;
+}
+
+/** A later envelope that may settle an ask: accept, decline, resolve, a deferring wait, an outcome. */
+export interface CloserLike {
+  act: string;
+  ts: number;
+  thread: string | null;
+  meta: Record<string, unknown> | null;
+}
+
+/**
+ * The asks still loud, by /live's own rule (`packages/web/src/live/asks.ts`: `deriveAsks`, then
+ * `applyTierClock`, then `askIsLoud`), so the phone's For you and /live's rail agree. An ask closes
+ * on a LATER envelope that references it — `in_reply_to` or `ask_ref` naming it, or any act on its
+ * thread — that accepts, declines, resolves, defers (`wait` with `ask_ref`), or reports
+ * `ask_outcome` risk_accepted or stranded; a `held` outcome keeps it loud. Still open past its
+ * deadline (a review ask's own `lane_review.wait_ms`, else the tier's), it stays loud only if its
+ * tier holds; any other tier has lapsed, and the work went on without an answer. An ask with no
+ * species or tier is not a well-formed ask and is not listed, as /live does not list it.
+ */
+export function liveAsks<A extends AskLike>(
+  asks: readonly A[],
+  closers: readonly CloserLike[],
+  now: number,
+): A[] {
+  return asks.filter((ask) => {
+    const species = askSpeciesOf(ask.meta?.['species']);
+    const tier = askTierOf(ask.meta?.['tier']);
+    if (!species || !tier) return false;
+    for (const env of closers) {
+      if (env.ts < ask.ts) continue;
+      const meta = env.meta ?? {};
+      const named = meta['in_reply_to'] === ask.id || meta['ask_ref'] === ask.id;
+      const onThread = env.thread !== null && (env.thread === ask.id || env.thread === ask.thread);
+      if (!named && !onThread) continue;
+      if (env.act === 'accept' || env.act === 'decline' || env.act === 'resolve') return false;
+      if (env.act === 'wait' && typeof meta['ask_ref'] === 'string') return false;
+      const outcome = meta['ask_outcome'];
+      if (outcome === 'risk_accepted' || outcome === 'stranded') return false;
+    }
+    const wait = (ask.meta?.['lane_review'] as { wait_ms?: unknown } | undefined)?.wait_ms;
+    const timeout =
+      typeof wait === 'number' && Number.isFinite(wait) && wait > 0
+        ? wait
+        : ASK_TIER_DEFAULTS[tier].timeout_ms;
+    return ask.ts + timeout > now || askTierHolds(tier);
+  });
 }

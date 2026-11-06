@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AppForYou, AppMember } from './team';
-import { sinceLabel, summaryLine, teamRows } from './team';
+import { forYouCount, modelLine, sinceLabel, summaryLine, teamRows } from './team';
 
 const NOW = 1_800_000_000_000;
 
@@ -112,5 +112,26 @@ describe('the Now header', () => {
     expect(sinceLabel(NOW - 3 * 3_600_000, NOW)).toBe('3h');
     expect(sinceLabel(NOW - 2 * 86_400_000, NOW)).toBe('2d');
     expect(sinceLabel(null, NOW)).toBeNull();
+  });
+});
+
+describe('build 59 fixes (nick’s screenshots, 2026-11-06)', () => {
+  it('the For you header counts the merged list, not the phone’s own asks', () => {
+    const r = roster({
+      members: [],
+      for_you: [
+        { id: 'a', from: 'miley', kind: 'approve', summary: 'a', ts: 1 },
+        { id: 'b', from: 'fifty', kind: 'question', summary: 'b', ts: 2 },
+      ],
+    });
+    const rows = teamRows(r, [{ id: 'b', from: 'fifty', ts: 2, summary: 'b' }], 'nick');
+    expect(forYouCount(rows)).toBe(2);
+  });
+
+  it('an away row shows no model line; a present one keeps /live’s badge, unknown included', () => {
+    expect(modelLine(member({ name: 'alfie', state: 'away', model: 'model unknown' }))).toBeNull();
+    expect(modelLine(member({ name: 'dolly', state: 'away', model: 'opus 5.5' }))).toBeNull();
+    expect(modelLine(member({ name: 'cider', model: 'opus 5.5' }))).toBe('opus 5.5');
+    expect(modelLine(member({ name: 'x', model: 'model unknown' }))).toBe('model unknown');
   });
 });

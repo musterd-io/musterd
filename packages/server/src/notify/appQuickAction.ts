@@ -26,7 +26,7 @@ import { getTeamBySlug } from '../store/teams.js';
 import { rosterPoll } from './appPoll.js';
 import { verifyPhoneSigned } from './appQuestion.js';
 import { loadAppChannelKeys, openFromPhone } from './appSeal.js';
-import { appForYou, appMembers, type ForYouSource } from './appTeam.js';
+import { appForYou, appMembers, liveAsks, type ForYouSource } from './appTeam.js';
 
 /**
  * The phone's quick actions and seat roster (ADR 791). A quick action is the same person's `steer`
@@ -266,18 +266,19 @@ async function appTeamFor(
     grade: viewer ? messageVisibilityOf(viewer) : 'public',
     readerId: viewer?.id ?? '',
   });
-  const asks = await ctx.db.all<{
+  const rows = await ctx.db.all<{
     id: string;
     body: string;
     meta: string | null;
     ts: number;
     to_kind: string;
     to_member: string | null;
+    thread_id: string | null;
     from_name: string;
     to_name: string | null;
     to_member_kind: string | null;
   }>(
-    `SELECT msg.id, msg.body, msg.meta, msg.ts, msg.to_kind, msg.to_member,
+    `SELECT msg.id, msg.body, msg.meta, msg.ts, msg.to_kind, msg.to_member, msg.thread_id,
             mf.name AS from_name, mt.name AS to_name, mt.kind AS to_member_kind
        FROM (SELECT * FROM messages
               WHERE team_id = ? AND act = 'ask' AND ts > ?${scope.sql}) msg
@@ -285,13 +286,35 @@ async function appTeamFor(
        LEFT JOIN members mt ON mt.id = msg.to_member AND mt.team_id = msg.team_id
       WHERE (msg.meta IS NULL OR json_extract(msg.meta, '$.question') IS NULL)
         AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = msg.team_id AND d.ask_id = msg.id)
-        AND NOT EXISTS (
-          SELECT 1 FROM messages a JOIN members author ON author.id = a.from_member AND author.team_id = a.team_id
-           WHERE a.team_id = msg.team_id AND a.act IN ('accept', 'decline') AND author.kind = 'human'
-             AND json_extract(a.meta, '$.in_reply_to') = msg.id
-        )
       ORDER BY msg.ts, msg.id`,
     [team.id, now - OPEN_ASK_LOOKBACK_MS, ...scope.params],
+  );
+  // Every act that can settle an ask in the window, read whole: it only ever closes an ask, so it
+  // needs no read scope. /live's rule (appTeam.ts liveAsks) then keeps what is still loud.
+  const closers = await ctx.db.all<{
+    act: string;
+    ts: number;
+    thread_id: string | null;
+    meta: string | null;
+  }>(
+    `SELECT act, ts, thread_id, meta FROM messages
+      WHERE team_id = ? AND ts > ?
+        AND (act IN ('accept', 'decline', 'resolve', 'wait')
+             OR json_extract(meta, '$.ask_outcome') IS NOT NULL)`,
+    [team.id, now - OPEN_ASK_LOOKBACK_MS],
+  );
+  const parse = (m: string | null): Record<string, unknown> | null => {
+    if (!m) return null;
+    try {
+      return JSON.parse(m) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+  const asks = liveAsks(
+    rows.map((r) => ({ ...r, thread: r.thread_id, meta: parse(r.meta) })),
+    closers.map((c) => ({ act: c.act, ts: c.ts, thread: c.thread_id, meta: parse(c.meta) })),
+    now,
   );
   // /live's teamCards: the freshest open ask per asker addressed to a person (or the team).
   const asking = new Map<string, { to: string | null }>();
@@ -316,20 +339,11 @@ async function appTeamFor(
     .map((a) => ({
       id: a.id,
       from: a.from_name,
-      kind: parseLaneReview(a.meta) ? 'review' : 'approve',
+      kind: a.meta?.['lane_review'] !== undefined ? 'review' : 'approve',
       body: a.body,
       ts: a.ts,
     }));
   for (const q of await openQuestions(ctx.db, team.id, { forPerson: viewer.name }))
     owed.push({ id: q.id, from: q.asker, kind: 'question', body: q.question.text, ts: q.asked_at });
   return { members, for_you: appForYou(owed) };
-}
-
-function parseLaneReview(meta: string | null): boolean {
-  if (!meta) return false;
-  try {
-    return (JSON.parse(meta) as { lane_review?: unknown }).lane_review !== undefined;
-  } catch {
-    return false;
-  }
 }

@@ -258,5 +258,74 @@ withDrivers('app roster waiting', (_o, kind) => {
       // nick is its addressee (and an admin): ada is asking him.
       expect(await asSeenBy(nick.id)).toBe('asking nick');
     });
+
+    it('lists an ask in for_you only while /live shows it loud: lapsed and withdrawn asks leave', async () => {
+      const ctx = operatorCtx({
+        db: server.store,
+        traceDb: server.traceStore,
+        hub: new Hub(),
+        config: server.config,
+        rosterRoots: [],
+      });
+      await fetch(`http://127.0.0.1:${port}/teams`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug: 'dead-asks', creator: { name: 'nick', kind: 'human' } }),
+      });
+      const team = (await getTeamBySlug(ctx.db, 'dead-asks'))!;
+      const nick = (await ctx.db.get<{ id: string }>(
+        `SELECT id FROM members WHERE team_id = ? AND name = 'nick'`,
+        [team.id],
+      ))!;
+      const live = (await addMember(ctx.db, team, { name: 'live', kind: 'agent' })).row!;
+      const NOW = 10 * 24 * 60 * 60_000;
+      const DAY = 24 * 60 * 60_000;
+      const ask = (id: string, ts: number, tier: string, thread?: string) =>
+        insertMessage(
+          ctx.db,
+          team.id,
+          live.id,
+          nick.id,
+          makeEnvelope({
+            id,
+            team: 'dead-asks',
+            from: 'live',
+            to: { kind: 'member', name: 'nick' },
+            act: 'ask',
+            body: `Deploy ${id}?`,
+            ts,
+            ...(thread ? { thread } : {}),
+            meta: { species: 'approve', tier },
+          }),
+        );
+      await ask('lapsed', NOW - 2 * DAY, 'standard');
+      await ask('withdrawn', NOW - 3 * DAY, 'blocking');
+      await ask('held', NOW - 4 * DAY, 'blocking');
+      // The publisher withdraws a superseded deploy ask with a resolve on its thread (ADR 734).
+      await insertMessage(
+        ctx.db,
+        team.id,
+        live.id,
+        nick.id,
+        makeEnvelope({
+          id: 'r-1',
+          team: 'dead-asks',
+          from: 'live',
+          to: { kind: 'member', name: 'nick' },
+          act: 'resolve',
+          body: 'main moved — withdrawn',
+          ts: NOW - 3 * DAY + 60_000,
+          thread: 'withdrawn',
+        }),
+      );
+      ctx.memberSummaries = async () => [];
+      const roster = await buildAppRoster(
+        ctx,
+        team,
+        { id: 'b', member_id: nick.id } as ChannelBinding,
+        NOW,
+      );
+      expect(roster.for_you?.map((f) => f.id)).toEqual(['held']);
+    });
   });
 });
