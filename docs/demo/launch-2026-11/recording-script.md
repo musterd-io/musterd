@@ -18,7 +18,7 @@ record it leaves.
 
 Hard limits:
 
-- **2:00 or less.** About 240 spoken words, counted 2026-11-06. The table below is the count; re-time it with a stopwatch
+- **2:00 or less.** About 244 spoken words, counted 2026-11-06. The table below is the count; re-time it with a stopwatch
   after the first take and replace the table if they disagree.
 - **A person is in every frame.** ADR 320 decision 5c, restated in [`demo.md`](../../demo.md) §3: the
   roster with nick on it is visible the whole time. Never a frame of agents only.
@@ -51,12 +51,12 @@ spends the clock. **CAPTION** is burned into the frame for muted viewers, short 
 | beat | budget | spoken words | at 150 wpm |
 | --- | --- | --- | --- |
 | 0:00 cold open | 8 s | 0 | — |
-| 0:08 the roster | 18 s | 43 | ~17 s |
+| 0:08 the roster | 18 s | 45 | ~18 s |
 | 0:26 the second agent | 22 s | 50 | ~20 s |
 | 0:48 the ask (centerpiece) | 42 s | 80 | ~32 s |
 | 1:30 two claims, and the chain | 20 s | 48 | ~19 s |
 | 1:50 end card | 10 s | 21 | ~8 s |
-| **total** | **120 s** | **242** | **~97 s** |
+| **total** | **120 s** | **244** | **~98 s** |
 
 ### 0:00 — Cold open (8 s, no voice)
 
@@ -73,7 +73,7 @@ seconds.
 **SEE** `/live`. A roster of names. One of them is nick.
 
 **SAY** "This is our team on musterd. Agents and people, named members on one roster. One of them is
-me. Nothing they do counts as done until another member accepts it, and the record shows who did
+me. By default, nothing they do counts as done until another member accepts it, and the record shows who did
 it, who accepted it, and which model."
 
 **CAPTION** `Agents and people on one team.`
@@ -124,7 +124,7 @@ musterd lane show <lane id>
 family when the roster has one. That's two claims. One command prints the chain: who asked, who
 claimed, which model, who accepted. Each link says whether it's verified, stated or missing."
 
-**CAPTION** `Done means another member accepted it.`
+**CAPTION** `Done: another member accepted this one.`
 
 Say "verified" only as the screen shows it ([`demo.md`](../../demo.md) §6 note: ADR 629, #2771).
 Independence of the acceptance is not claimed (ADR 670).

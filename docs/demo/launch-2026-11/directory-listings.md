@@ -13,9 +13,9 @@
 | Official MCP Registry | `io.musterd/musterd` 0.7.1 listed ([API](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.musterd/musterd)) | Car 4 of the release train, `mcp-publisher publish`, nick ([ADR 669](../../decisions/669-the-release-train.md) D1, D4). `pnpm train status` checks it |
 | mcprush | Security grade A ([listing](https://mcprush.com/musterd/musterd-mcp)); badge in `README.md` | Re-graded by mcprush |
 | PulseMCP | Its submit page says it takes no new servers for now and picks servers up from the official registry later | Nothing to do: the registry listing covers it |
-| Glama | Listed 2026-11-06 at [glama.ai/mcp/servers/musterd-io/musterd](https://glama.ai/mcp/servers/musterd-io/musterd), marked official; submitted by nick | Claim it from the listing page: `glama.json` names `Nas4146` |
-| awesome-mcp-servers | PR [punkpeye/awesome-mcp-servers#18787](https://github.com/punkpeye/awesome-mcp-servers/pull/18787), opened 2026-11-06 by nick (`~/submit.sh`, prepared by sloane; the title carries the list's agent marker) | Waits on the list's maintainers |
-| mcp.so | Issue [chatmcp/mcpso#6869](https://github.com/chatmcp/mcpso/issues/6869), opened 2026-11-06 by nick, in the format other submissions use | Waits on mcp.so |
+| Glama | Listed 2026-11-06 at [glama.ai/mcp/servers/musterd-io/musterd](https://glama.ai/mcp/servers/musterd-io/musterd), marked official; submitted by nick. No quality score yet: Glama needs a deployable release | The Dockerfile is `deploy/glama/` (#4058, lane `01M6S9N6HK`). nick enters the build settings from `deploy/glama/README.md` on the listing's Admin → Dockerfile page, then makes a release |
+| awesome-mcp-servers | PR [punkpeye/awesome-mcp-servers#18787](https://github.com/punkpeye/awesome-mcp-servers/pull/18787), opened 2026-11-06 by nick (`~/submit.sh`, prepared by sloane; the title carries the list's agent marker) | Waits on the list's maintainers and on Glama's quality score (the list's bot asks for one) |
+| mcp.so | Issue [chatmcp/mcpso#6869](https://github.com/chatmcp/mcpso/issues/6869), opened 2026-11-06 by nick, in the format other submissions use | Waits on mcp.so. Its description says "Nothing counts as done until another member accepts it"; the issue body takes "By default, " in front (big-body's review, ADR 234) |
 
 ## 2. To submit, in order
 
@@ -39,7 +39,7 @@ One description, in three lengths. Use the length the field allows; never write 
   `Your agents, on a team with you. Every piece of work shows who did it and who accepted it.`
   This is `packages/mcp/server.json`'s description. Keep the two the same.
 - **Short (for a form's description field, about 50 words):**
-  `musterd puts your agents and the people you work with on one team: a roster, a board of lanes, inboxes, and a record of each piece of work. An agent asks a person when it needs a decision. Nothing counts as done until another member accepts it. Runs on your machine, MIT.`
+  `musterd puts your agents and the people you work with on one team: a roster, a board of lanes, inboxes, and a record of each piece of work. An agent asks a person when it needs a decision. By default, nothing counts as done until another member accepts it. Runs on your machine, MIT.`
 - **List line, awesome-mcp-servers**, under **Agreements & Coordination** (its README, read
   2026-11-06: "commitments, escrow, and multi-party decision workflows across humans, agents, and
   organizations"), in alphabetical order:
