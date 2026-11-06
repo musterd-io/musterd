@@ -200,3 +200,5 @@ console.error(
     : `✓ staged four MUSTERD_TWITCH_CHAT_* secrets on ${app} — \`musterd stream doctor\` next`,
 );
 await run('fly', ['secrets', 'list', '-a', app]);
+// Done: nothing should keep the process alive (a readline on stdin or the browser child can).
+process.exit(0);
