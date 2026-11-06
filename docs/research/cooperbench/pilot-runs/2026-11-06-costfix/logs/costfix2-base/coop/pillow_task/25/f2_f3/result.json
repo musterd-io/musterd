@@ -1,0 +1,46 @@
+{
+  "repo": "pillow_task",
+  "task_id": 25,
+  "features": [
+    2,
+    3
+  ],
+  "setting": "coop",
+  "run_id": "dc272040",
+  "run_name": "costfix2-base",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T22:25:59.188444",
+  "ended_at": "2026-11-06T22:28:10.571617",
+  "duration_seconds": 131.383173,
+  "agents": {
+    "agent1": {
+      "feature_id": 2,
+      "status": "Submitted",
+      "cost": 0.18691039999999998,
+      "steps": 14,
+      "input_tokens": 22,
+      "output_tokens": 2720,
+      "cache_read_tokens": 301587,
+      "cache_write_tokens": 14421,
+      "patch_lines": 85,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 0.1875966,
+      "steps": 14,
+      "input_tokens": 22,
+      "output_tokens": 2675,
+      "cache_read_tokens": 308443,
+      "cache_write_tokens": 14464,
+      "patch_lines": 85,
+      "error": null
+    }
+  },
+  "total_cost": 0.374507,
+  "total_steps": 28,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix2-base/coop/pillow_task/25/f2_f3"
+}

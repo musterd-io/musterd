@@ -1,0 +1,177 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 666ad68..493a6e0 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -280,6 +280,8 @@ class Context:
+         token_normalize_func: t.Callable[[str], str] | None = None,
+         color: bool | None = None,
+         show_default: bool | None = None,
++        on_exit: t.Callable[[Context], t.Any] | None = None,
++        validate_nesting: bool = False,
+     ) -> None:
+         #: the parent context or `None` if none exists.
+         self.parent = parent
+@@ -432,6 +434,19 @@ class Context:
+         self._parameter_source: dict[str, ParameterSource] = {}
+         self._exit_stack = ExitStack()
+ 
++        #: Optional callback invoked with this context when it is closed.
++        self._on_exit: t.Callable[[Context], t.Any] | None = on_exit
++
++        #: Whether to validate that all child contexts are closed before
++        #: this context is closed. Inherited from the parent if enabled.
++        self.validate_nesting: bool = bool(validate_nesting) or (
++            parent is not None and getattr(parent, "validate_nesting", False)
++        )
++        self._child_contexts: list[Context] = []
++
++        if parent is not None and parent.validate_nesting:
++            parent._child_contexts.append(self)
++
+     @property
+     def protected_args(self) -> list[str]:
+         import warnings
+@@ -477,9 +492,15 @@ class Context:
+         tb: TracebackType | None,
+     ) -> None:
+         self._depth -= 1
+-        if self._depth == 0:
+-            self.close()
+-        pop_context()
++        try:
++            if self._depth == 0:
++                if exc_type is not None:
++                    # Don't mask the original exception with a nesting error.
++                    self._close(validate=False)
++                else:
++                    self.close()
++        finally:
++            pop_context()
+ 
+     @contextmanager
+     def scope(self, cleanup: bool = True) -> cabc.Iterator[Context]:
+@@ -606,10 +627,47 @@ class Context:
+         """Invoke all close callbacks registered with
+         :meth:`call_on_close`, and exit all context managers entered
+         with :meth:`with_resource`.
++
++        If ``validate_nesting`` is enabled and any child contexts are still
++        open, a :exc:`RuntimeError` is raised.
++
++        If an ``on_exit`` callback was given, it is called with this
++        context. Exceptions raised by the callback are ignored.
+         """
+-        self._exit_stack.close()
+-        # In case the context is reused, create a new exit stack.
+-        self._exit_stack = ExitStack()
++        self._close(validate=True)
++
++    def _close(self, validate: bool) -> None:
++        if validate and self.validate_nesting:
++            open_children = list(self._child_contexts)
++
++            if open_children:
++                names = ", ".join(
++                    repr(c.info_name or c.command.name) for c in open_children
++                )
++                raise RuntimeError(
++                    f"Cannot close context {self.info_name!r} while child"
++                    f" contexts are still open: {names}."
++                )
++
++        try:
++            if self._on_exit is not None:
++                try:
++                    self._on_exit(self)
++                except Exception:
++                    pass
++
++            self._exit_stack.close()
++        finally:
++            # In case the context is reused, create a new exit stack.
++            self._exit_stack = ExitStack()
++            self._child_contexts.clear()
++            parent = self.parent
++
++            if parent is not None:
++                try:
++                    parent._child_contexts.remove(self)
++                except ValueError:
++                    pass
+ 
+     @property
+     def command_path(self) -> str:
+@@ -728,6 +786,11 @@ class Context:
+ 
+         :meta private:
+         """
++        if self.validate_nesting:
++            return type(self)(
++                command, info_name=command.name, parent=self, validate_nesting=True
++            )
++
+         return type(self)(command, info_name=command.name, parent=self)
+ 
+     @t.overload
+@@ -1123,6 +1186,7 @@ class Command:
+         info_name: str | None,
+         args: list[str],
+         parent: Context | None = None,
++        on_exit: t.Callable[[Context], t.Any] | None = None,
+         **extra: t.Any,
+     ) -> Context:
+         """This function when given an info name and arguments will kick
+@@ -1139,6 +1203,8 @@ class Command:
+                           the name of the command.
+         :param args: the arguments to parse as list of strings.
+         :param parent: the parent context if available.
++        :param on_exit: an optional callback invoked with the context
++                        when the context is closed.
+         :param extra: extra keyword arguments forwarded to the context
+                       constructor.
+ 
+@@ -1149,6 +1215,9 @@ class Command:
+             if key not in extra:
+                 extra[key] = value
+ 
++        if on_exit is not None:
++            extra["on_exit"] = on_exit
++
+         ctx = self.context_class(self, info_name=info_name, parent=parent, **extra)
+ 
+         with ctx.scope(cleanup=False):
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 6fd9e54..25bdcad 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -544,6 +544,7 @@ def _resolve_context(
+     :param args: List of complete args before the incomplete value.
+     """
+     ctx_args["resilient_parsing"] = True
++    ctx_args["validate_nesting"] = False
+     ctx = cli.make_context(prog_name, args.copy(), **ctx_args)
+     args = ctx._protected_args + ctx.args
+ 
+@@ -557,7 +558,13 @@ def _resolve_context(
+                 if cmd is None:
+                     return ctx
+ 
+-                ctx = cmd.make_context(name, args, parent=ctx, resilient_parsing=True)
++                ctx = cmd.make_context(
++                    name,
++                    args,
++                    parent=ctx,
++                    resilient_parsing=True,
++                    validate_nesting=False,
++                )
+                 args = ctx._protected_args + ctx.args
+             else:
+                 sub_ctx = ctx
+@@ -575,6 +582,7 @@ def _resolve_context(
+                         allow_extra_args=True,
+                         allow_interspersed_args=False,
+                         resilient_parsing=True,
++                        validate_nesting=False,
+                     )
+                     args = sub_ctx.args
+ 

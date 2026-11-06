@@ -1,0 +1,103 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..7115e4cf5 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -179,23 +179,37 @@ impl Str {
+     /// Extracts the first grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn first(
++        &self,
++        /// The index of the grapheme cluster to extract, counted from the
++        /// start of the string.
++        #[default]
++        index: Option<usize>,
++        /// Whether to skip leading whitespace.
++        #[named]
++        #[default(false)]
++        skip_whitespace: bool,
++    ) -> StrResult<Str> {
++        let s = self.trimmed(skip_whitespace, str::trim_start_matches)?;
++        select_grapheme(s.graphemes(true), index)
+     }
+ 
+     /// Extracts the last grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next_back()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn last(
++        &self,
++        /// The index of the grapheme cluster to extract, counted from the
++        /// end of the string.
++        #[default]
++        index: Option<usize>,
++        /// Whether to skip trailing whitespace.
++        #[named]
++        #[default(false)]
++        skip_whitespace: bool,
++    ) -> StrResult<Str> {
++        let s = self.trimmed(skip_whitespace, str::trim_end_matches)?;
++        select_grapheme(s.graphemes(true).rev(), index)
+     }
+ 
+     /// Extracts the first grapheme cluster after the specified index. Returns
+@@ -835,6 +849,48 @@ fn string_is_empty() -> EcoString {
+     "string is empty".into()
+ }
+ 
++impl Str {
++    /// Returns the string, optionally trimmed of whitespace with `trim`.
++    /// Fails if a non-empty string becomes empty through trimming.
++    fn trimmed<'a>(
++        &'a self,
++        skip_whitespace: bool,
++        trim: fn(&'a str, fn(char) -> bool) -> &'a str,
++    ) -> StrResult<&'a str> {
++        if !skip_whitespace {
++            return Ok(self.0.as_str());
++        }
++        let s = trim(self.0.as_str(), char::is_whitespace);
++        if s.is_empty() && !self.0.is_empty() {
++            return Err(string_contains_only_whitespace());
++        }
++        Ok(s)
++    }
++}
++
++/// Selects the grapheme at `index` (or the first one) from an iterator.
++fn select_grapheme<'a>(
++    graphemes: impl Iterator<Item = &'a str> + Clone,
++    index: Option<usize>,
++) -> StrResult<Str> {
++    let i = index.unwrap_or(0);
++    graphemes.clone().nth(i).map(Into::into).ok_or_else(|| {
++        match index {
++            None => string_is_empty(),
++            Some(_) => eco_format!(
++                "index {i} out of bounds for string with {} characters",
++                graphemes.count()
++            ),
++        }
++    })
++}
++
++/// The error message when a string only contains whitespace.
++#[cold]
++fn string_contains_only_whitespace() -> EcoString {
++    "string contains only whitespace".into()
++}
++
+ /// A regular expression.
+ ///
+ /// Can be used as a [show rule selector]($styling/#show-rules) and with

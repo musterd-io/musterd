@@ -1,0 +1,46 @@
+{
+  "repo": "pallets_jinja_task",
+  "task_id": 1559,
+  "features": [
+    5,
+    8
+  ],
+  "setting": "coop",
+  "run_id": "20138499",
+  "run_name": "costfix1-lean",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T19:36:32.514324",
+  "ended_at": "2026-11-06T19:39:17.162190",
+  "duration_seconds": 164.647866,
+  "agents": {
+    "agent2": {
+      "feature_id": 8,
+      "status": "Submitted",
+      "cost": 0.31812919999999995,
+      "steps": 12,
+      "input_tokens": 20,
+      "output_tokens": 7256,
+      "cache_read_tokens": 308621,
+      "cache_write_tokens": 22241,
+      "patch_lines": 332,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 5,
+      "status": "Submitted",
+      "cost": 0.184998,
+      "steps": 13,
+      "input_tokens": 18,
+      "output_tokens": 3219,
+      "cache_read_tokens": 241580,
+      "cache_write_tokens": 14446,
+      "patch_lines": 332,
+      "error": null
+    }
+  },
+  "total_cost": 0.5031272,
+  "total_steps": 25,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix1-lean/coop/pallets_jinja_task/1559/f5_f8"
+}

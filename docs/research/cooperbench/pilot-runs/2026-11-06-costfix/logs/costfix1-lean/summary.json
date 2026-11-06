@@ -1,0 +1,63 @@
+{
+  "run_name": "costfix1-lean",
+  "completed_at": "2026-11-06T19:48:53.910410",
+  "pass_rate": null,
+  "total_tasks": 10,
+  "completed": 10,
+  "skipped": 0,
+  "failed": 0,
+  "total_cost": 4.7879044,
+  "total_time_seconds": 1396.3904600143433,
+  "results": [
+    {
+      "task": "dottxt_ai_outlines_task/1655/1,3",
+      "status": "done",
+      "cost": 0.32794639999999997
+    },
+    {
+      "task": "dspy_task/8563/1,4",
+      "status": "done",
+      "cost": 0.40925340000000004
+    },
+    {
+      "task": "go_chi_task/27/3,4",
+      "status": "done",
+      "cost": 0.4688758
+    },
+    {
+      "task": "llama_index_task/17244/5,6",
+      "status": "done",
+      "cost": 0.3939048
+    },
+    {
+      "task": "openai_tiktoken_task/0/4,8",
+      "status": "done",
+      "cost": 0.4187352
+    },
+    {
+      "task": "pallets_click_task/2800/1,4",
+      "status": "done",
+      "cost": 0.500733
+    },
+    {
+      "task": "pallets_jinja_task/1559/5,8",
+      "status": "done",
+      "cost": 0.5031272
+    },
+    {
+      "task": "pallets_jinja_task/1621/6,10",
+      "status": "done",
+      "cost": 0.5982616000000001
+    },
+    {
+      "task": "react_hook_form_task/153/2,6",
+      "status": "done",
+      "cost": 0.6619496
+    },
+    {
+      "task": "typst_task/6554/2,6",
+      "status": "done",
+      "cost": 0.5051174
+    }
+  ]
+}

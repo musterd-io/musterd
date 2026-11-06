@@ -1,0 +1,12 @@
+
+cooperbench eval costfix-smoke-solo
+runs: 1
+backend: docker
+
+  evaluating samuelcolvin_dirty_equals_task/43 [2,3]
+✗ partial f1:✓ f2:✗
+
+  passed       0     
+  failed       1     
+  pass rate    0.0%  
+

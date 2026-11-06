@@ -1,0 +1,53 @@
+# CooperBench cost-fix run — run log (lane 01M6S2NP0X, costfix-manifest.md)
+
+- 2026-11-06 ~18:55Z: nick chose the "Lean package" (question 01M6S3EXTZ). Manifest #4004 merged before
+  any pair. ~19:05Z: nick approved spend up to $135 (question 01M6S3X1MV, verified app answer). Inbox
+  read before the first paid pair: no hold on this lane.
+- ~19:15Z: image `costfix-4a1422cc` built from main `4a1422cc` (`fly deploy --build-only --push`),
+  `machine update`, start. Pre-flight 19:19Z (`preflight.log`): musterd 0.7.1, Claude Code 2.1.307,
+  api check ok on `claude-opus-5-5`, 52 GB free. No pytest on the image; the arm's tests were run by
+  calling them directly: 11 of 12 passed. The failure was the new line-length assertion in
+  `test_prompt.py`, which wrongly held the baseline's own tool table to 80 columns; the arm was
+  unaffected. Fixed in #4014.
+- 19:21–19:25Z smoke (`smoke.log`), dirty_equals 43 f2,f3: base $0.614 both pass, merge identical;
+  lean $0.598 feature 2 failed 1 of 60 tests, merge identical; solo $0.143 feature 2 failed. Lean
+  sessions loaded 26 musterd tools against base's 32; both arms opened lanes. Gate met (it requires a
+  scored, non-empty run, not a pass).
+- 19:25–20:00Z stage 1 on `core` (`stage1.log`, `gates1.json`): base $5.47, lean $4.79. G1 failed (13 of
+  20 lean sessions opened with `team_inbox_check`), G2 failed (0 of 10 pairs with one integrator), G3
+  passed, G4 passed (lean 5, base 6 passes; no conflicts). Cause of G2: CooperBench's `_git_block`
+  requires every agent to merge before submitting. Machine stopped while nick decided.
+- ~20:05Z: nick chose "Seed 2 only" (question 01M6S786PJ). Manifest amendment committed 20:07:42Z
+  (#4026), before the first stage-2 pair. `stage2.sh` edited to drop the lean arm.
+- 20:08:36Z stage 2 started: `costfix2-base` (-c 2) and `costfix2-solo` (-c 1), `run_arms.py --cap 110`.
+- ~20:15Z: one base pair (dspy 8394 f3,f4) failed at start — `musterd install failed: npm error code
+  ETARGET … No matching version found for @aws-sdk/core@^3.980.1` (npm registry, inside the agent
+  container). No result was usable; the resume below re-ran it.
+- ~20:26Z (uptime 1080 s): **the kernel OOM-killed the base arm's `cooperbench` process** (`dmesg`:
+  "Out of memory: Killed process 1434 (cooperbench)"), after 8 of 50 pairs had results. Solo continued.
+  Not noticed until ~21:23Z: the waiter watched only for the done marker and stop lines, and a killed
+  process writes neither. Three orphaned agent containers were left running.
+- 21:45Z solo finished (50/50) and the first `run_arms` evaluated both arms' finished pairs (exit 1, the
+  killed arm). No eval result of either arm was read before the next step.
+- 21:45:26Z `resume.sh` (manifest error rule: re-run an errored arm once): orphans removed, 15.3 GB
+  free, the base arm re-run under the same name without `--force`, so CooperBench skipped the 7 pairs
+  with results and ran the other 43, alone on the machine. 22:55Z done ("42 completed, 7 skipped,
+  1 failed"): go_chi 56 f1,f5 failed with a 404 on the shared git server, the same race finding 035
+  recorded.
+- 22:56–23:01Z go_chi 56 f1,f5 re-run once (same name) and evaluated: 50/50 results and evals per arm.
+- ~23:02Z, before the read: every eval checked against its run's `ended_at`. **One stale eval**:
+  dspy 8394 f3,f4 was evaluated at 21:32:49 — the errored attempt with no patches (`apply_status`
+  skipped) — and CooperBench's eval skips a pair that already has `eval.json`, so the resumed run's
+  patches (ended 21:49:22) were never scored. The machine was restarted (one "lack of capacity"
+  refusal, then started), the stale eval moved aside (`stale-eval-dspy8394-f3f4.json`) and the pair
+  evaluated once (23:06Z): both features pass. The check was run on all four arms; this was the only
+  stale eval. `readout-base.json` was written before this re-evaluation.
+- Read with `scripts/k3read.py` → `k3.json`; split with `costsplit.py` → `costsplit.json`.
+  Machine stopped 23:07Z. **Recorded spend $45.06**: $44.18 by `run_arms` over every `costfix*` pair
+  (smoke, stage 1, stage 2) plus $0.88 for the go_chi re-run. **Unrecorded:** whatever the agents of the
+  pairs in flight at the OOM kill spent in their orphaned containers before those were removed at
+  21:45Z — their `result.json` was never written (the resume re-ran those pairs from scratch), so no
+  figure exists for it and none is claimed.
+- Committed: results, evals and patches for every `costfix*` pair, the run logs, the scripts and the
+  reads. Not committed: agent stream transcripts (on the clone's volume under
+  `/data/runs/logs/costfix*`).

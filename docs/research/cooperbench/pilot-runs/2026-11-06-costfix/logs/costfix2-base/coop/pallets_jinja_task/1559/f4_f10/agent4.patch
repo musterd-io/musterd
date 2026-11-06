@@ -1,0 +1,114 @@
+diff --git a/src/jinja2/ext.py b/src/jinja2/ext.py
+index d21b83aa..120d0f7a 100644
+--- a/src/jinja2/ext.py
++++ b/src/jinja2/ext.py
+@@ -1,4 +1,5 @@
+ """Extension API for adding custom tags and behavior."""
++import hashlib
+ import pprint
+ import re
+ import typing as t
+@@ -265,6 +266,35 @@ class InternationalizationExtension(Extension):
+             extract_translations=self._extract,
+             newstyle_gettext=False,
+         )
++        self._translation_versions: t.Dict[str, str] = {}
++        environment.extend(
++            set_translation_version=self._set_translation_version,
++            get_translation_version=self._get_translation_version,
++            compare_translation_versions=self._compare_translation_versions,
++            translation_version_control=True,
++        )
++
++    @staticmethod
++    def _translation_version_key(message: str) -> str:
++        return hashlib.md5(message.encode("utf-8")).hexdigest()
++
++    def _set_translation_version(self, message: str, version: str) -> None:
++        """Store a version identifier for a translation message."""
++        key = self._translation_version_key(message)
++        self._translation_versions[key] = version
++
++    def _get_translation_version(self, message: str) -> t.Optional[str]:
++        """Return the stored version for a message, or ``None``."""
++        key = self._translation_version_key(message)
++        return self._translation_versions.get(key)
++
++    def _compare_translation_versions(self, message1: str, message2: str) -> bool:
++        """Return ``True`` if both messages have the same stored version.
++        Unversioned messages never compare equal.
++        """
++        version1 = self._get_translation_version(message1)
++        version2 = self._get_translation_version(message2)
++        return version1 is not None and version2 is not None and version1 == version2
+ 
+     def _install(
+         self, translations: "_SupportedTranslations", newstyle: t.Optional[bool] = None
+@@ -362,9 +392,10 @@ class InternationalizationExtension(Extension):
+         plural_expr: t.Optional[nodes.Expr] = None
+         plural_expr_assignment: t.Optional[nodes.Assign] = None
+         variables: t.Dict[str, nodes.Expr] = {}
++        metadata: t.Dict[str, str] = {}
+         trimmed = None
+         while parser.stream.current.type != "block_end":
+-            if variables:
++            if variables or metadata:
+                 parser.stream.expect("comma")
+ 
+             # skip colon for python compatibility
+@@ -372,6 +403,27 @@ class InternationalizationExtension(Extension):
+                 break
+ 
+             token = parser.stream.expect("name")
++
++            # translation metadata, only string literals are allowed
++            if token.value in ("note", "created", "modified"):
++                if parser.stream.current.type != "assign":
++                    parser.fail(
++                        f"metadata parameter {token.value!r} requires a value"
++                        " assignment.",
++                        token.lineno,
++                        exc=TemplateAssertionError,
++                    )
++                next(parser.stream)
++                if parser.stream.current.type != "string":
++                    parser.fail(
++                        f"metadata parameter {token.value!r} must be a string"
++                        " literal.",
++                        token.lineno,
++                        exc=TemplateAssertionError,
++                    )
++                metadata[token.value] = next(parser.stream).value
++                continue
++
+             if token.value in variables:
+                 parser.fail(
+                     f"translatable variable {token.value!r} defined twice.",
+@@ -459,6 +511,7 @@ class InternationalizationExtension(Extension):
+             plural_expr,
+             bool(referenced),
+             num_called_num and have_plural,
++            metadata,
+         )
+         node.set_lineno(lineno)
+         if plural_expr_assignment is not None:
+@@ -514,6 +567,7 @@ class InternationalizationExtension(Extension):
+         plural_expr: t.Optional[nodes.Expr],
+         vars_referenced: bool,
+         num_called_num: bool,
++        metadata: t.Optional[t.Dict[str, str]] = None,
+     ) -> nodes.Output:
+         """Generates a useful node from the data provided."""
+         newstyle = self.environment.newstyle_gettext  # type: ignore
+@@ -568,7 +622,10 @@ class InternationalizationExtension(Extension):
+                         ]
+                     ),
+                 )
+-        return nodes.Output([node])
++        output_node = nodes.Output([node])
++        if metadata:
++            output_node.trans_metadata = metadata  # type: ignore[attr-defined]
++        return output_node
+ 
+ 
+ class ExprStmtExtension(Extension):

@@ -1,0 +1,11 @@
+{
+  "run_name": "costfix-smoke-lean",
+  "evaluated_at": "2026-11-06T19:24:21.915072",
+  "total_runs": 1,
+  "passed": 0,
+  "failed": 1,
+  "errors": 0,
+  "skipped": 0,
+  "pass_rate": 0.0,
+  "results": []
+}

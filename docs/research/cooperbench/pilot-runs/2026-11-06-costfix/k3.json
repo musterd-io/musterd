@@ -1,0 +1,78 @@
+{
+ "K3": {
+  "label": "seed 2 (K3)",
+  "musterd_pass": 35,
+  "solo_pass": 39,
+  "musterd_only": 1,
+  "solo_only": 5,
+  "p": 0.21875,
+  "verdict": "no detectable difference at N = 50",
+  "musterd_wilson": [
+   0.562,
+   0.809
+  ],
+  "solo_wilson": [
+   0.648,
+   0.872
+  ],
+  "musterd_cost": 24.5,
+  "solo_cost": 8.95,
+  "cost_ratio": 2.74,
+  "musterd_per_pass": 0.7,
+  "solo_per_pass": 0.229,
+  "musterd_merge": {
+   "identical": 48,
+   "conflicts": 2
+  },
+  "musterd_only_pairs": [
+   "samuelcolvin_dirty_equals_task/43/f3_f7"
+  ],
+  "solo_only_pairs": [
+   "dottxt_ai_outlines_task/1655/f6_f7",
+   "dspy_task/8394/f3_f5",
+   "pallets_click_task/2068/f7_f10",
+   "pallets_jinja_task/1621/f4_f5",
+   "samuelcolvin_dirty_equals_task/43/f2_f3"
+  ]
+ },
+ "seed1": {
+  "label": "seed 1 (finding 035 C1)",
+  "musterd_pass": 38,
+  "solo_pass": 37,
+  "musterd_only": 2,
+  "solo_only": 1,
+  "p": 1.0,
+  "verdict": "no detectable difference at N = 50",
+  "musterd_wilson": [
+   0.626,
+   0.857
+  ],
+  "solo_wilson": [
+   0.604,
+   0.841
+  ],
+  "musterd_cost": 24.64,
+  "solo_cost": 8.74,
+  "cost_ratio": 2.82,
+  "musterd_per_pass": 0.649,
+  "solo_per_pass": 0.236,
+  "musterd_merge": {
+   "identical": 50
+  },
+  "musterd_only_pairs": [
+   "dottxt_ai_outlines_task/1655/f7_f10",
+   "samuelcolvin_dirty_equals_task/43/f3_f7"
+  ],
+  "solo_only_pairs": [
+   "huggingface_datasets_task/3997/f2_f4"
+  ]
+ },
+ "flips_between_seeds": {
+  "musterd": 3,
+  "solo": 4
+ },
+ "descriptive_pooled_discordant": [
+  3,
+  6
+ ]
+}

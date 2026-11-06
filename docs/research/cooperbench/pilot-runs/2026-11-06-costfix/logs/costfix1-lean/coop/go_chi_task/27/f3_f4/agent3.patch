@@ -1,0 +1,94 @@
+diff --git a/debug.go b/debug.go
+new file mode 100644
+index 0000000..311fe82
+--- /dev/null
++++ b/debug.go
+@@ -0,0 +1,27 @@
++package chi
++
++import (
++	"log"
++	"os"
++	"sync/atomic"
++)
++
++// debugEnabled reports whether debug-level logging is turned on.
++var debugEnabled int32
++
++// debugLogger is the logger used for debug-level output.
++var debugLogger = log.New(os.Stderr, "chi: ", log.LstdFlags)
++
++// EnableDebugLogging turns on debug-level logging of route pattern
++// handling, such as pattern parsing and HTTP method detection. It is off
++// by default.
++func EnableDebugLogging() {
++	atomic.StoreInt32(&debugEnabled, 1)
++}
++
++// debugLogf writes a debug-level log line when debug logging is enabled.
++func debugLogf(format string, args ...interface{}) {
++	if atomic.LoadInt32(&debugEnabled) == 1 {
++		debugLogger.Printf("[DEBUG] "+format, args...)
++	}
++}
+diff --git a/mux.go b/mux.go
+index 56fa4d2..026b7f3 100644
+--- a/mux.go
++++ b/mux.go
+@@ -105,29 +105,45 @@ func (mx *Mux) Use(middlewares ...func(http.Handler) http.Handler) {
+ }
+ 
+ // Handle adds the route `pattern` that matches any http method to
+-// execute the `handler` http.Handler.
++// execute the `handler` http.Handler. The pattern may optionally be
++// prefixed with an HTTP method and a space, e.g. "GET /users/{id}" or
++// "POST /api/*" for prefix matching.
+ func (mx *Mux) Handle(pattern string, handler http.Handler) {
++	debugLogf("Handle: registering pattern %q", pattern)
++	method, path := mx.parsePattern("Handle", pattern)
++	mx.handle(method, path, handler)
++}
++
++// HandleFunc adds the route `pattern` that matches any http method to
++// execute the `handlerFn` http.HandlerFunc. Like Handle, the pattern may
++// optionally be prefixed with an HTTP method, e.g. "GET /users/*".
++func (mx *Mux) HandleFunc(pattern string, handlerFn http.HandlerFunc) {
++	debugLogf("HandleFunc: registering pattern %q", pattern)
++	method, path := mx.parsePattern("HandleFunc", pattern)
++	mx.handle(method, path, handlerFn)
++}
++
++// parsePattern splits an optional "METHOD " prefix off of `pattern`,
++// returning the method type and the remaining route path. Patterns without
++// a method match all http methods.
++func (mx *Mux) parsePattern(caller, pattern string) (methodTyp, string) {
+ 	parts := strings.SplitN(pattern, " ", 2)
+ 	if len(parts) == 2 {
+ 		methodStr := strings.ToUpper(parts[0])
+-		path := parts[1]
++		path := strings.TrimLeft(parts[1], " ")
+ 
+ 		method, ok := methodMap[methodStr]
+ 		if !ok {
++			debugLogf("%s: invalid HTTP method %q in pattern %q", caller, methodStr, pattern)
+ 			panic("chi: invalid HTTP method specified in pattern: " + methodStr)
+ 		}
+ 
+-		mx.handle(method, path, handler)
+-		return
++		debugLogf("%s: detected method %q with path %q", caller, methodStr, path)
++		return method, path
+ 	}
+ 
+-	mx.handle(mALL, pattern, handler)
+-}
+-
+-// HandleFunc adds the route `pattern` that matches any http method to
+-// execute the `handlerFn` http.HandlerFunc.
+-func (mx *Mux) HandleFunc(pattern string, handlerFn http.HandlerFunc) {
+-	mx.handle(mALL, pattern, handlerFn)
++	debugLogf("%s: no method in pattern, matching all methods for path %q", caller, pattern)
++	return mALL, pattern
+ }
+ 
+ // Method adds the route `pattern` that matches `method` http method to

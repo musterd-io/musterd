@@ -1,0 +1,30 @@
+{
+  "repo": "huggingface_datasets_task",
+  "task_id": 3997,
+  "features": [
+    2,
+    4
+  ],
+  "setting": "solo",
+  "run_id": "8787bfd5",
+  "run_name": "costfix2-solo",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T20:31:35.284747",
+  "ended_at": "2026-11-06T20:33:02.152252",
+  "duration_seconds": 86.867505,
+  "agent": {
+    "status": "Submitted",
+    "cost": 0.1658966,
+    "steps": 7,
+    "input_tokens": 14,
+    "output_tokens": 4219,
+    "cache_read_tokens": 135478,
+    "cache_write_tokens": 10873,
+    "patch_lines": 120,
+    "error": null
+  },
+  "total_cost": 0.1658966,
+  "total_steps": 7,
+  "log_dir": "logs/costfix2-solo/solo/huggingface_datasets_task/3997/f2_f4"
+}

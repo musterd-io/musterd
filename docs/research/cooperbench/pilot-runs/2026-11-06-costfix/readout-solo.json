@@ -1,0 +1,1762 @@
+{
+ "arms": {
+  "claude_code": {
+   "pairs": 50,
+   "passed": 39,
+   "cause:None": 0,
+   "cause:coordination": 11
+  }
+ },
+ "pairs": [
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/dottxt_ai_outlines_task/1655/f6_f7",
+   "task": "dottxt_ai_outlines_task/1655",
+   "features": [
+    6,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.12435500000000002,
+   "steps": 5,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/dottxt_ai_outlines_task/1655/f7_f10",
+   "task": "dottxt_ai_outlines_task/1655",
+   "features": [
+    7,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1020132,
+   "steps": 6,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/dottxt_ai_outlines_task/1706/f4_f6",
+   "task": "dottxt_ai_outlines_task/1706",
+   "features": [
+    4,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.14109480000000002,
+   "steps": 5,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/dottxt_ai_outlines_task/1706/f5_f8",
+   "task": "dottxt_ai_outlines_task/1706",
+   "features": [
+    5,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.24212060000000002,
+   "steps": 8,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/dspy_task/8394/f3_f4",
+   "task": "dspy_task/8394",
+   "features": [
+    3,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.2509688,
+   "steps": 7,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/dspy_task/8394/f3_f5",
+   "task": "dspy_task/8394",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.316295,
+   "steps": 11,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/go_chi_task/26/f1_f2",
+   "task": "go_chi_task/26",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.16276900000000002,
+   "steps": 6,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/go_chi_task/56/f1_f5",
+   "task": "go_chi_task/56",
+   "features": [
+    1,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.36237020000000003,
+   "steps": 10,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/huggingface_datasets_task/3997/f2_f4",
+   "task": "huggingface_datasets_task/3997",
+   "features": [
+    2,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1658966,
+   "steps": 7,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/huggingface_datasets_task/6252/f4_f6",
+   "task": "huggingface_datasets_task/6252",
+   "features": [
+    4,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.07211319999999999,
+   "steps": 3,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/llama_index_task/18813/f1_f5",
+   "task": "llama_index_task/18813",
+   "features": [
+    1,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.112225,
+   "steps": 5,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/llama_index_task/18813/f2_f5",
+   "task": "llama_index_task/18813",
+   "features": [
+    2,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1274122,
+   "steps": 5,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/openai_tiktoken_task/0/f2_f9",
+   "task": "openai_tiktoken_task/0",
+   "features": [
+    2,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1379304,
+   "steps": 7,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/openai_tiktoken_task/0/f3_f6",
+   "task": "openai_tiktoken_task/0",
+   "features": [
+    3,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.0945758,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/openai_tiktoken_task/0/f6_f8",
+   "task": "openai_tiktoken_task/0",
+   "features": [
+    6,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.0965458,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2068/f1_f6",
+   "task": "pallets_click_task/2068",
+   "features": [
+    1,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.15173040000000002,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2068/f2_f10",
+   "task": "pallets_click_task/2068",
+   "features": [
+    2,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1421232,
+   "steps": 7,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2068/f5_f11",
+   "task": "pallets_click_task/2068",
+   "features": [
+    5,
+    11
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1544152,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2068/f5_f7",
+   "task": "pallets_click_task/2068",
+   "features": [
+    5,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1354024,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2068/f6_f7",
+   "task": "pallets_click_task/2068",
+   "features": [
+    6,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1380632,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2068/f7_f10",
+   "task": "pallets_click_task/2068",
+   "features": [
+    7,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.10262559999999998,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2800/f1_f3",
+   "task": "pallets_click_task/2800",
+   "features": [
+    1,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.2207934,
+   "steps": 10,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2800/f1_f7",
+   "task": "pallets_click_task/2800",
+   "features": [
+    1,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1848132,
+   "steps": 8,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2800/f2_f7",
+   "task": "pallets_click_task/2800",
+   "features": [
+    2,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.227113,
+   "steps": 7,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2800/f6_f7",
+   "task": "pallets_click_task/2800",
+   "features": [
+    6,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.2968906,
+   "steps": 10,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_click_task/2956/f1_f8",
+   "task": "pallets_click_task/2956",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.28972559999999997,
+   "steps": 11,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1465/f2_f3",
+   "task": "pallets_jinja_task/1465",
+   "features": [
+    2,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.10570639999999999,
+   "steps": 3,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1465/f2_f6",
+   "task": "pallets_jinja_task/1465",
+   "features": [
+    2,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.09208840000000001,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1559/f1_f8",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.29141419999999996,
+   "steps": 7,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1559/f4_f10",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    4,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.174472,
+   "steps": 5,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1559/f4_f8",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    4,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.32366759999999994,
+   "steps": 7,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1559/f6_f9",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    6,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.12115900000000002,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1621/f1_f6",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    1,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.2146528,
+   "steps": 5,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1621/f2_f9",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    2,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.22204979999999996,
+   "steps": 6,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1621/f3_f5",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1257026,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1621/f4_f10",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    4,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.27460039999999997,
+   "steps": 8,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1621/f4_f5",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    4,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1395156,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pallets_jinja_task/1621/f6_f7",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    6,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1778384,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pillow_task/25/f1_f5",
+   "task": "pillow_task/25",
+   "features": [
+    1,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.19478679999999998,
+   "steps": 9,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pillow_task/25/f2_f3",
+   "task": "pillow_task/25",
+   "features": [
+    2,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1056422,
+   "steps": 6,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pillow_task/290/f2_f3",
+   "task": "pillow_task/290",
+   "features": [
+    2,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.2082988,
+   "steps": 10,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pillow_task/290/f3_f5",
+   "task": "pillow_task/290",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.2672468,
+   "steps": 11,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pillow_task/290/f4_f5",
+   "task": "pillow_task/290",
+   "features": [
+    4,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.242248,
+   "steps": 10,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/pillow_task/68/f1_f5",
+   "task": "pillow_task/68",
+   "features": [
+    1,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1617716,
+   "steps": 5,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/samuelcolvin_dirty_equals_task/43/f2_f3",
+   "task": "samuelcolvin_dirty_equals_task/43",
+   "features": [
+    2,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.123217,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/samuelcolvin_dirty_equals_task/43/f3_f7",
+   "task": "samuelcolvin_dirty_equals_task/43",
+   "features": [
+    3,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": false,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": false,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1266694,
+   "steps": 4,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/typst_task/6554/f1_f9",
+   "task": "typst_task/6554",
+   "features": [
+    1,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.09401140000000001,
+   "steps": 5,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/typst_task/6554/f4_f9",
+   "task": "typst_task/6554",
+   "features": [
+    4,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.16584639999999998,
+   "steps": 10,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/typst_task/6554/f5_f9",
+   "task": "typst_task/6554",
+   "features": [
+    5,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.1727004,
+   "steps": 10,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  },
+  {
+   "pair": "/data/runs/logs/costfix2-solo/solo/typst_task/6554/f7_f8",
+   "task": "typst_task/6554",
+   "features": [
+    7,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "solo",
+   "passed": true,
+   "merge": null,
+   "strategy": null,
+   "apply": null,
+   "f1": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": null,
+    "tests_failed": null
+   },
+   "cost": 0.2698494,
+   "steps": 10,
+   "agent_status": {},
+   "patch_files": {
+    "agent1": [],
+    "agent2": []
+   },
+   "common_files": [],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {}
+  }
+ ]
+}

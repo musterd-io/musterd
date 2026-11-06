@@ -1,0 +1,96 @@
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 0fca3fa5c..a9c93e348 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -1048,7 +1048,16 @@ class Image:
+                 new_im.info["transparency"] = trns
+         return new_im
+ 
+-    def quantize(self, colors=256, method=None, kmeans=0, palette=None, dither=1):
++    def quantize(
++        self,
++        colors=256,
++        method=None,
++        kmeans=0,
++        palette=None,
++        dither=1,
++        max_colors=None,
++        sort_palette=None,
++    ):
+         """
+         Convert the image to 'P' mode with the specified number
+         of colors.
+@@ -1073,12 +1082,29 @@ class Image:
+            mode "RGB" to "P" or from "RGB" or "L" to "1".
+            Available methods are :data:`NONE` or :data:`FLOYDSTEINBERG` (default).
+            Default: 1 (legacy setting)
++        :param max_colors: Maximum number of colors, <= 256. The palette will
++           not contain more colors than this, and may use fewer than ``colors``
++           if ``max_colors`` is smaller. Defaults to ``colors``.
++        :param sort_palette: How to sort the palette colors after quantization.
++           Either ``None`` (default, no sorting), ``"brightness"`` or ``"rgb"``.
+         :returns: A new image
+ 
+         """
+ 
+         self.load()
+ 
++        if max_colors is None:
++            max_colors = colors
++        if max_colors < 1 or max_colors > 256:
++            raise ValueError("max_colors must be between 1 and 256")
++        colors = min(colors, max_colors)
++
++        if sort_palette not in (None, "brightness", "rgb"):
++            raise ValueError(
++                "sort_palette must be None, 'brightness' or 'rgb', "
++                f"not {repr(sort_palette)}"
++            )
++
+         if method is None:
+             # defaults:
+             method = MEDIANCUT
+@@ -1111,7 +1137,42 @@ class Image:
+         from . import ImagePalette
+ 
+         mode = im.im.getpalettemode()
+-        im.palette = ImagePalette.ImagePalette(mode, im.im.getpalette(mode, mode))
++        palette_bytes = im.im.getpalette(mode, mode)
++
++        if sort_palette is not None:
++            bands = len(mode)
++            count = min(colors, len(palette_bytes) // bands)
++            entries = [
++                palette_bytes[i * bands : (i + 1) * bands] for i in range(count)
++            ]
++            if sort_palette == "brightness":
++
++                def key(i):
++                    r, g, b = entries[i][:3]
++                    return (r * 299 + g * 587 + b * 114, tuple(entries[i]))
++
++            else:
++
++                def key(i):
++                    return tuple(entries[i])
++
++            order = sorted(range(count), key=key)
++            if order != list(range(count)):
++                new_positions = list(range(256))
++                for new_index, old_index in enumerate(order):
++                    new_positions[old_index] = new_index
++                im = im.point(new_positions)
++                palette_bytes = (
++                    b"".join(entries[i] for i in order)
++                    + palette_bytes[count * bands :]
++                )
++                if mode == "RGBA":
++                    im.im.putpalette("RGBX", palette_bytes)
++                    im.im.putpalettealphas(palette_bytes[3::4])
++                else:
++                    im.im.putpalette(mode, palette_bytes)
++
++        im.palette = ImagePalette.ImagePalette(mode, palette_bytes)
+ 
+         return im
+ 

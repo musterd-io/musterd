@@ -1,0 +1,63 @@
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 233df592c..bbaada6db 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -643,6 +643,25 @@ class Image:
+         else:
+             self.load()
+ 
++    def _mark_corners(self) -> None:
++        """Set the top-left and bottom-right pixels to red."""
++        if self.width == 0 or self.height == 0:
++            return
++        from . import ImageColor
++
++        self._ensure_mutable()
++        red: float | tuple[int, ...]
++        if self.mode == "P":
++            red = (255, 0, 0)
++        elif self.mode == "PA":
++            red = (255, 0, 0, 255)
++        elif self.mode == "CMYK":
++            red = (0, 255, 255, 0)
++        else:
++            red = ImageColor.getcolor("red", self.mode)
++        self.putpixel((0, 0), red)
++        self.putpixel((self.width - 1, self.height - 1), red)
++
+     def _dump(
+         self, file: str | None = None, format: str | None = None, **options: Any
+     ) -> str:
+@@ -2512,6 +2531,15 @@ class Image:
+            may have been created, and may contain partial data.
+         """
+ 
++        if params.pop("mark_corners", False):
++            # Mark a copy so that the original image is left unchanged
++            marked = self.copy()
++            if hasattr(self, "encoderinfo"):
++                marked.encoderinfo = self.encoderinfo
++            marked._mark_corners()
++            marked.save(fp, format, **params)
++            return
++
+         filename: str | bytes = ""
+         open_fp = False
+         if is_path(fp):
+@@ -2540,8 +2568,15 @@ class Image:
+                 msg = f"unknown file extension: {ext}"
+                 raise ValueError(msg) from e
+ 
++        from . import ImageFile
++
+         # may mutate self!
+-        self._ensure_mutable()
++        if isinstance(self, ImageFile.ImageFile) and os.path.abspath(
++            filename
++        ) == os.path.abspath(self.filename):
++            self._ensure_mutable()
++        else:
++            self.load()
+ 
+         save_all = params.pop("save_all", None)
+         self.encoderinfo = {**getattr(self, "encoderinfo", {}), **params}

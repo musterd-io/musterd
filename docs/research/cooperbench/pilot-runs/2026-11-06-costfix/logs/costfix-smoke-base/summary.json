@@ -1,0 +1,12 @@
+{
+  "run_name": "costfix-smoke-base",
+  "completed_at": "2026-11-06T19:23:39.897119",
+  "pass_rate": null,
+  "total_tasks": 1,
+  "completed": 1,
+  "skipped": 0,
+  "failed": 0,
+  "total_cost": 0.6139376,
+  "total_time_seconds": 144.82247853279114,
+  "results": []
+}

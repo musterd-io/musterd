@@ -1,0 +1,37 @@
+{
+  "repo": "dspy_task",
+  "task_id": 8394,
+  "features": [
+    3,
+    4
+  ],
+  "setting": "coop",
+  "apply_status": {
+    "agent1": "skipped",
+    "agent2": "skipped"
+  },
+  "merge": {
+    "status": "clean",
+    "strategy": "naive",
+    "diff": ""
+  },
+  "feature1": {
+    "feature_id": 3,
+    "passed": false,
+    "exit_code": 1,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "test_output": "Note: switching to '3ded7a6266514c1569452b0e26bcd4e75c1ee6db'.\n\nYou are in 'detached HEAD' state. You can look around, make experimental\nchanges and commit them, and you can discard any commits you make in this\nstate without impacting any branches by switching back to a branch.\n\nIf you want to create a new branch to retain commits you create, you may\ndo so (now or later) by using -c with the switch command. Example:\n\n  git switch -c <new-branch-name>\n\nOr undo this operation with:\n\n  git switch -\n\nTurn off this advice by setting config variable advice.detachedHead to false\n\nHEAD is now at 3ded7a626 remove experimental module (#8391)\nHEAD is now at 3ded7a626 remove experimental module (#8391)\nReset to base: 3ded7a6266514c1569452b0e26bcd4e75c1ee6db\nEnsuring clean repository state...\nHEAD is now at 3ded7a626 remove experimental module (#8391)\nRemoving dspy.egg-info/\nApplying test patch...\n/patches/tests1.patch:151: new blank line at EOF.\n+\nwarning: 1 line adds whitespace errors.\nTest patch applied successfully.\nApplying feature patch...\nWarning: Feature patch check failed. Attempting to apply anyway...\nerror: No valid patches in input (allow with \"--allow-empty\")\nError: Failed to apply feature patch.\nPatch file: /patches/merged.patch\nCleaning up repository...\nResetting to HEAD (HEAD) and cleaning...\nHEAD is now at 3ded7a626 remove experimental module (#8391)\nRemoving tests/clients/test_cache_ttl.py\nRepository cleaned.\n"
+  },
+  "feature2": {
+    "feature_id": 4,
+    "passed": false,
+    "exit_code": 1,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "test_output": "HEAD is now at 3ded7a626 remove experimental module (#8391)\nHEAD is now at 3ded7a626 remove experimental module (#8391)\nReset to base: 3ded7a6266514c1569452b0e26bcd4e75c1ee6db\nEnsuring clean repository state...\nHEAD is now at 3ded7a626 remove experimental module (#8391)\nApplying test patch...\n/patches/tests2.patch:14: trailing whitespace.\n \n/patches/tests2.patch:21: trailing whitespace.\n \n/patches/tests2.patch:26: trailing whitespace.\n \n/patches/tests2.patch:30: trailing whitespace.\n \n/patches/tests2.patch:34: trailing whitespace.\n \nwarning: squelched 22 whitespace errors\nwarning: 27 lines add whitespace errors.\nTest patch applied successfully.\nApplying feature patch...\nWarning: Feature patch check failed. Attempting to apply anyway...\nerror: No valid patches in input (allow with \"--allow-empty\")\nError: Failed to apply feature patch.\nPatch file: /patches/merged.patch\nCleaning up repository...\nResetting to HEAD (HEAD) and cleaning...\nHEAD is now at 3ded7a626 remove experimental module (#8391)\nRepository cleaned.\n"
+  },
+  "both_passed": false,
+  "error": null,
+  "evaluated_at": "2026-11-06T21:32:49.955606"
+}

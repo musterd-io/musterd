@@ -1,0 +1,86 @@
+diff --git a/tiktoken/core.py b/tiktoken/core.py
+index 6bc9736..a2105bf 100644
+--- a/tiktoken/core.py
++++ b/tiktoken/core.py
+@@ -2,7 +2,7 @@ from __future__ import annotations
+ 
+ import functools
+ from concurrent.futures import ThreadPoolExecutor
+-from typing import TYPE_CHECKING, AbstractSet, Collection, Literal, NoReturn, Sequence
++from typing import TYPE_CHECKING, AbstractSet, Callable, Collection, Literal, NoReturn, Sequence
+ 
+ import regex
+ 
+@@ -82,7 +82,9 @@ class Encoding:
+         *,
+         allowed_special: Literal["all"] | AbstractSet[str] = set(),  # noqa: B006
+         disallowed_special: Literal["all"] | Collection[str] = "all",
+-    ) -> list[int]:
++        transformers: Callable[[str], str] | Sequence[Callable[[str], str]] | None = None,
++        analyze_frequency: bool = False,
++    ) -> list[int] | tuple[list[int], dict[int, int]]:
+         """Encodes a string into tokens.
+ 
+         Special tokens are artificial tokens used to unlock capabilities from a model,
+@@ -109,7 +111,15 @@ class Encoding:
+         >>> enc.encode("<|endoftext|>", disallowed_special=())
+         [27, 91, 437, 1659, 5239, 91, 29]
+         ```
++
++        `transformers` may be a single callable or a sequence of callables, each taking and
++        returning a string. They are applied to the text in order before encoding.
++
++        If `analyze_frequency` is True, returns a tuple `(tokens, frequencies)` where
++        `frequencies` maps each token id to the number of times it occurs in `tokens`.
+         """
++        text = _apply_transformers(text, transformers)
++
+         if allowed_special == "all":
+             allowed_special = self.special_tokens_set
+         if disallowed_special == "all":
+@@ -121,7 +131,7 @@ class Encoding:
+                 raise_disallowed_special_token(match.group())
+ 
+         try:
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
+         except UnicodeEncodeError:
+             # BPE operates on bytes, but the regex operates on unicode. If we pass a str that is
+             # invalid UTF-8 to Rust, it will rightfully complain. Here we do a quick and dirty
+@@ -130,7 +140,14 @@ class Encoding:
+             # string, but given that this is input we want to support, maybe that's okay.
+             # Also we use errors="replace" to handle weird things like lone surrogates.
+             text = text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
++
++        if analyze_frequency:
++            frequencies: dict[int, int] = {}
++            for token in tokens:
++                frequencies[token] = frequencies.get(token, 0) + 1
++            return tokens, frequencies
++        return tokens
+ 
+     def encode_to_numpy(
+         self,
+@@ -437,3 +454,20 @@ def raise_disallowed_special_token(token: str) -> NoReturn:
+         f"by passing `disallowed_special=(enc.special_tokens_set - {{{token!r}}})`.\n"
+         "To disable this check for all special tokens, pass `disallowed_special=()`.\n"
+     )
++
++
++def _apply_transformers(
++    text: str,
++    transformers: Callable[[str], str] | Sequence[Callable[[str], str]] | None,
++) -> str:
++    if transformers is None:
++        return text
++    if callable(transformers):
++        transformers = [transformers]
++    for transformer in transformers:
++        text = transformer(text)
++        if not isinstance(text, str):
++            raise TypeError(
++                f"Transformer {transformer!r} must return a str, got {type(text).__name__}"
++            )
++    return text

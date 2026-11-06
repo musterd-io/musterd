@@ -1,0 +1,230 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 666ad68..6bf5b9d 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -280,6 +280,7 @@ class Context:
+         token_normalize_func: t.Callable[[str], str] | None = None,
+         color: bool | None = None,
+         show_default: bool | None = None,
++        validate_nesting: bool = False,
+     ) -> None:
+         #: the parent context or `None` if none exists.
+         self.parent = parent
+@@ -427,6 +428,12 @@ class Context:
+         #: Show option default values when formatting help text.
+         self.show_default: bool | None = show_default
+ 
++        #: Enforce that all child contexts created with
++        #: :meth:`_make_sub_context` are closed before this context is
++        #: closed. Inherited by child contexts.
++        self.validate_nesting: bool = validate_nesting
++        self._open_children: list[Context] = []
++
+         self._close_callbacks: list[t.Callable[[], t.Any]] = []
+         self._depth = 0
+         self._parameter_source: dict[str, ParameterSource] = {}
+@@ -477,9 +484,11 @@ class Context:
+         tb: TracebackType | None,
+     ) -> None:
+         self._depth -= 1
+-        if self._depth == 0:
+-            self.close()
+-        pop_context()
++        try:
++            if self._depth == 0:
++                self.close()
++        finally:
++            pop_context()
+ 
+     @contextmanager
+     def scope(self, cleanup: bool = True) -> cabc.Iterator[Context]:
+@@ -606,11 +615,30 @@ class Context:
+         """Invoke all close callbacks registered with
+         :meth:`call_on_close`, and exit all context managers entered
+         with :meth:`with_resource`.
++
++        If :attr:`validate_nesting` is enabled, raises a
++        :exc:`RuntimeError` if any child contexts are still open.
+         """
++        if self.validate_nesting and self._open_children:
++            names = ", ".join(
++                repr(child.info_name or child.command.name)
++                for child in self._open_children
++            )
++            raise RuntimeError(
++                f"Cannot close context {self.info_name!r} while child"
++                f" contexts are still open: {names}."
++            )
++
+         self._exit_stack.close()
+         # In case the context is reused, create a new exit stack.
+         self._exit_stack = ExitStack()
+ 
++        if self.parent is not None:
++            try:
++                self.parent._open_children.remove(self)
++            except ValueError:
++                pass
++
+     @property
+     def command_path(self) -> str:
+         """The computed command path.  This is used for the ``usage``
+@@ -728,7 +756,17 @@ class Context:
+ 
+         :meta private:
+         """
+-        return type(self)(command, info_name=command.name, parent=self)
++        sub_ctx = type(self)(
++            command,
++            info_name=command.name,
++            parent=self,
++            validate_nesting=self.validate_nesting,
++        )
++
++        if self.validate_nesting:
++            self._open_children.append(sub_ctx)
++
++        return sub_ctx
+ 
+     @t.overload
+     def invoke(
+@@ -832,6 +870,87 @@ class Context:
+         """
+         return self._parameter_source.get(name)
+ 
++    def save_state(self) -> dict[str, t.Any]:
++        """Capture a snapshot of the current context state. The returned
++        dictionary can be passed to :meth:`restore_state` to revert the
++        context to this point.
++
++        Mutable values such as :attr:`params`, :attr:`obj`, :attr:`meta`,
++        :attr:`default_map` and the parameter sources are deep copied, so
++        later changes to nested objects do not affect the snapshot.
++        References such as :attr:`parent` and :attr:`command` are kept
++        as-is.
++
++        .. versionadded:: 8.2
++        """
++        return {
++            "parent": self.parent,
++            "command": self.command,
++            "info_name": self.info_name,
++            "params": _deepcopy_or_ref(self.params),
++            "args": list(self.args),
++            "_protected_args": list(self._protected_args),
++            "_opt_prefixes": set(self._opt_prefixes),
++            "obj": _deepcopy_or_ref(self.obj),
++            "_meta": _deepcopy_or_ref(self._meta),
++            "default_map": _deepcopy_or_ref(self.default_map),
++            "invoked_subcommand": self.invoked_subcommand,
++            "terminal_width": self.terminal_width,
++            "max_content_width": self.max_content_width,
++            "allow_extra_args": self.allow_extra_args,
++            "allow_interspersed_args": self.allow_interspersed_args,
++            "ignore_unknown_options": self.ignore_unknown_options,
++            "help_option_names": list(self.help_option_names),
++            "token_normalize_func": self.token_normalize_func,
++            "resilient_parsing": self.resilient_parsing,
++            "auto_envvar_prefix": self.auto_envvar_prefix,
++            "color": self.color,
++            "show_default": self.show_default,
++            "_close_callbacks": list(self._close_callbacks),
++            "_depth": self._depth,
++            "_parameter_source": _deepcopy_or_ref(self._parameter_source),
++            "_exit_stack": self._exit_stack,
++        }
++
++    def restore_state(self, snapshot: dict[str, t.Any]) -> None:
++        """Restore the context to a state captured by :meth:`save_state`.
++        The snapshot is copied again while restoring, so it can be used
++        to restore the same state multiple times.
++
++        :param snapshot: A dictionary returned by :meth:`save_state`.
++
++        .. versionadded:: 8.2
++        """
++        for key, value in snapshot.items():
++            if key in {"params", "obj", "default_map", "_parameter_source"}:
++                value = _deepcopy_or_ref(value)
++            elif key == "_meta":
++                # The meta dict is shared with parent contexts; update it in
++                # place so the sharing is preserved.
++                meta = _deepcopy_or_ref(value)
++                self._meta.clear()
++                self._meta.update(meta)
++                continue
++            elif isinstance(value, (list, set)):
++                value = type(value)(value)
++
++            setattr(self, key, value)
++
++
++def _deepcopy_or_ref(value: V) -> V:
++    """Deep copy a value for a context state snapshot, falling back to a
++    shallow copy, then the original reference, for uncopyable objects.
++    """
++    import copy
++
++    try:
++        return copy.deepcopy(value)
++    except Exception:
++        try:
++            return copy.copy(value)
++        except Exception:
++            return value
++
+ 
+ class Command:
+     """Commands are the basic building block of command line interfaces in
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 6fd9e54..2180f6b 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -272,7 +272,14 @@ class ShellComplete:
+         """
+         ctx = _resolve_context(self.cli, self.ctx_args, self.prog_name, args)
+         obj, incomplete = _resolve_incomplete(ctx, args, incomplete)
+-        return obj.shell_complete(ctx, incomplete)
++        # Completion callbacks may modify the context, don't let those
++        # changes leak out of completion processing.
++        state = ctx.save_state()
++
++        try:
++            return obj.shell_complete(ctx, incomplete)
++        finally:
++            ctx.restore_state(state)
+ 
+     def format_completion(self, item: CompletionItem) -> str:
+         """Format a completion item into the form recognized by the
+@@ -544,6 +551,8 @@ def _resolve_context(
+     :param args: List of complete args before the incomplete value.
+     """
+     ctx_args["resilient_parsing"] = True
++    # Completion doesn't follow the normal context cleanup pattern.
++    ctx_args["validate_nesting"] = False
+     ctx = cli.make_context(prog_name, args.copy(), **ctx_args)
+     args = ctx._protected_args + ctx.args
+ 
+@@ -557,7 +566,13 @@ def _resolve_context(
+                 if cmd is None:
+                     return ctx
+ 
+-                ctx = cmd.make_context(name, args, parent=ctx, resilient_parsing=True)
++                ctx = cmd.make_context(
++                    name,
++                    args,
++                    parent=ctx,
++                    resilient_parsing=True,
++                    validate_nesting=False,
++                )
+                 args = ctx._protected_args + ctx.args
+             else:
+                 sub_ctx = ctx
+@@ -575,6 +590,7 @@ def _resolve_context(
+                         allow_extra_args=True,
+                         allow_interspersed_args=False,
+                         resilient_parsing=True,
++                        validate_nesting=False,
+                     )
+                     args = sub_ctx.args
+ 

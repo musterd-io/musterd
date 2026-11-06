@@ -1,0 +1,371 @@
+diff --git a/context.go b/context.go
+index e78a238..3a19ead 100644
+--- a/context.go
++++ b/context.go
+@@ -76,6 +76,7 @@ type Context struct {
+ 
+ 	// methodNotAllowed hint
+ 	methodNotAllowed bool
++	methodsAllowed   []methodTyp // allowed methods in case of a 405
+ }
+ 
+ // Reset a routing context to its initial state.
+@@ -91,6 +92,7 @@ func (x *Context) Reset() {
+ 	x.routeParams.Keys = x.routeParams.Keys[:0]
+ 	x.routeParams.Values = x.routeParams.Values[:0]
+ 	x.methodNotAllowed = false
++	x.methodsAllowed = x.methodsAllowed[:0]
+ 	x.parentCtx = nil
+ }
+ 
+diff --git a/cors.go b/cors.go
+new file mode 100644
+index 0000000..e4df9a2
+--- /dev/null
++++ b/cors.go
+@@ -0,0 +1,154 @@
++package chi
++
++import (
++	"net/http"
++	"sort"
++	"strconv"
++	"strings"
++)
++
++// CORSOptions represents configuration for CORS middleware.
++type CORSOptions struct {
++	// AllowOrigin is the value of the Access-Control-Allow-Origin header.
++	AllowOrigin string
++
++	// AllowMethods lists the methods sent in Access-Control-Allow-Methods.
++	// When empty, the methods are detected from the routing tree.
++	AllowMethods []string
++
++	// AllowHeaders lists the headers sent in Access-Control-Allow-Headers.
++	AllowHeaders []string
++
++	// ExposeHeaders lists the headers sent in Access-Control-Expose-Headers.
++	ExposeHeaders []string
++
++	// MaxAge is the duration in seconds a preflight response may be cached.
++	MaxAge int
++
++	// AllowCredentials sets Access-Control-Allow-Credentials to true.
++	AllowCredentials bool
++}
++
++// DefaultCORSOptions returns the default CORS options.
++func DefaultCORSOptions() CORSOptions {
++	return CORSOptions{
++		AllowOrigin:  "*",
++		AllowHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
++		MaxAge:       3600,
++	}
++}
++
++// CORS returns a middleware that sets CORS headers on responses and answers
++// preflight OPTIONS requests with a 204 No Content.
++func CORS(options ...CORSOptions) func(http.Handler) http.Handler {
++	opts := DefaultCORSOptions()
++	if len(options) > 0 {
++		opts = options[0]
++	}
++
++	return func(next http.Handler) http.Handler {
++		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++			setCORSHeaders(w, opts)
++
++			if r.Method == http.MethodOptions {
++				setCORSPreflightHeaders(w, r, opts)
++				w.WriteHeader(http.StatusNoContent)
++				return
++			}
++
++			next.ServeHTTP(w, r)
++		})
++	}
++}
++
++// EnableCORS adds CORS middleware with default options to the router.
++func (mx *Mux) EnableCORS() {
++	mx.EnableCORSWithOptions(DefaultCORSOptions())
++}
++
++// EnableCORSWithOptions adds CORS middleware with custom options to the router.
++func (mx *Mux) EnableCORSWithOptions(options CORSOptions) {
++	mx.Use(CORS(options))
++
++	// Answer preflight requests that reach the router as method-not-allowed,
++	// and report the allowed methods for any other 405.
++	mx.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
++		if r.Method == http.MethodOptions {
++			setCORSHeaders(w, options)
++			setCORSPreflightHeaders(w, r, options)
++			w.WriteHeader(http.StatusNoContent)
++			return
++		}
++		if methods := routeMethods(r); len(methods) > 0 {
++			w.Header().Set("Allow", strings.Join(methods, ", "))
++		}
++		w.WriteHeader(http.StatusMethodNotAllowed)
++	})
++}
++
++// WithCORS creates a new route group with CORS enabled.
++func (mx *Mux) WithCORS(fn func(r Router)) Router {
++	return mx.Group(func(r Router) {
++		r.Use(CORS())
++		if fn != nil {
++			fn(r)
++		}
++	})
++}
++
++func setCORSHeaders(w http.ResponseWriter, opts CORSOptions) {
++	origin := opts.AllowOrigin
++	if origin == "" {
++		origin = "*"
++	}
++	w.Header().Set("Access-Control-Allow-Origin", origin)
++	if opts.AllowCredentials {
++		w.Header().Set("Access-Control-Allow-Credentials", "true")
++	}
++	if len(opts.ExposeHeaders) > 0 {
++		w.Header().Set("Access-Control-Expose-Headers", strings.Join(opts.ExposeHeaders, ", "))
++	}
++}
++
++func setCORSPreflightHeaders(w http.ResponseWriter, r *http.Request, opts CORSOptions) {
++	methods := opts.AllowMethods
++	if len(methods) == 0 {
++		methods = routeMethods(r)
++	}
++	if len(methods) == 0 {
++		methods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
++	}
++	w.Header().Set("Access-Control-Allow-Methods", strings.Join(methods, ", "))
++	if len(opts.AllowHeaders) > 0 {
++		w.Header().Set("Access-Control-Allow-Headers", strings.Join(opts.AllowHeaders, ", "))
++	}
++	if opts.MaxAge > 0 {
++		w.Header().Set("Access-Control-Max-Age", strconv.Itoa(opts.MaxAge))
++	}
++}
++
++// routeMethods returns the methods routable for the request path, found by
++// matching each known method against the routing tree.
++func routeMethods(r *http.Request) []string {
++	rctx := RouteContext(r.Context())
++	if rctx == nil || rctx.Routes == nil {
++		return nil
++	}
++	path := r.URL.RawPath
++	if path == "" {
++		path = r.URL.Path
++	}
++	if path == "" {
++		path = "/"
++	}
++
++	var methods []string
++	for _, mt := range methodMap {
++		name := GetMethodName(mt)
++		if rctx.Routes.Match(NewRouteContext(), name, path) {
++			methods = append(methods, name)
++		}
++	}
++	sort.Strings(methods)
++	return methods
++}
+diff --git a/middleware/allowed_methods.go b/middleware/allowed_methods.go
+new file mode 100644
+index 0000000..86fbbdf
+--- /dev/null
++++ b/middleware/allowed_methods.go
+@@ -0,0 +1,51 @@
++package middleware
++
++import (
++	"net/http"
++
++	"github.com/go-chi/chi/v5"
++)
++
++// SetAllowHeader adds the Allow header for 405 responses based on
++// registered methods for the requested path.
++//
++// This middleware is useful when the router is configured with a custom
++// MethodNotAllowed handler, or for other routers that do not set the Allow
++// header themselves.
++func SetAllowHeader(next http.Handler) http.Handler {
++	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		rctx := chi.RouteContext(r.Context())
++		if rctx == nil || rctx.Routes == nil {
++			next.ServeHTTP(w, r)
++			return
++		}
++
++		url := r.URL.RawPath
++		if url == "" {
++			url = r.URL.Path
++		}
++
++		if rctx.Routes.Match(chi.NewRouteContext(), r.Method, url) {
++			next.ServeHTTP(w, r)
++			return
++		}
++
++		for _, m := range []string{
++			http.MethodGet,
++			http.MethodHead,
++			http.MethodPost,
++			http.MethodPut,
++			http.MethodPatch,
++			http.MethodDelete,
++			http.MethodConnect,
++			http.MethodOptions,
++			http.MethodTrace,
++		} {
++			if rctx.Routes.Match(chi.NewRouteContext(), m, url) {
++				w.Header().Add("Allow", m)
++			}
++		}
++
++		next.ServeHTTP(w, r)
++	})
++}
+diff --git a/mux.go b/mux.go
+index 0d1caa6..44f8429 100644
+--- a/mux.go
++++ b/mux.go
+@@ -378,11 +378,11 @@ func (mx *Mux) NotFoundHandler() http.HandlerFunc {
+ 
+ // MethodNotAllowedHandler returns the default Mux 405 responder whenever
+ // a method cannot be resolved for a route.
+-func (mx *Mux) MethodNotAllowedHandler() http.HandlerFunc {
++func (mx *Mux) MethodNotAllowedHandler(methodsAllowed ...methodTyp) http.HandlerFunc {
+ 	if mx.methodNotAllowedHandler != nil {
+ 		return mx.methodNotAllowedHandler
+ 	}
+-	return methodNotAllowedHandler
++	return methodNotAllowedHandler(methodsAllowed...)
+ }
+ 
+ // handle registers a http.Handler in the routing tree for a particular http method
+@@ -445,7 +445,7 @@ func (mx *Mux) routeHTTP(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 	if rctx.methodNotAllowed {
+-		mx.MethodNotAllowedHandler().ServeHTTP(w, r)
++		mx.MethodNotAllowedHandler(rctx.methodsAllowed...).ServeHTTP(w, r)
+ 	} else {
+ 		mx.NotFoundHandler().ServeHTTP(w, r)
+ 	}
+@@ -481,7 +481,12 @@ func (mx *Mux) updateRouteHandler() {
+ 
+ // methodNotAllowedHandler is a helper function to respond with a 405,
+ // method not allowed.
+-func methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
+-	w.WriteHeader(405)
+-	w.Write(nil)
++func methodNotAllowedHandler(methodsAllowed ...methodTyp) func(w http.ResponseWriter, r *http.Request) {
++	return func(w http.ResponseWriter, r *http.Request) {
++		for _, m := range methodsAllowed {
++			w.Header().Add("Allow", reverseMethodMap[m])
++		}
++		w.WriteHeader(405)
++		w.Write(nil)
++	}
+ }
+diff --git a/tree.go b/tree.go
+index 4189b52..8a0675f 100644
+--- a/tree.go
++++ b/tree.go
+@@ -43,6 +43,18 @@ var methodMap = map[string]methodTyp{
+ 	http.MethodTrace:   mTRACE,
+ }
+ 
++var reverseMethodMap = map[methodTyp]string{
++	mCONNECT: http.MethodConnect,
++	mDELETE:  http.MethodDelete,
++	mGET:     http.MethodGet,
++	mHEAD:    http.MethodHead,
++	mOPTIONS: http.MethodOptions,
++	mPATCH:   http.MethodPatch,
++	mPOST:    http.MethodPost,
++	mPUT:     http.MethodPut,
++	mTRACE:   http.MethodTrace,
++}
++
+ // RegisterMethod adds support for custom HTTP method handlers, available
+ // via Router#Method and Router#MethodFunc
+ func RegisterMethod(method string) {
+@@ -59,6 +71,7 @@ func RegisterMethod(method string) {
+ 	}
+ 	mt := methodTyp(2 << n)
+ 	methodMap[method] = mt
++	reverseMethodMap[mt] = method
+ 	mALL |= mt
+ }
+ 
+@@ -102,6 +115,17 @@ type node struct {
+ // for a given route.
+ type endpoints map[methodTyp]*endpoint
+ 
++// allowedMethods appends the registered method types of the endpoints to
++// dst in a stable (ascending) order, skipping the mALL and mSTUB markers.
++func (s endpoints) allowedMethods(dst []methodTyp) []methodTyp {
++	for mt := mCONNECT; mt != 0 && mt <= mALL; mt <<= 1 {
++		if h := s[mt]; h != nil && h.handler != nil {
++			dst = append(dst, mt)
++		}
++	}
++	return dst
++}
++
+ type endpoint struct {
+ 	// endpoint handler
+ 	handler http.Handler
+@@ -457,6 +481,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+ 						// flag that the routing context found a route, but not a corresponding
+ 						// supported method
+ 						rctx.methodNotAllowed = true
++						rctx.methodsAllowed = xn.endpoints.allowedMethods(rctx.methodsAllowed[:0])
+ 					}
+ 				}
+ 
+@@ -496,6 +521,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+ 				// flag that the routing context found a route, but not a corresponding
+ 				// supported method
+ 				rctx.methodNotAllowed = true
++				rctx.methodsAllowed = xn.endpoints.allowedMethods(rctx.methodsAllowed[:0])
+ 			}
+ 		}
+ 
+@@ -864,3 +890,25 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
+ 
+ 	return nil
+ }
++
++// methodNames maps method types to their HTTP method names.
++var methodNames = map[methodTyp]string{
++	mCONNECT: http.MethodConnect,
++	mDELETE:  http.MethodDelete,
++	mGET:     http.MethodGet,
++	mHEAD:    http.MethodHead,
++	mOPTIONS: http.MethodOptions,
++	mPATCH:   http.MethodPatch,
++	mPOST:    http.MethodPost,
++	mPUT:     http.MethodPut,
++	mTRACE:   http.MethodTrace,
++}
++
++// GetMethodName returns the HTTP method name for a method type, including
++// custom methods added via RegisterMethod.
++func GetMethodName(method methodTyp) string {
++	if name, ok := methodNames[method]; ok {
++		return name
++	}
++	return methodTypString(method)
++}

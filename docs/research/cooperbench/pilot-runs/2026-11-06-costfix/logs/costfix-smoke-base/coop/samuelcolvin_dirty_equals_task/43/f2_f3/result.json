@@ -1,0 +1,46 @@
+{
+  "repo": "samuelcolvin_dirty_equals_task",
+  "task_id": 43,
+  "features": [
+    2,
+    3
+  ],
+  "setting": "coop",
+  "run_id": "fb5e30de",
+  "run_name": "costfix-smoke-base",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T19:21:15.087594",
+  "ended_at": "2026-11-06T19:23:39.892166",
+  "duration_seconds": 144.804572,
+  "agents": {
+    "agent2": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 0.2999186,
+      "steps": 14,
+      "input_tokens": 20,
+      "output_tokens": 3630,
+      "cache_read_tokens": 275443,
+      "cache_write_tokens": 34430,
+      "patch_lines": 119,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 2,
+      "status": "Submitted",
+      "cost": 0.314019,
+      "steps": 17,
+      "input_tokens": 26,
+      "output_tokens": 3760,
+      "cache_read_tokens": 360775,
+      "cache_write_tokens": 33312,
+      "patch_lines": 119,
+      "error": null
+    }
+  },
+  "total_cost": 0.6139376,
+  "total_steps": 31,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix-smoke-base/coop/samuelcolvin_dirty_equals_task/43/f2_f3"
+}

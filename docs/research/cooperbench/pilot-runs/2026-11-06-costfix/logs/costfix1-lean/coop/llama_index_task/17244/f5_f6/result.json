@@ -1,0 +1,46 @@
+{
+  "repo": "llama_index_task",
+  "task_id": 17244,
+  "features": [
+    5,
+    6
+  ],
+  "setting": "coop",
+  "run_id": "444d7feb",
+  "run_name": "costfix1-lean",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T19:30:34.391772",
+  "ended_at": "2026-11-06T19:35:20.621643",
+  "duration_seconds": 286.229871,
+  "agents": {
+    "agent1": {
+      "feature_id": 5,
+      "status": "Submitted",
+      "cost": 0.2068808,
+      "steps": 13,
+      "input_tokens": 20,
+      "output_tokens": 3611,
+      "cache_read_tokens": 268329,
+      "cache_write_tokens": 16183,
+      "patch_lines": 51,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 6,
+      "status": "Submitted",
+      "cost": 0.187024,
+      "steps": 14,
+      "input_tokens": 22,
+      "output_tokens": 2708,
+      "cache_read_tokens": 294155,
+      "cache_write_tokens": 14789,
+      "patch_lines": 51,
+      "error": null
+    }
+  },
+  "total_cost": 0.3939048,
+  "total_steps": 27,
+  "messages_sent": 0,
+  "log_dir": "logs/costfix1-lean/coop/llama_index_task/17244/f5_f6"
+}
