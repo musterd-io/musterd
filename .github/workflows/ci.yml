@@ -159,7 +159,7 @@ jobs:
             if [ -n "$changed" ] && ! echo "$changed" | grep -q -v -E '^(docs/|[^/]+\.md$)'; then
               suite=false; a11y=false; mcp=false; kinds=sqlite; why="every changed path is docs/ or a root *.md — the docs gates run alone"
             else
-              if echo "$changed" | grep -q -E '^(packages/web/|scripts/a11y/|\.github/|package\.json$|pnpm-lock\.yaml$)'; then a11y=true; else a11y=false; fi
+              if echo "$changed" | grep -q -E '^(packages/web/|scripts/a11y/|scripts/e2e/|packages/console/|packages/server/src/transport/liveSession\.ts$|\.github/|package\.json$|pnpm-lock\.yaml$)'; then a11y=true; else a11y=false; fi
               # Lane 01M4VNTQFW: the adapter bundle's startup budget, when the bundle or what it bundles changed.
               if echo "$changed" | grep -q -E '^(packages/(mcp|protocol|telemetry)/|scripts/mcp/|docs/perf/mcp-startup-budget\.json$|\.github/|package\.json$|pnpm-lock\.yaml$)'; then mcp=true; else mcp=false; fi
               if [ "$EVENT" = pull_request ]; then
@@ -408,6 +408,15 @@ jobs:
         run: pnpm a11y:targets:check --connected-only
         env:
           CHROME_BIN: /usr/bin/google-chrome
+      # The hosted sign-in in a real browser (lane 01M6S7DKXH): a Cloud-mode team and a real console
+      # on two sites over https, Chrome clicking through the console's cross-site hand-back. Here
+      # because this job already has Chrome and a built web client. It caught Origin: null (#4035).
+      # The plan runs this job when the console or the server's sign-in routes change, too.
+      - name: Hosted sign-in, real browser
+        run: pnpm exec vitest run scripts/e2e/hosted-signin.e2e.test.ts
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+          MUSTERD_E2E: '1'
 
   # The fan-in, and the ONLY required check (ADR 106 §2). NEVER give it an `if:` that can skip it:
   # branch protection counts a SKIPPED required check as passing (#2104, ADR 523). `always()` so it
