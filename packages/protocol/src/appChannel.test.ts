@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   APP_MEMBER_STATES,
+  APP_MOMENTS_MAX,
   AppDeliverySchema,
+  AppMomentSchema,
   AppForYouSchema,
   AppMemberSchema,
 } from './appChannel.js';
@@ -88,6 +90,52 @@ describe('the roster carries the team as /live shows it (ADR 814)', () => {
   });
 
   it('still parses a roster from a daemon that sends neither field', () => {
+    expect(AppDeliverySchema.safeParse(roster()).success).toBe(true);
+  });
+});
+
+describe('the roster carries the day’s moments (ADR 819)', () => {
+  const moment = (over: Record<string, unknown> = {}) => ({
+    id: 'L1',
+    kind: 'landed',
+    member: 'cider',
+    lane: { id: 'L1', title: 'For you shows portraits' },
+    goal: 'phone-pairing-ux',
+    text: null,
+    accepted: true,
+    ts: 1,
+    ...over,
+  });
+  const roster = (over: Record<string, unknown> = {}) => ({
+    v: 1,
+    kind: 'roster',
+    team: 'revive',
+    binding: 'b1',
+    ts: 1,
+    seats: [],
+    ...over,
+  });
+
+  it('holds at most 20 moments', () => {
+    expect(APP_MOMENTS_MAX).toBe(20);
+    const many = (n: number) => Array.from({ length: n }, (_, i) => moment({ id: `L${i}` }));
+    expect(AppDeliverySchema.safeParse(roster({ moments: many(20) })).success).toBe(true);
+    expect(AppDeliverySchema.safeParse(roster({ moments: many(21) })).success).toBe(false);
+  });
+
+  it('carries the team’s work only: a join is not a moment', () => {
+    for (const kind of ['landed', 'goal', 'verdict', 'started', 'poll', 'said'])
+      expect(AppMomentSchema.safeParse(moment({ kind })).success).toBe(true);
+    expect(AppMomentSchema.safeParse(moment({ kind: 'joined' })).success).toBe(false);
+  });
+
+  it('cuts a moment’s text at 200 characters', () => {
+    const said = moment({ kind: 'said', lane: null, goal: null, accepted: undefined });
+    expect(AppMomentSchema.safeParse({ ...said, text: 'x'.repeat(200) }).success).toBe(true);
+    expect(AppMomentSchema.safeParse({ ...said, text: 'x'.repeat(201) }).success).toBe(false);
+  });
+
+  it('still parses a roster from a daemon that sends no moments', () => {
     expect(AppDeliverySchema.safeParse(roster()).success).toBe(true);
   });
 });

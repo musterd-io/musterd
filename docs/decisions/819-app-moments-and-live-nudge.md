@@ -62,6 +62,9 @@ Two things the phone cannot do today:
 - Reactions (spec decision 2), chat, and watching are later ADRs; `moments` carries no `reactions`
   field yet.
 
+- 2026-11-06: decision 1 and 2 are on the wire as `AppMomentSchema` (roster `moments`) and
+  `RelayAppNudgeFrameSchema` (`app_nudge`), SPEC A.33.
+
 ## Observability & Evaluation
 
 - Traces: the daemon audits `app.nudge {binding_id, coalesced}` per send or coalesce; the hourly

@@ -81,6 +81,22 @@ export const RelayAppDeliverFrameSchema = z.object({
 export type RelayAppDeliverFrame = z.infer<typeof RelayAppDeliverFrameSchema>;
 
 /**
+ * Daemon → relay: a lane landed or a goal finished, so a foreground app should pull its roster now
+ * (ADR 819). Strict and content-free: the relay sends an APNs background push that says only
+ * "something happened", and no title, name or sealed body may ride this frame.
+ */
+export const RelayAppNudgeFrameSchema = z
+  .object({
+    protocol: version,
+    type: z.literal('app_nudge'),
+    binding: z.string().min(1).max(64),
+    push: RelayAppPushTargetSchema,
+    dedupe_id: z.string().min(1).max(128),
+  })
+  .strict();
+export type RelayAppNudgeFrame = z.infer<typeof RelayAppNudgeFrameSchema>;
+
+/**
  * Daemon → relay: the answer to one `app_fetch` — the sealed body the push left out, or `null`
  * when nothing is live for that ask on that binding. The relay hands it to the waiting phone and
  * keeps nothing.
@@ -173,6 +189,7 @@ export const RelayDaemonFrameSchema = z.discriminatedUnion('type', [
   RelayReconcileFrameSchema,
   RelayDeliverFrameSchema,
   RelayAppDeliverFrameSchema,
+  RelayAppNudgeFrameSchema,
   RelayAppBodyFrameSchema,
   RelayResolveFrameSchema,
   RelayInstallStateFrameSchema,

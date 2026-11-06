@@ -270,6 +270,32 @@ export const AppForYouSchema = z.object({
 });
 export type AppForYou = z.infer<typeof AppForYouSchema>;
 
+/** ADR 819: the kinds of moment — the team's work, nothing else (no joins, no presence). */
+export const APP_MOMENT_KINDS = ['landed', 'goal', 'verdict', 'started', 'poll', 'said'] as const;
+export type AppMomentKind = (typeof APP_MOMENT_KINDS)[number];
+/** ADR 819: at most this many moments ride a roster, today's only, newest first. */
+export const APP_MOMENTS_MAX = 20;
+/** ADR 819: a moment's one line (a verdict, a poll, something said) is at most this long. */
+export const APP_MOMENT_TEXT_MAX = 200;
+
+/**
+ * ADR 819: one thing that happened on the team today. `landed` is a lane reaching `done`, credited
+ * to its owner, with `accepted` when a peer confirmed it; `goal` a goal finishing; `verdict` a
+ * review verdict; `started` a lane claimed; `poll` a poll opened; `said` a person's team message.
+ * `text` is the one line for `verdict`, `poll` and `said`.
+ */
+export const AppMomentSchema = z.object({
+  id: z.string(),
+  kind: z.enum(APP_MOMENT_KINDS),
+  member: z.string(),
+  lane: z.object({ id: z.string(), title: z.string() }).nullable(),
+  goal: z.string().nullable(),
+  text: z.string().max(APP_MOMENT_TEXT_MAX).nullable(),
+  accepted: z.boolean().optional(),
+  ts: z.number().int(),
+});
+export type AppMoment = z.infer<typeof AppMomentSchema>;
+
 /** A quick action's seal must expire within this window of the daemon's clock (replay bound). */
 export const APP_QUICK_ACTION_WINDOW_MS = 10 * 60_000;
 
@@ -391,6 +417,8 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
     members: z.array(AppMemberSchema).max(APP_ROSTER_MAX).optional(),
     /** ADR 814: what waits on the binding's person, oldest first. Optional for the same reason. */
     for_you: z.array(AppForYouSchema).max(APP_FOR_YOU_MAX).optional(),
+    /** ADR 819: the day's moments, newest first. Optional: older daemons send none. */
+    moments: z.array(AppMomentSchema).max(APP_MOMENTS_MAX).optional(),
   }),
   /**
    * ADR 807: what a phone poll request did, and the poll as it stands after it. `nonce` is the
