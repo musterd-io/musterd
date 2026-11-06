@@ -1425,4 +1425,13 @@ ADR 816's two-week eval (running hours, cold act→reply p50, flap count, realis
 against the $13.84 baseline) exists to read; one round is an existence proof for the mechanism,
 not a latency verdict. The candidates if it is the norm: a longer first lease for a hub-started
 machine, or counting a `lease_expired` within the no-poll window differently — both are residency
-changes and neither is decided here.
+changes and neither is decided here. The lane is `01M6RZ0NRA` (opened at fifty's ask on accepting
+`01M64B25QM`, rather than waiting on the eval).
+
+Close of the round, added when it happened: round 2's machine stopped itself down at audit
+`fly.machine_stop` **07:14:48.0Z** (`reason: idle`), flyd exit 07:14:49Z — 22½ min after the
+06:52:11Z `woke` (the 15 min window plus the daemon-restart running-since floor noted above, and
+the sweep's tick). At the time of writing (17:37Z) it is still `stopped`: the first full day of
+the pilot cost the volume and ~80 min of compute across both rounds, against the $0.46/day
+always-on line. The two-week eval reads the running-hours share from the `fly.machine_*` audit
+rows themselves.
