@@ -1493,3 +1493,39 @@ ever attempted on the probe-minted lease. The fix decision (stop the boot probe 
 claim endpoint, and the cold TTL's fate now that its premise is gone) is with the lane's
 acceptor; the two-week ADR 816 eval is unaffected except that its cold-p50 input starts
 counting only once a cold round can complete on the first lease.
+
+## 2026-11-06 (close) — round 6: the first clean cold read (lane `01M6RZ0NRA`)
+
+The acceptor's call landed the same evening in #4021: the boot probe's wake-leases POST is
+deleted (the host loop's own polls prove the replicated host key — 401s logged until the fold
+lands), and the cold TTL plus the `fly.machine_start` ledger crossing that served it are
+reverted (the crossing's only reader was the TTL). Hub flipped to `5cc47d21` at 19:47:55Z;
+delta-2 redeployed probe-free at 19:51Z (boot log: daemon up 19:51:56Z → host polling
+19:52:01Z, no probe line; `cold_first` gone from the joiner dist). Round 5's held steer then
+completed warm on the reverted build when its cap lifted (lease 19:59:18.5Z → reply
+19:59:22.9Z → `woke` 19:59:23.5Z, act age 59 min, cap-held as recorded above).
+
+**Round 6** waited out the cap the round-5 failure left (machine hand-stopped 20:02:13Z,
+stopped 20:03:10Z; steer held until `wake_failed` 19:08:26Z aged out of the trailing hour):
+
+| leg | at (UTC) | Δ |
+| --- | --- | --- |
+| `steer` to the stopped seat | 20:10:43.0 | — |
+| audit `fly.machine_start` (hub, attenuated token) | 20:11:18.2 | 35.1 s (the 60 s tick's phase) |
+| flyd `started`; first-boot main-child exit + reboot | 20:11:18 / 20:11:23 | — |
+| tailnet up → daemon up → host ◉ polling | 20:11:26 / 20:11:31 / 20:11:37 | — |
+| first `residency.wake_leased` (warm 120 s TTL, no stamp) | 20:11:45.9 | 62.8 s from the steer |
+| `residency.woke` on that first lease | 20:11:48.8 | 2.9 s |
+| reply | 20:11:49.3 | **act→reply 66.2 s** |
+
+The first cold round ever to complete on its first lease, and **inside the ~2 min falsifier**
+(rounds 2–3: 291.2 s / 182.2 s, both via the stranded-order retry). The remaining 66 s is
+mostly the fly watch's 60 s tick phase (35 s here) plus ~25 s of boot + fold + first poll —
+the tick, not the spawn, is now the cold latency's long pole, and it is bounded at ~60 s by
+construction. The start also ran on the hub's newly attenuated Fly token (staged 19:32Z,
+lane `01M6S36XB0`): no auth failure on the row. Two wakes inside the hour re-trip the cap
+afterwards, as designed; the idle stop is the 15 min rule's business and was still pending at
+writing. Cold act→reply now has its first clean input for ADR 816's two-week eval. Scope of
+the claim: one round, one machine, build `5cc47d21`, 2026-11-06 — falsify by re-running this
+round and watching the first lease expire unspawned, or act→reply exceed ~2 min with the tick
+phase accounted for.
