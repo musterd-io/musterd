@@ -236,6 +236,39 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
     expect(browserOrigin('https://musterd.example:4849')).toBe('https://musterd.example:4849');
   });
 
+  it('enroll puts the standing passkeys in the fragment so the page excludes them (lane 01M6SC8A8R)', async () => {
+    const standing = [
+      { id: 'key-1', kind: 'passkey', created_at: 1, revoked_at: null, credential_id: 'Y3JlZC0x' },
+      { id: 'key-0', kind: 'passkey', created_at: 0, revoked_at: 5, credential_id: 'b2xk' },
+      { id: 'key-p', kind: 'phone', created_at: 1, revoked_at: null, credential_id: null },
+    ];
+    h.keys = standing;
+    h.listDeviceKeys.mockResolvedValueOnce({ keys: standing }).mockResolvedValue({
+      keys: [...standing, { id: 'key-2', kind: 'passkey', created_at: 2, revoked_at: null }],
+    });
+    captureStdout();
+    const err = captureStderr();
+    expect(await authorityCommand(parsed(['enroll']))).toBe(0);
+    const link = err.join('').match(/\S*\/authority\/passkey\?\S*/)?.[0] ?? '';
+    expect(link).toContain('#approval=');
+    expect(link).toMatch(/&exclude=Y3JlZC0x(\s|$)/);
+    expect(link).not.toContain('b2xk');
+    vi.restoreAllMocks();
+  });
+
+  it('enroll with no standing passkey adds no exclude', async () => {
+    h.keys = [];
+    h.listDeviceKeys.mockResolvedValueOnce({ keys: [] }).mockResolvedValue({
+      keys: [{ id: 'key-9', kind: 'passkey', created_at: 2, revoked_at: null }],
+    });
+    captureStdout();
+    const err = captureStderr();
+    expect(await authorityCommand(parsed(['enroll']))).toBe(0);
+    expect(err.join('')).toContain('#hold=1');
+    expect(err.join('')).not.toContain('exclude=');
+    vi.restoreAllMocks();
+  });
+
   it('enroll prints a localhost ceremony URL when the server is 127.0.0.1', async () => {
     h.server = 'http://127.0.0.1:4849';
     try {

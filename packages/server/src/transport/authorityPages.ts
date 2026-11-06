@@ -75,6 +75,9 @@ document.getElementById('go').addEventListener('click', async () => {
   try { countersign = frag.get('countersign') ? JSON.parse(new TextDecoder().decode(unb64u(frag.get('countersign')))) : undefined; } catch { countersign = undefined; }
   // ADR 769: \`musterd authority enroll\` asks for a hold when an admin must vouch for this passkey.
   const hold = frag.get('hold') === '1' && !approval && !countersign;
+  // The member's standing passkeys, from \`musterd authority enroll\` (this page cannot list them):
+  // excluded so an authenticator that holds one refuses instead of silently replacing it.
+  const exclude = (frag.get('exclude') || '').split(',').filter(Boolean);
   try {
     out('Waiting for your passkey…');
     const cred = await navigator.credentials.create({ publicKey: {
@@ -83,8 +86,13 @@ document.getElementById('go').addEventListener('click', async () => {
       user: { id: new TextEncoder().encode(member), name: member, displayName: member },
       pubKeyCredParams: [{ type: 'public-key', alg: -8 }, { type: 'public-key', alg: -7 }],
       authenticatorSelection: { userVerification: 'required' },
+      excludeCredentials: exclude.map((id) => ({ type: 'public-key', id: unb64u(id) })),
       timeout: 120000,
-    }});
+    }}).catch((e) => {
+      if (e && e.name === 'InvalidStateError')
+        throw new Error('This device already holds a passkey for you — use that one, revoke it first, or add the passkey on another device. Nothing was enrolled.');
+      throw e;
+    });
     const res = await fetch('/teams/' + encodeURIComponent(team) + '/authority/passkeys', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ actor: member, challenge, ...(approval ? { approval } : {}), ...(countersign ? { countersign } : {}), ...(hold ? { hold: true } : {}), registration: {
