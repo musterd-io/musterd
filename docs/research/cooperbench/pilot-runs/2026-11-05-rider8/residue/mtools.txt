@@ -1,0 +1,10 @@
+== r8-musterd
+   musterd:team_inbox_check (plain)           45 $ 1.82
+   musterd:lane_open                          14 $ 0.26
+   musterd:lane_board                         13 $ 0.21
+   gate:edit-refused                           5 $ 0.17
+   musterd:team_inbox_check (wait)             7 $ 0.12
+   musterd:lane_update                         5 $ 0.10
+   musterd:lane_handoff                        1 $ 0.02
+   other:ToolSearch                            1 $ 0.02
+   musterd:team_status                         1 $ 0.01

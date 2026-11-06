@@ -1,0 +1,46 @@
+{
+  "repo": "dspy_task",
+  "task_id": 8563,
+  "features": [
+    1,
+    4
+  ],
+  "setting": "coop",
+  "run_id": "3dca3dcd",
+  "run_name": "r8-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-06T00:22:06.472698",
+  "ended_at": "2026-11-06T00:40:26.693455",
+  "duration_seconds": 1100.220757,
+  "agents": {
+    "agent2": {
+      "feature_id": 4,
+      "status": "Submitted",
+      "cost": 0.13894394999999998,
+      "steps": 6,
+      "input_tokens": 34,
+      "output_tokens": 3039,
+      "cache_read_tokens": 120269,
+      "cache_write_tokens": 15247,
+      "patch_lines": 0,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 1,
+      "status": "Submitted",
+      "cost": 0.3116355,
+      "steps": 17,
+      "input_tokens": 106,
+      "output_tokens": 4644,
+      "cache_read_tokens": 499150,
+      "cache_write_tokens": 24510,
+      "patch_lines": 0,
+      "error": null
+    }
+  },
+  "total_cost": 0.45057945,
+  "total_steps": 23,
+  "messages_sent": 0,
+  "log_dir": "logs/r8-musterd/coop/dspy_task/8563/f1_f4"
+}

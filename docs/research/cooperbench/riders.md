@@ -325,3 +325,10 @@ first calls, the only place it could come from.
 did not (finding 033: $18.06). Between, "part of it". A pair whose seat ended its turn and was never
 woken is a coordination loss of the treatment, counted per pair; three in the first five stop the run.
 
+**Read 2026-11-06 ([finding 034](../034-cooperbench-rider8-turn-rule.md)).** R8a acted (7 wait calls + 0
+sleeps + 46 wakes = 53), R8c acted (first calls $6.68), R8b did not ($23.58 — the work moved into 46
+wakes at $0.37 median). The task broke: 0 of 10 pass, 16 of 20 patches empty; nine pairs ended by the
+10-minute idle rule with both seats having ended their turns "waiting for" each other and no act in
+flight. The smoke gate checked patch existence, not content; the three-in-five stop rule was not
+enforced live. A seat-ends-turn loop needs a wake reason other than the partner's act.
+

@@ -1,0 +1,204 @@
+{
+ "seats": 19,
+ "first_wake_reclaimable_median_s": 0.0,
+ "first_wake_reclaimable_s": [
+  0.0,
+  0.0,
+  0.0,
+  10.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0
+ ],
+ "later_wakes_reclaimable_median_s": 0.0,
+ "later_wakes": 29,
+ "rows": [
+  {
+   "pair": "dottxt_ai_outlines_task_1655_f1_f3",
+   "seat": "agent1",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 28.2,
+   "later_wakes_reclaimable_s": [
+    0.0
+   ]
+  },
+  {
+   "pair": "dottxt_ai_outlines_task_1655_f1_f3",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 7.7,
+   "later_wakes_reclaimable_s": [
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "pair": "dspy_task_8563_f1_f4",
+   "seat": "agent1",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 4.1,
+   "later_wakes_reclaimable_s": [
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "pair": "dspy_task_8563_f1_f4",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 10.0,
+   "first_wake_waited_s": 53.6,
+   "later_wakes_reclaimable_s": []
+  },
+  {
+   "pair": "go_chi_task_27_f3_f4",
+   "seat": "agent1",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 1.4,
+   "later_wakes_reclaimable_s": []
+  },
+  {
+   "pair": "go_chi_task_27_f3_f4",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 1.0,
+   "later_wakes_reclaimable_s": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "pair": "llama_index_task_17244_f5_f6",
+   "seat": "agent1",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 7.4,
+   "later_wakes_reclaimable_s": [
+    10.0,
+    3.5
+   ]
+  },
+  {
+   "pair": "llama_index_task_17244_f5_f6",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 2.8,
+   "later_wakes_reclaimable_s": [
+    0.0
+   ]
+  },
+  {
+   "pair": "openai_tiktoken_task_0_f4_f8",
+   "seat": "agent1",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 9.0,
+   "later_wakes_reclaimable_s": []
+  },
+  {
+   "pair": "openai_tiktoken_task_0_f4_f8",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 2.1,
+   "later_wakes_reclaimable_s": []
+  },
+  {
+   "pair": "pallets_click_task_2800_f1_f4",
+   "seat": "agent1",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 3.5,
+   "later_wakes_reclaimable_s": [
+    0.0
+   ]
+  },
+  {
+   "pair": "pallets_click_task_2800_f1_f4",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 4.1,
+   "later_wakes_reclaimable_s": [
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "pair": "pallets_jinja_task_1559_f5_f8",
+   "seat": "agent1",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 7.2,
+   "later_wakes_reclaimable_s": []
+  },
+  {
+   "pair": "pallets_jinja_task_1559_f5_f8",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 3.4,
+   "later_wakes_reclaimable_s": [
+    0.0
+   ]
+  },
+  {
+   "pair": "pallets_jinja_task_1621_f6_f10",
+   "seat": "agent1",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 6.6,
+   "later_wakes_reclaimable_s": [
+    0.0,
+    10.0
+   ]
+  },
+  {
+   "pair": "pallets_jinja_task_1621_f6_f10",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 24.2,
+   "later_wakes_reclaimable_s": []
+  },
+  {
+   "pair": "react_hook_form_task_153_f2_f6",
+   "seat": "agent1",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 1.0,
+   "later_wakes_reclaimable_s": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "pair": "react_hook_form_task_153_f2_f6",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 1.0,
+   "later_wakes_reclaimable_s": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "pair": "typst_task_6554_f2_f6",
+   "seat": "agent2",
+   "first_wake_reclaimable_s": 0.0,
+   "first_wake_waited_s": 3.1,
+   "later_wakes_reclaimable_s": [
+    0.0,
+    0.0
+   ]
+  }
+ ]
+}

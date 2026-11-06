@@ -1,0 +1,44 @@
+# Rider 8 — run log (lane 01M6Q09SR6, rider8-manifest.md)
+
+- 2026-11-05 ~23:10Z: nick chose finding 033's arm-guidance option and its spend in session ("lets go
+  with your recommendation"). Manifest + arm change pre-registered as #3952 (40866276) before any pair
+  ran: the turn rule leads the act-lane protocol, the workflow's check step says it too,
+  `Bash(sleep:*)` denied on the act lane. Lanes 01M6PZZWKY (manifest + arm) and 01M6Q09SR6 (this run).
+- 23:4xZ: image build `fly deploy --build-only --push` from `main` 40866276 (`MUSTERD_REF=40866276`).
+  Deploy token: the one nick minted ~19:25Z and chose to keep (expires ~2026-11-07 07:00Z).
+  Scripts: `preflight-8.sh`, `smokepair-8.sh` (gate: a seat's first call ends with a "waiting for" result
+  text and is woken afterwards; no `sleep` command in the streams), `r8.sh` — rider 7c's with the `r8-`
+  prefix.
+- 23:49Z: image `deployment-01M6Q1VFYJVYDVBZQP4PS5FM21` pushed; `machine update` + `start` on `cb-run-2`;
+  on the machine `MUSTERD_REF=40866276…`, the turn rule and `ACT_LANE_DENY` present in the arm's code.
+- 23:54–23:57Z: pre-flight — api check ok, `gate_smoke` PASS, `hold_smoke_697` PASS (the trajectories
+  directory is created by the script now; no second attempt needed).
+- 23:58Z: smoke pair started (`pallets_click` 2068, f1,f2, act lane, guard pair cap $6). Gate: a seat's
+  first call ends with a "waiting for …" result and is woken afterwards; no `sleep` in the streams.
+- 2026-11-05 23:58Z – 2026-11-06 00:20Z: smoke pair exit 0, 22 min. **Gate met, both seats:** agent1's
+  first call ended at 81 s / $0.35 with the result text "Waiting for agent2 to respond about coordinating
+  our changes to the same files."; agent2's at 28 s / $0.16 with "Waiting for agent1's response about
+  how to coordinate our overlapping file changes." Six wakes followed (agent1 2, agent2 4), all
+  `compacted` (briefs 8–39 turns, 1.1–3.1 KiB of 348–770 KiB transcripts refused at $0.27–0.59), waits
+  1–23 s, spawn→roster 13–21 s; first-wake `reclaimable` 0.0 s on both seats; `sleep` 0 in both
+  streams; both patches written. Wake cost $2.67 (the work now happens in the wakes — $0.44 a wake
+  against finding 033's $0.18 — which is the trade the rules read on the ten pairs). One wake was due to
+  a `board` message (a lane push), not the partner.
+- 00:2xZ: the ten pairs started (`r8.sh`: `run_arms.py --cap 110`, `wake_guard.py --pair-cap 6
+  --total-cap 110`, run name `r8-musterd`, `-c 3`, `--no-auto-eval`, then `cooperbench eval`).
+- 2026-11-06 00:22–01:38Z: the ten pairs ran and were evaluated; `run_arms` exit 0; neither guard fired
+  (guard's finished count $7.18 is the first calls + evaluated pairs it saw; `rider7.py` reads $23.58
+  with every wake priced). No arm error, no evaluator error, no re-run.
+- Read: 46 wakes all `compacted`, median wait 7.7 s, first-wake `reclaimable` 0.0 s (19 seats); first
+  calls $6.68, wakes $16.90; pass 0/10, `cause: setup` on nine pairs — 16 of 20 `patch.txt` empty.
+  Every one of the nine ended by `ACT_IDLE_SECONDS` (both seats ended their turns "waiting for" each
+  other, no act in flight), 15–32 min in; none reached the quiet rule or the cap.
+- **Process misses, recorded:** the smoke-pair gate in `smokepair-8.sh` logged patch *existence*; both
+  smoke patches were 0 bytes and the run started anyway. The manifest's stop rule (three "ended, never
+  woken" pairs in the first five) had no live check; all five were, and the run went to ten.
+- Evidence here: `readout.json`, `rider7.json`, `firstcalls.txt` (each first call's cost, length and
+  closing text), `r7d.json` (`firstwake.py`), `residue/` (mtools, sends, boardreads), each pair's host
+  logs, residency report, result and patches (sizes are the finding), the smoke pair's. Streams stay on
+  the clone's volume (`/data/runs/logs/r8-*`). `fly machine stop 8175e6b907de58` 01:4xZ. The deploy
+  token stays, by nick's decision, until it expires ~2026-11-07 07:00Z.
+

@@ -1,0 +1,258 @@
+diff --git a/src/jinja2/ext.py b/src/jinja2/ext.py
+index d21b83aa..213377e3 100644
+--- a/src/jinja2/ext.py
++++ b/src/jinja2/ext.py
+@@ -351,6 +351,68 @@ class InternationalizationExtension(Extension):
+             source = self.environment.parse(source)
+         return extract_from_ast(source, gettext_functions)
+ 
++    def _validate_trans_expression(
++        self, name: str, expr: nodes.Expr, parser: "Parser", lineno: int
++    ) -> None:
++        """Validate that an expression is appropriate for translation contexts.
++
++        Checks that the expression type can be used in translation blocks.
++        Rejects template data nodes and other inappropriate types.
++        """
++        # Allow common expression types that work in translation contexts
++        allowed_types = (
++            nodes.Const,      # Literal values
++            nodes.Name,       # Variable references
++            nodes.Call,       # Function calls
++            nodes.Getattr,    # Attribute access
++            nodes.Filter,     # Filter expressions
++            nodes.Test,       # Test expressions
++        )
++
++        # Reject inappropriate types
++        if isinstance(expr, (nodes.TemplateData, nodes.Output)):
++            parser.fail(
++                f"Variable {name!r} cannot use template data in translation contexts",
++                lineno,
++                exc=TemplateSyntaxError,
++            )
++
++        # For other unexpected node types, provide a generic error
++        if not isinstance(expr, allowed_types):
++            parser.fail(
++                f"Variable {name!r} uses an expression type incompatible with translation contexts",
++                lineno,
++                exc=TemplateSyntaxError,
++            )
++
++    def _validate_trans_variables(
++        self, variables: t.Dict[str, nodes.Expr], parser: "Parser", lineno: int
++    ) -> None:
++        """Validate variables used in translation blocks.
++
++        Ensures variable names follow Python identifier rules and don't conflict
++        with reserved translation function names.
++        """
++        for name, expr in variables.items():
++            # Validate variable name is a valid Python identifier
++            if not name.isidentifier():
++                parser.fail(
++                    f"Invalid variable name {name!r} - must be a valid Python identifier",
++                    lineno,
++                    exc=TemplateSyntaxError,
++                )
++
++            # Check for conflicts with reserved translation function names
++            if name in GETTEXT_FUNCTIONS:
++                parser.fail(
++                    f"Variable name {name!r} conflicts with translation function names",
++                    lineno,
++                    exc=TemplateSyntaxError,
++                )
++
++            # Validate the expression itself
++            self._validate_trans_expression(name, expr, parser, lineno)
++
+     def parse(self, parser: "Parser") -> t.Union[nodes.Node, t.List[nodes.Node]]:
+         """Parse a translatable tag."""
+         lineno = next(parser.stream).lineno
+@@ -440,6 +502,9 @@ class InternationalizationExtension(Extension):
+             if name not in variables:
+                 variables[name] = nodes.Name(name, "load")
+ 
++        # Validate all variables after collection is complete
++        self._validate_trans_variables(variables, parser, lineno)
++
+         if not have_plural:
+             plural_expr = None
+         elif plural_expr is None:
+@@ -571,6 +636,96 @@ class InternationalizationExtension(Extension):
+         return nodes.Output([node])
+ 
+ 
++class ConditionalTranslationExtension(Extension):
++    """Adds a `ctrans` tag for conditional translation rendering.
++
++    The ctrans tag conditionally renders translations based on runtime boolean
++    expressions. The condition is evaluated synchronously after parsing but
++    before translation rendering.
++
++    Example usage:
++        {% ctrans condition=user.locale == 'en', message='Hello' %}
++        {% ctrans condition=show_greeting, message=greeting_text %}
++    """
++
++    tags = {"ctrans"}
++
++    def parse(self, parser: "Parser") -> nodes.Output:
++        """Parse the ctrans tag.
++
++        Syntax: {% ctrans condition=<expr>, message=<expr> %}
++
++        Returns an Output node with a conditional expression.
++        """
++        lineno = next(parser.stream).lineno
++
++        condition = None
++        message = None
++        variables: t.Dict[str, nodes.Expr] = {}
++        first_arg = True
++
++        # Parse the arguments
++        while parser.stream.current.type != "block_end":
++            if not first_arg:
++                parser.stream.expect("comma")
++            first_arg = False
++
++            token = parser.stream.expect("name")
++            parser.stream.expect("assign")
++
++            if token.value == "condition":
++                condition = parser.parse_expression(with_condexpr=False)
++            elif token.value == "message":
++                message = parser.parse_expression(with_condexpr=False)
++            else:
++                # Collect other variables for message formatting
++                variables[token.value] = parser.parse_expression(with_condexpr=False)
++
++        # Validate required parameters
++        if condition is None:
++            parser.fail(
++                "ctrans tag requires 'condition' parameter",
++                lineno,
++                exc=TemplateSyntaxError,
++            )
++
++        if message is None:
++            parser.fail(
++                "ctrans tag requires 'message' parameter",
++                lineno,
++                exc=TemplateSyntaxError,
++            )
++
++        # Create the translation call
++        gettext_call = nodes.Call(
++            nodes.Name("gettext", "load"),
++            [message],
++            [],
++            None,
++            None,
++        )
++
++        # Apply variable substitution if variables are provided
++        if variables:
++            gettext_call = nodes.MarkSafeIfAutoescape(gettext_call)
++            gettext_call = nodes.Mod(
++                gettext_call,
++                nodes.Dict(
++                    [
++                        nodes.Pair(nodes.Const(key), value)
++                        for key, value in variables.items()
++                    ]
++                ),
++            )
++        else:
++            gettext_call = nodes.MarkSafeIfAutoescape(gettext_call)
++
++        # Create a conditional expression: gettext_call if condition else ''
++        cond_expr = nodes.CondExpr(condition, gettext_call, nodes.Const(""), lineno=lineno)
++
++        return nodes.Output([cond_expr], lineno=lineno)
++
++
+ class ExprStmtExtension(Extension):
+     """Adds a `do` tag to Jinja that works like the print statement just
+     that it doesn't print the return value.
+diff --git a/test_ctrans.py b/test_ctrans.py
+new file mode 100644
+index 00000000..f3701113
+--- /dev/null
++++ b/test_ctrans.py
+@@ -0,0 +1,72 @@
++"""Test the conditional translation extension."""
++from jinja2 import Environment
++from jinja2.ext import ConditionalTranslationExtension
++
++
++def test_ctrans_basic():
++    """Test basic conditional translation rendering."""
++    env = Environment(extensions=[ConditionalTranslationExtension])
++
++    # Mock gettext function
++    def simple_gettext(message):
++        return f"Translated: {message}"
++
++    env.globals['gettext'] = simple_gettext
++
++    # Test with condition=True
++    template = env.from_string("{% ctrans condition=show, message='Hello' %}")
++    result = template.render(show=True)
++    assert result == "Translated: Hello", f"Expected 'Translated: Hello', got '{result}'"
++
++    # Test with condition=False
++    result = template.render(show=False)
++    assert result == "", f"Expected empty string, got '{result}'"
++
++    print("✓ Basic conditional translation test passed")
++
++
++def test_ctrans_with_variables():
++    """Test conditional translation with variable substitution."""
++    env = Environment(extensions=[ConditionalTranslationExtension])
++
++    def simple_gettext(message):
++        return message
++
++    env.globals['gettext'] = simple_gettext
++
++    # Test with variables
++    template = env.from_string("{% ctrans condition=show, message='Hello %(name)s', name=user %}")
++    result = template.render(show=True, user="Alice")
++    assert "Alice" in result, f"Expected 'Alice' in result, got '{result}'"
++
++    result = template.render(show=False, user="Alice")
++    assert result == "", f"Expected empty string, got '{result}'"
++
++    print("✓ Conditional translation with variables test passed")
++
++
++def test_ctrans_expression_condition():
++    """Test conditional translation with complex expressions."""
++    env = Environment(extensions=[ConditionalTranslationExtension])
++
++    def simple_gettext(message):
++        return f"Translated: {message}"
++
++    env.globals['gettext'] = simple_gettext
++
++    # Test with expression
++    template = env.from_string("{% ctrans condition=count > 5, message='Many items' %}")
++    result = template.render(count=10)
++    assert result == "Translated: Many items", f"Expected translation, got '{result}'"
++
++    result = template.render(count=3)
++    assert result == "", f"Expected empty string, got '{result}'"
++
++    print("✓ Conditional translation with expression test passed")
++
++
++if __name__ == "__main__":
++    test_ctrans_basic()
++    test_ctrans_with_variables()
++    test_ctrans_expression_condition()
++    print("\n✓ All tests passed!")

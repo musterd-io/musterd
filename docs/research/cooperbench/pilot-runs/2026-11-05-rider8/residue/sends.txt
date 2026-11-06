@@ -1,0 +1,38 @@
+{
+ "r8-musterd": {
+  "total": 6.68,
+  "counts": {
+   "send_calls": 39,
+   "sends": 39,
+   "act:message": 37,
+   "signal": 3,
+   "act:status_update": 2
+  },
+  "usd": {
+   "send_calls": 0.78,
+   "signal": 0.06
+  },
+  "signal_kinds": {
+   "waiting / ETA": [
+    1,
+    0.02
+   ],
+   "pushed/fetch": [
+    2,
+    0.04
+   ]
+  },
+  "examples": {
+   "waiting / ETA": [
+    "Since you claimed types.py first, I'll wait for you to finish your encoding field work. My get_image_mimetype() method will likely touch the same area (ImageBlo"
+   ],
+   "pushed/fetch": [
+    "I'm done! Committed and pushed to team/agent2 (commit 9b4c1653a). You can merge my branch and add your get_image_mimetype() method now. My changes won't conflic",
+    "My onFinally feature is complete and pushed (commit ae7fcf53). I modified UseFormHandleSubmit to add third param onFinally: (formState) => unknown | Promise<unk"
+   ]
+  },
+  "cf_as_run": 6.68,
+  "cf_drop_wait": 6.24,
+  "cf_drop_signal": 6.62
+ }
+}

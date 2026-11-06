@@ -1,0 +1,46 @@
+{
+  "repo": "pallets_jinja_task",
+  "task_id": 1559,
+  "features": [
+    5,
+    8
+  ],
+  "setting": "coop",
+  "run_id": "a4bf2257",
+  "run_name": "r8-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-06T00:57:39.668648",
+  "ended_at": "2026-11-06T01:20:50.298803",
+  "duration_seconds": 1390.630155,
+  "agents": {
+    "agent1": {
+      "feature_id": 5,
+      "status": "Submitted",
+      "cost": 0.5041042499999999,
+      "steps": 21,
+      "input_tokens": 114,
+      "output_tokens": 8784,
+      "cache_read_tokens": 585695,
+      "cache_write_tokens": 52345,
+      "patch_lines": 258,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 8,
+      "status": "Submitted",
+      "cost": 0.33191415,
+      "steps": 9,
+      "input_tokens": 74,
+      "output_tokens": 5080,
+      "cache_read_tokens": 275803,
+      "cache_write_tokens": 46067,
+      "patch_lines": 0,
+      "error": null
+    }
+  },
+  "total_cost": 0.8360183999999999,
+  "total_steps": 30,
+  "messages_sent": 0,
+  "log_dir": "logs/r8-musterd/coop/pallets_jinja_task/1559/f5_f8"
+}
