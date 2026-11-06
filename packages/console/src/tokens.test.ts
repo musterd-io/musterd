@@ -9,7 +9,14 @@ import { makeLog } from './log.js';
 import { migrate } from './schema.js';
 import { FRESH_MS, createSession } from './sessions.js';
 import { pglite } from './testing.js';
-import { derToP1363, localSigner, signConsoleToken, TOKEN_LIFETIME_S } from './tokens.js';
+import {
+  derToP1363,
+  localSigner,
+  signConsoleToken,
+  signIdentityStatement,
+  TOKEN_LIFETIME_S,
+  type PublicJwk,
+} from './tokens.js';
 
 const ISSUER = 'https://app.musterd.test';
 const AUD = 'https://cloud.test';
@@ -86,6 +93,58 @@ describe('signConsoleToken', () => {
     await expect(
       signConsoleToken(signer, { iss: ISSUER, sub: 'acct_1', aud: 'has space', nowS }),
     ).rejects.toThrow(/bad audience/);
+  });
+});
+
+const payloadOf = (token: string): Record<string, unknown> =>
+  JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString()) as Record<string, unknown>;
+
+const verifiesWith = (token: string, jwk: PublicJwk): boolean => {
+  const [h, p, s] = token.split('.');
+  return verify(
+    'sha256',
+    Buffer.from(`${h}.${p}`),
+    { key: createPublicKey({ key: jwk, format: 'jwk' }), dsaEncoding: 'ieee-p1363' },
+    Buffer.from(s!, 'base64url'),
+  );
+};
+
+describe('signIdentityStatement (ADR 818)', () => {
+  const nowS = 1_700_000_000;
+  const base = { iss: ISSUER, sub: 'acct_1', aud: AUD, nowS };
+
+  it('signs use:"identity" for one audience, 60 seconds, verifying against the published key', async () => {
+    const signer = localSigner();
+    const { token, jti } = await signIdentityStatement(signer, { ...base, email: null });
+    expect(payloadOf(token)).toMatchObject({
+      iss: ISSUER,
+      sub: 'acct_1',
+      aud: AUD,
+      use: 'identity',
+      jti,
+      iat: nowS,
+      exp: nowS + TOKEN_LIFETIME_S,
+    });
+    expect(verifiesWith(token, await signer.publicJwk())).toBe(true);
+  });
+
+  it('omits a null email and carries a known one', async () => {
+    const signer = localSigner();
+    const none = await signIdentityStatement(signer, { ...base, email: null });
+    expect('email' in payloadOf(none.token)).toBe(false);
+    const some = await signIdentityStatement(signer, { ...base, email: 'nick@example.com' });
+    expect(payloadOf(some.token).email).toBe('nick@example.com');
+  });
+
+  it('refuses a bad audience', async () => {
+    await expect(
+      signIdentityStatement(localSigner(), { ...base, aud: 'has space', email: null }),
+    ).rejects.toThrow(/bad audience/);
+  });
+
+  it('an admin token carries no use claim, so the two kinds stay apart', async () => {
+    const { token } = await signConsoleToken(localSigner(), base);
+    expect('use' in payloadOf(token)).toBe(false);
   });
 });
 

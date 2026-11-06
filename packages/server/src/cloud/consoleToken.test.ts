@@ -197,25 +197,43 @@ describe('verifyIdentityStatement (ADR 698, spec §4.4)', () => {
   afterEach(async () => issuer.close());
   const verifyId = (t: string) => verifyIdentityStatement(t, { jwks, audience: AUD, nowMs: now });
 
-  it('accepts a statement and returns account + verified email', async () => {
-    const claims = await verifyId(issuer.token(AUD, { sub: 'acct_1', email: 'nick@example.com' }));
+  const ID = { use: 'identity' } as const;
+
+  it('accepts a statement with use:"identity" and no email (a GitHub account, ADR 818)', async () => {
+    const claims = await verifyId(issuer.token(AUD, { sub: 'acct_1', ...ID }));
     expect(claims.accountId).toBe('acct_1');
+    expect(claims.email).toBeNull();
+  });
+
+  it('returns the email when the statement carries one', async () => {
+    const claims = await verifyId(
+      issuer.token(AUD, { sub: 'acct_1', email: 'nick@example.com', ...ID }),
+    );
     expect(claims.email).toBe('nick@example.com');
   });
 
-  it('refuses a statement with no email as malformed', async () => {
+  it('refuses a token without use:"identity" as malformed, even one carrying an email', async () => {
     expect(await refusal(verifyId(issuer.token(AUD, { sub: 'acct_1' })))).toBe('malformed');
+    expect(
+      await refusal(verifyId(issuer.token(AUD, { sub: 'acct_1', email: 'nick@example.com' }))),
+    ).toBe('malformed');
+  });
+
+  it('the admin verifier refuses an identity statement, and still takes a token with no use', async () => {
+    const verifyAdmin = (t: string) => verifyConsoleToken(t, { jwks, audience: AUD, nowMs: now });
+    expect(await refusal(verifyAdmin(issuer.token(AUD, { sub: 'acct_1', ...ID })))).toBe(
+      'malformed',
+    );
+    expect((await verifyAdmin(issuer.token(AUD, { sub: 'acct_1' }))).sub).toBe('acct_1');
   });
 
   it('refuses another audience, an expired statement, and a tampered payload', async () => {
-    const good = issuer.token(AUD, { sub: 'acct_1', email: 'nick@example.com' });
+    const good = issuer.token(AUD, { sub: 'acct_1', ...ID });
     expect(
-      await refusal(
-        verifyId(issuer.token('https://other.test', { sub: 'acct_1', email: 'nick@example.com' })),
-      ),
+      await refusal(verifyId(issuer.token('https://other.test', { sub: 'acct_1', ...ID }))),
     ).toBe('wrong_audience');
     const [h, , sig] = good.split('.');
-    const forged = `${h}.${b64({ sub: 'acct_2', email: 'eve@example.com', aud: AUD, jti: 'x', exp: Math.floor(now / 1000) + 60 })}.${sig}`;
+    const forged = `${h}.${b64({ sub: 'acct_2', use: 'identity', aud: AUD, jti: 'x', exp: Math.floor(now / 1000) + 60 })}.${sig}`;
     expect(await refusal(verifyId(forged))).toBe('bad_signature');
     now += 120_000;
     expect(await refusal(verifyId(good))).toBe('expired');

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { blockListOf } from './clientip.js';
 import type { ConsoleConfig } from './config.js';
 import type { SignInEmail } from './email.js';
+import { handbackPath } from './handback.js';
 import { createConsoleServer, inboxKey } from './http.js';
 import { makeLog } from './log.js';
 import { migrate } from './schema.js';
@@ -98,12 +99,12 @@ async function boot(opts: { email?: boolean; failSend?: boolean } = {}) {
     'content-type': 'application/x-www-form-urlencoded',
     ...extra,
   });
-  const ask = async (email = 'Nick@Example.TEST', ip = '203.0.113.1') => {
+  const ask = async (email = 'Nick@Example.TEST', ip = '203.0.113.1', ret = '/account') => {
     const r = await call(
       'POST',
       '/auth/email/start',
       form({ 'cf-connecting-ip': ip }),
-      `email=${encodeURIComponent(email)}&return=%2Faccount`,
+      `email=${encodeURIComponent(email)}&return=${encodeURIComponent(ret)}`,
     );
     const link = sent.at(-1)?.link;
     return {
@@ -144,6 +145,19 @@ describe('magic links (ADR 620 decision 6)', () => {
       expect((await view(token)).body).toContain('Open this in the browser where you started');
     expect((await view(token, tx)).body).toContain('<h1>Finish signing in</h1>');
     expect((await confirm(token, tx)).status).toBe(303);
+  });
+
+  it('a sign-in started from a team hand-back lands back on it (ADR 722 §1)', async () => {
+    const { ask, confirm } = await boot();
+    const back = handbackPath({
+      aud: 'https://musterd.test',
+      team: 'acme',
+      state: 'Zm9vYmFyYmF6cXV4cXV1eHF1dXhxdXV4cXV1eHF1dXg',
+    });
+    const { tx, token } = await ask(undefined, undefined, back);
+    const c = await confirm(token, tx);
+    expect(c.status).toBe(303);
+    expect(c.headers['location']).toBe(back);
   });
 
   it('the asking browser confirms and is signed in; the link then works never again', async () => {

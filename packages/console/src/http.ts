@@ -8,12 +8,21 @@ import { hostCookie } from './cookies.js';
 import { csrfTokenFor, csrfTokenValid, originAllowed } from './csrf.js';
 import { DATABASE_UNREACHABLE_SENTENCE, type Queryable } from './db.js';
 import { sendSignInEmail } from './email.js';
+import {
+  callbackUrl,
+  handbackCsp,
+  handbackPath,
+  parseHandbackShape,
+  statementEmail,
+  TEAM_SLUG,
+} from './handback.js';
 import type { Log } from './log.js';
 import {
   accountPage,
   assetFor,
   checkEmailPage,
   errorPages,
+  handbackPage,
   finishPage,
   PAGE_CSP,
   signInPage,
@@ -33,7 +42,7 @@ import { cookie, FormError, readForm, SESSION_COOKIE } from './request.js';
 import { safeReturnPath } from './returnpath.js';
 import { hashSecret, newSecret } from './secrets.js';
 import { ABSOLUTE_MS, createSession, isFresh, loadSession, revokeSession } from './sessions.js';
-import { audienceOk, signConsoleToken, type TokenSigner } from './tokens.js';
+import { audienceOk, signConsoleToken, signIdentityStatement, type TokenSigner } from './tokens.js';
 import {
   consumeMagic,
   consumeOAuthTx,
@@ -115,8 +124,6 @@ const TEAM_PER_ACCOUNT = 5;
 const TEAM_WINDOW_MS = 60 * 60 * 1000;
 /** How long the console waits on the team server's `POST /teams`. */
 const TEAM_CREATE_TIMEOUT_MS = 15_000;
-/** The team server's own rule (`store/teams.ts` SLUG_RE), checked here first so the refusal is a field error. */
-const TEAM_SLUG = /^[a-z0-9-]{1,32}$/;
 /** A member name: what `addMember` accepts (no whitespace), bounded. */
 const SEAT_NAME = /^[A-Za-z0-9_.-]{1,32}$/;
 /**
@@ -853,6 +860,71 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
               'cache-control': asset.cache,
             });
             return res.end(req.method === 'HEAD' ? undefined : asset.body);
+          }
+          if (path === '/handback') {
+            // The team hand-back (ADR 722 §1, ADR 818): sign an identity statement for the team's
+            // audience and hand it, with the team's state, to the team's own callback in a form.
+            // The callback URL is built from the slug and the configured suffix, never the query.
+            route = 'handback';
+            if (!deps.signer || !config.teams) return send(res, 404, err('not_found', 'not found'));
+            const teams = config.teams;
+            const h = parseHandbackShape(req.url ?? '');
+            if (!h || h.aud !== teams.audience) return sendHtml(res, 400, errorPages.handback());
+            const sid = cookie(req, SESSION_COOKIE);
+            const t = now();
+            const session = await loadSession(db, sid, t);
+            if (!session)
+              return sendHtml(
+                res,
+                200,
+                signInPage({
+                  providers: PROVIDERS.filter((x) => config.providers[x]),
+                  email: Boolean(config.email),
+                  returnTo: handbackPath(h),
+                }),
+              );
+            const action = callbackUrl(h.team, teams.suffix);
+            const headers = {
+              'content-security-policy': handbackCsp(new URL(action).origin),
+              'referrer-policy': 'no-referrer',
+            };
+            // A HEAD signs nothing: it answers what the page would, without a statement.
+            if (req.method === 'HEAD') return sendHtml(res, 200, '', headers);
+            if (
+              !(await hit(
+                db,
+                {
+                  bucket: `token:${session.accountId}`,
+                  max: TOKEN_PER_ACCOUNT,
+                  windowMs: WINDOW_MS,
+                },
+                t,
+              ))
+            )
+              return sendHtml(res, 429, errorPages.rate(), { 'retry-after': '60' });
+            const issued = await signIdentityStatement(deps.signer, {
+              iss: config.issuer,
+              sub: session.accountId,
+              aud: h.aud,
+              email: await statementEmail(db, session),
+              nowS: Math.floor(t / 1000),
+            });
+            await appendAudit(
+              db,
+              {
+                action: 'statement.issue',
+                requestId: rid,
+                actorAccountId: session.accountId,
+                detail: { aud: h.aud, team: h.team, jti: issued.jti },
+              },
+              t,
+            );
+            return sendHtml(
+              res,
+              200,
+              handbackPage({ action, team: h.team, statement: issued.token, state: h.state }),
+              headers,
+            );
           }
           if (path === '/' || path === '/account') {
             route = path === '/' ? 'signin_page' : 'account_page';

@@ -48,13 +48,16 @@ replayed statement from being believed.
 1. **The identity statement is a console-signed ES256 compact JWS** with claims `sub` (the
    account id), `email` (the verified email), `aud` (the one asking team server), `jti`, and
    `exp` — the §4.3 properties: at most 60 s of life, audience-pinned, single-use. It asserts
-   identity only; it carries no team, member, or role claim (§4.4).
+   identity only; it carries no team, member, or role claim (§4.4). _(Amended 2026-11-06: ADR
+   818 — a statement also carries `use: "identity"`, and `email` is optional.)_
 2. **One verifier, extended.** `consoleToken.ts` gains `verifyIdentityStatement`, built on the
    same segment/JWKS/signature path as `verifyConsoleToken`. The claims schema gains an
    optional `email`; the identity path requires it (absent ⇒ `malformed`). Refusals reuse the
    existing vocabulary (`malformed`, `bad_alg`, `unknown_key`, `bad_signature`, `expired`,
    `lifetime`, `wrong_audience`, `replayed`); redemption reuses `redeemJti` unchanged, so a
-   statement and an admin token can never each be spent once.
+   statement and an admin token can never each be spent once. _(Amended 2026-11-06: ADR 818 —
+   `use: "identity"`, not `email`, is what the identity path requires, and the admin path refuses
+   it.)_
 3. **`members.account_id`** — one nullable TEXT column (portable ladder v126), exposed on the protocol
    `Member` as `account_id: z.string().min(1).nullish()`. Binding is **write-once**: the first
    sign-in through an invite or claim sets it (`bindMemberAccount` in the members store);
@@ -81,6 +84,10 @@ replayed statement from being believed.
   are nullish end to end, so no surface has to branch on hosted-ness to render a roster.
 - Write-once binding means a person who changes console accounts cannot silently rebind a
   member; an admin-mediated rebind is future work, named below, not improvised here.
+
+- _(2026-11-06, ADR 818.)_ A GitHub sign-in stores no email, so requiring one locked GitHub-made
+  accounts out of every statement. ADR 818 moves the marker to a `use: "identity"` claim and makes
+  `email` optional; the email was never read.
 
 Follows-up: `01M3Z458B261P8DW8VX4A7XCHG` (Cloud 4 consumes the verifier + binding in the hosted sign-in flow)
 Follows-up: deferred — admin-mediated `account_id` rebind/unbind, when a real account-change case arrives (2026-10-21)
