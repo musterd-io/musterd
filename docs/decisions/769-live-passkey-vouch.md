@@ -239,6 +239,17 @@ barrel's named re-exports in `authority.ts`: it was missing there, so daemon cod
 `undefined` at runtime, a gap the server tests caught while typecheck, reading a stale build, did
 not.
 
+**2026-11-06: increment 5, the phone (lane `01M64SXW85`).** This closes increment 3's two
+deferrals that had a page to land on. `ask-phone` takes `vouch: {member, key}` from a human admin,
+never for themself, for a live vouch descriptor targeting that member whose stored digest equals the
+rebuilt payload's. The ask's `device_key_enroll` meta carries the vouch, and the app adapter builds
+both offers from that same rebuilt payload (approve, and reject with `decision: 'reject'`). It
+refuses any ask whose vouch does not hash to the descriptor. /live's card offers **Vouch from your
+phone** behind the same typed-code gate. The app's descriptor screen shows `check` under the
+headline, and `approval.vectors.json` gains a `vouch` block signed by its own fresh vector key, so
+the earlier offers keep theirs. With this, every part of the Decision is built except the joiner
+card, which has no page to render on (increment 3).
+
 ## Observability & Evaluation
 
 - **Traces:** the existing `device_key.enrolled` audit row (actor the member) and the countersign

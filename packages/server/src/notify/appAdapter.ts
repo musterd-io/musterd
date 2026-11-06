@@ -283,9 +283,21 @@ export function laneVerdictOf(
  * — /live raised it because no passkey signs on its origin, and the phone key is the one standing
  * signer. The phone's approval is parked on that nonce for /live to collect; it closes no lane.
  */
-export function deviceKeyEnrollOf(meta: Record<string, unknown> | null): { nonce: string } | null {
-  const e = meta?.['device_key_enroll'] as { nonce?: unknown } | undefined;
-  return typeof e?.nonce === 'string' && e.nonce.length >= 16 ? { nonce: e.nonce } : null;
+export interface DeviceKeyEnrollAsk {
+  nonce: string;
+  /** ADR 769: an admin's vouch for another member's held enrollment, not their own passkey. */
+  vouch?: { member: string; key: string };
+}
+
+export function deviceKeyEnrollOf(meta: Record<string, unknown> | null): DeviceKeyEnrollAsk | null {
+  const e = meta?.['device_key_enroll'] as { nonce?: unknown; vouch?: unknown } | undefined;
+  if (typeof e?.nonce !== 'string' || e.nonce.length < 16) return null;
+  const v = e.vouch as { member?: unknown; key?: unknown } | undefined;
+  if (v === undefined) return { nonce: e.nonce };
+  // A malformed vouch is no enrollment ask at all — never quietly an own-passkey one.
+  if (typeof v?.member !== 'string' || typeof v.key !== 'string' || !/^[0-9a-f]{64}$/.test(v.key))
+    return null;
+  return { nonce: e.nonce, vouch: { member: v.member, key: v.key } };
 }
 
 /**
@@ -296,7 +308,7 @@ export function deviceKeyEnrollOf(meta: Record<string, unknown> | null): { nonce
 function enrollAskOf(
   ask: { from_name: string; from_kind: string; meta: string | null },
   human: { name: string },
-): { nonce: string } | null {
+): DeviceKeyEnrollAsk | null {
   if (ask.from_kind !== 'human' || ask.from_name !== human.name) return null;
   return deviceKeyEnrollOf(parseMeta(ask.meta));
 }
@@ -306,7 +318,7 @@ function appAskKind(
   meta: Record<string, unknown> | null,
 ):
   | { class: 'advisory' }
-  | { class: 'privileged'; lane?: { id: string; title: string }; enroll?: { nonce: string } }
+  | { class: 'privileged'; lane?: { id: string; title: string }; enroll?: DeviceKeyEnrollAsk }
   | null {
   if (classifyAskAction(meta) === 'advisory') return { class: 'advisory' };
   const lane = laneVerdictOf(meta);
@@ -356,17 +368,25 @@ async function buildEnrollApproval(
   ctx: Ctx,
   team: { id: string; slug: string },
   human: { id: string; name: string },
-  nonce: string,
+  enroll: DeviceKeyEnrollAsk,
 ): Promise<AppApproval | null> {
+  const { nonce } = enroll;
+  // ADR 769: a vouch's payload names the member and the held enrollment's digest; the descriptor
+  // targets that member. Rebuilt here from the ask and accepted only if it hashes to what the
+  // descriptor was minted over, so the phone signs exactly those bytes and words them itself.
+  const payload: Record<string, string> = enroll.vouch
+    ? { ...PASSKEY_ENROLL_PAYLOAD, member: enroll.vouch.member, key: enroll.vouch.key }
+    : { ...PASSKEY_ENROLL_PAYLOAD };
+  const target = enroll.vouch ? enroll.vouch.member : human.name;
   const descriptor = await getDescriptorByNonce(ctx.db, team.id, team.slug, nonce);
   if (
     !descriptor ||
     descriptor.act !== 'device_key_admin' ||
     descriptor.actor !== human.name ||
-    descriptor.target !== human.name ||
+    descriptor.target !== target ||
     // …and over the exact enrollment payload: a nonce minted over any other act (a revoke, a
     // policy write) can never be put in front of the phone wearing these words.
-    descriptor.payload_digest !== payloadDigest(PASSKEY_ENROLL_PAYLOAD)
+    descriptor.payload_digest !== payloadDigest(payload)
   )
     return null;
   const owner = await ctx.db.get<{ member_id: string }>(
@@ -374,18 +394,18 @@ async function buildEnrollApproval(
     [team.id, nonce],
   );
   if (owner?.member_id !== human.id) return null;
-  const rejectPayload = { ...PASSKEY_ENROLL_PAYLOAD, decision: 'reject' };
+  const rejectPayload = { ...payload, decision: 'reject' };
   const reject = await buildDescriptor(ctx.db, {
     teamId: team.id,
     audience: team.slug,
     memberId: human.id,
     actor: human.name,
     act: 'device_key_admin',
-    target: human.name,
+    target,
     payload: rejectPayload,
   });
   return {
-    approve: { descriptor, payload: { ...PASSKEY_ENROLL_PAYLOAD } },
+    approve: { descriptor, payload },
     reject: { descriptor: reject, payload: rejectPayload },
   };
 }
@@ -446,7 +466,7 @@ async function issueAskDelivery(
         ? await buildVerdictApproval(ctx, team, human, kind.lane.id)
         : kind.enroll
           ? enrollAskOf(ask, human)
-            ? ((await buildEnrollApproval(ctx, team, human, kind.enroll.nonce)) ?? undefined)
+            ? ((await buildEnrollApproval(ctx, team, human, kind.enroll)) ?? undefined)
             : undefined
           : await buildAskAnswerApproval(ctx, team, human, ask.id)
       : undefined;

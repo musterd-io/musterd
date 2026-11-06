@@ -190,6 +190,32 @@ withDrivers('passkey vouch over http (ADR 769)', (_o, kind) => {
     expect(JSON.stringify(replay.json)).toContain('already_spent');
   });
 
+  it('ask-phone takes a vouch only from an admin, never for themself, and only for its descriptor', async () => {
+    const key = 'e5'.repeat(32);
+    const payload = { action: 'enroll', kind: 'passkey', member: 'ada', key };
+    const mint = async (token: string, target: string, body: unknown) =>
+      (
+        await call('POST', '/teams/dawn/authority/descriptors', token, {
+          act: 'device_key_admin',
+          target,
+          payload: body,
+        })
+      ).json.descriptor.nonce as string;
+    const ask = (token: string, nonce: string, vouch: unknown) =>
+      call('POST', `/teams/dawn/authority/descriptors/${nonce}/ask-phone`, token, { vouch });
+
+    // ada is no admin: refused before anything is looked up.
+    const adaNonce = await mint(ada, 'ada', payload);
+    expect((await ask(ada, adaNonce, { member: 'ada', key })).status).toBe(403);
+    // nick, an admin, for a key his descriptor was not minted over: not found.
+    const nonce = await mint(nick, 'ada', payload);
+    expect((await ask(nick, nonce, { member: 'ada', key: 'f6'.repeat(32) })).status).toBe(404);
+    // The right payload passes every descriptor check and stops only at "no paired phone".
+    const ok = await ask(nick, nonce, { member: 'ada', key });
+    expect(ok.status).toBe(422);
+    expect(JSON.stringify(ok.json)).toContain('no paired phone');
+  });
+
   it('a digest with no held enrollment is not found; a malformed one is a bad request', async () => {
     const wrong = 'a'.repeat(64);
     const none = await call('POST', '/teams/dawn/authority/passkeys/vouch', nick, {

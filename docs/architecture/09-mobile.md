@@ -166,6 +166,13 @@ small change.
   header says "Add a new passkey for nick" and "If you decline" says "Don't add a new passkey for
   nick"; the daemon's own ask body below the rule names the origin. Nothing else is new: the same
   digest check, the same two signatures under one Face ID, no new key or permission.
+- **An admin's vouch, approved on the phone** ([ADR 769](../decisions/769-live-passkey-vouch.md)). An
+  admin with no passkey that signs on /live vouches from the phone. The offers are the same shape,
+  for `target` the member, over `{action:'enroll', kind:'passkey', member, key}`. For exactly that
+  payload `approvalWording` adds `check`: the screen shows the six-digit code worked out on the phone
+  from the `key` it is about to sign, never from the ask body, with "Only approve if <member> read you
+  this code on a call or in person." `approval.vectors.json`'s `vouch` block is the vector, with its
+  own key.
 
 ## Screens
 

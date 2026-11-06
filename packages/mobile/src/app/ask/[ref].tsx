@@ -342,6 +342,21 @@ export default function AskScreen() {
             <Text style={[styles.headline, { color: p.text }]}>
               {offers.approve.wording.headline}
             </Text>
+            {offers.approve.wording.check ? (
+              // ADR 769: a vouch. The code is worked out here from the payload this phone signs,
+              // never taken from the ask body; it must match the one the member read you.
+              <View style={styles.check}>
+                <Text
+                  style={[styles.checkCode, { color: p.text }]}
+                  accessibilityLabel={`Check code ${offers.approve.wording.check.code.split('').join(' ')}`}
+                >
+                  {offers.approve.wording.check.code}
+                </Text>
+                <Text style={[styles.checkNote, { color: p.muted }]}>
+                  {offers.approve.wording.check.instruction}
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.fields}>
               <Field label="Asked by" value={agent ? `${ask.from}, an agent seat` : ask.from} />
               <Field label="Target" value={offers.approve.descriptor.target} />
@@ -458,6 +473,9 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 11, fontFamily: font.semibold },
   headline: { fontSize: 17, lineHeight: 23, fontFamily: font.semibold },
+  check: { gap: space.xs },
+  checkCode: { fontSize: 30, lineHeight: 36, letterSpacing: 6, fontFamily: font.bold },
+  checkNote: { fontSize: 13, lineHeight: 18, fontFamily: font.regular },
   fields: { gap: 0 },
   field: {
     flexDirection: 'row',
