@@ -31,8 +31,9 @@ happened to bind `members.account_id`.
   passkey on that origin, no CLI run, no second admin. (nick: *"if I can sign into live for a
   specific team and specific user with proper credentials regardless of state of other surfaces"*.)
 - **Every surface recognises the same you**: the same account, the same member of the same team,
-  the same permissions. A revoke or removal anywhere holds everywhere (within 5 minutes for an
-  account-level event; §11.4).
+  the same permissions. A revoke or removal anywhere holds everywhere, within the bounds §11.4
+  states: about 20 minutes on a connected server, at most 1 h 15 min on a linked hub that
+  has lost the console.
 - **No secret is ever shown or pasted in order to sign in**, on any surface. The one secret a
   person ever sees is an API key they asked for (§8), shown once. *(Corrected 2026-11-06 after
   sloane's read: the first wording contradicted §8.)*
@@ -235,9 +236,18 @@ each changes what gets built, so each is settled here as **my call**.
 4. **How far a revoke reaches.** Ending a session (§7) is per surface, per team, as written. **An
    account-level event** — the account suspended or deleted, or a sign-in method removed and its
    sessions ended — is published on the console's revocation list. Every team server and linked hub
-   pulls it with the keys (at most 5 minutes stale) and ends that account's sessions on it. A hub
-   offline for longer catches up when it next reaches the console. ("A revoke holds everywhere" in
-   *What success is* means this, within those 5 minutes.)
+   pulls it on a 5-minute timer and ends that account's sessions on it. Two bounds, stated
+   separately (big-body, 2026-11-06):
+
+   - **Connected** (the server reaches the console): a revoke is seen within one poll (5 min). The
+     account's `msat_` already minted live out their 15 minutes; the server refuses every new mint
+     and closes the account's open sockets on the pull. Worst case about **20 min**.
+   - **Stale** (a linked hub that cannot reach the console): §11.3's fail-closed rule stops new
+     mints once its last successful pull is over 1 h old. Worst case: the revoke lands just after
+     that pull, so the hub mints for up to 1 h and the last token lives 15 min — **1 h 15 min**.
+   - Assumptions: "age" is measured on the hub's own monotonic clock from the last successful
+     pull, not from a console timestamp, so console–hub clock skew does not move either bound; the
+     list response is `no-store`, so no HTTP cache sits between the pull and the console.
 
    **What the pull sends** (sloane, for PRIVACY.md; big-body to confirm): the keys are a plain GET of
    the public JWKS and send nothing. The revocation pull is one GET carrying the hub's **link id**
@@ -264,9 +274,16 @@ approve**:
 - If an account passkey is ever to sign an approval, it needs its own design: a fresh,
   replay-resistant assertion bound to one action and one team, verified at the hub, keeping the
   recovery and approval rules. Not in this goal.
-- Every console-signed token kind is distinguished by a mandatory purpose claim, each verifier
-  refuses the others (ADR 818 for the first two), and issuer, audience, lifetime and `jti` are
-  enforced on every verifier.
+- **Cross-use, as it stands today (ADR 818):** an identity statement carries `use: "identity"` and
+  the identity verifier requires it; the admin token carries **no** `use`, and the admin verifier
+  refuses any token whose `use` is `"identity"`. Both verifiers enforce audience, lifetime and
+  single-use `jti`. Neither checks `iss`: the issuer is pinned by the JWKS URL the server is
+  configured with, so only the console's keys verify — but that is not an `iss` check.
+- **A separately scoped change** (lane `01M6S4PMZP`) adds defence in depth: an explicit `iss`
+  check against the configured expected issuer on both verifiers, and a mandatory purpose on the
+  admin token (`use: "admin"`), with a compatibility window and tests that old admin tokens
+  (no `use`) are accepted only until it closes. New token kinds after that each carry their own
+  `use`, and every verifier refuses every other kind.
 - JWKS trust authenticates the issuer, not membership: binding stays explicit and team-scoped
   (§3), never by email. A compromised console can impersonate any account it can sign for; the
   hub's own approval keys are what still stand in that case.
@@ -295,7 +312,7 @@ approve**:
 | 13 | Hub passkey enrollment | Kept for unlinked self-hosted + ADR 662 signatures (open question 3). |
 | 14 | Admin vouch for a first passkey (ADR 769) | Kept on every team: the account signs you in, it does not vouch for an approval key (§12). |
 | 15 | Hub recovery code | Kept (unlinked). |
-| 16 | Phone pairing by QR | **Folded into phone sign-in**; QR stays as the unlinked path. |
+| 16 | Phone pairing by QR | **Kept** for the phone's approval keys, on every team (§12). Phone sign-in (lane `01M6S2WTKE`) adds a read/talk session alongside it; it does not replace pairing. |
 | 17 | Second machine (`msinv_` + trust act) | **Replaced** by `musterd login` + `join` on linked/hosted teams. |
 | 18 | Note key | Unchanged (automatic). |
 
