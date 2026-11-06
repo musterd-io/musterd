@@ -126,29 +126,49 @@ export interface TokenClaims {
 
 const b64url = (s: string) => Buffer.from(s).toString('base64url');
 
+/** One compact ES256 JWS over `payload` plus a fresh `jti`, `iat` and `exp` (60 s). */
+async function signJws(
+  signer: TokenSigner,
+  claims: Record<string, unknown> & { aud: string; nowS: number },
+): Promise<{ token: string; jti: string }> {
+  const { nowS, ...rest } = claims;
+  if (!audienceOk(rest.aud)) throw new Error('bad audience');
+  const pub = await signer.publicJwk();
+  const jti = randomUUID();
+  const header = b64url(JSON.stringify({ alg: 'ES256', typ: 'JWT', kid: pub.kid }));
+  const payload = b64url(JSON.stringify({ ...rest, jti, iat: nowS, exp: nowS + TOKEN_LIFETIME_S }));
+  const signingInput = `${header}.${payload}`;
+  const sig = await signer.sign(Buffer.from(signingInput));
+  return { token: `${signingInput}.${Buffer.from(sig).toString('base64url')}`, jti };
+}
+
 /**
- * One compact JWS. `jti` is returned beside the token so the audit row can name it without
- * parsing the token back. `nowS` is the caller's clock, in seconds.
+ * One compact JWS: the §4.3 admin token. `jti` is returned beside the token so the audit row can
+ * name it without parsing the token back. `nowS` is the caller's clock, in seconds. It carries no
+ * `use` claim — that absence is what the team server's admin path accepts (ADR 818).
  */
 export async function signConsoleToken(
   signer: TokenSigner,
   c: TokenClaims,
 ): Promise<{ token: string; jti: string }> {
-  if (!audienceOk(c.aud)) throw new Error('bad audience');
-  const pub = await signer.publicJwk();
-  const jti = randomUUID();
-  const header = b64url(JSON.stringify({ alg: 'ES256', typ: 'JWT', kid: pub.kid }));
-  const payload = b64url(
-    JSON.stringify({
-      iss: c.iss,
-      sub: c.sub,
-      aud: c.aud,
-      jti,
-      iat: c.nowS,
-      exp: c.nowS + TOKEN_LIFETIME_S,
-    }),
-  );
-  const signingInput = `${header}.${payload}`;
-  const sig = await signer.sign(Buffer.from(signingInput));
-  return { token: `${signingInput}.${Buffer.from(sig).toString('base64url')}`, jti };
+  return signJws(signer, { iss: c.iss, sub: c.sub, aud: c.aud, nowS: c.nowS });
+}
+
+/**
+ * An identity statement (ADR 698, ADR 818): who the console authenticated, for one team server.
+ * `use: "identity"` marks it; `email` is included only when the console holds a provider-verified
+ * one (a GitHub sign-in has none). No team, member or role claim.
+ */
+export async function signIdentityStatement(
+  signer: TokenSigner,
+  c: TokenClaims & { email: string | null },
+): Promise<{ token: string; jti: string }> {
+  return signJws(signer, {
+    iss: c.iss,
+    sub: c.sub,
+    aud: c.aud,
+    use: 'identity',
+    ...(c.email ? { email: c.email } : {}),
+    nowS: c.nowS,
+  });
 }
