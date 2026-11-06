@@ -259,6 +259,81 @@ withDrivers('app roster waiting', (_o, kind) => {
       expect(await asSeenBy(nick.id)).toBe('asking nick');
     });
 
+    it('carries the day’s moments as the binding person’s /live shows them (ADR 819, ADR 407)', async () => {
+      const ctx = operatorCtx({
+        db: server.store,
+        traceDb: server.traceStore,
+        hub: new Hub(),
+        config: server.config,
+        rosterRoots: [],
+      });
+      await fetch(`http://127.0.0.1:${port}/teams`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug: 'moment-team', creator: { name: 'nick', kind: 'human' } }),
+      });
+      const team = (await getTeamBySlug(ctx.db, 'moment-team'))!;
+      const nick = (await ctx.db.get<{ id: string }>(
+        `SELECT id FROM members WHERE team_id = ? AND name = 'nick'`,
+        [team.id],
+      ))!;
+      const ada = (await addMember(ctx.db, team, { name: 'ada', kind: 'agent' })).row!;
+      const eve = (await addMember(ctx.db, team, { name: 'eve', kind: 'human' })).row!;
+      const now = Date.now();
+      const post = (
+        id: string,
+        from: { id: string },
+        fromName: string,
+        meta?: Record<string, unknown>,
+      ) =>
+        insertMessage(
+          ctx.db,
+          team.id,
+          from.id,
+          null,
+          makeEnvelope({
+            id,
+            team: 'moment-team',
+            from: fromName,
+            to: { kind: 'team' },
+            act: 'message',
+            body: id === 'said-1' ? 'lunch at 1' : 'done',
+            ts: now - 60_000,
+            ...(meta ? { meta } : {}),
+          }),
+        );
+      await post('said-1', eve, 'eve');
+      await post('goal-1', ada, 'ada', { goal_outcome: { goal_id: 'g-x', outcome: 'shipped' } });
+      // A human-to-human DM is never a moment, and its pair is the only one who reads it anyway.
+      await insertMessage(
+        ctx.db,
+        team.id,
+        eve.id,
+        nick.id,
+        makeEnvelope({
+          id: 'dm-1',
+          team: 'moment-team',
+          from: 'eve',
+          to: { kind: 'member', name: 'nick' },
+          act: 'message',
+          body: 'psst',
+          ts: now - 30_000,
+        }),
+      );
+      ctx.memberSummaries = async () => [] as unknown as MemberSummary[];
+      const kinds = async (memberId: string) =>
+        (
+          await buildAppRoster(ctx, team, { id: 'b', member_id: memberId } as ChannelBinding, now)
+        ).moments?.map((m) => [m.id, m.kind]);
+      // Team grade (ADR 407) hides only confidential asks, and an ask is never a moment, so both
+      // people see what their /live shows: eve's line and ada's goal note, and no DM.
+      for (const who of [eve.id, nick.id])
+        expect((await kinds(who))?.sort()).toEqual([
+          ['goal-1', 'goal'],
+          ['said-1', 'said'],
+        ]);
+    });
+
     it('lists an ask in for_you only while /live shows it loud: lapsed and withdrawn asks leave', async () => {
       const ctx = operatorCtx({
         db: server.store,

@@ -1,6 +1,15 @@
 import type { Lane, MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { appForYou, appMembers, liveAsks, type AskLike, type CloserLike } from './appTeam.js';
+import {
+  appForYou,
+  appMembers,
+  appMoments,
+  liveAsks,
+  type AskLike,
+  type CloserLike,
+  type MomentActLike,
+  type MomentLaneLike,
+} from './appTeam.js';
 
 /**
  * ADR 814: the daemon folds the team for the phone by the rule /live's team column uses
@@ -255,5 +264,137 @@ describe('liveAsks: an ask is open on the phone exactly when /live shows it loud
       'g',
     ]);
     expect(ids([ask('h', { meta: { tier: 'blocking' } })])).toEqual([]);
+  });
+});
+
+describe('appMoments: the day’s team work, newest first (ADR 819)', () => {
+  const SINCE = NOW - 12 * 60 * MIN;
+  const ml = (over: Partial<MomentLaneLike> & { id: string }): MomentLaneLike => ({
+    title: `lane ${over.id}`,
+    owner_seat: 'cider',
+    goal_id: null,
+    state: 'done',
+    claimed_at: SINCE - 60 * MIN,
+    resolved_at: NOW - MIN,
+    requested_by: null,
+    verified: undefined,
+    ...over,
+  });
+  const act = (over: Partial<MomentActLike> & { id: string }): MomentActLike => ({
+    act: 'message',
+    from: 'nick',
+    from_kind: 'human',
+    ts: NOW - 2 * MIN,
+    body: 'hello',
+    meta: null,
+    to_kind: 'team',
+    review_lane: null,
+    ...over,
+  });
+  const moments = (o: { lanes?: MomentLaneLike[]; acts?: MomentActLike[]; viewer?: string }) =>
+    appMoments({
+      lanes: o.lanes ?? [],
+      goals: [{ id: 'g1', title: 'phone-pairing-ux — the phone is the team' }],
+      acts: o.acts ?? [],
+      since: SINCE,
+      viewer: o.viewer ?? 'nick',
+    });
+
+  it('reads a lane done today as landed by its owner, accepted when a peer confirmed it', () => {
+    const [a, b] = moments({
+      lanes: [
+        ml({ id: 'A', verified: true, goal_id: 'g1', resolved_at: NOW - MIN }),
+        ml({ id: 'B', owner_seat: 'wallow', verified: false, resolved_at: NOW - 2 * MIN }),
+      ],
+    });
+    expect(a).toMatchObject({
+      kind: 'landed',
+      member: 'cider',
+      lane: { id: 'A', title: 'lane A' },
+      goal: 'phone-pairing-ux',
+      accepted: true,
+      ts: NOW - MIN,
+    });
+    expect(b).toMatchObject({ kind: 'landed', member: 'wallow', accepted: false });
+  });
+
+  it('leaves out a lane that landed before today', () => {
+    expect(moments({ lanes: [ml({ id: 'old', resolved_at: SINCE - 1 })] })).toEqual([]);
+  });
+
+  it('reads a lane claimed today as started', () => {
+    const out = moments({
+      lanes: [ml({ id: 'S', state: 'active', claimed_at: NOW - 5 * MIN, resolved_at: null })],
+    });
+    expect(out).toEqual([
+      expect.objectContaining({ kind: 'started', member: 'cider', ts: NOW - 5 * MIN }),
+    ]);
+  });
+
+  it('reads a goal outcome as a finished goal, named before its dash', () => {
+    const [m] = moments({
+      acts: [
+        act({
+          id: 'o1',
+          from: 'cider',
+          from_kind: 'agent',
+          meta: { goal_outcome: { goal_id: 'g1', outcome: 'nick answers asks from his phone' } },
+        }),
+      ],
+    });
+    expect(m).toMatchObject({
+      kind: 'goal',
+      member: 'cider',
+      goal: 'phone-pairing-ux',
+      text: 'nick answers asks from his phone',
+    });
+  });
+
+  it('shows a review verdict only on the viewer’s own lanes', () => {
+    const lanes = [
+      ml({ id: 'mine', state: 'awaiting_acceptance', resolved_at: null, requested_by: 'nick' }),
+      ml({ id: 'theirs', state: 'awaiting_acceptance', resolved_at: null }),
+    ];
+    const verdict = (id: string, lane: string) =>
+      act({
+        id,
+        act: 'accept',
+        from: 'big-body',
+        from_kind: 'agent',
+        body: 'Feels right.\nmore',
+        review_lane: lane,
+      });
+    const out = moments({ lanes, acts: [verdict('v1', 'mine'), verdict('v2', 'theirs')] });
+    expect(out.filter((m) => m.kind === 'verdict')).toEqual([
+      expect.objectContaining({
+        id: 'v1',
+        member: 'big-body',
+        lane: { id: 'mine', title: 'lane mine' },
+        text: 'Feels right.',
+        accepted: true,
+      }),
+    ]);
+  });
+
+  it('reads a person’s plain team message as said, but not an agent’s or a lane notice', () => {
+    const out = moments({
+      acts: [
+        act({ id: 'h', body: 'lunch at 1' }),
+        act({ id: 'a', from: 'cider', from_kind: 'agent', body: 'on it' }),
+        act({ id: 'n', body: '[lane] resolved "X"', meta: { lane_resolve: { lane: 'X' } } }),
+        act({ id: 'd', to_kind: 'member', body: 'just you' }),
+      ],
+    });
+    expect(out.map((m) => [m.id, m.kind, m.text])).toEqual([['h', 'said', 'lunch at 1']]);
+  });
+
+  it('keeps the 20 newest', () => {
+    const lanes = Array.from({ length: 25 }, (_, i) =>
+      ml({ id: `L${i}`, resolved_at: NOW - i * MIN }),
+    );
+    const out = moments({ lanes });
+    expect(out).toHaveLength(20);
+    expect(out[0]!.lane?.id).toBe('L0');
+    expect(out[19]!.lane?.id).toBe('L19');
   });
 });

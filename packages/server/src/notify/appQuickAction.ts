@@ -26,7 +26,14 @@ import { getTeamBySlug } from '../store/teams.js';
 import { rosterPoll } from './appPoll.js';
 import { verifyPhoneSigned } from './appQuestion.js';
 import { loadAppChannelKeys, openFromPhone } from './appSeal.js';
-import { appForYou, appMembers, liveAsks, type ForYouSource } from './appTeam.js';
+import {
+  appForYou,
+  appMembers,
+  appMoments,
+  liveAsks,
+  type ForYouSource,
+  type MomentLaneLike,
+} from './appTeam.js';
 
 /**
  * The phone's quick actions and seat roster (ADR 791). A quick action is the same person's `steer`
@@ -256,7 +263,7 @@ async function appTeamFor(
   seats: { seat: string; wakeable: boolean; portrait?: string | null }[],
   waiting: ReadonlyMap<string, { to: string | null; since: number }>,
   now: number,
-): Promise<Pick<Extract<AppDelivery, { kind: 'roster' }>, 'members' | 'for_you'>> {
+): Promise<Pick<Extract<AppDelivery, { kind: 'roster' }>, 'members' | 'for_you' | 'moments'>> {
   if (!ctx.memberSummaries) return {};
   const person = binding.member_id ? await getMemberById(ctx.db, binding.member_id) : null;
   const viewer = person && person.kind === 'human' ? person : null;
@@ -322,10 +329,11 @@ async function appTeamFor(
     const toPerson = a.to_kind === 'team' || a.to_member_kind === 'human';
     if (toPerson) asking.set(a.from_name, { to: a.to_kind === 'team' ? null : a.to_name });
   }
+  const goals = await listGoals(ctx.db, team.id, team.slug);
   const members = appMembers({
     roster: await ctx.memberSummaries(team, viewer),
     lanes: await listLanes(ctx.db, team.id, team.slug, { states: [...LIVE_LANE_STATES] }),
-    goals: await listGoals(ctx.db, team.id, team.slug),
+    goals,
     asking,
     waiting,
     seats: new Map(
@@ -333,7 +341,8 @@ async function appTeamFor(
     ),
     now,
   });
-  if (!viewer) return { members };
+  const moments = await momentsFor(ctx, team, viewer, goals, scope, now);
+  if (!viewer) return { members, moments };
   const owed: ForYouSource[] = asks
     .filter((a) => a.to_member === viewer.id || a.to_kind === 'team')
     .map((a) => ({
@@ -345,5 +354,108 @@ async function appTeamFor(
     }));
   for (const q of await openQuestions(ctx.db, team.id, { forPerson: viewer.name }))
     owed.push({ id: q.id, from: q.asker, kind: 'question', body: q.question.text, ts: q.asked_at });
-  return { members, for_you: appForYou(owed) };
+  return { members, for_you: appForYou(owed), moments };
+}
+
+function parseMeta(m: string | null): Record<string, unknown> | null {
+  if (!m) return null;
+  try {
+    const v: unknown = JSON.parse(m);
+    return v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ADR 819: the day's moments, from the daemon's local midnight. Lanes are the board every member
+ * sees; acts go through the same read scope as the asks, so a confidential verdict or goal note
+ * never becomes another person's moment.
+ */
+async function momentsFor(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  viewer: { name: string } | null,
+  goals: readonly { id: string; title: string }[],
+  scope: { sql: string; params: unknown[] },
+  now: number,
+) {
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const since = midnight.getTime();
+  const laneRows = await ctx.db.all<{
+    id: string;
+    title: string;
+    owner_seat: string | null;
+    goal_id: string | null;
+    state: MomentLaneLike['state'];
+    claimed_at: number | null;
+    resolved_at: number | null;
+    requested_json: string | null;
+  }>(
+    `SELECT id, title, owner_seat, goal_id, state, claimed_at, resolved_at, requested_json
+       FROM lanes
+      WHERE team_id = ? AND ((state = 'done' AND resolved_at >= ?) OR claimed_at >= ?
+             OR state = 'awaiting_acceptance')`,
+    [team.id, since, since],
+  );
+  const closes = await ctx.db.all<{ target: string; detail: string | null }>(
+    `SELECT target, detail FROM audit WHERE team_id = ? AND action = 'lane.closed' AND ts >= ?
+      ORDER BY ts, id`,
+    [team.id, since],
+  );
+  const verified = new Map<string, boolean>();
+  for (const c of closes) {
+    const v = (parseMeta(c.detail) ?? {})['verified'];
+    if (typeof v === 'boolean') verified.set(c.target, v);
+  }
+  const lanes: MomentLaneLike[] = laneRows.map((l) => {
+    const by = (parseMeta(l.requested_json) ?? {})['by'];
+    return {
+      ...l,
+      claimed_at: l.claimed_at === null ? null : Number(l.claimed_at),
+      resolved_at: l.resolved_at === null ? null : Number(l.resolved_at),
+      requested_by: typeof by === 'string' ? by : null,
+      verified: verified.get(l.id),
+    };
+  });
+  const acts = await ctx.db.all<{
+    id: string;
+    act: string;
+    body: string;
+    meta: string | null;
+    ts: number;
+    to_kind: string;
+    from_name: string;
+    from_kind: string;
+    review_lane: string | null;
+  }>(
+    `SELECT msg.id, msg.act, msg.body, msg.meta, msg.ts, msg.to_kind,
+            mf.name AS from_name, mf.kind AS from_kind,
+            json_extract(a.meta, '$.lane_review.lane') AS review_lane
+       FROM (SELECT * FROM messages
+              WHERE team_id = ? AND ts >= ? AND act IN ('message', 'accept', 'decline')${scope.sql}) msg
+       JOIN members mf ON mf.id = msg.from_member AND mf.team_id = msg.team_id
+       LEFT JOIN messages a ON a.team_id = msg.team_id AND a.id = msg.in_reply_to AND a.act = 'ask'
+      ORDER BY msg.ts DESC, msg.id
+      LIMIT 500`,
+    [team.id, since, ...scope.params],
+  );
+  return appMoments({
+    lanes,
+    goals,
+    acts: acts.map((a) => ({
+      id: a.id,
+      act: a.act,
+      from: a.from_name,
+      from_kind: a.from_kind,
+      ts: Number(a.ts),
+      body: a.body,
+      meta: parseMeta(a.meta),
+      to_kind: a.to_kind,
+      review_lane: a.review_lane,
+    })),
+    since,
+    viewer: viewer?.name ?? null,
+  });
 }
