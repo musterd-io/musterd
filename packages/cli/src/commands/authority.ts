@@ -81,6 +81,29 @@ export function browserOrigin(server: string): string {
   }
 }
 
+/**
+ * The origin a ceremony URL must be opened at. Since the hub moved off the laptop the
+ * configured server is its plain-http tailnet IP, where `navigator.credentials` does not
+ * exist and the approve page dies before WebAuthn (measured 2026-11-05, lane
+ * 01M6Q0MJ2Z). The daemon's `/health` names `browser_origin` — its first https passkey
+ * origin, on the same node that built the descriptor (#3900) — so prefer it whenever it
+ * is https. The probe fails open to the server-origin rule: a ceremony must never die
+ * because a health read did.
+ */
+export async function resolveCeremonyOrigin(
+  http: Pick<Http, 'server'> & Partial<Pick<Http, 'health'>>,
+): Promise<string> {
+  try {
+    const health = typeof http.health === 'function' ? await http.health() : undefined;
+    const origin = health?.browser_origin;
+    if (typeof origin === 'string' && origin.startsWith('https://'))
+      return origin.replace(/\/+$/, '');
+  } catch {
+    // fall through to the configured server origin
+  }
+  return browserOrigin(http.server);
+}
+
 /** How a terminal launches the ceremony page. A pipe returns null so a capturing script never
  * opens a browser. Chrome is named outright: the Mac login passkey sheet has to come up in the
  * browser the human actually uses, not whichever app owns http. */
@@ -166,16 +189,22 @@ export async function collectApproval(
       `  target: ${d.target}\n  expires: ${new Date(d.expiry).toISOString()}\n`,
   );
   const url =
-    `${browserOrigin(http.server)}/authority/approve?team=${encodeURIComponent(team)}` +
+    `${await resolveCeremonyOrigin(http)}/authority/approve?team=${encodeURIComponent(team)}` +
     `&nonce=${encodeURIComponent(d.nonce)}`;
   await presentCeremony('Approve at', url, 'waiting for the parked proof…\n');
-  const deadline = Date.now() + 4 * 60 * 1000;
+  // Wait as long as the descriptor lives — no longer, no shorter. A fixed 4-minute wait
+  // against the server's 5-minute descriptor left a minute where the browser approval
+  // succeeded, parked a proof, and nobody consumed it (measured 2026-11-05).
   for (;;) {
     try {
       const { proof } = await http.getParkedApproval(team, d.nonce);
       return proof;
     } catch {
-      if (Date.now() > deadline) throw new CliError('no approval arrived in 4 minutes', 1);
+      if (Date.now() > d.expiry)
+        throw new CliError(
+          'no approval arrived before the descriptor expired — re-run the command to mint a fresh one',
+          1,
+        );
       await new Promise((r) => setTimeout(r, 2000));
     }
   }
@@ -575,18 +604,20 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
       humanPrompt(`Using ${confirmedBy}'s hub-issued countersign proof for this enrollment.\n`);
       countersign = { confirmer: confirmedBy, approval: suppliedCountersignProof };
     }
-    const { challenge } = await http.issueEnrollmentChallenge(team);
+    const { challenge, expires_at: challengeExpiresAt } = await http.issueEnrollmentChallenge(team);
     const fragment = approval
       ? `#approval=${Buffer.from(JSON.stringify(approval)).toString('base64url')}`
       : countersign
         ? `#countersign=${Buffer.from(JSON.stringify(countersign)).toString('base64url')}`
         : '';
     const url =
-      `${browserOrigin(http.server)}/authority/passkey?team=${encodeURIComponent(team)}` +
+      `${await resolveCeremonyOrigin(http)}/authority/passkey?team=${encodeURIComponent(team)}` +
       `&member=${encodeURIComponent(member)}&challenge=${encodeURIComponent(challenge)}` +
       fragment;
     await presentCeremony('Open', url, 'waiting for the passkey ceremony…\n');
-    const deadline = Date.now() + 4 * 60 * 1000;
+    // The challenge outlives a fixed 4-minute wait (10 minutes server-side); wait for
+    // its whole life so a late-completed ceremony is still the one this command reports.
+    const deadline = challengeExpiresAt;
     for (;;) {
       const { keys } = await http.listDeviceKeys(team);
       const fresh = keys.find((k) => !beforeIds.has(k.id) && k.revoked_at === null);
@@ -602,8 +633,8 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
       if (Date.now() > deadline) {
         throw new CliError(
           confirmedBy || active.length > 0
-            ? 'no passkey was enrolled in 4 minutes'
-            : 'no passkey was enrolled in 4 minutes — if this team already has device keys, ' +
+            ? 'no passkey was enrolled before the challenge expired'
+            : 'no passkey was enrolled before the challenge expired — if this team already has device keys, ' +
                 'a human admin must countersign on the hub, then pass its proof with ' +
                 '--confirmed-by <admin> --countersign-proof <json>',
           1,

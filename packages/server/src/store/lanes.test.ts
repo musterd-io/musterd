@@ -361,6 +361,31 @@ withDrivers('lanes', (o) => {
       expect(noted.merged).toEqual({ pr: 7, sha: 'deadbeef', authorized_by: 'nick' });
     });
 
+    it('retro-stamp: a done→done patch naming the full merge tuple can add authorized_by (lane 01M6Q0MJ2Z)', async () => {
+      // Settles the 2026-11-05 question from lane 01M6PV4CTT: a lane closed without
+      // authorized_by can gain it afterwards — the store replaces `merged` wholesale
+      // when the patch carries it, with no terminal-state no-op. (Whether the proof
+      // is required is the transport's guardAuthority, not the store's.)
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'riley', {
+        title: 'retro-stamp',
+        project: 'musterd',
+        branch: 'riley/retro-stamp',
+        claim: true,
+      });
+      const closed = (await updateLane(db, team.id, lane.id, 'bravo', {
+        state: 'done',
+        merged: { pr: 3939, sha: 'e30fdf7' },
+      }))!;
+      expect(closed.merged).toEqual({ pr: 3939, sha: 'e30fdf7' });
+      const stamped = (await updateLane(db, team.id, lane.id, 'bravo', {
+        state: 'done',
+        merged: { pr: 3939, sha: 'e30fdf7', authorized_by: 'nick' },
+      }))!;
+      expect(stamped.state).toBe('done');
+      expect(stamped.merged).toEqual({ pr: 3939, sha: 'e30fdf7', authorized_by: 'nick' });
+    });
+
     it('scenario 2 — the redone lane: handoff carries the branch', async () => {
       const { db, team } = await seed();
       const lane = await openLane(db, team.id, 'bravo', 'riley', {

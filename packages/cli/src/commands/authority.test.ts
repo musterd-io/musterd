@@ -5,7 +5,9 @@ import {
   authorityCommand,
   browserOrigin,
   ceremonyLaunch,
+  collectApproval,
   openCeremony,
+  resolveCeremonyOrigin,
   setPolicySigned,
 } from './authority.js';
 
@@ -14,7 +16,7 @@ const h = vi.hoisted(() => ({
   keys: [] as { id: string; kind: string; created_at: number; revoked_at: number | null }[],
   issueEnrollmentChallenge: vi.fn(async () => ({
     challenge: 'challenge-at-least-16-chars',
-    expires_at: 123,
+    expires_at: 9999999999999,
   })),
   listDeviceKeys: vi.fn(async () => ({ keys: h.keys })),
   revokeDeviceKey: vi.fn(async () => ({ ok: true as const })),
@@ -353,6 +355,101 @@ describe('browserOrigin (RP-ID rule)', () => {
   });
   it('is safe on garbage input', () => {
     expect(browserOrigin('not a url')).toBe('not a url');
+  });
+});
+
+describe('resolveCeremonyOrigin (hub browser_origin, lane 01M6Q0MJ2Z)', () => {
+  // Falsifier for the 2026-11-05 failure: the configured server is the hub's
+  // plain-http tailnet IP, where navigator.credentials does not exist; the
+  // daemon's /health names the https origin its passkeys sign at (#3900).
+  const hub = 'http://100.115.152.1:4849';
+  it('prefers the https browser_origin from /health over the raw server URL', async () => {
+    const http = {
+      server: hub,
+      health: async () => ({ browser_origin: 'https://musterd-joiner-1.tail400343.ts.net/' }),
+    };
+    await expect(resolveCeremonyOrigin(http as never)).resolves.toBe(
+      'https://musterd-joiner-1.tail400343.ts.net',
+    );
+  });
+  it('ignores a non-https browser_origin and falls back to the server origin rule', async () => {
+    const http = {
+      server: hub,
+      health: async () => ({ browser_origin: 'http://100.115.152.1:4849' }),
+    };
+    await expect(resolveCeremonyOrigin(http as never)).resolves.toBe(hub);
+  });
+  it('falls back when /health cannot be read — the ceremony must not die on the probe', async () => {
+    const http = {
+      server: 'http://127.0.0.1:4849',
+      health: async () => {
+        throw new Error('down');
+      },
+    };
+    await expect(resolveCeremonyOrigin(http as never)).resolves.toBe('http://localhost:4849');
+  });
+  it('falls back when the client has no health read at all', async () => {
+    await expect(resolveCeremonyOrigin({ server: hub } as never)).resolves.toBe(hub);
+  });
+});
+
+describe('collectApproval ceremony URL (lane 01M6Q0MJ2Z)', () => {
+  it('opens the approve page at the hub https browser_origin, not the raw http IP server', async () => {
+    const err = captureStderr();
+    const http = {
+      server: 'http://100.115.152.1:4849',
+      health: async () => ({ browser_origin: 'https://musterd-joiner-1.tail400343.ts.net' }),
+      createAuthorityDescriptor: async () => ({
+        descriptor: {
+          v: 1,
+          actor: 'nick',
+          act: 'set_authorized_by',
+          target: 'lane-1',
+          payload_digest: 'a'.repeat(64),
+          audience: 'revive',
+          expiry: 9999999999999,
+          nonce: 'nonce-at-least-16-chars',
+        },
+      }),
+      getParkedApproval: async () => ({
+        proof: { key_id: 'key-1', nonce: 'nonce-at-least-16-chars', signature: 'sig' },
+      }),
+    };
+    await collectApproval(http as never, 'revive', 'set_authorized_by', 'lane-1', {});
+    expect(err.join('')).toContain(
+      'Approve at https://musterd-joiner-1.tail400343.ts.net/authority/approve?team=revive&nonce=nonce-at-least-16-chars',
+    );
+    vi.restoreAllMocks();
+  });
+});
+
+describe('collectApproval wait (descriptor expiry, lane 01M6Q0MJ2Z)', () => {
+  it('stops waiting at the descriptor expiry instead of polling past a dead nonce', async () => {
+    captureStderr();
+    const getParkedApproval = vi.fn(async () => {
+      throw new Error('no parked proof');
+    });
+    const http = {
+      server: 'http://localhost:4849',
+      health: async () => ({}),
+      createAuthorityDescriptor: async () => ({
+        descriptor: {
+          v: 1,
+          actor: 'nick',
+          act: 'set_authorized_by',
+          target: 'lane-1',
+          payload_digest: 'a'.repeat(64),
+          audience: 'revive',
+          expiry: Date.now() - 1,
+          nonce: 'nonce-at-least-16-chars',
+        },
+      }),
+      getParkedApproval,
+    };
+    await expect(
+      collectApproval(http as never, 'revive', 'set_authorized_by', 'lane-1', {}),
+    ).rejects.toThrow(/descriptor expired/);
+    expect(getParkedApproval).toHaveBeenCalledTimes(1);
   });
 });
 
