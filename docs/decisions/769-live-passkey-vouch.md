@@ -1,7 +1,10 @@
 # 769 — An admin vouches for a first passkey from /live
 
-- Status: proposed
-- Date: 2026-10-29
+- Status: accepted
+- Date: 2026-10-29 (revised 2026-11-06)
+- Lane: `01M64SXW85VJ064EQCN67AY34V`
+- Reviews: big-body (security, 2026-10-29 and 2026-11-06), slippy (design, 2026-11-06)
+- Relates to: ADR 662, ADR 728, ADR 767, ADR 808, ADR 812
 
 ## Context
 
@@ -42,98 +45,161 @@ has to make "this really is them asking" a deliberate check, not a reflex.
 
 ## Decision
 
-Proposed, revised 2026-10-29 after big-body's security read and again 2026-11-06 against ADRs 808
-and 812. Pending slippy's design and a second security read. Nothing is built yet, and the build
-waits on fifty's passkey fixes (lanes 01M6Q3ZJJB, 01M6Q1RDTK, 01M6Q1QMTF), which own the same files.
+Revised 2026-10-29 after big-body's first security read, and 2026-11-06 against ADRs 808 and 812,
+then after slippy's design read and big-body's second security read the same day. The build waits on
+fifty's passkey fixes (lanes 01M6Q3ZJJB, 01M6Q1RDTK, 01M6Q1QMTF), which own the same files.
 
-The read found two gaps in the first proposal. The countersign payload named the member but not the
-key, so a parked proof would enroll any registration for that member until it expired. And a check
-code shared by both screens proves they show the same request, not who started it. So the vouch now
-signs the exact key, and the code is described as a same-request check only.
+The first read found two gaps. The countersign payload named the member but not the key, so a
+parked proof would enroll any registration for that member until it expired. And a check code shared
+by both screens proves they show the same request, not who started it. The second read found that
+the key digest alone does not pin the rest of the held registration, and that a code taken from the
+ask body is not bound to what the phone signs. So the vouch signs a digest of the whole held
+enrollment, and the admin must type a code the member reads them.
 
-1. **The member enrolls first, and the daemon holds the key.** Past genesis, the member's ADR 767
-   ceremony runs as before. `enrollPasskeyGuarded` verifies the registration, then refuses with
-   `countersign_required` as it does today. It now also records the verified key against the
-   enrollment code (new columns on `enrollment_codes`: the public key, the credential id and the
-   key digest, sha256 of the SPKI). It returns the digest in the refusal. The code expires in ten
-   minutes as it does now, and the held key expires with it. Nothing is enrolled. The registration
-   options are the ones fifty's lane 01M6Q3ZJJB ships (a per-credential user handle and
-   `excludeCredentials`), so holding a key never overwrites one the authenticator already has.
-2. **The member asks.** The sheet says "an admin must vouch for this passkey" and lists the team's
-   human admins whom `recoveryCountersignerStands` would accept: a different human, admin now, with
-   a key that signs where the hub serves (a phone key, a platform key, or a passkey whose recorded
-   `rp_id` is a configured hostname). An admin whose only passkeys are from an origin the hub no
-   longer serves is not listed, because their vouch could not be signed. When the list is empty, the
-   sheet does not dead-end: it says nobody on the team can vouch and names the ADR 808 inc D
-   recovery code ("ask whoever runs the hub machine"). Picking an admin sends a `request_help` to
-   that admin carrying `{vouch: {member, key_digest}}`. Both screens show a **check code**: six
-   digits taken from the digest.
-3. **The admin vouches.** The admin's /live shows the request under Waiting for you: who is asking
-   and the check code. The card says "this code only shows you're looking at the same request.
-   Before you vouch, confirm on a call or in person that <member> started it". **Vouch with
-   passkey** makes the admin's browser create its own descriptor (`device_key_admin`, target the
-   member, payload `{action: 'enroll', kind: 'passkey', member, key: <digest>}`) and sign it. When
-   no passkey of the admin's signs on this origin but their phone key stands, the card offers
-   **Vouch from your phone** instead: the same descriptor goes to the admin's phone through the
-   ADR 808 inc C app-channel ask, whose fixed headline (ADR 812) reads "Add a new passkey for
-   <member>". The daemon-written ask body carries the check code, so the phone shows it under the
-   rule as the asker's words. A new
-   route, `POST /authority/passkeys/vouch {member, key_digest, approval}`, then completes the
-   enrollment. It verifies the admin's proof through `requireAuthority`, re-runs the countersign
-   rules (a different human, admin at this moment, whose signing key is one `usableKeyStands`
-   accepts), finds the held
-   key whose digest matches, and in one statement spends the code and enrolls the key. Because the
-   admin mints the descriptor when they act, the request lasts as long as the code (ten minutes),
-   not the five-minute descriptor.
+### The flow
+
+1. **The member enrolls first, and the daemon holds the registration.** Past genesis, with no usable
+   key (see "Who is sent here"), the member's ADR 767 ceremony runs as before.
+   `enrollPasskeyGuarded` verifies the registration, then refuses with `countersign_required` as it
+   does today. It now also writes a **held enrollment** against the enrollment code: team, member,
+   the code's challenge hash, credential id, SPKI, the registration's `origin` and `rp_id`, and the
+   **enrollment digest**, sha256 over the canonical JSON of exactly those fields (the same
+   canonicalisation as the approval descriptor). The row is written once and never updated, and it
+   expires with the code (ten minutes). The refusal returns the enrollment digest. Nothing is
+   enrolled. The registration options are the ones fifty's lane 01M6Q3ZJJB ships (a per-credential
+   user handle and `excludeCredentials`), so holding a registration never overwrites a credential
+   the authenticator already has.
+2. **The member asks.** The sheet says "an admin must vouch for this passkey" and lists the human
+   admins whom `recoveryCountersignerStands` would accept: a different human, admin now, holding a
+   key that signs somewhere the hub serves. An admin with only dead-origin passkeys is not listed,
+   because their vouch could not be signed. When nobody is listed, the sheet does not dead-end: it
+   says nobody on the team can vouch and names the ADR 808 inc D recovery code ("ask whoever runs
+   the hub machine"). Picking an admin sends a `request_help` to that admin carrying
+   `{vouch: {member, enrollment_digest}}`. The member's sheet shows the **check code**: six digits
+   derived from the enrollment digest by one function in `@musterd/protocol`
+   (`vouchCheckCode(digest)`). The sheet also names the member's keys that do not sign here, read
+   only: "Your 2 passkeys from <origin> don't sign here. This new one will", with each key's label
+   and created date.
+3. **The admin vouches, on /live.** The request lands only on /live, under Waiting for you. The
+   request_help notifies as any act does, but the notification links to the card and carries no
+   vouch control: a lock-screen approve is the reflex this ADR exists to prevent. The card names the
+   member, says how many of their keys don't sign here, and does **not** show the check code. It
+   asks "Call <member> or ask in person, and enter the 6-digit code they read you", and Vouch stays
+   disabled until the typed code equals `vouchCheckCode` of the request's digest. The typed code is
+   the out-of-band identity check made a required step. It also proves both screens show the same
+   request. Then:
+   - **Vouch with passkey:** the admin's browser mints its own descriptor (`device_key_admin`,
+     target the member, payload `{action: 'enroll', kind: 'passkey', member, key: <enrollment
+     digest>}`) and signs it.
+   - **Vouch from your phone,** offered when no passkey of the admin's signs on this origin but
+     their phone key stands: after the code matches on /live, the same descriptor goes to the phone
+     through the ADR 808 inc C app-channel ask. The phone words it from the signed payload, never
+     from the ask body (see "Fixed words on the phone").
+
+   A new route, `POST /authority/passkeys/vouch {member, enrollment_digest, approval}`, completes
+   the enrollment (see "Commit"). Because the admin mints the descriptor when they act, the request
+   lasts as long as the code (ten minutes), not the five-minute descriptor.
 4. **The member sees it land.** The member's sheet polls its own keys and shows "<admin> vouched,
-   your passkey is enrolled". The member does not click again, because the key was created in step 1.
+   your passkey is enrolled". The member does not click again: the registration was made in step 1.
+   The dead keys from step 2 are listed again with one **Revoke these** action, nothing
+   pre-selected, dismissible. The new key signs the revoke (ADR 808 §3), so no second countersign is
+   needed. Nothing is revoked automatically, because revocation cannot be undone and the old
+   hostname may come back. Whatever the member chooses, those keys keep a "doesn't sign here" badge
+   in the keys list.
+
+**Joiners.** ADR 728 §4 and §9 serve the countersign from the hub's origin. On a joiner's /live the
+card's whole content is a link to the hub's /live; it never offers Vouch and then refuses.
+
+### Who is sent here
+
+The countersign branch of `enrollPasskeyGuarded` opens when **no usable key** of the member's
+stands, not only when they hold zero active keys. "Usable" is ADR 808's `usableKeyStands` over the
+**hub's configured passkey hostnames**, never the current page's host. A phone key, a platform key,
+or a passkey whose recorded `rp_id` is any configured hostname keeps the member on the standing-key
+approval. Vouching is never enabled just because the page in front of them cannot sign.
+
+Two parts of this are stated as trades, not facts:
+
+- **A passkey with no recorded `rp_id`** (made before ADR 808 inc A) counts as unusable, as it does
+  for the inc D recovery code. That is a recovery policy, not proof the key is dead: it may still
+  sign on an origin the hub serves. The member's sheet and the admin's card list such keys as
+  "made before origins were recorded", so the admin sees them before vouching.
+- **It widens who can authorize an enrollment.** Today an admin's countersign is read only at zero
+  keys. After this, it also enrolls a key for a member who holds active keys the hub cannot match to
+  a configured origin. The authority is the same as for a first key (a different human admin's
+  standing key, plus the typed check code), and the case it serves had no path in at all: the
+  standing-key approval cannot be signed, and the recovery code is refused with
+  `countersigner_stands`.
+
+### Commit
+
+`POST /authority/passkeys/vouch` runs one transaction, and every check runs inside it at commit
+time:
+
+- the admin's proof verifies through `requireAuthority` over the key-bound payload, with the
+  origin and node checks it applies today, the same on the authority relay;
+- the admin is a different human, admin at this moment, whose signing key `usableKeyStands`
+  accepts and is not revoked;
+- the member still has no usable key (the predicate above, re-run);
+- the enrollment code is unspent and unexpired, and its held enrollment's recomputed digest equals
+  both the request's and the signed `key`.
+
+Then it spends the code and inserts the key in the same transaction. A failed insert rolls the spend
+back, and the code stays usable until it expires. A second vouch, a retry or a replayed proof finds
+the code spent and fails with its own reason, so two concurrent vouches enroll at most one key.
 
 Guard changes, which fail closed:
 
-- The countersign branch of `enrollPasskeyGuarded` opens when **no usable key** of the member's
-  stands (ADR 808's predicate), not only when they have zero active keys. Today a member whose
-  passkeys are all bound to a dead origin, on a team that has another admin, has no path in: they
-  cannot sign the standing-key approval, the recovery code is refused with `countersigner_stands`,
-  and the countersign is only read at zero keys. The admin's countersign is the same authority as
-  for a first key, so this widens no one's reach. The dead keys stay listed until revoked, and the
-  vouch card says the member's existing keys do not sign here.
-
-- The countersign payload must include `key`, and it must equal the digest of the verified
-  registration. A countersign without `key` is refused. This covers the existing
-  `POST /authority/passkeys` countersign path and the authority relay as well.
+- A countersign must carry `key`, equal to the held enrollment's digest. A countersign without
+  `key`, or with the payload of the standing-key approval (`{action, kind}` only), is refused. A
+  generic `device_key_admin` proof cannot stand in for the key-bound one, because the payload digest
+  differs. This covers the existing `POST /authority/passkeys` countersign path and the relay too.
 - The terminal path follows the same order: `musterd authority enroll --confirmed-by <admin>` runs
-  the ceremony first, then prints the `musterd authority approve … --payload` line with the key
-  digest, and the admin's approve finishes it via the vouch route. `--countersign-proof` is
-  retired.
-- Wrong member, wrong admin, a digest with no held key, an expired code and a replayed proof each
-  fail with their own reason. Two concurrent vouches enroll at most one key.
+  the ceremony first and prints the `musterd authority approve … --payload` line with the enrollment
+  digest. The admin's approve finishes it through the vouch route, after the CLI asks for the check
+  code the member reads them. `--countersign-proof` is retired.
+- Wrong member, wrong admin, an admin no longer admin or whose key was revoked, a digest with no
+  held enrollment, an altered record, an expired code and a replayed proof each fail with their own
+  reason.
 
-**Joiners.** ADR 728 §4 and §9 serve the countersign from the hub's origin. An admin vouching from
-a joiner's /live would be refused, so the card says so and links to the hub's /live.
+### Fixed words on the phone
 
-## Open questions
+The ask body is daemon-written text that the phone labels as the asker's words. Nothing in it is
+trusted. This ADR extends ADR 812's fixed wording for one payload shape: `device_key_admin` over
+`{action: 'enroll', kind: 'passkey', member, key}`, where `member` equals the target and `key` is a
+64-hex digest. For that shape the phone shows the headline "Add a new passkey for <member>", the
+check code computed **on the phone** by `vouchCheckCode(key)` from the payload it is about to sign,
+and the same fixed instruction as /live: "Only approve if <member> read you this code on a call or
+in person." Any other value in either field falls back to ADR 812's generic line. The code on the
+phone is a second look at what is signed, not the gate: the gate is the typed code on /live.
 
-For slippy (design):
-
-- Where the request lands on the admin's side: Waiting for you on /live, the phone, or both.
-- Whether the member's sheet should name the dead keys it is replacing, and offer to revoke them
-  once the vouch lands (ADR 808 §3).
-
-For the second security read:
-
-- The countersign branch opening at "no usable key" instead of "zero keys" (Guard changes, first
-  item). Is there a case where a member with a live key on another origin the hub serves should be
-  sent to the standing-key approval instead?
-- The phone vouch. Is the ADR 812 headline plus an ask body holding the check code enough for an
-  admin to know whose key they are adding, given the body is labelled as the asker's words?
+This is a change to `@musterd/protocol` (`vouchCheckCode`, one more branch in `approvalWording`), so
+this ADR is its record under hard rule 1. No schema, signing-byte or digest change.
 
 ## Consequences
 
-To be written once the open questions are settled.
+- One new table or column set for held enrollments, one new route, one protocol helper, and the
+  admin card, the member's sheet and the phone wording. The terminal countersign changes shape and
+  `--countersign-proof` goes.
+- Every member with a reachable countersigner gets in from /live, including after an origin move
+  with only passkeys. ADR 808 inc D stays the path for a team with nobody left who can vouch.
+- An admin can now enroll a key for a member who still holds keys the hub cannot place (stated
+  above). The typed check code and the commit-time re-checks are what stand against a stolen
+  browser session asking in the member's name.
+- An admin who cannot reach the member by call or in person cannot vouch. That is intended.
+- The build needs fifty's three passkey fixes first. The lane's scope widens to the code files
+  once they land.
 
 ## Observability & Evaluation
 
 - **Traces:** the existing `device_key.enrolled` audit row (actor the member) and the countersign
   verification inside `enrollPasskeyGuarded`. The request itself is a `request_help` act.
-- **Eval:** to be set with the design.
+- **Eval:** the falsifiers are tests that must exist before the build lane merges: a member with a
+  usable key on another configured origin, a phone key or a platform key is sent to the standing-key
+  approval, never the vouch; a key with null `rp_id` is listed as unrecorded on both screens; an
+  altered body, code, held record or digest is refused; a revoked admin key, an admin demoted
+  mid-request, an expired code and a replayed proof are refused; two simultaneous vouches enroll
+  one key; a failed insert leaves the code unspent; a generic `device_key_admin` proof is refused as
+  a countersign. In use: any `device_key.enrolled` row through the vouch route that was not preceded
+  by a matching typed-code check on the admin's /live is a defect.
 - **Experiment:** n/a — a consent ceremony, not a tunable.
