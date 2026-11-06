@@ -7,15 +7,36 @@ import type { AppMember, AppMoment } from '@musterd/protocol/app-channel';
 
 /** At most this many desks; the rest are "+N" at the edge. */
 export const FLOOR_MAX = 8;
-/** One bubble change at most this often (the motion budget: nothing loops faster). */
-export const BUBBLE_MS = 4_000;
-/** A working member's bubble is the lane title, cut to this many characters. */
-const BUBBLE_CHARS = 28;
+/** A desk's cue is the lane title, cut to this many characters (/live's work cue, phone-sized). */
+const CUE_CHARS = 24;
 
-/** The eight most recently active present members (lane time newest first, else roster order). */
-export function floorDesks(present: readonly AppMember[]): { desks: AppMember[]; more: number } {
-  const ranked = present
+/** What sits on a desk besides its member, as /live's desk props: the tray, the sticky, the ask. */
+export type DeskProp = 'review' | 'blocked' | 'asking' | 'asking-you' | null;
+
+export interface Desk {
+  member: AppMember;
+  /** What they are on, in a few words; for an ask, who it is to. */
+  cue: string | null;
+  prop: DeskProp;
+}
+
+function cut(t: string): string {
+  return t.length > CUE_CHARS ? `${t.slice(0, CUE_CHARS - 1).trimEnd()}…` : t;
+}
+
+/**
+ * The floor as /live's office lays the team out (`office-scene/seating.ts`): members with work sit
+ * at desks — at most eight, most recently active first — each with what they are on and the prop
+ * that says their state; members between tasks are in the lounge. `askingYou` names the members
+ * with something in your For you: their desk says so, in mustard.
+ */
+export function officeLayout(
+  present: readonly AppMember[],
+  askingYou: ReadonlySet<string>,
+): { desks: Desk[]; moreDesks: number; lounge: AppMember[] } {
+  const working = present
     .map((m, i) => ({ m, i }))
+    .filter(({ m }) => m.state !== 'between' && m.state !== 'away')
     .sort((a, b) => {
       const as = a.m.since;
       const bs = b.m.since;
@@ -24,39 +45,38 @@ export function floorDesks(present: readonly AppMember[]): { desks: AppMember[];
       if (as === null && bs !== null) return 1;
       return a.i - b.i;
     })
-    .map(({ m }) => m);
+    .map(({ m }): Desk => {
+      const prop: DeskProp =
+        m.state === 'review'
+          ? 'review'
+          : m.state === 'blocked'
+            ? 'blocked'
+            : m.state === 'asking'
+              ? askingYou.has(m.name)
+                ? 'asking-you'
+                : 'asking'
+              : null;
+      const title = (m.title ?? '').trim();
+      const cue =
+        prop === 'asking-you'
+          ? 'asking you'
+          : title
+            ? cut(title)
+            : prop === 'asking'
+              ? m.label
+              : null;
+      return { member: m, cue, prop };
+    });
   return {
-    desks: ranked.slice(0, FLOOR_MAX),
-    more: Math.max(0, ranked.length - FLOOR_MAX),
+    desks: working.slice(0, FLOOR_MAX),
+    moreDesks: Math.max(0, working.length - FLOOR_MAX),
+    lounge: present.filter((m) => m.state === 'between'),
   };
 }
 
-/**
- * One short line over a desk. `askingYou` is whether this member has something in your For you:
- * then the bubble says so, in mustard. Between tasks and away say nothing.
- */
-export function bubbleText(
-  m: AppMember,
-  askingYou: boolean,
-): { text: string; mine: boolean } | null {
-  switch (m.state) {
-    case 'asking':
-      return askingYou ? { text: 'asking you →', mine: true } : { text: m.label, mine: false };
-    case 'working': {
-      const t = (m.title ?? '').trim();
-      if (!t) return { text: m.label, mine: false };
-      return {
-        text: t.length > BUBBLE_CHARS ? `${t.slice(0, BUBBLE_CHARS - 1).trimEnd()}…` : t,
-        mine: false,
-      };
-    }
-    case 'review':
-      return { text: 'waiting for review', mine: false };
-    case 'blocked':
-      return { text: 'blocked', mine: false };
-    default:
-      return null;
-  }
+/** The board's count: lanes landed today, as /live pins each to its board. */
+export function landedToday(moments: readonly AppMoment[]): number {
+  return moments.filter((m) => m.kind === 'landed').length;
 }
 
 /**

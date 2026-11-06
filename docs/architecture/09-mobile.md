@@ -427,7 +427,7 @@ src/
     asks.ts                // the asks list: Notification Center refs, each fetched live by ref; redeliver
     bytes.ts               // UTF-8 and base64url for a runtime with no Buffer and no TextEncoder
     delivery.ts            // the delivery composition — route AAD, inner {p,s}, the daemon's Ed25519 check
-    floor.ts               // ADR 819: the live floor's rules — floorDesks (8 most recent, +N), bubbleText (asking you → in mustard), newLandings (none on first load), glowQueue (one glow at a time), momentWords (a moment row's copy)
+    floor.ts               // ADR 819: the live floor's rules — officeLayout (/live's seating: desks for members with work, ≤8 most recent, each with a cue and a prop — review, blocked, asking, asking you; the lounge for between tasks), landedToday (the board), newLandings (none on first load), glowQueue (one glow at a time), momentWords (a moment row's copy)
     nonceStore.ts          // seen-nonce verdicts; the extension's Swift copy follows this
     notice.ts              // lock-screen copy and which asks get actions
     notificationAnswers.ts // take a pending action once the app is open; a plain tap opens its ask
@@ -481,7 +481,7 @@ src/ui/chrome.tsx     // ChromeProvider / useChrome: one shared value the pill r
 src/ui/memberRow.tsx  // one member in two lines, as /live's team card reads: portrait + state dot, name, model, age; state word and what they're on
 src/ui/stateDot.tsx   // /live's state dot on a portrait's corner: working, review, blocked, asking, between (ring), away (none)
 src/ui/forYouRow.tsx  // one thing waiting on you: asker, the question in a line, kind and age, a Review / Answer chip
-src/ui/floor.tsx      // the live floor (ADR 819): warm wood (svg gradient), desks of portraits with state dots, one rotating bubble, a landing's glow, the goal bell, LIVE while anyone works; Reduce Motion freezes it
+src/ui/floor.tsx      // the live floor as /live's office (ADR 819): warm wood (svg gradient), desks two to a row (face + state dot, name, what they're on, the state's prop), the lounge sofa, the board's "N landed today", a landing's glow, the goal bell, LIVE while anyone works; sized by what it holds
 src/ui/momentRow.tsx  // one "Happening now" moment: a landing or goal as a full row with portrait, lane or outcome, goal and accepted seal; the rest one quiet line
 src/ui/offlineFold.tsx // the "N offline" fold with stacked faces and Show / Hide
 src/ui/memberSheet.tsx // a member's sheet (reanimated + gesture-handler): rises on a spring, dragged shut; today's quick actions

@@ -5,7 +5,7 @@ import { AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'reac
 import Animated, { Easing, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AsksView } from '../../native/asks';
-import { floorDesks, glowQueue, newLandings } from '../../native/floor';
+import { glowQueue, landedToday, newLandings, officeLayout } from '../../native/floor';
 import { heldBody, refusalLine } from '../../native/notice';
 import { endedNote, type PairingEnded } from '../../native/pairingEnded';
 import type { PairingPin } from '../../native/pairingPin';
@@ -309,8 +309,7 @@ export default function AsksScreen() {
       },
     });
   };
-  const floor = floorDesks(rows.present);
-  const askingYou = new Set(rows.forYou.map((f) => f.from));
+  const office = officeLayout(rows.present, new Set(rows.forYou.map((f) => f.from)));
   const moments = paired ? (roster?.moments ?? []) : [];
   const kindOf = new Map([...rows.present, ...rows.offline].map((m) => [m.name, m] as const));
 
@@ -417,10 +416,11 @@ export default function AsksScreen() {
       {paired && pin && roster ? (
         <Rise>
           <Floor
-            desks={floor.desks}
-            more={floor.more}
+            desks={office.desks}
+            moreDesks={office.moreDesks}
+            lounge={office.lounge}
             live={rows.present.some((m) => m.state === 'working')}
-            askingYou={askingYou}
+            landed={landedToday(moments)}
             glowing={glows[0] ?? null}
             bell={bell}
             pin={pin}
