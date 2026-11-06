@@ -128,6 +128,24 @@ Alternatives considered:
 
 ## Consequences
 
+- _(2026-11-06, rule 2 follow-up answered, lane `01M6S36XB0`.)_ The caveat vocabulary can do
+  the attenuation: `docs/wiki/fly-token-attenuation.md` (#4003) measures a deploy token
+  narrowed to read/start/stop/signal on the named machines, refusing exec, update, create,
+  delete, secrets and registry push. That discharges the "unverified" half of the phase-2a
+  precondition; staging an attenuated token still has to happen before the first phase-2a
+  per-team machine.
+- _(2026-11-06, correction to the note below, lane `01M6RZ0NRA` rounds 4–5.)_ The premise under
+  the cold first lease — that the first lease expires before a slow cold spawn occupies the
+  seat — is falsified live. No spawn is ever attempted on the first lease of a hub-mode cold
+  boot: a wake order is issued only in the poll that mints the lease, and the cloud-agent boot
+  probe consumes that poll (it POSTs `/residency/wake-leases` to test the host key and discards
+  the body), stranding the order before the host loop starts. Round 5 proved it end to end: the
+  lease carried `cold_first` at 19:01:22Z, no spawn process ever existed, and it expired unused
+  at 19:08:26Z — the 420 s TTL made the round slower than the 120 s it replaced and burnt an
+  hourly-cap slot. The ledger crossing below stands (proven live, and how round 5's lease got
+  its stamp); the TTL's fate and the probe fix are the lane's open decision. Full evidence:
+  `docs/perf/cloud-seat.md`, "cold-lease rounds 3–5".
+  Follows-up: 01M6RZ0NRAQR9BSJA42ZN5M6N2
 - _(2026-11-06, cold-lease follow-up, lane `01M6RZ0NRA`.)_ The cold first lease (420 s for the
   first lease inside 10 min of a hub machine start, no `woke` since) is decided where leases
   mint — in hub mode the seat machine's own joiner daemon — so `fly.machine_start` joined
