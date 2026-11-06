@@ -2995,3 +2995,15 @@ in the stream and is eager, so initial JS rose 0.3 KB, from 149.8 to 150.1 KB ag
 laptop against 410.2 KB, and app CSS read 19.8 KB, at its edge. Lazy-loading cannot move either
 total, so both are raised to clear CI's read.
 
+## 2026-11-06 — an admin vouches for a passkey from /live: total JS RAISED 423,000 → 426,000 B (lane 01M64SXW85VJ064EQCN67AY34V)
+
+ADR 769 increment 3. A member with no approval to attach has their new passkey held by the daemon.
+The sheet shows the six-digit check code and asks an admin to vouch. The admin types the code the
+member reads them on a card under Waiting for you, and Vouch signs the held enrollment. The ceremony
+(`vouch.ts`, `VouchRequests.tsx`, the held state in `Passkeys.tsx`) sits inside the already-lazy
+settings chunk. The pure `vouchRequests.ts`, which finds requests in the stream and lights the
+settings dot, is eager, so initial JS rose 0.3 KB, from 150.2 to 150.5 KB against 150.9. Total JS read
+414.7 KB on this laptop, against 412.2 KB on main measured the same way, a cost of 2.5 KB. Lazy-loading
+cannot move that total, so the budget is raised by 3 KB to clear CI's read, which has run about 0.6 KB
+above the laptop's.
+

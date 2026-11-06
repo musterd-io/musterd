@@ -1,5 +1,10 @@
 import { z } from 'zod';
-export { humanAskAnswerApproval, requestDecisionApproval } from './approvalContracts.js';
+import { vouchCheckCode } from './approvalContracts.js';
+export {
+  humanAskAnswerApproval,
+  requestDecisionApproval,
+  vouchCheckCode,
+} from './approvalContracts.js';
 
 /**
  * The node-free half of human authority (ADR 662 decisions 4–5, ADR 694): the closed list of
@@ -115,16 +120,6 @@ export interface ApprovalWording {
    * signed (never from the ask body), and the fixed instruction shown with it.
    */
   check?: { code: string; instruction: string };
-}
-
-/**
- * ADR 769: the six-digit check code for a passkey vouch. The member's sheet shows it, the admin
- * types it on /live, and the phone works it out again from the signed `key`. One function, so the
- * three surfaces cannot disagree. `digest` is the held enrollment's 64-hex sha256.
- */
-export function vouchCheckCode(digest: string): string {
-  if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('vouchCheckCode: digest must be 64 hex');
-  return (Number.parseInt(digest.slice(0, 8), 16) % 1_000_000).toString().padStart(6, '0');
 }
 
 /**

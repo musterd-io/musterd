@@ -292,6 +292,26 @@ export async function recoveryCountersignerStands(
 }
 
 /**
+ * ADR 769: every human admin who could vouch for this member now — a different human, admin, with
+ * a key that signs where the hub serves. The same rule as {@link recoveryCountersignerStands},
+ * listed in full so the member's sheet offers only admins whose vouch could be signed.
+ */
+export async function countersignersFor(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+  hosts: readonly string[],
+): Promise<string[]> {
+  const out: string[] = [];
+  for (const m of await listMembers(db, teamId)) {
+    if (m.id === memberId || m.kind !== 'human' || m.left_at !== null) continue;
+    if (!resolveCapabilities(m).is_admin) continue;
+    if (usableKeyStands(await activeDeviceKeys(db, teamId, m.id), hosts)) out.push(m.name);
+  }
+  return out;
+}
+
+/**
  * ADR 808 inc D: mint a one-time passkey recovery code for a member whose every key is bound to an
  * origin this hub no longer serves. The caller has already established that it runs on the hub's
  * own machine (the route's loopback check) — the same trust `node join` carries. Five minutes, one

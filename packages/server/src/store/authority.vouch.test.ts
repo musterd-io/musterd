@@ -1,10 +1,11 @@
 import { createHash, generateKeyPairSync, sign as cryptoSign, type KeyObject } from 'node:crypto';
-import { descriptorSigningBytes } from '@musterd/protocol';
+import { descriptorSigningBytes, GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import { beforeEach, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import {
   buildDescriptor,
+  countersignersFor,
   enrollDeviceKey,
   enrollPasskeyGuarded,
   issueEnrollmentChallenge,
@@ -89,6 +90,12 @@ async function setup() {
     publicKey: spkiOf(rootKp.publicKey),
     kind: 'platform',
   });
+  const makeAdmin = (id: string) =>
+    db.run('UPDATE members SET capabilities = ? WHERE id = ?', [
+      JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
+      id,
+    ]);
+  await makeAdmin(root.id);
 
   /** ada's ceremony with `hold`: returns the guarded result. */
   const hold = async (credName = 'ada-new', hosts: readonly string[] = HOSTS) => {
@@ -158,7 +165,7 @@ async function setup() {
       ...over,
     });
 
-  return { db, team, ada, root, rootKp, rootKey, hold, rootProof, vouchPayload, vouch };
+  return { db, team, ada, root, rootKp, rootKey, makeAdmin, hold, rootProof, vouchPayload, vouch };
 }
 
 const digestOf = (r: Awaited<ReturnType<typeof enrollPasskeyGuarded>>): string => {
@@ -367,6 +374,27 @@ withDrivers('passkey vouch (ADR 769)', (o) => {
     );
     const retried = await s.vouch(digest, await s.rootProof(s.vouchPayload(digest)));
     expect(retried.ok).toBe(true);
+  });
+
+  it('lists as countersigners only other human admins with a key that signs here', async () => {
+    const s = await setup();
+    // root (admin, platform key) counts; ada never lists herself.
+    expect(await countersignersFor(s.db, s.team.id, s.ada.id, HOSTS)).toEqual(['root']);
+    // An admin whose only passkey is from a dead origin cannot sign a vouch here: not listed.
+    const cy = (await addMember(s.db, s.team, { name: 'cy', kind: 'human' })).row;
+    await s.makeAdmin(cy.id);
+    await enrollDeviceKey(s.db, {
+      teamId: s.team.id,
+      memberId: cy.id,
+      publicKey: spkiOf(generateKeyPairSync('ed25519').publicKey),
+      kind: 'passkey',
+      origin: 'http://localhost:4849',
+      rpId: 'localhost',
+    });
+    expect(await countersignersFor(s.db, s.team.id, s.ada.id, HOSTS)).toEqual(['root']);
+    // root's key revoked: nobody can vouch.
+    await revokeDeviceKey(s.db, s.team.id, s.rootKey.id);
+    expect(await countersignersFor(s.db, s.team.id, s.ada.id, HOSTS)).toEqual([]);
   });
 
   it('the one-shot countersign must name the registration too (key = held digest)', async () => {

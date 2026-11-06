@@ -13,8 +13,9 @@ import { apiGet, apiPost, LiveFetchError, type LiveConfig } from './client';
  * for `musterd authority enroll`, run in the settings sheet instead. The daemon's rules are unchanged,
  * because the same two routes decide: a challenge bound to this human
  * (`POST /authority/enrollment-challenges`), then the registration
- * (`POST /authority/passkeys`). A further passkey carries the standing passkey's approval; a first one
- * past team genesis needs an admin countersign, which the daemon refuses as `countersign_required`.
+ * (`POST /authority/passkeys`). A further passkey carries the standing passkey's approval. A first
+ * one past team genesis, or one for a member none of whose keys sign here, is HELD by the daemon for
+ * an admin's vouch (ADR 769): the registration is sent with `hold: true` and comes back as `held`.
  *
  * Its own module so only the settings sheet's lazy chunk carries it.
  */
@@ -45,6 +46,18 @@ export function signsHere(key: DeviceKey, hostname: string): boolean | null {
   return key.rp_id === hostname;
 }
 
+/** ADR 769: a registration the daemon verified and holds until an admin vouches for it. */
+export interface HeldEnrollment {
+  digest: string;
+  expiresAt: number;
+  /** The admins whose vouch could be signed here; empty means nobody on the team can. */
+  countersigners: string[];
+}
+
+export type EnrollOutcome =
+  | { kind: 'enrolled'; key: DeviceKey }
+  | { kind: 'held'; held: HeldEnrollment };
+
 /** This human's device keys (passkeys and phones), revoked ones included. */
 export async function fetchMyDeviceKeys(cfg: LiveConfig): Promise<DeviceKey[]> {
   const out = await apiGet<{ keys: DeviceKey[] }>(
@@ -58,13 +71,10 @@ export async function fetchMyDeviceKeys(cfg: LiveConfig): Promise<DeviceKey[]> {
 export function enrollRefusal(e: unknown): string {
   const text = e instanceof Error ? e.message : String(e);
   if (/already holds a passkey/.test(text)) return text;
-  if (/countersign_required/.test(text)) {
-    return (
-      'this team already has passkeys, so an admin must vouch for your first one, and that ' +
-      'step is still in the terminal: run `musterd authority enroll --confirmed-by <admin>` ' +
-      'and it prints what the admin runs on the hub'
-    );
-  }
+  if (/countersign_required/.test(text))
+    return 'an admin must vouch for this passkey — start again and ask one from this sheet';
+  if (/already_held/.test(text))
+    return 'this enrollment code already holds another passkey — start again';
   if (/usable_key_stands/.test(text))
     return 'a recovery code is for when no key of yours signs anywhere — one still does, so use it, or revoke it first';
   if (/bad_challenge/.test(text)) return 'the enrollment code expired — try again';
@@ -80,7 +90,7 @@ export async function enrollPasskey(
   cfg: LiveConfig,
   member: string,
   standing: boolean,
-): Promise<DeviceKey> {
+): Promise<EnrollOutcome> {
   if (!navigator.credentials?.create) throw new Error('passkeys are unavailable in this browser');
   const approval = standing ? await authorityProofForPasskeyEnroll(cfg, member) : null;
   if (standing && !approval) {
@@ -89,6 +99,25 @@ export async function enrollPasskey(
     );
   }
   return registerPasskey(cfg, member, approval);
+}
+
+/**
+ * ADR 769: make a passkey here with no approval of your own, for an admin to vouch for — the path
+ * for a member none of whose keys sign here and who has no phone. The daemon decides: it holds the
+ * registration (`held`) when a vouch is needed, and refuses as usual when it is not.
+ */
+export async function enrollPasskeyForVouch(
+  cfg: LiveConfig,
+  member: string,
+): Promise<EnrollOutcome> {
+  if (!navigator.credentials?.create) throw new Error('passkeys are unavailable in this browser');
+  return registerPasskey(cfg, member, null);
+}
+
+/** An outcome that must be an enrolled key (an approval or a recovery code was presented). */
+function enrolledKey(outcome: EnrollOutcome): DeviceKey {
+  if (outcome.kind === 'held') throw new Error('an admin must vouch for this passkey');
+  return outcome.key;
 }
 
 /**
@@ -131,7 +160,7 @@ export async function enrollPasskeyViaPhone(
       if (!(e instanceof LiveFetchError && e.status === 404)) throw e;
     }
   }
-  return registerPasskey(cfg, member, approval);
+  return enrolledKey(await registerPasskey(cfg, member, approval));
 }
 
 /**
@@ -145,7 +174,7 @@ export async function enrollPasskeyWithRecoveryCode(
   code: string,
 ): Promise<DeviceKey> {
   if (!navigator.credentials?.create) throw new Error('passkeys are unavailable in this browser');
-  return registerPasskey(cfg, member, null, code.trim());
+  return enrolledKey(await registerPasskey(cfg, member, null, code.trim()));
 }
 
 /**
@@ -165,13 +194,17 @@ export function excludeCredentialsFrom(
     .map((k) => k.credential_id as string);
 }
 
-/** The registration ceremony itself, with whatever approval the caller collected (or none). */
+/**
+ * The registration ceremony itself, with whatever approval the caller collected (or none). With
+ * neither an approval nor a recovery code it asks the daemon to hold the registration for a vouch
+ * (ADR 769), so a refusal for want of a countersign comes back as `held` instead.
+ */
 async function registerPasskey(
   cfg: LiveConfig,
   member: string,
   approval: ApprovalProof | null,
   recoveryCode?: string,
-): Promise<DeviceKey> {
+): Promise<EnrollOutcome> {
   const teamPath = `/teams/${encodeURIComponent(cfg.team)}/authority`;
   const challenge =
     recoveryCode ??
@@ -215,23 +248,41 @@ async function registerPasskey(
   }
   if (!cred) throw new Error('passkey cancelled; nothing was enrolled');
   const resp = cred.response as AuthenticatorAttestationResponse;
-  const { key } = await apiPost<{ key: { id: string; kind: string } }>(cfg, `${teamPath}/passkeys`, {
+  const out = await apiPost<{
+    key?: { id: string; kind: string };
+    held?: { enrollment_digest: string; expires_at: number; countersigners?: string[] };
+  }>(cfg, `${teamPath}/passkeys`, {
     actor: member,
     challenge,
     ...(approval ? { approval } : {}),
+    ...(!approval && !recoveryCode ? { hold: true } : {}),
     registration: {
       attestation_object: bytesToB64url(resp.attestationObject),
       // Posted decoded, as the daemon's own enroll page does: the verifier hashes this utf8 text.
       client_data_json: new TextDecoder().decode(resp.clientDataJSON),
     },
   });
+  if (out.held) {
+    return {
+      kind: 'held',
+      held: {
+        digest: out.held.enrollment_digest,
+        expiresAt: out.held.expires_at,
+        countersigners: out.held.countersigners ?? [],
+      },
+    };
+  }
+  if (!out.key) throw new Error('the daemon answered without a key; nothing was enrolled');
   return {
-    id: key.id,
-    kind: key.kind,
-    origin: location.origin,
-    rp_id: location.hostname,
-    created_at: Date.now(),
-    revoked_at: null,
+    kind: 'enrolled',
+    key: {
+      id: out.key.id,
+      kind: out.key.kind,
+      origin: location.origin,
+      rp_id: location.hostname,
+      created_at: Date.now(),
+      revoked_at: null,
+    },
   };
 }
 

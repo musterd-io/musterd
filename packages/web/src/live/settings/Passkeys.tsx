@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { LiveConfig } from '../client';
 import {
   enrollPasskey,
+  enrollPasskeyForVouch,
   enrollPasskeyViaPhone,
   enrollPasskeyWithRecoveryCode,
   enrollRefusal,
@@ -9,8 +10,14 @@ import {
   revokeDeviceKey,
   signsHere,
   type DeviceKey,
+  type EnrollOutcome,
+  type HeldEnrollment,
 } from '../passkeyEnroll';
 import type { SheetNote } from '../StyleSheet';
+import { askVouch, replacedPasskeys, vouchCheckCode } from '../vouch';
+
+/** How often a held enrollment's sheet looks for the vouched key to land (ADR 769 step 4). */
+const VOUCH_POLL_MS = 3_000;
 
 /**
  * Your passkeys (ADR 767): what signs this human's high-authority acts — a verdict, a policy write,
@@ -35,16 +42,61 @@ export function Passkeys({
   const [revoking, setRevoking] = useState<string | null>(null);
   const [recoveryCode, setRecoveryCode] = useState('');
   const [note, setNote] = useState<SheetNote>(null);
+  // ADR 769: a registration held for an admin's vouch, who was asked, and the key ids that stood
+  // when it was held (the vouched key is the one not among them — ids, not clocks).
+  const [held, setHeld] = useState<(HeldEnrollment & { before: readonly string[] }) | null>(null);
+  const [asked, setAsked] = useState<string | null>(null);
+  // After a vouch lands: the keys it replaces, offered for one dismissible revoke (never automatic).
+  const [replaced, setReplaced] = useState<DeviceKey[] | null>(null);
   const refresh = useCallback(async () => {
     try {
-      setKeys(await fetchMyDeviceKeys(cfg));
+      const fresh = await fetchMyDeviceKeys(cfg);
+      setKeys(fresh);
+      return fresh;
     } catch {
       setKeys(null);
+      return null;
     }
   }, [cfg]);
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // ADR 769 step 4: while a registration is held, look for the vouched key. The member does not
+  // click again — the key was made when the registration was held.
+  useEffect(() => {
+    if (!held) return;
+    const host = location.hostname;
+    const t = setInterval(() => {
+      if (Date.now() > held.expiresAt) {
+        setHeld(null);
+        setAsked(null);
+        setNote({ tone: 'err', text: 'the request expired before an admin vouched; nothing was enrolled — start again' });
+        return;
+      }
+      void refresh().then((fresh) => {
+        const landed = fresh?.find(
+          (k) =>
+            k.kind === 'passkey' &&
+            k.revoked_at === null &&
+            !held.before.includes(k.id) &&
+            signsHere(k, host) !== false,
+        );
+        if (!landed || !fresh) return;
+        const gone = replacedPasskeys(fresh, host);
+        setHeld(null);
+        setNote({
+          tone: 'ok',
+          text: `${asked ?? 'an admin'} vouched — your passkey is enrolled and signs from now on`,
+        });
+        setAsked(null);
+        const old = [...gone.away, ...gone.unrecorded].filter((k) => k.id !== landed.id);
+        setReplaced(old.length > 0 ? old : null);
+        onEnrolled?.();
+      });
+    }, VOUCH_POLL_MS);
+    return () => clearInterval(t);
+  }, [held, asked, refresh, onEnrolled]);
   if (keys === null || !me) return null;
 
   const active = keys.filter((k) => k.revoked_at === null && !k.pairing_ended);
@@ -121,14 +173,68 @@ export function Passkeys({
     }
   };
 
+  // A registration came back enrolled, or held for an admin's vouch (ADR 769).
+  const settle = async (outcome: EnrollOutcome) => {
+    if (outcome.kind === 'held') {
+      setHeld({ ...outcome.held, before: (keys ?? []).map((k) => k.id) });
+      setAsked(null);
+      setNote(null);
+      return;
+    }
+    setNote({ tone: 'ok', text: 'passkey enrolled — it signs your high-authority acts from now on' });
+    await refresh();
+    onEnrolled?.();
+  };
+
   const enroll = async () => {
     setBusy(true);
     setNote(null);
     try {
-      await enrollPasskey(cfg, me, active.length > 0);
-      setNote({ tone: 'ok', text: 'passkey enrolled — it signs your high-authority acts from now on' });
+      await settle(await enrollPasskey(cfg, me, active.length > 0));
+    } catch (e) {
+      setNote({ tone: 'err', text: enrollRefusal(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ADR 769: none of your keys sign here and no phone — make the passkey, and an admin vouches.
+  const enrollForVouch = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await settle(await enrollPasskeyForVouch(cfg, me));
+    } catch (e) {
+      setNote({ tone: 'err', text: enrollRefusal(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const ask = async (admin: string) => {
+    if (!held) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      await askVouch(cfg, admin, me, held.digest);
+      setAsked(admin);
+    } catch (e) {
+      setNote({ tone: 'err', text: enrollRefusal(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // After the vouch: revoke the keys it replaces, signed by the new key. One action, the member's.
+  const revokeReplaced = async () => {
+    if (!replaced) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      for (const k of replaced) await revokeDeviceKey(cfg, me, k.id);
+      setReplaced(null);
+      setNote({ tone: 'ok', text: replaced.length === 1 ? 'old passkey revoked' : 'old passkeys revoked' });
       await refresh();
-      onEnrolled?.();
     } catch (e) {
       setNote({ tone: 'err', text: enrollRefusal(e) });
     } finally {
@@ -198,7 +304,56 @@ export function Passkeys({
           {phones > 0 ? ' or from your paired phone' : ''}; open musterd there to add one.
         </p>
       )}
-      {noneSignHere && phones === 0 && (
+      {held && (
+        <HeldPanel
+          held={held}
+          asked={asked}
+          busy={busy}
+          replaced={replacedPasskeys(keys, host)}
+          onAsk={(admin) => void ask(admin)}
+        />
+      )}
+      {replaced && !held && (
+        <div className="lc-keys__vouch" role="group" aria-label="Passkeys this one replaces">
+          <p className="lc-set__hint">
+            {replaced.length === 1
+              ? 'Your old passkey does not sign here.'
+              : `Your ${replaced.length} old passkeys do not sign here.`}{' '}
+            Revoke {replaced.length === 1 ? 'it' : 'them'} now, or keep{' '}
+            {replaced.length === 1 ? 'it' : 'them'} in case that address comes back. Revoking cannot
+            be undone.
+          </p>
+          <div className="lc-keys__vouchact">
+            <button
+              type="button"
+              className="lc-set__btn"
+              disabled={busy}
+              onClick={() => void revokeReplaced()}
+            >
+              {busy ? 'Revoking…' : 'Revoke these'}
+            </button>
+            <button
+              type="button"
+              className="lc-set__btn"
+              disabled={busy}
+              onClick={() => setReplaced(null)}
+            >
+              Keep them
+            </button>
+          </div>
+        </div>
+      )}
+      {noneSignHere && phones === 0 && !held && (
+        <button
+          type="button"
+          className="lc-set__btn lc-set__btn--go"
+          disabled={busy}
+          onClick={() => void enrollForVouch()}
+        >
+          {busy ? 'Waiting for your passkey…' : 'Add a passkey here, vouched for by an admin'}
+        </button>
+      )}
+      {((noneSignHere && phones === 0) || (held && held.countersigners.length === 0)) && (
         <form
           className="lc-keys__recover"
           onSubmit={(e) => {
@@ -241,7 +396,7 @@ export function Passkeys({
       <button
         type="button"
         className={`lc-set__btn${passkeys.length === 0 ? ' lc-set__btn--go' : ''}`}
-        disabled={busy || noneSignHere}
+        disabled={busy || noneSignHere || held !== null}
         onClick={() => void enroll()}
       >
         {busy
@@ -263,5 +418,70 @@ export function Passkeys({
         {note?.text ?? ''}
       </p>
     </section>
+  );
+}
+
+/**
+ * ADR 769 steps 2–3, the member's side: the check code to read the admin, the passkeys the new one
+ * replaces (read-only here), and the admins whose vouch could be signed. With nobody to ask, the
+ * recovery-code form below takes over instead of a dead end.
+ */
+function HeldPanel({
+  held,
+  asked,
+  busy,
+  replaced,
+  onAsk,
+}: {
+  held: HeldEnrollment;
+  asked: string | null;
+  busy: boolean;
+  replaced: { away: DeviceKey[]; unrecorded: DeviceKey[] };
+  onAsk: (admin: string) => void;
+}) {
+  const code = vouchCheckCode(held.digest);
+  const old = [...replaced.away, ...replaced.unrecorded];
+  const origins = [...new Set(replaced.away.map((k) => k.origin ?? k.rp_id ?? ''))].filter(Boolean);
+  return (
+    <div className="lc-keys__vouch" role="group" aria-labelledby="lc-keys-vouch-h">
+      <p id="lc-keys-vouch-h" className="lc-set__lede">
+        An admin must vouch for this passkey. Read them this code on a call or in person:
+      </p>
+      <p className="lc-keys__code" aria-label={`check code ${code.split('').join(' ')}`}>
+        {code}
+      </p>
+      {old.length > 0 && (
+        <p className="lc-set__hint">
+          {old.length === 1 ? 'Your passkey' : `Your ${old.length} passkeys`}
+          {origins.length > 0 ? ` from ${origins.join(', ')}` : ''} {old.length === 1 ? "doesn't" : "don't"}{' '}
+          sign here. This new one will.{' '}
+          {old.map((k) => `since ${since(k.created_at)}${signsHere(k, location.hostname) === null ? ' (made before origins were recorded)' : ''}`).join(' · ')}
+        </p>
+      )}
+      {held.countersigners.length === 0 ? (
+        <p className="lc-set__hint" role="status">
+          Nobody on the team can vouch for you here. Ask whoever runs the hub machine for a recovery
+          code, and enter it below.
+        </p>
+      ) : asked ? (
+        <p className="lc-set__hint" role="status" aria-live="polite">
+          Asked {asked}. Once they have typed your code and vouched, your passkey appears here.
+        </p>
+      ) : (
+        <div className="lc-keys__vouchact" role="group" aria-label="Ask an admin to vouch">
+          {held.countersigners.map((admin) => (
+            <button
+              key={admin}
+              type="button"
+              className="lc-set__btn lc-set__btn--go"
+              disabled={busy}
+              onClick={() => onAsk(admin)}
+            >
+              Ask {admin}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

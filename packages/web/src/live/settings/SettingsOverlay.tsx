@@ -5,6 +5,7 @@ import { OPEN_TILT, shouldDismiss, zoomTransform } from '../boardOverlayMath';
 import type { LiveConfig } from '../client';
 import type { ChannelPairing } from '../pairingClient';
 import { TeamPanel } from './TeamPanel';
+import type { VouchRequest } from '../vouchRequests';
 import { YouPanel } from './YouPanel';
 
 /** Matches the CSS close transition, as the board overlay's does. */
@@ -28,6 +29,7 @@ export function SettingsOverlay({
   isAdmin,
   teamHours,
   pairings,
+  vouches = [],
   origin,
   initialTab = 'you',
   onPairingsChanged,
@@ -42,6 +44,8 @@ export function SettingsOverlay({
   isAdmin: boolean;
   teamHours: WorkingHours | null;
   pairings: ChannelPairing[];
+  /** ADR 769: vouch requests waiting on this admin. */
+  vouches?: readonly VouchRequest[];
   /** The calendar's viewport rect — where the panel comes from and goes back to. */
   origin: DOMRect | null;
   /** The sheet to open on — `team` when the wiki shelf sends an admin to link its repo. */
@@ -102,7 +106,7 @@ export function SettingsOverlay({
   }, [close]);
 
   const tabs: { id: Tab; label: string; flag?: boolean }[] = [
-    { id: 'you', label: 'you', flag: pairings.length > 0 },
+    { id: 'you', label: 'you', flag: pairings.length > 0 || vouches.length > 0 },
     ...(isAdmin ? [{ id: 'team' as const, label: 'team' }] : []),
   ];
 
@@ -161,6 +165,7 @@ export function SettingsOverlay({
               cfg={cfg}
               me={me}
               pairings={pairings}
+              vouches={vouches}
               onPairingsChanged={onPairingsChanged}
               seats={seats}
             />

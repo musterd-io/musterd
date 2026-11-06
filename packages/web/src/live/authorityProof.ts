@@ -128,6 +128,23 @@ export async function authorityProofForPasskeyEnroll(
 }
 
 /**
+ * ADR 769: an admin's vouch for a member's held passkey enrollment. The payload names the member
+ * and the held enrollment's digest, so the signature covers that one registration and no other.
+ */
+export async function authorityProofForVouch(
+  cfg: LiveConfig,
+  member: string,
+  digest: string,
+): Promise<ApprovalProof | null> {
+  return authorityProofForDescriptor(cfg, 'device_key_admin', member, {
+    action: 'enroll',
+    kind: 'passkey',
+    member,
+    key: digest,
+  });
+}
+
+/**
  * ADR 808 inc B: revoking a device key from /live, signed by a key that works on this page —
  * and not by the key being revoked. The daemon refuses a key's approval of its own revocation
  * while another of the member's keys stands (`revokeDeviceKeyGuarded`, as `descriptor_mismatch`),
