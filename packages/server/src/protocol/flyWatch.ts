@@ -69,10 +69,25 @@ async function seatOnShift(
   return row !== undefined;
 }
 
-/** Unread directed acts for a seat — the same cursor read the wake derivation makes (ADR 735). */
-async function unreadDirected(ctx: Ctx, member: MemberRow, enrolledAt: number): Promise<number> {
+/**
+ * Directed acts this daemon can still call undelivered: newer than BOTH the seat's read cursor
+ * and its last wake activity. The wake derivation's own read is the cursor alone (ADR 735) — but
+ * a hub-mode seat reads its inbox on its joiner daemon, whose cursor never reaches the hub
+ * (measured 2026-11-06 on delta-2: no `inbox_cursors` row on the hub at all), so a cursor-only
+ * read counts every historical act forever and the stop rule can never fire. An act older than
+ * the seat's last wake was in front of that wake; treating it as handled for start/stop purposes
+ * costs at most a cold start when the next act lands. Actual leasing keeps its own cursor logic
+ * on the polling daemon — this predicate only decides whether the machine should be running.
+ */
+async function unreadDirected(
+  ctx: Ctx,
+  member: MemberRow,
+  enrolledAt: number,
+  lastActivity: number | null,
+): Promise<number> {
   const cursor = await getCursor(ctx.db, member.id);
-  const rows = await listDirectedSince(ctx.db, member, cursor.last_read_ts, enrolledAt);
+  const since = Math.max(cursor.last_read_ts, lastActivity ?? 0);
+  const rows = await listDirectedSince(ctx.db, member, since, enrolledAt);
   return rows.length;
 }
 
@@ -152,7 +167,12 @@ async function sweepHost(
     for (const seat of seats) {
       if (await hasLivePresence(ctx.db, seat.member.id, ctx.config.presenceTimeoutMs)) continue;
       if (
-        (await unreadDirected(ctx, seat.member, seat.enrolledAt)) > 0 ||
+        (await unreadDirected(
+          ctx,
+          seat.member,
+          seat.enrolledAt,
+          await lastWakeActivity(ctx, team.id, [seat.member.name]),
+        )) > 0 ||
         (await seatOnShift(ctx, team.id, seat.member.id, now))
       ) {
         due = seat;
@@ -235,7 +255,15 @@ async function sweepHost(
   for (const seat of seats) {
     if (await liveLease(ctx.db, seat.member.id, now)) return 0;
     if (await seatOnShift(ctx, team.id, seat.member.id, now)) return 0;
-    if ((await unreadDirected(ctx, seat.member, seat.enrolledAt)) > 0) return 0;
+    if (
+      (await unreadDirected(
+        ctx,
+        seat.member,
+        seat.enrolledAt,
+        await lastWakeActivity(ctx, team.id, [seat.member.name]),
+      )) > 0
+    )
+      return 0;
   }
   const activity = await lastWakeActivity(
     ctx,

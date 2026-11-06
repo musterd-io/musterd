@@ -173,6 +173,50 @@ withDrivers('flyWatch (ADR 816)', (o) => {
     void delta;
   });
 
+  it('a directed act older than the last wake does not hold the stop (the delta-2 shape)', async () => {
+    // Measured live 2026-11-06: a hub-mode seat reads its inbox on its joiner daemon, so the
+    // hub holds no cursor row for it — a cursor-only unread count held delta-2's machine up
+    // forever on five already-answered acts. The record is in this test's name on purpose.
+    const { db, team, nick, delta, ctx } = await seed();
+    const t = Date.now();
+    await steer(db, team.id, nick, delta, 'a1', t);
+    await recordHostSeen(db, team.id, 'cloud-delta-2', t, null);
+    await appendAudit(db, team.id, {
+      actor: null,
+      action: 'residency.woke',
+      target: 'delta',
+      result: 'allow',
+      detail: {},
+    });
+    const fly = new FakeFly('started');
+    const d = deps(fly);
+    await sweepFlyMachines(ctx, t, d);
+    expect(await sweepFlyMachines(ctx, t + 16 * 60_000, d)).toBe(1);
+    expect(fly.stops).toBe(1);
+    // And it must not restart for that same act: it was in front of the last wake.
+    expect(await sweepFlyMachines(ctx, t + 17 * 60_000, d)).toBe(0);
+    expect(fly.starts).toBe(0);
+  });
+
+  it('a directed act newer than the last wake holds the stop', async () => {
+    const { db, team, nick, delta, ctx } = await seed();
+    const t = Date.now();
+    await recordHostSeen(db, team.id, 'cloud-delta-2', t, null);
+    await appendAudit(db, team.id, {
+      actor: null,
+      action: 'residency.woke',
+      target: 'delta',
+      result: 'allow',
+      detail: {},
+    });
+    await steer(db, team.id, nick, delta, 'a-late', t + 60_000);
+    const fly = new FakeFly('started');
+    const d = deps(fly);
+    await sweepFlyMachines(ctx, t, d);
+    expect(await sweepFlyMachines(ctx, t + 16 * 60_000, d)).toBe(0);
+    expect(fly.stops).toBe(0);
+  });
+
   it('recent wake activity holds the stop', async () => {
     const { db, team, ctx } = await seed();
     const t = Date.now();
