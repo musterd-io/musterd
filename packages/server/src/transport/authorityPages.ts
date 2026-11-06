@@ -24,6 +24,23 @@ const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(
 const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 const out = (msg, err) => { const el = document.getElementById('out'); el.textContent = msg; el.className = err ? 'err' : ''; };
 const params = new URLSearchParams(location.search);
+// WebAuthn exists only on a secure context (https, or localhost). On a plain-http hub address the
+// old page died with "Cannot read properties of undefined (reading 'get')" (nick, 2026-11-05):
+// say why, point at the hub's https origin from /health, and keep every button off.
+const insecure = !(window.isSecureContext && navigator.credentials && typeof navigator.credentials.get === 'function');
+if (insecure) {
+  (async () => {
+    let origin = '';
+    try {
+      const j = await (await fetch('/health')).json();
+      if (typeof j.browser_origin === 'string' && j.browser_origin.startsWith('https://')) origin = j.browser_origin;
+    } catch {}
+    const here = location.pathname + location.search + location.hash;
+    out('Passkeys only work on https or localhost, and this page is on ' + location.origin + '. ' +
+      (origin ? 'Open the same link here instead: ' + origin + here : "Open the same link on the hub's https address, or on http://localhost."), true);
+    for (const b of document.querySelectorAll('button')) b.disabled = true;
+  })();
+}
 ${script}
 </script></body></html>`;
 
@@ -39,6 +56,7 @@ challenge (ten minutes). The ceremony asks your authenticator to verify it's you
 document.getElementById('team').value = params.get('team') || '';
 document.getElementById('member').value = params.get('member') || '';
 document.getElementById('go').addEventListener('click', async () => {
+  if (insecure) return;
   const team = document.getElementById('team').value.trim();
   const member = document.getElementById('member').value.trim();
   const challenge = params.get('challenge') || '';
@@ -91,11 +109,12 @@ let descriptor = null; let passkeys = [];
     document.getElementById('descriptor').textContent =
       'actor:  ' + descriptor.actor + '\\nact:    ' + descriptor.act + '\\ntarget: ' + descriptor.target +
       '\\nexpires: ' + new Date(descriptor.expiry).toISOString();
-    document.getElementById('go').disabled = passkeys.length === 0;
+    document.getElementById('go').disabled = insecure || passkeys.length === 0;
     if (passkeys.length === 0) out('No passkey is enrolled for ' + descriptor.actor + ' on this team.', true);
   } catch (e) { out(String(e && e.message || e), true); }
 })();
 document.getElementById('go').addEventListener('click', async () => {
+  if (insecure) return;
   try {
     out('Waiting for your passkey…');
     const cred = await navigator.credentials.get({ publicKey: {
