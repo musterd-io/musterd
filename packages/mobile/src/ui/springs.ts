@@ -19,6 +19,18 @@ export const TAB_BOUNCE = [0.8, 1.15, 1] as const;
 export type Tab = 'now' | 'work' | 'you';
 
 /**
+ * The tab a route name is. Now is `(tabs)/index.tsx`, because it must serve "/" — the URL the app
+ * opens at (build 58 opened on "Unmatched Route" when it was `now.tsx`, which serves /now).
+ */
+export function tabOf(routeName: string): Tab {
+  return routeName === 'index'
+    ? 'now'
+    : routeName === 'work' || routeName === 'you'
+      ? routeName
+      : 'now';
+}
+
+/**
  * Each tab keeps its own hue even when it is not the active one: mustard for Now (what needs you),
  * agent jade for Work, human rose for You — the brand's two identity colours, so the pill reads as
  * musterd and not as a grey system bar.

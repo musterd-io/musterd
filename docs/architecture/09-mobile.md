@@ -449,7 +449,7 @@ The screens are `.tsx` and outside the drift check; kept honest by hand:
 ```
 src/app/_layout.tsx   // the Stack: the (tabs) shell first, then pair / ask / poll under the app's own NavBar
 src/app/(tabs)/_layout.tsx // the shell (ADR 814): Now · Work · You under the floating pill (ui/tabBar.tsx)
-src/app/(tabs)/now.tsx // Now (ADR 814): what waits on you, then the team as /live shows it, the offline fold, the member sheet; the way into pairing
+src/app/(tabs)/index.tsx // Now (ADR 814), at "/" — the URL the app opens at (as now.tsx it served /now and build 58 opened on "Unmatched Route"): what waits on you, then the team as /live shows it, the offline fold, the member sheet; the way into pairing
 src/app/(tabs)/work.tsx // Work: goals and lanes — a placeholder until phase 4
 src/app/(tabs)/you.tsx  // You: your and the team's settings — a placeholder until phase 5; carries Start a poll (ADR 807) meanwhile
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
