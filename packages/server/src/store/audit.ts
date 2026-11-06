@@ -673,6 +673,14 @@ export type AuditAction =
   // client_registered — registration is unauthenticated — and on revocation/reuse rows where the
   // token named nothing); target = the client_id (null on revoked, where either token kind may
   // arrive); detail carries `{ client_name }` / `{}` / `{ reason }` — never a secret or its hash.
+  // ADR 722 §4: hosted /live browser sessions. `session.created` — actor = the member signed in,
+  // target = the session id, detail `{session_id, mode}`; `session.revoked` — actor = who ended it
+  // (null for a rotate by the loopback caller), target = the member, detail `{session_id, by:
+  // self | admin | rotate}`; `session.refused` — no actor or target, detail `{reason}` (a code
+  // from transport/liveSession.ts). Never the secret, the statement, the email or the account id.
+  | 'session.created'
+  | 'session.revoked'
+  | 'session.refused'
   | 'oauth.client_registered'
   | 'oauth.code_issued'
   | 'oauth.token_issued'
@@ -1009,6 +1017,9 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'gate.session_denied': 'actor',
   'gate.unenforced': 'actor',
   'credential.rotate': 'actor',
+  'session.created': 'actor',
+  'session.revoked': 'target',
+  'session.refused': 'none',
   'oauth.client_registered': 'none',
   'oauth.code_issued': 'actor',
   'oauth.token_issued': 'actor',

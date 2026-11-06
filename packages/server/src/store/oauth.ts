@@ -61,7 +61,7 @@ function newClientId(): string {
 }
 
 /** Ensure a Team owns this exact public client ID without persisting CIMD metadata. */
-async function ensureClientBinding(
+export async function ensureClientBinding(
   db: Driver,
   teamId: string,
   clientId: string,
@@ -228,13 +228,19 @@ export async function mintTokenPair(
     scope?: string | null;
     /** ADR 456 §3: the member whose standing bounds this chain beside the seat's own. */
     connectedBy?: string | null;
+    /** ADR 722 §3: a browser session's access token lives 15 minutes, not the OAuth hour. */
+    accessTtlMs?: number;
   },
   now = Date.now(),
 ): Promise<OAuthTokenPair> {
   const access_token = newSecret(TOKEN_PREFIXES.oauth_access);
   const refresh_token = newSecret(TOKEN_PREFIXES.oauth_refresh);
   const chain_id = ulid();
-  const exp = cappedExpiries(await memberEnd(db, input.memberId), now);
+  let exp = cappedExpiries(await memberEnd(db, input.memberId), now);
+  if (input.accessTtlMs !== undefined && now + input.accessTtlMs < exp.access) {
+    const access = now + input.accessTtlMs;
+    exp = { ...exp, access, expires_in: Math.max(0, Math.floor(input.accessTtlMs / 1000)) };
+  }
   const INS = `INSERT INTO oauth_tokens
        (token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at, expires_at, connected_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
@@ -513,4 +519,55 @@ export async function verifyAccess(
   const connector = await connectorRefusal(db, row.connected_by, now);
   if (connector) throw connector;
   return member;
+}
+
+/**
+ * ADR 722 §3: the one OAuth client a team's browser sessions mint on — a fixed id per team,
+ * registered on first use (public, no redirect: it never runs an authorization flow). The chain
+ * it carries is linked to its session by {@link liveSessionScope}.
+ */
+export async function liveSessionClient(db: Driver, teamId: string): Promise<string> {
+  const clientId = `cid_live_${teamId}`;
+  await db.tx(async (t) => {
+    await t.run(
+      `INSERT INTO oauth_clients (client_id, team_id, client_name, redirect_uris, auth_method, created_at)
+       VALUES (?, ?, 'musterd-live', '[]', 'none', ?) ON CONFLICT(client_id) DO NOTHING`,
+      [clientId, teamId, Date.now()],
+    );
+    await ensureClientBinding(t, teamId, clientId, 'dcr');
+  });
+  return clientId;
+}
+
+/** The scope a browser session's chain carries, so the session can revoke exactly its chains. */
+export function liveSessionScope(sessionId: string): string {
+  return `session:${sessionId}`;
+}
+
+/** The session a chain belongs to, read back from its scope; null for any other chain. */
+export function sessionOfScope(scope: string | null | undefined): string | null {
+  return scope && scope.startsWith('session:') ? scope.slice('session:'.length) : null;
+}
+
+/** Revoke every live token on a browser session's chains. Returns how many rows it revoked. */
+export async function revokeChainsForSession(
+  db: Driver,
+  teamId: string,
+  sessionId: string,
+  now = Date.now(),
+): Promise<number> {
+  const res = await db.run(
+    'UPDATE oauth_tokens SET revoked_at = ? WHERE team_id = ? AND scope = ? AND revoked_at IS NULL',
+    [now, teamId, liveSessionScope(sessionId)],
+  );
+  return Number(res.changes);
+}
+
+/** The browser session an access token was minted for (ADR 722 §4: its sockets close with it). */
+export async function sessionOfAccess(db: Driver, accessToken: string): Promise<string | null> {
+  const row = await db.get<{ scope: string | null }>(
+    "SELECT scope FROM oauth_tokens WHERE token_hash = ? AND kind = 'access'",
+    [hashToken(accessToken)],
+  );
+  return sessionOfScope(row?.scope);
 }

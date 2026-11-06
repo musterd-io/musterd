@@ -7,11 +7,14 @@ import { addMember, authMember } from './members.js';
 import {
   burnUnexchangedCodes,
   issueCode,
+  liveSessionClient,
+  liveSessionScope,
   mintTokenPair,
   pkceChallenge,
   redeemCode,
   registerClient,
   revokeAllForMember,
+  revokeChainsForSession,
   revokeToken,
   rotateRefresh,
   verifyAccess,
@@ -359,6 +362,50 @@ withDrivers('oauth', (o) => {
         clientId: f.client_id,
       });
       expect((await verifyAccess(f.db, f.team.id, pair.access_token)).name).toBe('Nick');
+    });
+  });
+
+  describe('browser-session chains (ADR 722 §3–4)', () => {
+    it('registers the musterd-live client once per team, idempotently', async () => {
+      const f = await freshHuman();
+      const a = await liveSessionClient(f.db, f.team.id);
+      const b = await liveSessionClient(f.db, f.team.id);
+      expect(a).toBe(b);
+      const other = await createTeam(f.db, { slug: 'dusk' });
+      expect(await liveSessionClient(f.db, other.id)).not.toBe(a);
+    });
+
+    it('mints a capped access token on a session chain, and revoking the session kills it', async () => {
+      const f = await freshHuman();
+      const client = await liveSessionClient(f.db, f.team.id);
+      const t0 = Date.now();
+      const pair = await mintTokenPair(
+        f.db,
+        {
+          teamId: f.team.id,
+          memberId: f.member.id,
+          clientId: client,
+          scope: liveSessionScope('sess_1'),
+          accessTtlMs: 15 * 60_000,
+        },
+        t0,
+      );
+      expect(pair.expires_in).toBe(15 * 60);
+      expect((await verifyAccess(f.db, f.team.id, pair.access_token, t0 + 1)).name).toBe('Nick');
+      // Past 15 minutes the access token is gone even though the OAuth default is an hour.
+      await expect(
+        verifyAccess(f.db, f.team.id, pair.access_token, t0 + 15 * 60_000 + 1),
+      ).rejects.toThrow();
+      const other = await mintTokenPair(f.db, {
+        teamId: f.team.id,
+        memberId: f.member.id,
+        clientId: client,
+        scope: liveSessionScope('sess_2'),
+        accessTtlMs: 15 * 60_000,
+      });
+      expect(await revokeChainsForSession(f.db, f.team.id, 'sess_1')).toBe(2);
+      await expect(verifyAccess(f.db, f.team.id, pair.access_token)).rejects.toThrow();
+      expect((await verifyAccess(f.db, f.team.id, other.access_token)).name).toBe('Nick');
     });
   });
 });

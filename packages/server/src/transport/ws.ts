@@ -5,6 +5,7 @@ import {
   type WSServerFrame,
   type ClaimTarget,
   type Hearing,
+  TOKEN_PREFIXES,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
@@ -32,6 +33,7 @@ import {
   haltedSentence,
 } from '../store/members.js';
 import { memoryEnvelope } from '../store/memory.js';
+import { sessionOfAccess, verifyAccess } from '../store/oauth.js';
 import {
   attach,
   recordClaimAttestation,
@@ -334,6 +336,7 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
           // Step 1: authenticate the bootstrap key or a self-identifying seat credential. An agent
           // seat credential is accepted only to reconnect through this claim handshake (ADR 337).
           let authenticatedAs: import('../store/rows.js').MemberRow | null = null;
+          let browserSession: string | null = null;
           const bootstrapCredential = await findBootstrapCredential(ctx.db, team.id, frame.key);
           const bootstrapRecord =
             bootstrapCredential ??
@@ -368,6 +371,19 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
           const keyHash = await getAgentKeyHash(ctx.db, team.id);
           if (bootstrapCredential || (keyHash && hashToken(frame.key) === keyHash)) {
             // Agent harness: key validates against the team secret. No specific member identity yet.
+          } else if (frame.key.startsWith(TOKEN_PREFIXES.oauth_access)) {
+            // ADR 722 §3: a hosted /live holds a 15-minute `msat_` traded from its browser session
+            // and claims with it exactly as it would with a credential. Human chains only — an
+            // agent's connect chain (ADR 452) never opened a socket this way.
+            try {
+              const member = await verifyAccess(ctx.db, team.id, frame.key);
+              if (member.kind === 'human') {
+                authenticatedAs = member;
+                browserSession = await sessionOfAccess(ctx.db, frame.key);
+              }
+            } catch {
+              authenticatedAs = null;
+            }
           } else {
             // Human credential: look up by hash.
             const credHash = hashToken(frame.key);
@@ -376,6 +392,8 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
                 "SELECT * FROM members WHERE team_id = ? AND credential_hash = ? AND left_at IS NULL AND kind IN ('human', 'agent')",
                 [team.id, credHash],
               )) ?? null;
+          }
+          if (!bootstrapCredential && !(keyHash && hashToken(frame.key) === keyHash)) {
             if (!authenticatedAs) {
               const claimable = await claimableSeats(ctx, team.id);
               send(ws, {
@@ -992,7 +1010,8 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
             workspaceKey: frame.workspace_key ?? null,
             surface: frame.surface,
             send: (f) => send(ws, f),
-            close: () => ws.close(),
+            close: (code, reason) => ws.close(code, reason),
+            browserSession,
           };
           state.authenticated = true;
           state.conn = conn;
