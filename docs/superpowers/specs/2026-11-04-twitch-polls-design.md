@@ -33,8 +33,10 @@ more automation can build on the result; that is out of scope here.
   the musterd phone app, or the CLI.
 - A poll can be created **only while the broadcast stream is actually live** on Twitch.
 - Configurable: the question, 2–4 options, a time limit. The vote rules are fixed (below).
-- The bot posts the poll in Twitch chat. It says what it is ("I'm musterd's Twitch bot"), who asks
-  ("nick wants to ask you: …"), the options, how to vote, and how long the poll runs.
+- The bot posts the poll in Twitch chat: who asks ("nick asks: …"), the options as `Option N - text`,
+  how to vote, and how long the poll runs. _(2026-11-05, after the first live run: the "I'm musterd's
+  Twitch bot" greeting and the `N · text | …` list were dropped — three lines read badly in the chat
+  column, and nick asked for the `Option N - text` shape.)_
 - Viewers vote in chat (`!vote N`).
 - A **live tally shows on the stream** while the poll runs (nick, 2026-11-04: "yes the tally should
   show"). It shows each option's share, the vote count and the time left.
@@ -153,13 +155,14 @@ that one lets viewer words reach a seat.
    limit, and a Start button. It shows "Live on Twitch" when the stream is up. When it is down, it says
    so and Start is disabled.
 2. **Chat, on open**:
-   `musterdbot: 👋 I'm musterd's Twitch bot. nick wants to ask you: What should team revive work on next?`
-   then the numbered options, then `Vote by typing !vote 1, !vote 2 or !vote 3 — 5 minutes.`
+   `musterdbot: 🗳️ nick asks: What should team revive work on next?` then one line:
+   `Option 1 - …, Option 2 - …, Option 3 - …. Vote by typing !vote 1, !vote 2 or !vote 3 — 5 minutes.`
+   _(wording as of 2026-11-05; `!vote1` without the space counts too.)_
    Twitch caps a chat message at 500 characters, so a long poll posts in more than one message.
 3. **On the stream, while it runs**: a compact card in the stream's warm style. It shows the question,
    each option with a bar and its percentage, the time left, the vote count and "type !vote in chat".
    The top option's bar wears the mustard fill. It updates as counts arrive; it never shows a voter.
-4. **Close**: `musterdbot: 🗳️ Poll closed — 48 votes. Winner: 2 · Viewers ask the team questions (52%).
+4. **Close**: `musterdbot: 🗳️ Poll closed — 48 votes. Winner: Option 2 - Viewers ask the team questions (52%).
    Thanks for voting!` The stream card shows the winner for a short while, then leaves. A tie, no votes,
    cancelled and interrupted each get their own fixed sentence.
 5. **The record**: on `/live`, the poll and its result appear in the team's history, as a settled act

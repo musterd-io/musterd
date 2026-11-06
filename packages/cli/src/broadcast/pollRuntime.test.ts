@@ -71,7 +71,7 @@ describe('startPollRuntime (ADR 807)', () => {
       auth: 'Bearer mscr_seat',
       body: { live: true },
     });
-    expect(r.posted[0]).toContain('nick wants to ask you: What next?');
+    expect(r.posted[0]).toContain('nick asks: What next?');
     r.rt.onChat('U1', '!vote 2');
     r.advance(5_000);
     await r.rt.tick();
@@ -108,8 +108,8 @@ describe('startPollRuntime (ADR 807)', () => {
     await r.rt.tick();
     await r.rt.tick();
     await settle();
-    expect(r.posted.filter((l) => l.startsWith('🗳️'))).toEqual([
-      '🗳️ Poll closed — 1 vote. Winner: 2 · Ask the team (100%). Thanks for voting!',
+    expect(r.posted.filter((l) => l.includes('Poll closed'))).toEqual([
+      '🗳️ Poll closed — 1 vote. Winner: Option 2 - Ask the team (100%). Thanks for voting!',
     ]);
     r.rt.stop();
   });
@@ -134,7 +134,7 @@ describe('startPollRuntime (ADR 807)', () => {
     ]);
     expect(r.calls[0]!.body).toEqual({ live: true });
     expect(r.calls[2]!.body).toMatchObject({ live: true, post_failed: false });
-    expect(r.posted[0]).toContain('nick wants to ask you: What next?');
+    expect(r.posted[0]).toContain('nick asks: What next?');
     r.rt.stop();
   });
 
@@ -160,7 +160,7 @@ describe('startPollRuntime (ADR 807)', () => {
     ]);
     expect(r.calls[0]!.body).toEqual({ live: true });
     expect(r.calls[2]!.body).toMatchObject({ live: true });
-    expect(r.posted[0]).toContain('nick wants to ask you: What next?');
+    expect(r.posted[0]).toContain('nick asks: What next?');
     r.rt.stop();
   });
 
