@@ -1,0 +1,46 @@
+{
+  "repo": "pallets_click_task",
+  "task_id": 2800,
+  "features": [
+    6,
+    7
+  ],
+  "setting": "coop",
+  "run_id": "bcb50857",
+  "run_name": "flash2-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T06:01:46.723514",
+  "ended_at": "2026-11-06T06:04:57.913925",
+  "duration_seconds": 191.190411,
+  "agents": {
+    "agent1": {
+      "feature_id": 6,
+      "status": "Submitted",
+      "cost": 0.3824376,
+      "steps": 24,
+      "input_tokens": 32,
+      "output_tokens": 7484,
+      "cache_read_tokens": 545598,
+      "cache_write_tokens": 24702,
+      "patch_lines": 210,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 7,
+      "status": "Submitted",
+      "cost": 0.2277858,
+      "steps": 16,
+      "input_tokens": 26,
+      "output_tokens": 4083,
+      "cache_read_tokens": 393209,
+      "cache_write_tokens": 13476,
+      "patch_lines": 210,
+      "error": null
+    }
+  },
+  "total_cost": 0.6102234,
+  "total_steps": 40,
+  "messages_sent": 0,
+  "log_dir": "logs/flash2-musterd/coop/pallets_click_task/2800/f6_f7"
+}

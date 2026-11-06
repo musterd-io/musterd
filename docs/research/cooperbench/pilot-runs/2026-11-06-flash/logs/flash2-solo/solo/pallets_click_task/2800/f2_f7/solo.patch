@@ -1,0 +1,164 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 666ad68..83a98d9 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -280,6 +280,8 @@ class Context:
+         token_normalize_func: t.Callable[[str], str] | None = None,
+         color: bool | None = None,
+         show_default: bool | None = None,
++        on_exit: t.Callable[[Context], t.Any] | None = None,
++        validate_nesting: bool = False,
+     ) -> None:
+         #: the parent context or `None` if none exists.
+         self.parent = parent
+@@ -427,6 +429,14 @@ class Context:
+         #: Show option default values when formatting help text.
+         self.show_default: bool | None = show_default
+ 
++        #: Optional callback invoked with this context when it is closed.
++        self.on_exit: t.Callable[[Context], t.Any] | None = on_exit
++
++        #: Whether to validate that child contexts are closed before
++        #: this context is closed.
++        self.validate_nesting: bool = validate_nesting
++        self._child_contexts: list[Context] = []
++
+         self._close_callbacks: list[t.Callable[[], t.Any]] = []
+         self._depth = 0
+         self._parameter_source: dict[str, ParameterSource] = {}
+@@ -477,9 +487,11 @@ class Context:
+         tb: TracebackType | None,
+     ) -> None:
+         self._depth -= 1
+-        if self._depth == 0:
+-            self.close()
+-        pop_context()
++        try:
++            if self._depth == 0:
++                self.close()
++        finally:
++            pop_context()
+ 
+     @contextmanager
+     def scope(self, cleanup: bool = True) -> cabc.Iterator[Context]:
+@@ -606,10 +618,36 @@ class Context:
+         """Invoke all close callbacks registered with
+         :meth:`call_on_close`, and exit all context managers entered
+         with :meth:`with_resource`.
++
++        If ``validate_nesting`` is enabled and child contexts are still
++        open, a :exc:`RuntimeError` is raised.
+         """
+-        self._exit_stack.close()
+-        # In case the context is reused, create a new exit stack.
+-        self._exit_stack = ExitStack()
++        if self.validate_nesting and self._child_contexts:
++            names = ", ".join(
++                repr(child.info_name or child.command.name)
++                for child in self._child_contexts
++            )
++            raise RuntimeError(
++                f"Cannot close context {self.info_name!r} while child contexts"
++                f" are still open: {names}"
++            )
++
++        try:
++            self._exit_stack.close()
++        finally:
++            # In case the context is reused, create a new exit stack.
++            self._exit_stack = ExitStack()
++
++            parent = self.parent
++            if parent is not None and self in parent._child_contexts:
++                parent._child_contexts.remove(self)
++
++            if self.on_exit is not None:
++                try:
++                    self.on_exit(self)
++                except Exception:
++                    # Errors in the exit hook must not break cleanup.
++                    pass
+ 
+     @property
+     def command_path(self) -> str:
+@@ -728,7 +766,17 @@ class Context:
+ 
+         :meta private:
+         """
+-        return type(self)(command, info_name=command.name, parent=self)
++        sub_ctx = type(self)(
++            command,
++            info_name=command.name,
++            parent=self,
++            validate_nesting=self.validate_nesting,
++        )
++
++        if self.validate_nesting:
++            self._child_contexts.append(sub_ctx)
++
++        return sub_ctx
+ 
+     @t.overload
+     def invoke(
+@@ -1123,6 +1171,7 @@ class Command:
+         info_name: str | None,
+         args: list[str],
+         parent: Context | None = None,
++        on_exit: t.Callable[[Context], t.Any] | None = None,
+         **extra: t.Any,
+     ) -> Context:
+         """This function when given an info name and arguments will kick
+@@ -1139,6 +1188,8 @@ class Command:
+                           the name of the command.
+         :param args: the arguments to parse as list of strings.
+         :param parent: the parent context if available.
++        :param on_exit: an optional callback invoked with the context when
++                        it is closed.
+         :param extra: extra keyword arguments forwarded to the context
+                       constructor.
+ 
+@@ -1149,6 +1200,9 @@ class Command:
+             if key not in extra:
+                 extra[key] = value
+ 
++        if on_exit is not None:
++            extra["on_exit"] = on_exit
++
+         ctx = self.context_class(self, info_name=info_name, parent=parent, **extra)
+ 
+         with ctx.scope(cleanup=False):
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 6fd9e54..25bdcad 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -544,6 +544,7 @@ def _resolve_context(
+     :param args: List of complete args before the incomplete value.
+     """
+     ctx_args["resilient_parsing"] = True
++    ctx_args["validate_nesting"] = False
+     ctx = cli.make_context(prog_name, args.copy(), **ctx_args)
+     args = ctx._protected_args + ctx.args
+ 
+@@ -557,7 +558,13 @@ def _resolve_context(
+                 if cmd is None:
+                     return ctx
+ 
+-                ctx = cmd.make_context(name, args, parent=ctx, resilient_parsing=True)
++                ctx = cmd.make_context(
++                    name,
++                    args,
++                    parent=ctx,
++                    resilient_parsing=True,
++                    validate_nesting=False,
++                )
+                 args = ctx._protected_args + ctx.args
+             else:
+                 sub_ctx = ctx
+@@ -575,6 +582,7 @@ def _resolve_context(
+                         allow_extra_args=True,
+                         allow_interspersed_args=False,
+                         resilient_parsing=True,
++                        validate_nesting=False,
+                     )
+                     args = sub_ctx.args
+ 

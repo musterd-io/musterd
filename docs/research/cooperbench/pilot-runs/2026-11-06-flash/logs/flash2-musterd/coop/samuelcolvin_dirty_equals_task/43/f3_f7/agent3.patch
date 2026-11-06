@@ -1,0 +1,115 @@
+diff --git a/dirty_equals/__init__.py b/dirty_equals/__init__.py
+index ba8214e..6d69b85 100644
+--- a/dirty_equals/__init__.py
++++ b/dirty_equals/__init__.py
+@@ -18,7 +18,7 @@ from ._numeric import (
+     IsPositiveFloat,
+     IsPositiveInt,
+ )
+-from ._other import FunctionCheck, IsJson, IsUUID
++from ._other import FunctionCheck, IsEmail, IsHash, IsJson, IsUUID
+ from ._sequence import Contains, HasLen, IsList, IsListOrTuple, IsTuple
+ from ._strings import IsAnyStr, IsBytes, IsStr
+ 
+@@ -68,7 +68,9 @@ __all__ = (
+     # other
+     'FunctionCheck',
+     'IsJson',
++    'IsHash',
+     'IsUUID',
++    'IsEmail',
+     # strings
+     'IsStr',
+     'IsBytes',
+diff --git a/dirty_equals/_other.py b/dirty_equals/_other.py
+index b2b8379..77740a1 100644
+--- a/dirty_equals/_other.py
++++ b/dirty_equals/_other.py
+@@ -1,5 +1,6 @@
++import re
+ import json
+-from typing import Any, Callable, TypeVar, overload
++from typing import Any, Callable, Optional, TypeVar, overload
+ from uuid import UUID
+ 
+ from ._base import DirtyEquals
+@@ -145,3 +146,79 @@ class FunctionCheck(DirtyEquals[Any]):
+ 
+     def equals(self, other: Any) -> bool:
+         return self.func(other)
++
++
++class IsHash(DirtyEquals[str]):
++    """
++    A class that checks if a value is a valid cryptographic hash string for a given algorithm.
++    """
++
++    _ALGORITHM_LENGTHS = {
++        'md5': 32,
++        'sha1': 40,
++        'sha224': 56,
++        'sha256': 64,
++        'sha384': 96,
++        'sha512': 128,
++    }
++
++    def __init__(self, algorithm: str):
++        """
++        Args:
++            algorithm: The hash algorithm the value should match, one of
++                `md5`, `sha1`, `sha224`, `sha256`, `sha384`, `sha512` (case-insensitive).
++
++        ```py title="IsHash"
++        from dirty_equals import IsHash
++
++        assert 'd41d8cd98f00b204e9800998ecf8427e' == IsHash('md5')
++        assert 'da39a3ee5e6b4b0d3255bfef95601890afd80709' == IsHash('sha1')
++        assert 'not-a-hash' != IsHash('md5')
++        ```
++        """
++        algo = algorithm.lower()
++        if algo not in self._ALGORITHM_LENGTHS:
++            supported = ', '.join(self._ALGORITHM_LENGTHS)
++            raise ValueError(f'Unsupported hash algorithm: {algorithm!r}, supported algorithms: {supported}')
++        self.algorithm = algo
++        self.expected_length = self._ALGORITHM_LENGTHS[algo]
++        super().__init__(algorithm)
++
++    def equals(self, other: Any) -> bool:
++        if not isinstance(other, str) or len(other) != self.expected_length:
++            return False
++        return all(c in '0123456789abcdefABCDEF' for c in other)
++
++
++class IsEmail(DirtyEquals[str]):
++    """
++    A class that checks if a value is a valid email address, optionally checking the domain.
++    """
++
++    _email_regex = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
++
++    def __init__(self, domain: Optional[str] = None):
++        """
++        Args:
++            domain: The domain to check, if omitted, any domain is accepted. Matching is case-sensitive.
++
++        ```py title="IsEmail"
++        from dirty_equals import IsEmail
++
++        assert 'user@example.com' == IsEmail
++        assert 'user@example.com' == IsEmail(domain='example.com')
++        assert 'user@other.com' != IsEmail(domain='example.com')
++        assert 'not-an-email' != IsEmail
++        ```
++        """
++        self.domain = domain
++        super().__init__(domain or plain_repr('*'))
++
++    def equals(self, other: Any) -> bool:
++        if not isinstance(other, str):
++            return False
++        if not self._email_regex.match(other):
++            return False
++        if self.domain is not None:
++            return other.split('@', 1)[1] == self.domain
++        return True

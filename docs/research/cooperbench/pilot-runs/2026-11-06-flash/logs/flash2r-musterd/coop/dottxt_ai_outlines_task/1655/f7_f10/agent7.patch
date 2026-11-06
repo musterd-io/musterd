@@ -1,0 +1,16 @@
+diff --git a/outlines/types/__init__.py b/outlines/types/__init__.py
+index 85af9adc..1e57072b 100644
+--- a/outlines/types/__init__.py
++++ b/outlines/types/__init__.py
+@@ -68,3 +68,11 @@ email = Regex(
+ isbn = Regex(
+     r"(?:ISBN(?:-1[03])?:? )?(?=[0-9X]{10}$|(?=(?:[0-9]+[- ]){3})[- 0-9X]{13}$|97[89][0-9]{10}$|(?=(?:[0-9]+[- ]){4})[- 0-9]{17}$)(?:97[89][- ]?)?[0-9]{1,5}[- ]?[0-9]+[- ]?[0-9]+[- ]?[0-9X]"
+ )
++
++# Matches 16-digit credit card numbers, either with no separators, or with
++# groups of 4 digits separated consistently by spaces or by hyphens.
++# Note that this does not validate the Luhn checksum nor the issuer prefix.
++credit_card = Regex(r"\d{16}|\d{4}( \d{4}){3}|\d{4}(-\d{4}){3}")
++
++# Matches a SHA-256 hash string: exactly 64 hexadecimal characters.
++hash_sha256 = Regex(r"[a-fA-F0-9]{64}")

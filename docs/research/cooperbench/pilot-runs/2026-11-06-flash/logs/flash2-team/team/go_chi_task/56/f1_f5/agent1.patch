@@ -1,0 +1,209 @@
+diff --git a/context.go b/context.go
+index e78a238..a2c452d 100644
+--- a/context.go
++++ b/context.go
+@@ -3,6 +3,7 @@ package chi
+ import (
+ 	"context"
+ 	"net/http"
++	"sort"
+ 	"strings"
+ )
+ 
+@@ -76,6 +77,10 @@ type Context struct {
+ 
+ 	// methodNotAllowed hint
+ 	methodNotAllowed bool
++
++	// methodsAllowed lists the methods registered for a route that matched
++	// the path but not the request method
++	methodsAllowed []methodTyp
+ }
+ 
+ // Reset a routing context to its initial state.
+@@ -91,6 +96,7 @@ func (x *Context) Reset() {
+ 	x.routeParams.Keys = x.routeParams.Keys[:0]
+ 	x.routeParams.Values = x.routeParams.Values[:0]
+ 	x.methodNotAllowed = false
++	x.methodsAllowed = x.methodsAllowed[:0]
+ 	x.parentCtx = nil
+ }
+ 
+@@ -157,3 +163,23 @@ type contextKey struct {
+ func (k *contextKey) String() string {
+ 	return "chi context value " + k.name
+ }
++
++// collectAllowedMethods records the methods registered on a matched route's
++// endpoints, keeping methodsAllowed sorted and free of duplicates.
++func (x *Context) collectAllowedMethods(eps endpoints) {
++	for mt, ep := range eps {
++		if ep == nil || ep.handler == nil {
++			continue
++		}
++		if _, ok := reverseMethodMap[mt]; !ok {
++			continue
++		}
++		i := sort.Search(len(x.methodsAllowed), func(i int) bool { return x.methodsAllowed[i] >= mt })
++		if i < len(x.methodsAllowed) && x.methodsAllowed[i] == mt {
++			continue
++		}
++		x.methodsAllowed = append(x.methodsAllowed, 0)
++		copy(x.methodsAllowed[i+1:], x.methodsAllowed[i:])
++		x.methodsAllowed[i] = mt
++	}
++}
+diff --git a/middleware/allowed_methods.go b/middleware/allowed_methods.go
+new file mode 100644
+index 0000000..2a0d0e6
+--- /dev/null
++++ b/middleware/allowed_methods.go
+@@ -0,0 +1,51 @@
++package middleware
++
++import (
++	"net/http"
++
++	"github.com/go-chi/chi/v5"
++)
++
++// SetAllowHeader adds the Allow header for 405 responses based on
++// registered methods for the requested path.
++//
++// This middleware is a workaround for the routing context not being able to
++// expose the allowed methods to custom 405 handlers.
++func SetAllowHeader(next http.Handler) http.Handler {
++	fn := func(w http.ResponseWriter, r *http.Request) {
++		rctx := chi.RouteContext(r.Context())
++		if rctx == nil || rctx.Routes == nil {
++			next.ServeHTTP(w, r)
++			return
++		}
++
++		url := r.URL.RawPath
++		if url == "" {
++			url = r.URL.Path
++		}
++
++		if rctx.Routes.Match(chi.NewRouteContext(), r.Method, url) {
++			next.ServeHTTP(w, r)
++			return
++		}
++
++		for _, m := range []string{
++			http.MethodGet,
++			http.MethodHead,
++			http.MethodPost,
++			http.MethodPut,
++			http.MethodPatch,
++			http.MethodDelete,
++			http.MethodConnect,
++			http.MethodOptions,
++			http.MethodTrace,
++		} {
++			if rctx.Routes.Match(chi.NewRouteContext(), m, url) {
++				w.Header().Add("Allow", m)
++			}
++		}
++
++		next.ServeHTTP(w, r)
++	}
++	return http.HandlerFunc(fn)
++}
+diff --git a/mux.go b/mux.go
+index 0d1caa6..271586d 100644
+--- a/mux.go
++++ b/mux.go
+@@ -378,11 +378,11 @@ func (mx *Mux) NotFoundHandler() http.HandlerFunc {
+ 
+ // MethodNotAllowedHandler returns the default Mux 405 responder whenever
+ // a method cannot be resolved for a route.
+-func (mx *Mux) MethodNotAllowedHandler() http.HandlerFunc {
++func (mx *Mux) MethodNotAllowedHandler(methodsAllowed ...methodTyp) http.HandlerFunc {
+ 	if mx.methodNotAllowedHandler != nil {
+ 		return mx.methodNotAllowedHandler
+ 	}
+-	return methodNotAllowedHandler
++	return methodNotAllowedHandler(methodsAllowed...)
+ }
+ 
+ // handle registers a http.Handler in the routing tree for a particular http method
+@@ -445,7 +445,7 @@ func (mx *Mux) routeHTTP(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 	if rctx.methodNotAllowed {
+-		mx.MethodNotAllowedHandler().ServeHTTP(w, r)
++		mx.MethodNotAllowedHandler(rctx.methodsAllowed...).ServeHTTP(w, r)
+ 	} else {
+ 		mx.NotFoundHandler().ServeHTTP(w, r)
+ 	}
+@@ -480,8 +480,18 @@ func (mx *Mux) updateRouteHandler() {
+ }
+ 
+ // methodNotAllowedHandler is a helper function to respond with a 405,
+-// method not allowed.
+-func methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
+-	w.WriteHeader(405)
+-	w.Write(nil)
++// method not allowed. The Allow header is set to the given allowed methods.
++func methodNotAllowedHandler(methodsAllowed ...methodTyp) func(w http.ResponseWriter, r *http.Request) {
++	return func(w http.ResponseWriter, r *http.Request) {
++		// Don't duplicate values already set, e.g. by middleware.SetAllowHeader
++		if len(w.Header()["Allow"]) == 0 {
++			for _, m := range methodsAllowed {
++				if name, ok := reverseMethodMap[m]; ok {
++					w.Header().Add("Allow", name)
++				}
++			}
++		}
++		w.WriteHeader(405)
++		w.Write(nil)
++	}
+ }
+diff --git a/tree.go b/tree.go
+index 4189b52..8a6c4a0 100644
+--- a/tree.go
++++ b/tree.go
+@@ -43,6 +43,18 @@ var methodMap = map[string]methodTyp{
+ 	http.MethodTrace:   mTRACE,
+ }
+ 
++var reverseMethodMap = map[methodTyp]string{
++	mCONNECT: http.MethodConnect,
++	mDELETE:  http.MethodDelete,
++	mGET:     http.MethodGet,
++	mHEAD:    http.MethodHead,
++	mOPTIONS: http.MethodOptions,
++	mPATCH:   http.MethodPatch,
++	mPOST:    http.MethodPost,
++	mPUT:     http.MethodPut,
++	mTRACE:   http.MethodTrace,
++}
++
+ // RegisterMethod adds support for custom HTTP method handlers, available
+ // via Router#Method and Router#MethodFunc
+ func RegisterMethod(method string) {
+@@ -59,6 +71,7 @@ func RegisterMethod(method string) {
+ 	}
+ 	mt := methodTyp(2 << n)
+ 	methodMap[method] = mt
++	reverseMethodMap[mt] = method
+ 	mALL |= mt
+ }
+ 
+@@ -457,6 +470,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+ 						// flag that the routing context found a route, but not a corresponding
+ 						// supported method
+ 						rctx.methodNotAllowed = true
++						rctx.collectAllowedMethods(xn.endpoints)
+ 					}
+ 				}
+ 
+@@ -496,6 +510,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+ 				// flag that the routing context found a route, but not a corresponding
+ 				// supported method
+ 				rctx.methodNotAllowed = true
++				rctx.collectAllowedMethods(xn.endpoints)
+ 			}
+ 		}
+ 

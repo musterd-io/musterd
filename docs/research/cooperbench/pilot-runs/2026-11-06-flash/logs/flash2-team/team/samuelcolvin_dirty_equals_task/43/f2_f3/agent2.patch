@@ -1,0 +1,81 @@
+diff --git a/dirty_equals/__init__.py b/dirty_equals/__init__.py
+index ba8214e..932a3c6 100644
+--- a/dirty_equals/__init__.py
++++ b/dirty_equals/__init__.py
+@@ -18,7 +18,7 @@ from ._numeric import (
+     IsPositiveFloat,
+     IsPositiveInt,
+ )
+-from ._other import FunctionCheck, IsJson, IsUUID
++from ._other import FunctionCheck, IsJson, IsMac, IsUUID
+ from ._sequence import Contains, HasLen, IsList, IsListOrTuple, IsTuple
+ from ._strings import IsAnyStr, IsBytes, IsStr
+ 
+@@ -68,6 +68,7 @@ __all__ = (
+     # other
+     'FunctionCheck',
+     'IsJson',
++    'IsMac',
+     'IsUUID',
+     # strings
+     'IsStr',
+diff --git a/dirty_equals/_other.py b/dirty_equals/_other.py
+index b2b8379..c88280c 100644
+--- a/dirty_equals/_other.py
++++ b/dirty_equals/_other.py
+@@ -1,4 +1,5 @@
+ import json
++import re
+ from typing import Any, Callable, TypeVar, overload
+ from uuid import UUID
+ 
+@@ -145,3 +146,49 @@ class FunctionCheck(DirtyEquals[Any]):
+ 
+     def equals(self, other: Any) -> bool:
+         return self.func(other)
++
++
++class IsMac(DirtyEquals[str]):
++    """
++    A class that checks if a value is a valid MAC address, optionally checking format.
++    """
++
++    _formats = {
++        'colon': r'[0-9a-f]{2}(?::[0-9a-f]{2}){5}',
++        'hyphen': r'[0-9a-f]{2}(?:-[0-9a-f]{2}){5}',
++        'dot': r'[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}',
++        'compact': r'[0-9a-f]{12}',
++    }
++
++    def __init__(self, format: Literal[None, 'colon', 'hyphen', 'dot', 'compact'] = None):
++        """
++        Args:
++            format: The format of the MAC address to check, if omitted, all formats are accepted.
++                One of `'colon'`, `'hyphen'`, `'dot'` or `'compact'`.
++
++        ```py title="IsMac"
++        from dirty_equals import IsMac
++
++        assert '00:1B:44:11:3A:B7' == IsMac
++        assert '00-1B-44-11-3A-B7' == IsMac
++        assert '001B.4411.3AB7' == IsMac
++        assert '001b44113ab7' == IsMac
++        assert '00:1B:44:11:3A:B7' == IsMac('colon')
++        assert '00-1B-44-11-3A-B7' != IsMac('colon')
++        assert '001b44113ab7' == IsMac('compact')
++        ```
++        """
++        if format is not None and format not in self._formats:
++            raise ValueError(f'Invalid MAC address format {format!r}, must be one of {list(self._formats)}')
++        self.format = format
++        if format is None:
++            pattern = '|'.join(self._formats.values())
++        else:
++            pattern = self._formats[format]
++        self._regex = re.compile(f'(?:{pattern})', re.IGNORECASE)
++        super().__init__(format or plain_repr('*'))
++
++    def equals(self, other: Any) -> bool:
++        if not isinstance(other, str):
++            return False
++        return self._regex.fullmatch(other) is not None

@@ -1,0 +1,63 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..af69ccb26 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -179,22 +179,52 @@ impl Str {
+     /// Extracts the first grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
++    pub fn first(
++        &self,
++        /// A set of characters to ignore at the start of the string before
++        /// extracting the first grapheme cluster.
++        #[named]
++        strip: Option<Str>,
++        /// A default value to return if the string is empty.
++        #[named]
++        default: Option<Str>,
++    ) -> StrResult<Str> {
++        let s = match &strip {
++            Some(set) if !set.is_empty() => {
++                self.0.trim_start_matches(|c: char| set.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        s.graphemes(true)
+             .next()
+             .map(Into::into)
++            .or(default)
+             .ok_or_else(string_is_empty)
+     }
+ 
+     /// Extracts the last grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
++    pub fn last(
++        &self,
++        /// A set of characters to ignore at the end of the string before
++        /// extracting the last grapheme cluster.
++        #[named]
++        strip: Option<Str>,
++        /// A default value to return if the string is empty.
++        #[named]
++        default: Option<Str>,
++    ) -> StrResult<Str> {
++        let s = match &strip {
++            Some(set) if !set.is_empty() => {
++                self.0.trim_end_matches(|c: char| set.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        s.graphemes(true)
+             .next_back()
+             .map(Into::into)
++            .or(default)
+             .ok_or_else(string_is_empty)
+     }
+ 

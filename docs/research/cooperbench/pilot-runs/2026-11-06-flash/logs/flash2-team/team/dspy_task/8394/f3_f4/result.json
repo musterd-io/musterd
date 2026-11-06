@@ -1,0 +1,64 @@
+{
+  "repo": "dspy_task",
+  "task_id": 8394,
+  "features": [
+    3,
+    4
+  ],
+  "setting": "team",
+  "run_id": "b804b7a5",
+  "run_name": "flash2-team",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:27:54.498958",
+  "ended_at": "2026-11-06T05:29:56.757193",
+  "duration_seconds": 122.258235,
+  "lead_agent": "agent1",
+  "agents": {
+    "agent1": {
+      "feature_id": 3,
+      "team_role": "lead",
+      "status": "Submitted",
+      "cost": 0.1902684,
+      "steps": 6,
+      "input_tokens": 12,
+      "output_tokens": 3512,
+      "cache_read_tokens": 143402,
+      "cache_write_tokens": 18260,
+      "patch_lines": 116,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 4,
+      "team_role": "member",
+      "status": "Submitted",
+      "cost": 0.2487426,
+      "steps": 8,
+      "input_tokens": 16,
+      "output_tokens": 4487,
+      "cache_read_tokens": 218093,
+      "cache_write_tokens": 23064,
+      "patch_lines": 152,
+      "error": null
+    }
+  },
+  "total_cost": 0.43901100000000004,
+  "total_steps": 14,
+  "messages_sent": 0,
+  "metrics": {
+    "tasks_total": 2,
+    "tasks_done": 0,
+    "unowned_at_end": 0,
+    "time_to_first_claim_seconds": null,
+    "claims_per_agent": {},
+    "updates_per_agent": {}
+  },
+  "team_features": {
+    "task_list": true,
+    "scratchpad": true,
+    "mcp": true,
+    "auto_refresh": true,
+    "protocol": true
+  },
+  "log_dir": "logs/flash2-team/team/dspy_task/8394/f3_f4"
+}

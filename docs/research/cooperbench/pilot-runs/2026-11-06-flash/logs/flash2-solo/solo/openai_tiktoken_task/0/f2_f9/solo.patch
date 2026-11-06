@@ -1,0 +1,80 @@
+diff --git a/tiktoken/core.py b/tiktoken/core.py
+index 6bc9736..8b7b722 100644
+--- a/tiktoken/core.py
++++ b/tiktoken/core.py
+@@ -82,7 +82,9 @@ class Encoding:
+         *,
+         allowed_special: Literal["all"] | AbstractSet[str] = set(),  # noqa: B006
+         disallowed_special: Literal["all"] | Collection[str] = "all",
+-    ) -> list[int]:
++        return_positions: bool = False,
++        compress: bool = False,
++    ) -> list[int] | tuple[list[int], list[int]]:
+         """Encodes a string into tokens.
+ 
+         Special tokens are artificial tokens used to unlock capabilities from a model,
+@@ -109,6 +111,18 @@ class Encoding:
+         >>> enc.encode("<|endoftext|>", disallowed_special=())
+         [27, 91, 437, 1659, 5239, 91, 29]
+         ```
++
++        If `return_positions` is True, returns a tuple `(tokens, positions)` where `positions[i]`
++        is the index of the character in `text` at which token `i` starts.
++
++        If `compress` is True, adjacent repeated tokens are collapsed into a single token after
++        encoding (when combined with `return_positions`, the position of the first token in each
++        run is kept).
++
++        ```
++        >>> enc.encode("hello world", return_positions=True)
++        ([31373, 995], [0, 5])
++        ```
+         """
+         if allowed_special == "all":
+             allowed_special = self.special_tokens_set
+@@ -121,7 +135,7 @@ class Encoding:
+                 raise_disallowed_special_token(match.group())
+ 
+         try:
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
+         except UnicodeEncodeError:
+             # BPE operates on bytes, but the regex operates on unicode. If we pass a str that is
+             # invalid UTF-8 to Rust, it will rightfully complain. Here we do a quick and dirty
+@@ -130,7 +144,35 @@ class Encoding:
+             # string, but given that this is input we want to support, maybe that's okay.
+             # Also we use errors="replace" to handle weird things like lone surrogates.
+             text = text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
++
++        if not return_positions and not compress:
++            return tokens
++
++        positions = self._token_char_offsets(tokens) if return_positions else None
++
++        if compress:
++            keep = [i for i in range(len(tokens)) if i == 0 or tokens[i] != tokens[i - 1]]
++            tokens = [tokens[i] for i in keep]
++            if positions is not None:
++                positions = [positions[i] for i in keep]
++
++        if return_positions:
++            return tokens, positions
++        return tokens
++
++    def _token_char_offsets(self, tokens: Sequence[int]) -> list[int]:
++        """Returns the starting character index of each token in the decoded text.
++
++        If a token starts in the middle of a UTF-8 character, the offset is the index of the
++        character that contains the token's first byte.
++        """
++        text_len = 0
++        offsets = []
++        for token in self.decode_tokens_bytes(tokens):
++            offsets.append(max(0, text_len - (0x80 <= token[0] < 0xC0)))
++            text_len += sum(1 for c in token if not 0x80 <= c < 0xC0)
++        return offsets
+ 
+     def encode_to_numpy(
+         self,

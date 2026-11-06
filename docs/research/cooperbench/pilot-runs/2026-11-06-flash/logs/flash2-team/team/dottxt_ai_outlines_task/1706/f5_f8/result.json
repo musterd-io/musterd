@@ -1,0 +1,64 @@
+{
+  "repo": "dottxt_ai_outlines_task",
+  "task_id": 1706,
+  "features": [
+    5,
+    8
+  ],
+  "setting": "team",
+  "run_id": "dd4f35f0",
+  "run_name": "flash2-team",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:25:27.336313",
+  "ended_at": "2026-11-06T05:27:54.474162",
+  "duration_seconds": 147.137849,
+  "lead_agent": "agent1",
+  "agents": {
+    "agent2": {
+      "feature_id": 8,
+      "team_role": "member",
+      "status": "Submitted",
+      "cost": 0.1606902,
+      "steps": 5,
+      "input_tokens": 10,
+      "output_tokens": 3758,
+      "cache_read_tokens": 101201,
+      "cache_write_tokens": 13050,
+      "patch_lines": 208,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 5,
+      "team_role": "lead",
+      "status": "Submitted",
+      "cost": 0.2565132,
+      "steps": 12,
+      "input_tokens": 24,
+      "output_tokens": 4742,
+      "cache_read_tokens": 317986,
+      "cache_write_tokens": 19596,
+      "patch_lines": 232,
+      "error": null
+    }
+  },
+  "total_cost": 0.4172034,
+  "total_steps": 17,
+  "messages_sent": 0,
+  "metrics": {
+    "tasks_total": 2,
+    "tasks_done": 0,
+    "unowned_at_end": 0,
+    "time_to_first_claim_seconds": null,
+    "claims_per_agent": {},
+    "updates_per_agent": {}
+  },
+  "team_features": {
+    "task_list": true,
+    "scratchpad": true,
+    "mcp": true,
+    "auto_refresh": true,
+    "protocol": true
+  },
+  "log_dir": "logs/flash2-team/team/dottxt_ai_outlines_task/1706/f5_f8"
+}

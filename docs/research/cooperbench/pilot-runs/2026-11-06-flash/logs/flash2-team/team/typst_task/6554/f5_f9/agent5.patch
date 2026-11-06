@@ -1,0 +1,97 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..4bef77bdd 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -179,22 +179,84 @@ impl Str {
+     /// Extracts the first grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
++    pub fn first(
++        &self,
++        /// Characters to strip from the start of the string before
++        /// extracting the first grapheme cluster.
++        #[named]
++        strip: Option<Str>,
++        /// Number of characters to return as an array. If omitted, returns a
++        /// single string.
++        #[named]
++        count: Option<i64>,
++    ) -> StrResult<Value> {
++        let s = match &strip {
++            Some(chars) if !chars.is_empty() => {
++                self.0.trim_start_matches(|c: char| chars.as_str().contains(c))
++            }
++            _ => self.as_str(),
++        };
++        if let Some(n) = count {
++            let graphemes: Vec<&str> = s.graphemes(true).collect();
++            let total = graphemes.len();
++            if n < 1 {
++                bail!("count must be at least 1");
++            }
++            let n = n as usize;
++            if n > total {
++                bail!("not enough characters (requested {n}, but string only has {total})");
++            }
++            return Ok(graphemes[..n]
++                .iter()
++                .map(|s| Str::from(*s).into_value())
++                .collect::<Array>()
++                .into_value());
++        }
++        s.graphemes(true)
+             .next()
+-            .map(Into::into)
++            .map(|s| Str::from(s).into_value())
+             .ok_or_else(string_is_empty)
+     }
+ 
+     /// Extracts the last grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
++    pub fn last(
++        &self,
++        /// Characters to strip from the end of the string before extracting
++        /// the last grapheme cluster.
++        #[named]
++        strip: Option<Str>,
++        /// Number of characters to return as an array. If omitted, returns a
++        /// single string.
++        #[named]
++        count: Option<i64>,
++    ) -> StrResult<Value> {
++        let s = match &strip {
++            Some(chars) if !chars.is_empty() => {
++                self.0.trim_end_matches(|c: char| chars.as_str().contains(c))
++            }
++            _ => self.as_str(),
++        };
++        if let Some(n) = count {
++            let graphemes: Vec<&str> = s.graphemes(true).collect();
++            let total = graphemes.len();
++            if n < 1 {
++                bail!("count must be at least 1");
++            }
++            let n = n as usize;
++            if n > total {
++                bail!("not enough characters (requested {n}, but string only has {total})");
++            }
++            return Ok(graphemes[total - n..]
++                .iter()
++                .map(|s| Str::from(*s).into_value())
++                .collect::<Array>()
++                .into_value());
++        }
++        s.graphemes(true)
+             .next_back()
+-            .map(Into::into)
++            .map(|s| Str::from(s).into_value())
+             .ok_or_else(string_is_empty)
+     }
+ 

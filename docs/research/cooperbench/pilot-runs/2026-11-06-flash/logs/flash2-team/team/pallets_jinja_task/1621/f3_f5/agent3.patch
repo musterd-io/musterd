@@ -1,0 +1,47 @@
+diff --git a/src/jinja2/loaders.py b/src/jinja2/loaders.py
+index d7d9bd04..8fb3a309 100644
+--- a/src/jinja2/loaders.py
++++ b/src/jinja2/loaders.py
+@@ -3,6 +3,7 @@ sources.
+ """
+ import importlib.util
+ import os
++import re
+ import sys
+ import typing as t
+ import weakref
+@@ -21,10 +22,34 @@ if t.TYPE_CHECKING:
+     from .environment import Template
+ 
+ 
++def validate_template_path(template: str) -> None:
++    """Check a template path for invalid characters or sequences. Raises
++    a `TemplateNotFound` error for empty paths, null bytes, absolute
++    paths, Windows drive letters, and control characters other than
++    tab, newline, and carriage return.
++    """
++    if not template:
++        raise TemplateNotFound(template)
++
++    if "\x00" in template:
++        raise TemplateNotFound(template)
++
++    if template[0] in "/\\":
++        raise TemplateNotFound(template)
++
++    if re.match(r"[A-Za-z]:", template):
++        raise TemplateNotFound(template)
++
++    for char in template:
++        if ord(char) < 32 and char not in "\t\n\r":
++            raise TemplateNotFound(template)
++
++
+ def split_template_path(template: str) -> t.List[str]:
+     """Split a path into segments and perform a sanity check.  If it detects
+     '..' in the path it will raise a `TemplateNotFound` error.
+     """
++    validate_template_path(template)
+     pieces = []
+     for piece in template.split("/"):
+         if (

@@ -1,0 +1,93 @@
+diff --git a/Tests/test_image.py b/Tests/test_image.py
+index c2e850c36..297d9e1e6 100644
+--- a/Tests/test_image.py
++++ b/Tests/test_image.py
+@@ -258,6 +258,42 @@ class TestImage:
+             assert im.readonly
+             im.save(temp_file)
+ 
++    def test_save_mark_corners(self, tmp_path: Path) -> None:
++        temp_file = tmp_path / "temp.png"
++        im = Image.new("RGB", (10, 10), "blue")
++        im.save(temp_file, mark_corners=True)
++
++        # The original image is not modified
++        assert im.getpixel((0, 0)) == (0, 0, 255)
++        assert im.getpixel((9, 9)) == (0, 0, 255)
++
++        with Image.open(temp_file) as reloaded:
++            assert reloaded.getpixel((0, 0)) == (255, 0, 0)
++            assert reloaded.getpixel((9, 9)) == (255, 0, 0)
++            assert reloaded.getpixel((5, 5)) == (0, 0, 255)
++
++    @pytest.mark.parametrize("mode", ("L", "RGBA", "P"))
++    def test_save_mark_corners_modes(self, mode: str, tmp_path: Path) -> None:
++        temp_file = tmp_path / "temp.png"
++        im = Image.new(mode, (10, 10))
++        im.save(temp_file, mark_corners=True)
++
++        expected = Image.new("RGB", (1, 1), "red").convert(mode).getpixel((0, 0))
++        with Image.open(temp_file) as reloaded:
++            if mode == "P":
++                reloaded = reloaded.convert("RGB")
++                expected = (255, 0, 0)
++            assert reloaded.getpixel((0, 0)) == expected
++            assert reloaded.getpixel((9, 9)) == expected
++
++    def test_save_without_mark_corners(self, tmp_path: Path) -> None:
++        temp_file = tmp_path / "temp.png"
++        im = Image.new("RGB", (10, 10), "blue")
++        im.save(temp_file)
++
++        with Image.open(temp_file) as reloaded:
++            assert reloaded.getpixel((0, 0)) == (0, 0, 255)
++
+     def test_dump(self, tmp_path: Path) -> None:
+         im = Image.new("L", (10, 10))
+         im._dump(str(tmp_path / "temp_L.ppm"))
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 233df592c..7958d2cc7 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -2512,6 +2512,24 @@ class Image:
+            may have been created, and may contain partial data.
+         """
+ 
++        if params.pop("mark_corners", False):
++            # Mark a copy, so that the original image is left unchanged
++            im = self.copy()
++            if hasattr(self, "encoderinfo"):
++                im.encoderinfo = self.encoderinfo
++            if im.width and im.height:
++                from . import ImageColor
++
++                try:
++                    red = ImageColor.getcolor("red", im.mode)
++                except ValueError:
++                    im = im.convert("RGBA" if im.has_transparency_data else "RGB")
++                    red = ImageColor.getcolor("red", im.mode)
++                im.putpixel((0, 0), red)
++                im.putpixel((im.width - 1, im.height - 1), red)
++            im.save(fp, format, **params)
++            return
++
+         filename: str | bytes = ""
+         open_fp = False
+         if is_path(fp):
+@@ -2540,8 +2558,15 @@ class Image:
+                 msg = f"unknown file extension: {ext}"
+                 raise ValueError(msg) from e
+ 
++        from . import ImageFile
++
+         # may mutate self!
+-        self._ensure_mutable()
++        if isinstance(self, ImageFile.ImageFile) and os.path.abspath(
++            filename
++        ) == os.path.abspath(self.filename):
++            self._ensure_mutable()
++        else:
++            self.load()
+ 
+         save_all = params.pop("save_all", None)
+         self.encoderinfo = {**getattr(self, "encoderinfo", {}), **params}

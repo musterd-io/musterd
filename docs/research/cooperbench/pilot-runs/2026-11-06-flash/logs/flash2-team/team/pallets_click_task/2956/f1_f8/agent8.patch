@@ -1,0 +1,98 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index f57ada6..c34a215 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -439,6 +439,11 @@ class Context:
+         self._parameter_source: dict[str, ParameterSource] = {}
+         self._exit_stack = ExitStack()
+ 
++        #: Whether option value history tracking is enabled for this context.
++        self._track_changes: bool = bool(getattr(command, "track_changes", False))
++        #: Maps parameter names to a list of history entries.
++        self._option_history: dict[str, list[dict[str, t.Any]]] = {}
++
+     @property
+     def protected_args(self) -> list[str]:
+         import warnings
+@@ -839,6 +844,43 @@ class Context:
+         """
+         return self._parameter_source.get(name)
+ 
++    def _record_option_history(
++        self, name: str, value: t.Any, source: ParameterSource | None
++    ) -> None:
++        """Record a value change for a parameter if tracking is enabled."""
++        if not self._track_changes or name is None:
++            return
++
++        import time
++
++        self._option_history.setdefault(name, []).append(
++            {"value": value, "source": source, "timestamp": time.time()}
++        )
++
++    def get_option_history(self, name: str) -> list[dict[str, t.Any]] | None:
++        """Get the history of values set for an option. Each entry is a
++        dict with ``value``, ``source`` (a
++        :class:`~click.core.ParameterSource`), and ``timestamp`` keys.
++
++        :param name: The parameter name (``"count"``) or one of its option
++            flags (``"--count"``, ``"-c"``).
++        :return: ``None`` if tracking is disabled, otherwise a list of
++            history entries, empty if no history exists.
++        """
++        if not self._track_changes:
++            return None
++
++        if name not in self._option_history:
++            for param in self.command.params:
++                if name in getattr(param, "opts", ()) or name in getattr(
++                    param, "secondary_opts", ()
++                ):
++                    if param.name is not None:
++                        name = param.name
++                    break
++
++        return list(self._option_history.get(name, []))
++
+ 
+ class Command:
+     """Commands are the basic building block of command line interfaces in
+@@ -916,6 +958,7 @@ class Command:
+         no_args_is_help: bool = False,
+         hidden: bool = False,
+         deprecated: bool | str = False,
++        track_changes: bool = False,
+     ) -> None:
+         #: the name the command thinks it has.  Upon registering a command
+         #: on a :class:`Group` the group will default the command name
+@@ -945,6 +988,8 @@ class Command:
+         self.no_args_is_help = no_args_is_help
+         self.hidden = hidden
+         self.deprecated = deprecated
++        #: Whether to track the history of option values in the context.
++        self.track_changes = track_changes
+ 
+     def to_info_dict(self, ctx: Context) -> dict[str, t.Any]:
+         return {
+@@ -1521,9 +1566,10 @@ class Group(Command):
+         subcommand_metavar: str | None = None,
+         chain: bool = False,
+         result_callback: t.Callable[..., t.Any] | None = None,
++        track_changes: bool = False,
+         **kwargs: t.Any,
+     ) -> None:
+-        super().__init__(name, **kwargs)
++        super().__init__(name, track_changes=track_changes, **kwargs)
+ 
+         if commands is None:
+             commands = {}
+@@ -2420,6 +2466,8 @@ class Parameter:
+ 
+                 value = None
+ 
++            ctx._record_option_history(self.name, value, source)  # type: ignore
++
+         if self.expose_value:
+             ctx.params[self.name] = value  # type: ignore
+ 

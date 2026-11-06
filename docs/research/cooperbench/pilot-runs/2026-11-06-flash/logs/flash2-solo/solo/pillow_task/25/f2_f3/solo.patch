@@ -1,0 +1,60 @@
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 233df592c..33d63a5d9 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -2505,6 +2505,18 @@ class Image:
+              red = Image.new("RGB", (1, 1), "#f00")
+              red.encoderinfo = {"xmp": b"test"}
+              black.save("out.mpo", save_all=True, append_images=[red])
++
++           Two additional keyword arguments are handled by this method and
++           are not passed to the image writer:
++
++           ``preserve_readonly``: If true, a readonly image (for example, one
++           created by :py:func:`~PIL.Image.frombuffer`) is only loaded, rather
++           than copied, so that it keeps reflecting changes to the
++           underlying buffer. Defaults to false.
++
++           ``dry_run``: If true, the image is fully processed by the writer,
++           but nothing is written to disk. Any errors that would occur when
++           saving are still raised. Defaults to false.
+         :returns: None
+         :exception ValueError: If the output format could not be determined
+            from the file name.  Use the format option to solve this.
+@@ -2512,6 +2524,9 @@ class Image:
+            may have been created, and may contain partial data.
+         """
+ 
++        preserve_readonly = params.pop("preserve_readonly", False)
++        dry_run = params.pop("dry_run", False)
++
+         filename: str | bytes = ""
+         open_fp = False
+         if is_path(fp):
+@@ -2540,8 +2555,11 @@ class Image:
+                 msg = f"unknown file extension: {ext}"
+                 raise ValueError(msg) from e
+ 
+-        # may mutate self!
+-        self._ensure_mutable()
++        if preserve_readonly:
++            self.load()
++        else:
++            # may mutate self!
++            self._ensure_mutable()
+ 
+         save_all = params.pop("save_all", None)
+         self.encoderinfo = {**getattr(self, "encoderinfo", {}), **params}
+@@ -2559,7 +2577,11 @@ class Image:
+             save_handler = SAVE[format.upper()]
+ 
+         created = False
+-        if open_fp:
++        if dry_run:
++            # process the image as usual, but discard the output
++            open_fp = False
++            fp = io.BytesIO()
++        elif open_fp:
+             created = not os.path.exists(filename)
+             if params.get("append", False):
+                 # Open also for reading ("+"), because TIFF save_all

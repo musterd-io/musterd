@@ -1,0 +1,74 @@
+diff --git a/src/jinja2/loaders.py b/src/jinja2/loaders.py
+index d7d9bd04..49c49c3e 100644
+--- a/src/jinja2/loaders.py
++++ b/src/jinja2/loaders.py
+@@ -165,26 +165,66 @@ class FileSystemLoader(BaseLoader):
+ 
+         loader = FileSystemLoader(["/override/templates", "/default/templates"])
+ 
++    Paths can be given a priority by passing ``(path, priority)``
++    tuples. Paths with a higher priority are searched first, regardless
++    of the order they were given in. Paths without an explicit priority
++    default to priority ``0``. Negative priorities are allowed. Paths
++    with the same priority keep their original relative order.
++
++    .. code-block:: python
++
++        loader = FileSystemLoader([
++            ("/high/priority/themes", 100),
++            ("/medium/priority/plugins", 50),
++            "/default/templates",
++            ("/low/priority/fallback", -10),
++        ])
++
+     :param searchpath: A path, or list of paths, to the directory that
+-        contains the templates.
++        contains the templates. Each path may also be a
++        ``(path, priority)`` tuple.
+     :param encoding: Use this encoding to read the text from template
+         files.
+     :param followlinks: Follow symbolic links in the path.
+ 
+     .. versionchanged:: 2.8
+         Added the ``followlinks`` parameter.
++
++    .. versionchanged:: 3.1
++        Added support for ``(path, priority)`` tuples in ``searchpath``.
+     """
+ 
+     def __init__(
+         self,
+-        searchpath: t.Union[str, os.PathLike, t.Sequence[t.Union[str, os.PathLike]]],
++        searchpath: t.Union[
++            str,
++            os.PathLike,
++            t.Sequence[
++                t.Union[str, os.PathLike, t.Tuple[t.Union[str, os.PathLike], int]]
++            ],
++        ],
+         encoding: str = "utf-8",
+         followlinks: bool = False,
+     ) -> None:
+         if not isinstance(searchpath, abc.Iterable) or isinstance(searchpath, str):
+             searchpath = [searchpath]
+ 
+-        self.searchpath = [os.fspath(p) for p in searchpath]
++        path_priorities: t.List[t.Tuple[str, int]] = []
++
++        for item in searchpath:
++            if isinstance(item, tuple) and len(item) == 2:
++                path, priority = item
++
++                if not isinstance(priority, int) or isinstance(priority, bool):
++                    priority = 0
++            else:
++                path, priority = item, 0
++
++            path_priorities.append((os.fspath(path), priority))
++
++        # sorted() is stable, so equal priorities keep their original order
++        path_priorities.sort(key=lambda x: x[1], reverse=True)
++        self.searchpath = [p for p, _ in path_priorities]
+         self.encoding = encoding
+         self.followlinks = followlinks
+ 

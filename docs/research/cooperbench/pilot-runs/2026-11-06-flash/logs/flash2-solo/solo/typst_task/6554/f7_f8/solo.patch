@@ -1,0 +1,173 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..9762ea25a 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -179,23 +179,62 @@ impl Str {
+     /// Extracts the first grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn first(
++        &self,
++        /// A character class the returned grapheme must match. One of
++        /// `{"alpha"}`, `{"numeric"}`, `{"alphanumeric"}`, `{"uppercase"}`,
++        /// `{"lowercase"}`, or `{"whitespace"}`.
++        #[named]
++        pattern: Option<Str>,
++        /// Converts the returned grapheme to the given case. One of
++        /// `{"upper"}`, `{"lower"}`, or `{"title"}`.
++        #[named]
++        case: Option<Str>,
++    ) -> StrResult<Str> {
++        let case = case.as_deref().map(CaseOption::parse).transpose()?;
++        if self.0.is_empty() {
++            return Err(string_is_empty());
++        }
++        let pattern = pattern.as_deref().map(CharPattern::parse).transpose()?;
++        let mut graphemes = self.0.graphemes(true);
++        let found = match pattern {
++            None => graphemes.next().ok_or_else(string_is_empty)?,
++            Some(pattern) => graphemes
++                .find(|g| pattern.matches(g))
++                .ok_or_else(|| pattern.no_match())?,
++        };
++        Ok(apply_case(found, case))
+     }
+ 
+     /// Extracts the last grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next_back()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn last(
++        &self,
++        /// A character class the returned grapheme must match. One of
++        /// `{"alpha"}`, `{"numeric"}`, `{"alphanumeric"}`, `{"uppercase"}`,
++        /// `{"lowercase"}`, or `{"whitespace"}`.
++        #[named]
++        pattern: Option<Str>,
++        /// Converts the returned grapheme to the given case. One of
++        /// `{"upper"}`, `{"lower"}`, or `{"title"}`.
++        #[named]
++        case: Option<Str>,
++    ) -> StrResult<Str> {
++        let case = case.as_deref().map(CaseOption::parse).transpose()?;
++        if self.0.is_empty() {
++            return Err(string_is_empty());
++        }
++        let pattern = pattern.as_deref().map(CharPattern::parse).transpose()?;
++        let mut graphemes = self.0.graphemes(true);
++        let found = match pattern {
++            None => graphemes.next_back().ok_or_else(string_is_empty)?,
++            Some(pattern) => graphemes
++                .rev()
++                .find(|g| pattern.matches(g))
++                .ok_or_else(|| pattern.no_match())?,
++        };
++        Ok(apply_case(found, case))
+     }
+ 
+     /// Extracts the first grapheme cluster after the specified index. Returns
+@@ -967,3 +1006,93 @@ cast! {
+     v: Str => Self::Str(v),
+     v: Func => Self::Func(v)
+ }
++
++/// A built-in character class for `str.first` and `str.last`.
++#[derive(Debug, Copy, Clone, Eq, PartialEq)]
++enum CharPattern {
++    Alpha,
++    Numeric,
++    Alphanumeric,
++    Uppercase,
++    Lowercase,
++    Whitespace,
++}
++
++impl CharPattern {
++    fn parse(name: &str) -> StrResult<Self> {
++        Ok(match name {
++            "alpha" => Self::Alpha,
++            "numeric" => Self::Numeric,
++            "alphanumeric" => Self::Alphanumeric,
++            "uppercase" => Self::Uppercase,
++            "lowercase" => Self::Lowercase,
++            "whitespace" => Self::Whitespace,
++            _ => bail!("unknown pattern {}", name.repr()),
++        })
++    }
++
++    fn name(self) -> &'static str {
++        match self {
++            Self::Alpha => "alpha",
++            Self::Numeric => "numeric",
++            Self::Alphanumeric => "alphanumeric",
++            Self::Uppercase => "uppercase",
++            Self::Lowercase => "lowercase",
++            Self::Whitespace => "whitespace",
++        }
++    }
++
++    /// Whether the leading scalar of the grapheme matches this class.
++    fn matches(self, grapheme: &str) -> bool {
++        let Some(c) = grapheme.chars().next() else { return false };
++        match self {
++            Self::Alpha => c.is_alphabetic(),
++            Self::Numeric => c.is_numeric(),
++            Self::Alphanumeric => c.is_alphanumeric(),
++            Self::Uppercase => c.is_uppercase(),
++            Self::Lowercase => c.is_lowercase(),
++            Self::Whitespace => c.is_whitespace(),
++        }
++    }
++
++    fn no_match(self) -> EcoString {
++        eco_format!("no character matches pattern \"{}\"", self.name())
++    }
++}
++
++/// A case conversion for `str.first` and `str.last`.
++#[derive(Debug, Copy, Clone, Eq, PartialEq)]
++enum CaseOption {
++    Upper,
++    Lower,
++    Title,
++}
++
++impl CaseOption {
++    fn parse(name: &str) -> StrResult<Self> {
++        Ok(match name {
++            "upper" => Self::Upper,
++            "lower" => Self::Lower,
++            "title" => Self::Title,
++            _ => bail!("unknown case option \"{}\"", name),
++        })
++    }
++}
++
++/// Converts a grapheme to the requested case, if any.
++fn apply_case(grapheme: &str, case: Option<CaseOption>) -> Str {
++    match case {
++        None => grapheme.into(),
++        Some(CaseOption::Upper) => grapheme.to_uppercase().into(),
++        Some(CaseOption::Lower) => grapheme.to_lowercase().into(),
++        Some(CaseOption::Title) => {
++            let mut chars = grapheme.chars();
++            let mut out = String::new();
++            if let Some(first) = chars.next() {
++                out.extend(first.to_uppercase());
++                out.push_str(&chars.as_str().to_lowercase());
++            }
++            out.into()
++        }
++    }
++}

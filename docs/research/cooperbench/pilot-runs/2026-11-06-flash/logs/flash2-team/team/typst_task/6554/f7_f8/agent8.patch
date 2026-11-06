@@ -1,0 +1,72 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..52667bf56 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -179,23 +179,29 @@ impl Str {
+     /// Extracts the first grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn first(
++        &self,
++        /// Transforms the extracted grapheme cluster to the given case. Can be
++        /// `{"upper"}`, `{"lower"}`, or `{"title"}`.
++        #[named]
++        case: Option<Str>,
++    ) -> StrResult<Str> {
++        let grapheme = self.0.graphemes(true).next().ok_or_else(string_is_empty)?;
++        apply_case(grapheme, case)
+     }
+ 
+     /// Extracts the last grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next_back()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn last(
++        &self,
++        /// Transforms the extracted grapheme cluster to the given case. Can be
++        /// `{"upper"}`, `{"lower"}`, or `{"title"}`.
++        #[named]
++        case: Option<Str>,
++    ) -> StrResult<Str> {
++        let grapheme = self.0.graphemes(true).next_back().ok_or_else(string_is_empty)?;
++        apply_case(grapheme, case)
+     }
+ 
+     /// Extracts the first grapheme cluster after the specified index. Returns
+@@ -835,6 +841,25 @@ fn string_is_empty() -> EcoString {
+     "string is empty".into()
+ }
+ 
++/// Transforms a grapheme cluster to the requested case, if any.
++fn apply_case(grapheme: &str, case: Option<Str>) -> StrResult<Str> {
++    let Some(case) = case else { return Ok(grapheme.into()) };
++    match case.as_str() {
++        "upper" => Ok(grapheme.to_uppercase().into()),
++        "lower" => Ok(grapheme.to_lowercase().into()),
++        "title" => {
++            let mut chars = grapheme.chars();
++            let mut out = EcoString::new();
++            if let Some(c) = chars.next() {
++                out.extend(c.to_uppercase());
++            }
++            out.push_str(&chars.as_str().to_lowercase());
++            Ok(out.into())
++        }
++        other => Err(eco_format!("unknown case option \"{other}\"")),
++    }
++}
++
+ /// A regular expression.
+ ///
+ /// Can be used as a [show rule selector]($styling/#show-rules) and with

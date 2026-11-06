@@ -1,0 +1,122 @@
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 0fca3fa5c..311d326f4 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -1048,7 +1048,16 @@ class Image:
+                 new_im.info["transparency"] = trns
+         return new_im
+ 
+-    def quantize(self, colors=256, method=None, kmeans=0, palette=None, dither=1):
++    def quantize(
++        self,
++        colors=256,
++        method=None,
++        kmeans=0,
++        palette=None,
++        dither=1,
++        sort_palette=None,
++        lightness_factor=1.0,
++    ):
+         """
+         Convert the image to 'P' mode with the specified number
+         of colors.
+@@ -1073,12 +1082,28 @@ class Image:
+            mode "RGB" to "P" or from "RGB" or "L" to "1".
+            Available methods are :data:`NONE` or :data:`FLOYDSTEINBERG` (default).
+            Default: 1 (legacy setting)
++        :param sort_palette: Optional method used to sort the palette colors
++           after quantization. Either ``None`` (default, keep the order
++           produced by the quantizer), ``"brightness"`` (darkest to brightest)
++           or ``"rgb"`` (by red, then green, then blue value).
++        :param lightness_factor: Brightness adjustment applied to the palette
++           after quantization. Values greater than 1.0 brighten the image,
++           values less than 1.0 darken it. Must be greater than 0.
++           Default: 1.0 (no change)
+         :returns: A new image
+ 
+         """
+ 
+         self.load()
+ 
++        if sort_palette not in (None, "brightness", "rgb"):
++            raise ValueError(
++                "sort_palette must be None, 'brightness' or 'rgb', "
++                f"not {sort_palette!r}"
++            )
++        if lightness_factor <= 0:
++            raise ValueError("lightness_factor must be greater than 0")
++
+         if method is None:
+             # defaults:
+             method = MEDIANCUT
+@@ -1104,7 +1129,9 @@ class Image:
+             im = self.im.convert("P", dither, palette.im)
+             new_im = self._new(im)
+             new_im.palette = palette.palette.copy()
+-            return new_im
++            return new_im._adjust_quantized_palette(
++                256, sort_palette, lightness_factor
++            )
+ 
+         im = self._new(self.im.quantize(colors, method, kmeans))
+ 
+@@ -1113,6 +1140,59 @@ class Image:
+         mode = im.im.getpalettemode()
+         im.palette = ImagePalette.ImagePalette(mode, im.im.getpalette(mode, mode))
+ 
++        return im._adjust_quantized_palette(colors, sort_palette, lightness_factor)
++
++    def _adjust_quantized_palette(self, colors, sort_palette, lightness_factor):
++        if sort_palette is None and lightness_factor == 1.0:
++            return self
++
++        from . import ImagePalette
++
++        mode = self.im.getpalettemode()
++        channels = len(mode)
++        data = list(self.im.getpalette(mode, mode))
++        entries = [
++            tuple(data[i : i + channels]) for i in range(0, len(data), channels)
++        ]
++        count = min(colors, len(entries))
++
++        im = self
++        if sort_palette is not None:
++            if sort_palette == "brightness":
++
++                def key(i):
++                    r, g, b = entries[i][:3]
++                    return (r * 299 + g * 587 + b * 114, entries[i])
++
++            else:
++
++                def key(i):
++                    return entries[i]
++
++            order = sorted(range(count), key=key)
++            lut = list(range(256))
++            for new_index, old_index in enumerate(order):
++                lut[old_index] = new_index
++            entries = [entries[i] for i in order] + entries[count:]
++            im = self._new(self.im.point(lut, None))
++
++        if lightness_factor != 1.0:
++            entries = [
++                tuple(
++                    min(255, max(0, int(round(v * lightness_factor))))
++                    for v in entry[:3]
++                )
++                + entry[3:]
++                for entry in entries
++            ]
++
++        data = bytes(v for entry in entries for v in entry)
++        if mode == "RGBA":
++            im.im.putpalette("RGBX", data)
++            im.im.putpalettealphas(data[3::4])
++        else:
++            im.im.putpalette(mode, data)
++        im.palette = ImagePalette.ImagePalette(mode, im.im.getpalette(mode, mode))
+         return im
+ 
+     def copy(self):

@@ -1,0 +1,154 @@
+diff --git a/metrics.go b/metrics.go
+new file mode 100644
+index 0000000..3520a26
+--- /dev/null
++++ b/metrics.go
+@@ -0,0 +1,57 @@
++package chi
++
++import (
++	"context"
++	"net/http"
++	"time"
++)
++
++// MetricsCollector receives a notification for every request that is matched
++// to a route by a Mux, along with the time it took to serve it.
++type MetricsCollector interface {
++	RecordHit(ctx context.Context, r *http.Request, duration time.Duration)
++}
++
++// RouteMetric describes a single route hit.
++type RouteMetric struct {
++	Pattern  string            // matched route pattern, e.g. "/users/{id}"
++	Method   string            // HTTP method of the request
++	Path     string            // request URL path
++	Duration time.Duration     // time taken to serve the request
++	Params   map[string]string // URL parameters keyed by name, e.g. {"id": "123"}
++}
++
++// SimpleMetricsCollector is a MetricsCollector that builds a RouteMetric for
++// every hit and passes it to the OnHit callback.
++type SimpleMetricsCollector struct {
++	OnHit func(RouteMetric)
++}
++
++// RecordHit implements the MetricsCollector interface.
++func (s *SimpleMetricsCollector) RecordHit(ctx context.Context, r *http.Request, duration time.Duration) {
++	if s == nil || s.OnHit == nil {
++		return
++	}
++
++	metric := RouteMetric{
++		Method:   r.Method,
++		Path:     r.URL.Path,
++		Duration: duration,
++		Params:   map[string]string{},
++	}
++
++	rctx, _ := ctx.Value(RouteCtxKey).(*Context)
++	if rctx == nil {
++		rctx = RouteContext(r.Context())
++	}
++	if rctx != nil {
++		metric.Pattern = rctx.RoutePattern()
++		for i, key := range rctx.URLParams.Keys {
++			if i < len(rctx.URLParams.Values) {
++				metric.Params[key] = rctx.URLParams.Values[i]
++			}
++		}
++	}
++
++	s.OnHit(metric)
++}
+diff --git a/metrics_test.go b/metrics_test.go
+new file mode 100644
+index 0000000..06e6f58
+--- /dev/null
++++ b/metrics_test.go
+@@ -0,0 +1,36 @@
++package chi
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"testing"
++)
++
++func TestMetricsCollector(t *testing.T) {
++	var got []RouteMetric
++	r := NewRouter()
++	r.SetMetricsCollector(&SimpleMetricsCollector{OnHit: func(m RouteMetric) { got = append(got, m) }})
++	r.Get("/users/{id}", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
++
++	ts := httptest.NewServer(r)
++	defer ts.Close()
++
++	if _, body := testRequest(t, ts, "GET", "/users/123", nil); body != "ok" {
++		t.Fatalf("unexpected body %q", body)
++	}
++	testRequest(t, ts, "GET", "/missing", nil)
++
++	if len(got) != 1 {
++		t.Fatalf("expected 1 metric, got %d", len(got))
++	}
++	m := got[0]
++	if m.Pattern != "/users/{id}" || m.Method != "GET" || m.Path != "/users/123" {
++		t.Fatalf("unexpected metric %+v", m)
++	}
++	if m.Params["id"] != "123" {
++		t.Fatalf("unexpected params %v", m.Params)
++	}
++	if m.Duration < 0 {
++		t.Fatalf("negative duration")
++	}
++}
+diff --git a/mux.go b/mux.go
+index 56fa4d2..543cf8b 100644
+--- a/mux.go
++++ b/mux.go
+@@ -6,6 +6,7 @@ import (
+ 	"net/http"
+ 	"strings"
+ 	"sync"
++	"time"
+ )
+ 
+ var _ Router = &Mux{}
+@@ -45,6 +46,9 @@ type Mux struct {
+ 	// Controls the behaviour of middleware chain generation when a mux
+ 	// is registered as an inline group inside another mux.
+ 	inline bool
++
++	// Optional collector notified of every matched route hit
++	metricsCollector MetricsCollector
+ }
+ 
+ // NewMux returns a newly initialized Mux object that implements the Router
+@@ -423,6 +427,12 @@ func (mx *Mux) handle(method methodTyp, pattern string, handler http.Handler) *n
+ 	return mx.tree.InsertRoute(method, pattern, h)
+ }
+ 
++// SetMetricsCollector sets a MetricsCollector that is notified with timing
++// information every time a request is matched to a route on this Mux.
++func (mx *Mux) SetMetricsCollector(collector MetricsCollector) {
++	mx.metricsCollector = collector
++}
++
+ // routeHTTP routes a http.Request through the Mux routing tree to serve
+ // the matching handler for a particular http method.
+ func (mx *Mux) routeHTTP(w http.ResponseWriter, r *http.Request) {
+@@ -454,7 +464,13 @@ func (mx *Mux) routeHTTP(w http.ResponseWriter, r *http.Request) {
+ 
+ 	// Find the route
+ 	if _, _, h := mx.tree.FindRoute(rctx, method, routePath); h != nil {
++		if mx.metricsCollector == nil {
++			h.ServeHTTP(w, r)
++			return
++		}
++		start := time.Now()
+ 		h.ServeHTTP(w, r)
++		mx.metricsCollector.RecordHit(r.Context(), r, time.Since(start))
+ 		return
+ 	}
+ 	if rctx.methodNotAllowed {

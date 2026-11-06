@@ -1,0 +1,64 @@
+{
+  "repo": "openai_tiktoken_task",
+  "task_id": 0,
+  "features": [
+    2,
+    9
+  ],
+  "setting": "team",
+  "run_id": "083f8129",
+  "run_name": "flash2-team",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:36:23.508891",
+  "ended_at": "2026-11-06T05:38:13.545087",
+  "duration_seconds": 110.036196,
+  "lead_agent": "agent1",
+  "agents": {
+    "agent2": {
+      "feature_id": 9,
+      "team_role": "member",
+      "status": "Submitted",
+      "cost": 0.0943206,
+      "steps": 3,
+      "input_tokens": 6,
+      "output_tokens": 1829,
+      "cache_read_tokens": 51208,
+      "cache_write_tokens": 9495,
+      "patch_lines": 57,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 2,
+      "team_role": "lead",
+      "status": "Submitted",
+      "cost": 0.18506559999999997,
+      "steps": 7,
+      "input_tokens": 14,
+      "output_tokens": 4162,
+      "cache_read_tokens": 149423,
+      "cache_write_tokens": 14377,
+      "patch_lines": 97,
+      "error": null
+    }
+  },
+  "total_cost": 0.2793862,
+  "total_steps": 10,
+  "messages_sent": 0,
+  "metrics": {
+    "tasks_total": 2,
+    "tasks_done": 0,
+    "unowned_at_end": 0,
+    "time_to_first_claim_seconds": null,
+    "claims_per_agent": {},
+    "updates_per_agent": {}
+  },
+  "team_features": {
+    "task_list": true,
+    "scratchpad": true,
+    "mcp": true,
+    "auto_refresh": true,
+    "protocol": true
+  },
+  "log_dir": "logs/flash2-team/team/openai_tiktoken_task/0/f2_f9"
+}

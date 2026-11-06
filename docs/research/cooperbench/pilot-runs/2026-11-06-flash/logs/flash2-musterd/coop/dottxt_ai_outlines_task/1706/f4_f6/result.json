@@ -1,0 +1,46 @@
+{
+  "repo": "dottxt_ai_outlines_task",
+  "task_id": 1706,
+  "features": [
+    4,
+    6
+  ],
+  "setting": "coop",
+  "run_id": "8968fffc",
+  "run_name": "flash2-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:23:25.739664",
+  "ended_at": "2026-11-06T05:26:56.286882",
+  "duration_seconds": 210.547218,
+  "agents": {
+    "agent2": {
+      "feature_id": 6,
+      "status": "Submitted",
+      "cost": 0.23252500000000004,
+      "steps": 15,
+      "input_tokens": 26,
+      "output_tokens": 3197,
+      "cache_read_tokens": 388330,
+      "cache_write_tokens": 18163,
+      "patch_lines": 136,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 4,
+      "status": "Submitted",
+      "cost": 0.1975418,
+      "steps": 13,
+      "input_tokens": 20,
+      "output_tokens": 2621,
+      "cache_read_tokens": 287559,
+      "cache_write_tokens": 17506,
+      "patch_lines": 136,
+      "error": null
+    }
+  },
+  "total_cost": 0.4300668,
+  "total_steps": 28,
+  "messages_sent": 0,
+  "log_dir": "logs/flash2-musterd/coop/dottxt_ai_outlines_task/1706/f4_f6"
+}

@@ -1,0 +1,12 @@
+[2026-11-06T05:03:33Z] smoke start: solo, team, musterd on dirty_equals 43 f2,f3 (claude-opus-5-5)
+[2026-11-06T05:04:54Z] solo run exit=0
+[2026-11-06T05:05:25Z] team run exit=0
+[2026-11-06T05:05:59Z] musterd run exit=0
+[2026-11-06T05:06:18Z] solo eval exit=0
+[2026-11-06T05:06:37Z] team eval exit=0
+[2026-11-06T05:06:57Z] musterd eval exit=0
+[2026-11-06T05:06:57Z] solo: cost 0.133 status {} both_passed True f1 True f2 True merge None patches {'solo.patch': 4113}
+[2026-11-06T05:06:57Z] team: cost 0.325 status {'agent2': 'Submitted', 'agent1': 'Submitted'} both_passed True f1 True f2 True merge conflicts patches {'agent2.patch': 4478, 'agent3.patch': 2293}
+[2026-11-06T05:06:57Z] musterd: cost 0.615 status {'agent2': 'Submitted', 'agent1': 'Submitted'} both_passed True f1 True f2 True merge identical patches {'agent2.patch': 4474, 'agent3.patch': 4474}
+[2026-11-06T05:06:57Z] team harness evidence: /data/runs/logs/flash-smoke-team/team/samuelcolvin_dirty_equals_task/43/f2_f3/agent3_traj.json /data/runs/logs/flash-smoke-team/team/samuelcolvin_dirty_equals_task/43/f2_f3/result.json /data/runs/logs/flash-smoke-team/team/samuelcolvin_dirty_equals_task/43/f2_f3/agent2_traj.json 
+[2026-11-06T05:06:57Z] musterd evidence:      16 lane_claim      38 lane_open 

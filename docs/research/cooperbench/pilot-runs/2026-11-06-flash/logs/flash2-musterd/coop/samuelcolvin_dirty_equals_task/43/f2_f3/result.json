@@ -1,0 +1,46 @@
+{
+  "repo": "samuelcolvin_dirty_equals_task",
+  "task_id": 43,
+  "features": [
+    2,
+    3
+  ],
+  "setting": "coop",
+  "run_id": "2ecdea8e",
+  "run_name": "flash2-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T06:31:53.911898",
+  "ended_at": "2026-11-06T06:33:54.936617",
+  "duration_seconds": 121.024719,
+  "agents": {
+    "agent2": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 0.22060719999999998,
+      "steps": 15,
+      "input_tokens": 20,
+      "output_tokens": 3513,
+      "cache_read_tokens": 296436,
+      "cache_write_tokens": 18196,
+      "patch_lines": 117,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 2,
+      "status": "Submitted",
+      "cost": 0.184205,
+      "steps": 12,
+      "input_tokens": 18,
+      "output_tokens": 3048,
+      "cache_read_tokens": 251165,
+      "cache_write_tokens": 14588,
+      "patch_lines": 117,
+      "error": null
+    }
+  },
+  "total_cost": 0.40481219999999996,
+  "total_steps": 27,
+  "messages_sent": 0,
+  "log_dir": "logs/flash2-musterd/coop/samuelcolvin_dirty_equals_task/43/f2_f3"
+}

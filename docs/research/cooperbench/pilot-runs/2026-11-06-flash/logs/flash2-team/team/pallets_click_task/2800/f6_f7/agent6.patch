@@ -1,0 +1,116 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 666ad68..84ac46f 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -158,6 +158,18 @@ class ParameterSource(enum.Enum):
+     """Used a prompt to confirm a default or provide a value."""
+ 
+ 
++def _deepcopy_state(value: t.Any) -> t.Any:
++    """Deep copy a value for a context state snapshot. Values that can't
++    be deep copied are kept by reference.
++    """
++    import copy
++
++    try:
++        return copy.deepcopy(value)
++    except Exception:
++        return value
++
++
+ class Context:
+     """The context is a special internal object that holds state relevant
+     for the script execution at every single level.  It's normally invisible
+@@ -432,6 +444,70 @@ class Context:
+         self._parameter_source: dict[str, ParameterSource] = {}
+         self._exit_stack = ExitStack()
+ 
++    def save_state(self) -> dict[str, t.Any]:
++        """Capture a snapshot of the current context state. The snapshot
++        can later be passed to :meth:`restore_state` to revert any
++        changes made to the context in the meantime.
++
++        Mutable state such as ``params``, ``obj``, ``meta``,
++        ``default_map`` and the parameter sources is deep copied so that
++        modifications to nested objects do not affect the snapshot.
++
++        .. versionadded:: 8.2
++        """
++        return {
++            "params": _deepcopy_state(self.params),
++            "args": list(self.args),
++            "_protected_args": list(self._protected_args),
++            "_opt_prefixes": set(self._opt_prefixes),
++            "obj": _deepcopy_state(self.obj),
++            "_meta": _deepcopy_state(self._meta),
++            "default_map": _deepcopy_state(self.default_map),
++            "_parameter_source": _deepcopy_state(self._parameter_source),
++            "parent": self.parent,
++            "command": self.command,
++            "info_name": self.info_name,
++            "invoked_subcommand": self.invoked_subcommand,
++            "terminal_width": self.terminal_width,
++            "max_content_width": self.max_content_width,
++            "allow_extra_args": self.allow_extra_args,
++            "allow_interspersed_args": self.allow_interspersed_args,
++            "ignore_unknown_options": self.ignore_unknown_options,
++            "help_option_names": list(self.help_option_names),
++            "token_normalize_func": self.token_normalize_func,
++            "resilient_parsing": self.resilient_parsing,
++            "auto_envvar_prefix": self.auto_envvar_prefix,
++            "color": self.color,
++            "show_default": self.show_default,
++            "_close_callbacks": list(self._close_callbacks),
++            "_depth": self._depth,
++        }
++
++    def restore_state(self, snapshot: dict[str, t.Any]) -> None:
++        """Restore the context to a state previously captured with
++        :meth:`save_state`. The snapshot is copied again while
++        restoring, so it can be reused to restore multiple times.
++
++        :param snapshot: The value returned by :meth:`save_state`.
++
++        .. versionadded:: 8.2
++        """
++        deep = {"params", "obj", "_meta", "default_map", "_parameter_source"}
++
++        for key, value in snapshot.items():
++            if key == "_meta" and isinstance(value, dict):
++                # Update in place so the dict stays shared with child
++                # contexts that reference the same meta.
++                self._meta.clear()
++                self._meta.update(_deepcopy_state(value))
++                continue
++            elif key in deep:
++                value = _deepcopy_state(value)
++            elif isinstance(value, (list, set, dict)):
++                value = type(value)(value)
++
++            setattr(self, key, value)
++
+     @property
+     def protected_args(self) -> list[str]:
+         import warnings
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 6fd9e54..16bc18a 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -561,6 +561,9 @@ def _resolve_context(
+                 args = ctx._protected_args + ctx.args
+             else:
+                 sub_ctx = ctx
++                # Resolving chained subcommands must not leak state
++                # changes back into the parent context.
++                state = ctx.save_state()
+ 
+                 while args:
+                     name, cmd, args = command.resolve_command(ctx, args)
+@@ -578,6 +581,7 @@ def _resolve_context(
+                     )
+                     args = sub_ctx.args
+ 
++                ctx.restore_state(state)
+                 ctx = sub_ctx
+                 args = [*sub_ctx._protected_args, *sub_ctx.args]
+         else:

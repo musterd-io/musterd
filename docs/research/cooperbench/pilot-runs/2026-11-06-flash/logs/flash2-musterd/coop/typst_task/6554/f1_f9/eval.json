@@ -1,0 +1,35 @@
+{
+  "repo": "typst_task",
+  "task_id": 6554,
+  "features": [
+    1,
+    9
+  ],
+  "setting": "coop",
+  "apply_status": {
+    "agent1": "applied",
+    "agent2": "applied"
+  },
+  "merge": {
+    "status": "identical",
+    "strategy": "skip-merge-identical",
+    "diff": "diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs\nindex d90b6f206..af69ccb26 100644\n--- a/crates/typst/src/foundations/str.rs\n+++ b/crates/typst/src/foundations/str.rs\n@@ -179,22 +179,52 @@ impl Str {\n     /// Extracts the first grapheme cluster of the string.\n     /// Fails with an error if the string is empty.\n     #[func]\n-    pub fn first(&self) -> StrResult<Str> {\n-        self.0\n-            .graphemes(true)\n+    pub fn first(\n+        &self,\n+        /// A set of characters to ignore at the start of the string before\n+        /// extracting the first grapheme cluster.\n+        #[named]\n+        strip: Option<Str>,\n+        /// A default value to return if the string is empty.\n+        #[named]\n+        default: Option<Str>,\n+    ) -> StrResult<Str> {\n+        let s = match &strip {\n+            Some(set) if !set.is_empty() => {\n+                self.0.trim_start_matches(|c: char| set.0.contains(c))\n+            }\n+            _ => self.0.as_str(),\n+        };\n+        s.graphemes(true)\n             .next()\n             .map(Into::into)\n+            .or(default)\n             .ok_or_else(string_is_empty)\n     }\n \n     /// Extracts the last grapheme cluster of the string.\n     /// Fails with an error if the string is empty.\n     #[func]\n-    pub fn last(&self) -> StrResult<Str> {\n-        self.0\n-            .graphemes(true)\n+    pub fn last(\n+        &self,\n+        /// A set of characters to ignore at the end of the string before\n+        /// extracting the last grapheme cluster.\n+        #[named]\n+        strip: Option<Str>,\n+        /// A default value to return if the string is empty.\n+        #[named]\n+        default: Option<Str>,\n+    ) -> StrResult<Str> {\n+        let s = match &strip {\n+            Some(set) if !set.is_empty() => {\n+                self.0.trim_end_matches(|c: char| set.0.contains(c))\n+            }\n+            _ => self.0.as_str(),\n+        };\n+        s.graphemes(true)\n             .next_back()\n             .map(Into::into)\n+            .or(default)\n             .ok_or_else(string_is_empty)\n     }\n \n"
+  },
+  "feature1": {
+    "passed": true,
+    "output": "Note: switching to 'b8034a343831e8609aec2ec81eb7eeda57aa5d81'.\n\nYou are in 'detached HEAD' state. You can look around, make experimental\nchanges and commit them, and you can discard any commits you make in this\nstate without impacting any branches by switching back to a branch.\n\nIf you want to create a new branch to retain commits you create, you may\ndo so (now or later) by using -c with the switch command. Example:\n\n  git switch -c <new-branch-name>\n\nOr undo this operation with:\n\n  git switch -\n\nTurn off this advice by setting config variable advice.detachedHead to false\n\nHEAD is now at b8034a343 Syntax set macro (#5138)\nHEAD is now at b8034a343 Syntax set macro (#5138)\nReset to base: b8034a343831e8609aec2ec81eb7eeda57aa5d81\nEnsuring clean repository state...\nHEAD is now at b8034a343 Syntax set macro (#5138)\nApplying feature patch: merged.patch\nFeature patch applied successfully.\nApplying test patch: tests1.patch\nTest patch applied successfully.\nBuilding Typst...\n   Compiling typst v0.12.0 (/workspace/repo/crates/typst)\n   Compiling typst-render v0.12.0 (/workspace/repo/crates/typst-render)\n   Compiling typst-kit v0.12.0 (/workspace/repo/crates/typst-kit)\n   Compiling typst-svg v0.12.0 (/workspace/repo/crates/typst-svg)\n   Compiling typst-pdf v0.12.0 (/workspace/repo/crates/typst-pdf)\n   Compiling typst-cli v0.12.0 (/workspace/repo/crates/typst-cli)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 48s\nDeriving test filters from the test patch...\nTest patch declares no new test blocks; grading against the full suite.\nRunning the whole suite...\n   Compiling typst v0.12.0 (/workspace/repo/crates/typst)\n   Compiling typst-pdf v0.12.0 (/workspace/repo/crates/typst-pdf)\n   Compiling typst-render v0.12.0 (/workspace/repo/crates/typst-render)\n   Compiling typst-svg v0.12.0 (/workspace/repo/crates/typst-svg)\n   Compiling typst-tests v0.12.0 (/workspace/repo/tests)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 49s\n     Running src/tests.rs (target/debug/deps/tests-52a2759a859b1a53)\n2354 passed, 0 failed, 0 skipped\nTest execution completed!\nCleaning up repository...\nHEAD is now at b8034a343 Syntax set macro (#5138)\nRepository cleaned.\n",
+    "exit_code": 0,
+    "tests_passed": 2354,
+    "tests_failed": 0
+  },
+  "feature2": {
+    "passed": true,
+    "output": "HEAD is now at b8034a343 Syntax set macro (#5138)\nHEAD is now at b8034a343 Syntax set macro (#5138)\nReset to base: b8034a343831e8609aec2ec81eb7eeda57aa5d81\nEnsuring clean repository state...\nHEAD is now at b8034a343 Syntax set macro (#5138)\nApplying feature patch: merged.patch\nFeature patch applied successfully.\nApplying test patch: tests2.patch\nTest patch applied successfully.\nBuilding Typst...\n   Compiling typst v0.12.0 (/workspace/repo/crates/typst)\n   Compiling typst-render v0.12.0 (/workspace/repo/crates/typst-render)\n   Compiling typst-kit v0.12.0 (/workspace/repo/crates/typst-kit)\n   Compiling typst-svg v0.12.0 (/workspace/repo/crates/typst-svg)\n   Compiling typst-pdf v0.12.0 (/workspace/repo/crates/typst-pdf)\n   Compiling typst-cli v0.12.0 (/workspace/repo/crates/typst-cli)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 44s\nDeriving test filters from the test patch...\nTest blocks declared by this patch: str-strip-exhaust str-strip-parameter \nRunning tests...\n   Compiling typst v0.12.0 (/workspace/repo/crates/typst)\n   Compiling typst-pdf v0.12.0 (/workspace/repo/crates/typst-pdf)\n   Compiling typst-render v0.12.0 (/workspace/repo/crates/typst-render)\n   Compiling typst-svg v0.12.0 (/workspace/repo/crates/typst-svg)\n   Compiling typst-tests v0.12.0 (/workspace/repo/tests)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 26s\n     Running src/tests.rs (target/debug/deps/tests-52a2759a859b1a53)\n1 passed, 0 failed, 2355 skipped\nRunning tests...\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.60s\n     Running src/tests.rs (target/debug/deps/tests-52a2759a859b1a53)\n1 passed, 0 failed, 2355 skipped\nTest execution completed!\nCleaning up repository...\nHEAD is now at b8034a343 Syntax set macro (#5138)\nRepository cleaned.\n",
+    "exit_code": 0,
+    "tests_passed": 1,
+    "tests_failed": 0
+  },
+  "both_passed": true,
+  "error": null,
+  "evaluated_at": "2026-11-06T07:42:03.899881"
+}

@@ -1,0 +1,67 @@
+diff --git a/src/jinja2/ext.py b/src/jinja2/ext.py
+index d21b83aa..5400bf94 100644
+--- a/src/jinja2/ext.py
++++ b/src/jinja2/ext.py
+@@ -264,7 +264,62 @@ class InternationalizationExtension(Extension):
+             uninstall_gettext_translations=self._uninstall,
+             extract_translations=self._extract,
+             newstyle_gettext=False,
++            i18n_cache_size=128,
+         )
++        self._init_cache()
++
++    def bind(self, environment: Environment) -> "Extension":
++        rv = t.cast("InternationalizationExtension", super().bind(environment))
++        rv._init_cache()
++        return rv
++
++    def _init_cache(self) -> None:
++        """Initialize the translation cache."""
++        self._cache: t.Dict[str, str] = {}
++        self._cache_order: t.List[str] = []
++        self._cache_size = 128
++        self._update_cache_size()
++
++    def _update_cache_size(self) -> None:
++        """Update the cache capacity from the environment, evicting the
++        least recently used entries if the new size is smaller.
++        """
++        self._cache_size = getattr(self.environment, "i18n_cache_size", 128)
++
++        while len(self._cache_order) > max(self._cache_size, 0):
++            oldest = self._cache_order.pop(0)
++            self._cache.pop(oldest, None)
++
++    def _get_from_cache(self, key: str) -> t.Optional[str]:
++        """Return a cached translation, marking it as recently used."""
++        if key not in self._cache:
++            return None
++
++        self._cache_order.remove(key)
++        self._cache_order.append(key)
++        return self._cache[key]
++
++    def _put_in_cache(self, key: str, value: str) -> None:
++        """Store a translation, evicting the least recently used entry if
++        the cache is full.
++        """
++        if self._cache_size <= 0:
++            return
++
++        if key in self._cache:
++            self._cache_order.remove(key)
++        else:
++            while len(self._cache_order) >= self._cache_size:
++                oldest = self._cache_order.pop(0)
++                self._cache.pop(oldest, None)
++
++        self._cache[key] = value
++        self._cache_order.append(key)
++
++    def clear_cache(self) -> None:
++        """Remove all cached translations."""
++        self._cache.clear()
++        self._cache_order.clear()
+ 
+     def _install(
+         self, translations: "_SupportedTranslations", newstyle: t.Optional[bool] = None

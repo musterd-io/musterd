@@ -1,0 +1,46 @@
+{
+  "repo": "typst_task",
+  "task_id": 6554,
+  "features": [
+    4,
+    9
+  ],
+  "setting": "coop",
+  "run_id": "a8841026",
+  "run_name": "flash2-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T06:35:22.516903",
+  "ended_at": "2026-11-06T06:37:22.423464",
+  "duration_seconds": 119.906561,
+  "agents": {
+    "agent2": {
+      "feature_id": 9,
+      "status": "Submitted",
+      "cost": 0.18241740000000004,
+      "steps": 14,
+      "input_tokens": 20,
+      "output_tokens": 3222,
+      "cache_read_tokens": 277812,
+      "cache_write_tokens": 12467,
+      "patch_lines": 109,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 4,
+      "status": "Submitted",
+      "cost": 0.2173886,
+      "steps": 15,
+      "input_tokens": 24,
+      "output_tokens": 3460,
+      "cache_read_tokens": 341313,
+      "cache_write_tokens": 15966,
+      "patch_lines": 109,
+      "error": null
+    }
+  },
+  "total_cost": 0.399806,
+  "total_steps": 29,
+  "messages_sent": 0,
+  "log_dir": "logs/flash2-musterd/coop/typst_task/6554/f4_f9"
+}

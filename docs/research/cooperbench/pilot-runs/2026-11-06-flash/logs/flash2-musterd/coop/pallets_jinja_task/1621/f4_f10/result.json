@@ -1,0 +1,46 @@
+{
+  "repo": "pallets_jinja_task",
+  "task_id": 1621,
+  "features": [
+    4,
+    10
+  ],
+  "setting": "coop",
+  "run_id": "940d6000",
+  "run_name": "flash2-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T06:20:14.150510",
+  "ended_at": "2026-11-06T06:23:29.225297",
+  "duration_seconds": 195.074787,
+  "agents": {
+    "agent2": {
+      "feature_id": 10,
+      "status": "Submitted",
+      "cost": 0.3327554,
+      "steps": 21,
+      "input_tokens": 38,
+      "output_tokens": 5375,
+      "cache_read_tokens": 580467,
+      "cache_write_tokens": 21802,
+      "patch_lines": 179,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 4,
+      "status": "Submitted",
+      "cost": 0.1695576,
+      "steps": 13,
+      "input_tokens": 20,
+      "output_tokens": 3082,
+      "cache_read_tokens": 282838,
+      "cache_write_tokens": 10254,
+      "patch_lines": 179,
+      "error": null
+    }
+  },
+  "total_cost": 0.502313,
+  "total_steps": 34,
+  "messages_sent": 0,
+  "log_dir": "logs/flash2-musterd/coop/pallets_jinja_task/1621/f4_f10"
+}

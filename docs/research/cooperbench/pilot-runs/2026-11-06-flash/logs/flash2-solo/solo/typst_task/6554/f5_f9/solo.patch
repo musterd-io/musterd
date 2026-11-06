@@ -1,0 +1,112 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..f61e089b5 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -179,23 +179,72 @@ impl Str {
+     /// Extracts the first grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn first(
++        &self,
++        /// Number of characters to return as an array. If omitted, returns a
++        /// single string.
++        #[named]
++        count: Option<usize>,
++        /// Characters to strip from the start of the string before extracting.
++        #[named]
++        strip: Option<Str>,
++    ) -> StrResult<Value> {
++        let s = match &strip {
++            Some(set) if !set.is_empty() => {
++                self.0.trim_start_matches(|c| set.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        match count {
++            None => s
++                .graphemes(true)
++                .next()
++                .map(|g| Str::from(g).into_value())
++                .ok_or_else(string_is_empty),
++            Some(n) => {
++                check_count(s, n)?;
++                Ok(Value::Array(
++                    s.graphemes(true).take(n).map(|g| Str::from(g).into_value()).collect(),
++                ))
++            }
++        }
+     }
+ 
+     /// Extracts the last grapheme cluster of the string.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next_back()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn last(
++        &self,
++        /// Number of characters to return as an array. If omitted, returns a
++        /// single string.
++        #[named]
++        count: Option<usize>,
++        /// Characters to strip from the end of the string before extracting.
++        #[named]
++        strip: Option<Str>,
++    ) -> StrResult<Value> {
++        let s = match &strip {
++            Some(set) if !set.is_empty() => {
++                self.0.trim_end_matches(|c| set.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        match count {
++            None => s
++                .graphemes(true)
++                .next_back()
++                .map(|g| Str::from(g).into_value())
++                .ok_or_else(string_is_empty),
++            Some(n) => {
++                let total = check_count(s, n)?;
++                Ok(Value::Array(
++                    s.graphemes(true)
++                        .skip(total - n)
++                        .map(|g| Str::from(g).into_value())
++                        .collect(),
++                ))
++            }
++        }
+     }
+ 
+     /// Extracts the first grapheme cluster after the specified index. Returns
+@@ -811,6 +860,22 @@ fn captures_to_dict(cap: regex::Captures) -> Dict {
+     }
+ }
+ 
++/// Checks that a requested character count is valid for the given string and
++/// returns the total number of grapheme clusters.
++fn check_count(s: &str, n: usize) -> StrResult<usize> {
++    if n == 0 {
++        bail!("count must be at least 1");
++    }
++    let total = s.graphemes(true).count();
++    if total == 0 {
++        return Err(string_is_empty());
++    }
++    if n > total {
++        bail!("not enough characters (requested {n}, but string only has {total})");
++    }
++    Ok(total)
++}
++
+ /// The out of bounds access error message.
+ #[cold]
+ fn out_of_bounds(index: i64, len: usize) -> EcoString {

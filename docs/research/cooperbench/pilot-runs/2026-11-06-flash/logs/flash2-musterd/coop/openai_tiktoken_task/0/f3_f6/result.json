@@ -1,0 +1,46 @@
+{
+  "repo": "openai_tiktoken_task",
+  "task_id": 0,
+  "features": [
+    3,
+    6
+  ],
+  "setting": "coop",
+  "run_id": "f352f88f",
+  "run_name": "flash2-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:47:04.108031",
+  "ended_at": "2026-11-06T05:49:31.185030",
+  "duration_seconds": 147.076999,
+  "agents": {
+    "agent1": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 0.18079380000000003,
+      "steps": 13,
+      "input_tokens": 20,
+      "output_tokens": 2689,
+      "cache_read_tokens": 278144,
+      "cache_write_tokens": 14261,
+      "patch_lines": 76,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 6,
+      "status": "Submitted",
+      "cost": 0.20797860000000004,
+      "steps": 16,
+      "input_tokens": 26,
+      "output_tokens": 2948,
+      "cache_read_tokens": 367248,
+      "cache_write_tokens": 15093,
+      "patch_lines": 76,
+      "error": null
+    }
+  },
+  "total_cost": 0.3887724000000001,
+  "total_steps": 29,
+  "messages_sent": 0,
+  "log_dir": "logs/flash2-musterd/coop/openai_tiktoken_task/0/f3_f6"
+}

@@ -1,0 +1,103 @@
+diff --git a/tiktoken/core.py b/tiktoken/core.py
+index 6bc9736..5389805 100644
+--- a/tiktoken/core.py
++++ b/tiktoken/core.py
+@@ -82,7 +82,9 @@ class Encoding:
+         *,
+         allowed_special: Literal["all"] | AbstractSet[str] = set(),  # noqa: B006
+         disallowed_special: Literal["all"] | Collection[str] = "all",
+-    ) -> list[int]:
++        compress: bool = False,
++        return_positions: bool = False,
++    ) -> list[int] | tuple[list[int], list[int]]:
+         """Encodes a string into tokens.
+ 
+         Special tokens are artificial tokens used to unlock capabilities from a model,
+@@ -109,6 +111,17 @@ class Encoding:
+         >>> enc.encode("<|endoftext|>", disallowed_special=())
+         [27, 91, 437, 1659, 5239, 91, 29]
+         ```
++
++        If `compress` is True, adjacent repeated tokens are collapsed into a single token
++        after encoding (e.g. [1, 1, 2, 2, 2, 1] -> [1, 2, 1]).
++
++        If `return_positions` is True, returns a tuple `(tokens, positions)` where `positions[i]`
++        is the starting character index in `text` of `tokens[i]`.
++
++        ```
++        >>> enc.encode("hello world", return_positions=True)
++        ([15339, 1917], [0, 5])
++        ```
+         """
+         if allowed_special == "all":
+             allowed_special = self.special_tokens_set
+@@ -121,7 +134,7 @@ class Encoding:
+                 raise_disallowed_special_token(match.group())
+ 
+         try:
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
+         except UnicodeEncodeError:
+             # BPE operates on bytes, but the regex operates on unicode. If we pass a str that is
+             # invalid UTF-8 to Rust, it will rightfully complain. Here we do a quick and dirty
+@@ -130,7 +143,33 @@ class Encoding:
+             # string, but given that this is input we want to support, maybe that's okay.
+             # Also we use errors="replace" to handle weird things like lone surrogates.
+             text = text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
++
++        if return_positions:
++            positions = self._token_char_positions(text, tokens)
++            if compress:
++                tokens, positions = _compress_tokens_with_positions(tokens, positions)
++            return tokens, positions
++
++        if compress:
++            tokens = _compress_tokens(tokens)
++        return tokens
++
++    def _token_char_positions(self, text: str, tokens: Sequence[int]) -> list[int]:
++        """Returns the starting character index in `text` of each token in `tokens`."""
++        # Map each UTF-8 byte offset to the index of the character containing it, so that tokens
++        # starting in the middle of a multi-byte character map to that character.
++        byte_to_char: list[int] = []
++        for i, ch in enumerate(text):
++            byte_to_char.extend([i] * len(ch.encode("utf-8")))
++        byte_to_char.append(len(text))
++
++        positions = []
++        offset = 0
++        for token in tokens:
++            positions.append(byte_to_char[min(offset, len(byte_to_char) - 1)])
++            offset += len(self.decode_single_token_bytes(token))
++        return positions
+ 
+     def encode_to_numpy(
+         self,
+@@ -437,3 +476,25 @@ def raise_disallowed_special_token(token: str) -> NoReturn:
+         f"by passing `disallowed_special=(enc.special_tokens_set - {{{token!r}}})`.\n"
+         "To disable this check for all special tokens, pass `disallowed_special=()`.\n"
+     )
++
++
++def _compress_tokens(tokens: list[int]) -> list[int]:
++    """Removes adjacent repeated tokens from a token sequence."""
++    compressed: list[int] = []
++    for token in tokens:
++        if not compressed or compressed[-1] != token:
++            compressed.append(token)
++    return compressed
++
++
++def _compress_tokens_with_positions(
++    tokens: list[int], positions: list[int]
++) -> tuple[list[int], list[int]]:
++    """Like `_compress_tokens`, keeping the position of the first token in each run."""
++    compressed: list[int] = []
++    compressed_positions: list[int] = []
++    for token, position in zip(tokens, positions):
++        if not compressed or compressed[-1] != token:
++            compressed.append(token)
++            compressed_positions.append(position)
++    return compressed, compressed_positions
