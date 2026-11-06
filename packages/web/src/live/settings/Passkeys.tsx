@@ -47,7 +47,7 @@ export function Passkeys({
   }, [refresh]);
   if (keys === null || !me) return null;
 
-  const active = keys.filter((k) => k.revoked_at === null);
+  const active = keys.filter((k) => k.revoked_at === null && !k.pairing_ended);
   const passkeys = active.filter((k) => k.kind === 'passkey');
   const phones = active.filter((k) => k.kind === 'phone').length;
   // ADR 808: a passkey signs only on the hostname it was made for. `null` is a key from before

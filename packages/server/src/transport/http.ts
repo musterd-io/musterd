@@ -298,6 +298,7 @@ import {
   requireAuthority,
   revokeKeyGuarded,
   storePasskeyProof,
+  pairingOver,
 } from '../store/authority.js';
 import { matchGoalQuery, matchLaneQuery, readBoardQuery } from '../store/boardQuery.js';
 import { DAEMON_SERVICE_SEATS } from '../store/boardSeat.js';
@@ -5866,6 +5867,16 @@ export async function handleHttp(
           });
           if (relayed) return sendJson(res, 200, { keys: relayed.keys });
           const keys = await listDeviceKeys(ctx.db, team.id, member.id);
+          // Lane 01M6Q1RDTK: a phone key whose pairing ended is reported as not active even before
+          // the boot sweep has revoked it — a read that tells the truth, and mutates nothing.
+          const ended = new Set<string>();
+          for (const k of keys)
+            if (
+              k.kind === 'phone' &&
+              k.revokedAt === null &&
+              (await pairingOver(ctx.db, team.id, k.id))
+            )
+              ended.add(k.id);
           return sendJson(res, 200, {
             keys: keys.map((k) => ({
               id: k.id,
@@ -5874,6 +5885,7 @@ export async function handleHttp(
               rp_id: k.rpId,
               created_at: k.createdAt,
               revoked_at: k.revokedAt,
+              pairing_ended: ended.has(k.id),
               // The WebAuthn credential id (a public identifier, already served by the descriptor
               // view) so a registration can EXCLUDE the credentials this member already holds: an
               // authenticator keeps one discoverable credential per (rp_id, user handle), and a
