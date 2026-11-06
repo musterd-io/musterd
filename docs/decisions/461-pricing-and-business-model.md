@@ -204,8 +204,13 @@ does not gate the post, and it does not.
   on a team are free; billing is per person from the third, plus Cloud agent-hours** past an included
   block. Model keys are the customer's own; a musterd native harness and LLM are in progress and
   would add model compute as its own line when they ship. The amounts are still set with design
-  partners (§5). Cost-to-serve, packaging, ranges to test and a willingness-to-pay questions:
+  partners (§5). Cost-to-serve, packaging, ranges to test and willingness-to-pay questions:
   [`2026-11-06-pricing-proposal.md`](../superpowers/specs/2026-11-06-pricing-proposal.md).
+- 2026-11-06 (nick, question `01M6SCHH9K`; lane `01M6SA1B52`): **a person is billed once per
+  account.** Someone who is the third or later member on several paid teams pays as one person, as
+  §2 says ("a person on three paid teams is one paying person"). The seat count lives on the
+  account, counted across that person's paid teams; per-team pricing decides only whether a team
+  has reached its third person.
 - Dated notes go here as design-partner figures, conversions and the cookoff refresh land.
 
 ## Observability & Evaluation

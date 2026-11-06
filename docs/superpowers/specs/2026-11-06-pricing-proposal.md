@@ -121,6 +121,9 @@ Decided by nick, 2026-11-06:
 3. **The paid plan is called Pro.** The ladder is Local / Cloud Free / Pro / Org. "Team" was ruled out
    because it is the glossary's word for the group itself.
 4. **"musterd Cloud" keeps its name** for now (sloane's advice; nick did not move it).
+5. **A person is billed once per account** (question `01M6SCHH9K`). Someone who is the third or later
+   member on several paid teams pays one Pro seat, counted on their musterd account across all their
+   paid teams. A team's member count decides only whether it has reached its third person.
 
 Still open:
 
