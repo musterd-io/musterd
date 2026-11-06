@@ -7,6 +7,7 @@ import { addMember, authMember } from './members.js';
 import {
   burnUnexchangedCodes,
   issueCode,
+  listClientChains,
   liveSessionClient,
   liveSessionScope,
   mintTokenPair,
@@ -15,6 +16,7 @@ import {
   registerClient,
   revokeAllForMember,
   revokeChainsForSession,
+  revokeClientChain,
   revokeToken,
   rotateRefresh,
   verifyAccess,
@@ -406,6 +408,73 @@ withDrivers('oauth', (o) => {
       expect(await revokeChainsForSession(f.db, f.team.id, 'sess_1')).toBe(2);
       await expect(verifyAccess(f.db, f.team.id, pair.access_token)).rejects.toThrow();
       expect((await verifyAccess(f.db, f.team.id, other.access_token)).name).toBe('Nick');
+    });
+  });
+
+  describe("where you're signed in: MCP clients (unified sign-in lane 6)", () => {
+    it('lists each live client chain once, with its name and when it was last used', async () => {
+      const f = await freshHuman();
+      const first = await mintTokenPair(
+        f.db,
+        { teamId: f.team.id, memberId: f.member.id, clientId: f.client_id },
+        1_000,
+      );
+      // A refresh rotates within the same chain: still one row, last used moves on.
+      await rotateRefresh(
+        f.db,
+        { teamId: f.team.id, clientId: f.client_id, refreshToken: first.refresh_token },
+        5_000,
+      );
+      const rows = await listClientChains(f.db, f.team.id, f.member.id, 6_000);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        client_id: f.client_id,
+        client_name: 'Claude',
+        connected_at: 1_000,
+        last_used_at: 5_000,
+      });
+      expect(typeof rows[0]!.chain_id).toBe('string');
+    });
+
+    it('leaves out browser sessions, revoked chains and expired chains', async () => {
+      const f = await freshHuman();
+      const live = await liveSessionClient(f.db, f.team.id);
+      await mintTokenPair(f.db, {
+        teamId: f.team.id,
+        memberId: f.member.id,
+        clientId: live,
+        scope: liveSessionScope('sess1'),
+      });
+      const gone = await mintTokenPair(f.db, {
+        teamId: f.team.id,
+        memberId: f.member.id,
+        clientId: f.client_id,
+      });
+      await revokeToken(f.db, f.team.id, gone.refresh_token);
+      expect(await listClientChains(f.db, f.team.id, f.member.id)).toEqual([]);
+      await mintTokenPair(
+        f.db,
+        { teamId: f.team.id, memberId: f.member.id, clientId: f.client_id },
+        1_000,
+      );
+      // Far past every expiry: nothing live.
+      expect(await listClientChains(f.db, f.team.id, f.member.id, 10 ** 13)).toEqual([]);
+    });
+
+    it("ends one chain — both halves — and only that member's", async () => {
+      const f = await freshHuman();
+      const at = { teamId: f.team.id, memberId: f.member.id, clientId: f.client_id };
+      await mintTokenPair(f.db, at);
+      await mintTokenPair(f.db, at);
+      const chains = await listClientChains(f.db, f.team.id, f.member.id);
+      expect(chains).toHaveLength(2);
+      const target = chains[0]!.chain_id;
+      const other = (await addMember(f.db, f.team, { name: 'Ada', kind: 'human', role: '' })).row;
+      expect(await revokeClientChain(f.db, f.team.id, other.id, target)).toBe(0);
+      // The access and the refresh token of that chain.
+      expect(await revokeClientChain(f.db, f.team.id, f.member.id, target)).toBe(2);
+      const left = await listClientChains(f.db, f.team.id, f.member.id);
+      expect(left.map((r) => r.chain_id)).toEqual([chains[1]!.chain_id]);
     });
   });
 });

@@ -571,3 +571,61 @@ export async function sessionOfAccess(db: Driver, accessToken: string): Promise<
   );
   return sessionOfScope(row?.scope);
 }
+
+/** One MCP client a member has signed in, for "Where you're signed in" (unified sign-in lane 6). */
+export interface ClientChainRow {
+  chain_id: string;
+  client_id: string;
+  client_name: string;
+  /** When the chain began: its first token. */
+  connected_at: number;
+  /** Its latest token — a refresh, or the first mint: when the client last came back. */
+  last_used_at: number;
+}
+
+/**
+ * The member's signed-in MCP clients: one row per chain that still holds a live refresh token.
+ * A browser session's chains (`scope = 'session:…'`, ADR 722 §3) are not clients and are listed
+ * by `listBrowserSessions`. Newest use first. No token or hash ever leaves this query.
+ */
+export async function listClientChains(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+  now = Date.now(),
+): Promise<ClientChainRow[]> {
+  return db.all<ClientChainRow>(
+    `SELECT t.chain_id AS chain_id, t.client_id AS client_id, c.client_name AS client_name,
+            MIN(t.created_at) AS connected_at, MAX(t.created_at) AS last_used_at
+       FROM oauth_tokens t
+       JOIN oauth_clients c ON c.client_id = t.client_id
+      WHERE t.team_id = ? AND t.member_id = ?
+        AND (t.scope IS NULL OR t.scope NOT LIKE 'session:%')
+      GROUP BY t.chain_id, t.client_id, c.client_name
+     HAVING SUM(CASE WHEN t.kind = 'refresh' AND t.revoked_at IS NULL AND t.replaced_at IS NULL
+                      AND t.expires_at > ? THEN 1 ELSE 0 END) > 0
+      ORDER BY MAX(t.created_at) DESC, t.chain_id`,
+    [teamId, memberId, now],
+  );
+}
+
+/**
+ * Sign one MCP client out: every unrevoked token of that chain, and only if the chain is this
+ * member's on this team (a caller can never end someone else's chain by its id). Returns how many
+ * rows it revoked; 0 means there was nothing of theirs to end.
+ */
+export async function revokeClientChain(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+  chainId: string,
+  now = Date.now(),
+): Promise<number> {
+  const r = await db.run(
+    `UPDATE oauth_tokens SET revoked_at = ?
+      WHERE team_id = ? AND member_id = ? AND chain_id = ? AND revoked_at IS NULL
+        AND (scope IS NULL OR scope NOT LIKE 'session:%')`,
+    [now, teamId, memberId, chainId],
+  );
+  return r.changes;
+}
