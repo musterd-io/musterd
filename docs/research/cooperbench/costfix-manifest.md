@@ -140,3 +140,30 @@ expires ~2026-11-07 07:00Z — if the run cannot finish before then it waits for
 | Fold in the C1 second seed (baseline + solo on flash) | lazara, proposed here: the baseline arm is needed concurrently for K1 anyway; solo adds ~$9 |
 | Model | `claude-opus-5-5`, all arms (as finding 035) |
 | Spend | nick, 2026-11-06 ~19:05Z, question `01M6S3X1MV` (verified app answer): "Approve up to $135" |
+
+## Amendment after stage 1 (2026-11-06 20:07Z) — the lean arm stops; stage 2 runs seed 2 only
+
+Recorded after stage 1 and **before any stage-2 pair** (committed 20:07:42Z; the seed-2 run started 20:08:36Z by the run machine's clock); nothing above is changed.
+
+- **Stage 1 ran** 19:25–20:00Z on main `4a1422cc` (smoke 19:21Z: all three arms passed the gate;
+  lean sessions loaded 26 musterd tools against baseline's 32). `core`: baseline $5.47, lean $4.79
+  (no verdict is read from these). **Gates** (`gates1.json`): **G1 failed** — 13 of 20 lean sessions
+  still opened with `team_inbox_check`; **G2 failed** — in 0 of 10 pairs did only one agent fetch or
+  merge; G3 passed (none of the six tools present); G4 passed (passes lean 5, baseline 6; no merge
+  conflicts). Spend $11.61 including the smoke.
+- **Why G2 failed — a design error in this manifest.** CooperBench's own git block (`_git_block`, at
+  `63b9d44`), which every two-agent arm receives, is headed "MERGE IS REQUIRED BEFORE SUBMITTING" and
+  tells each agent to fetch and merge every partner's branch "verbatim before exiting", because the
+  bench scores each agent's patch against every feature. The lean paragraph contradicted the
+  benchmark's submission rule; the agents followed the benchmark. One integrator cannot be tested on
+  CooperBench without overriding its rule, which would tune the arm to the harness rather than fix
+  musterd. It should have been caught before pre-registration.
+- **Why G1 failed.** musterd's own MCP server instructions tell a seat to get on the team with
+  `team_inbox_check` first; the arm text alone did not override it in 13 of 20 sessions. The fix, if
+  any, belongs in the product's guidance, not the arm.
+- **Decision (nick, question `01M6S786PJ`, verified app answer, "Seed 2 only"):** the lean arm stops;
+  no revision is run. Without the integrator the package is worth roughly 5% by finding 036's
+  illustrative estimates, which K1 could not detect at N = 50. **Stage 2 runs baseline and solo only**
+  on the 50 `flash` pairs (`costfix2-base`, `costfix2-solo`, `-c 2` / `-c 1`, the threshold unchanged
+  at $110 over every `costfix*` pair). **K1 and K2 are withdrawn; K3 is read exactly as written above.**
+  The join-call guidance and the up-front tool set go to product lanes, judged on mechanism.
