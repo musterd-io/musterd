@@ -52,7 +52,7 @@ import {
   type ArtPiece,
 } from './layout';
 import type { ReadStatus } from '../experimentReads';
-import { READ_PIN_CAP, readPins, stickySway, WALL_COLUMNS, type WallBoard } from './wallboard';
+import { boardKey, boardSwaying, READ_PIN_CAP, readPins, stickySway, WALL_COLUMNS, type WallBoard } from './wallboard';
 import { DAY_ENV, deskLampOn, floorLampOn, sunBeam, type LightEnv } from './lighting';
 import type { Weather } from './weather';
 import { drawMovers, moversAt } from './windowSprites';
@@ -1143,6 +1143,8 @@ export function drawWalls(
   bellAngle = 0,
   /** Broadcast's stage timer: each fixture group marks its own `walls.*` stage (lane 01M6S5V5DY). */
   prof?: FrameProfile,
+  /** The stage's sprite cache and the static key suffix (`statKey`): a still board blits as one sprite. */
+  sprites?: { cache: SpriteCache; statKey: string; only?: string | undefined },
 ): void {
   /**
    * What each wall carries. The right wall gets the clock (it is the only one whose `+t` runs screen-right,
@@ -1182,9 +1184,17 @@ export function drawWalls(
       // The agile board — far-right gap. Must be THIS wall: `+t` runs screen-left on the other one
       // (same constraint that fixed the clock here), and a kanban has a reading direction.
       const [bx, by] = edge(WALL_BOARD.tc);
-      run(() => {
-        if (blitIf(ctx, fit, art, 'wall/board', bx, by)) wallLaneBoard(ctx, fit, edge, wallBoard);
-      });
+      const board = (c: CanvasRenderingContext2D): void => {
+        if (blitIf(c, fit, art, 'wall/board', bx, by)) wallLaneBoard(c, fit, edge, wallBoard);
+      };
+      // A still board is one sprite, keyed on what it shows; only a card swinging from its landing
+      // paints it live (lane 01M6S5V5DY: ~12.7 ms a frame on the stream box, both passes, before).
+      // Shared by /live and /broadcast — the board draws the same on both.
+      run(() =>
+        sprites && !boardSwaying(wallBoard)
+          ? blitSprite(ctx, sprites.cache, `wall·board·${boardKey(wallBoard)}·${sprites.statKey}`, board, sprites.only)
+          : board(ctx),
+      );
       prof?.mark('walls.board');
       // The goal bell over the board's top-left corner (lane 01M6HHH5EH): its own unit, so a swing
       // damages the bell and not the board beside it.
@@ -4594,7 +4604,11 @@ export function renderScene(
     prof?.mark('shell');
     // On the stage, in their existing order: the live fixtures over the blitted walls, then the
     // additive bulb strands (see `drawWalls`).
-    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather, opts.bellAngle, prof);
+    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather, opts.bellAngle, prof, {
+      cache,
+      statKey,
+      only: opts.spriteOnly,
+    });
     prof?.mark('walls');
     // Source-over floor paint, so it caches cleanly on top of the shell.
     run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));

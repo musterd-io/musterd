@@ -386,3 +386,40 @@ export function withMoving(board: WallBoard | null, moving: readonly CardInFligh
   return out;
 }
 
+
+/**
+ * Is any card on the board still swinging from its landing (`stickySway` non-zero)? While one is, the
+ * board changes every frame and is painted live; otherwise it is a still picture (lane 01M6S5V5DY).
+ */
+export function boardSwaying(board: WallBoard | null): boolean {
+  if (!board) return false;
+  for (const col of board) {
+    if (!col) continue;
+    for (const s of col.stickies) if (s.age !== undefined && s.age >= 0 && s.age < STICKY_SWAY_S) return true;
+  }
+  return false;
+}
+
+const boardKeys = new WeakMap<object, string>();
+
+/**
+ * Everything the board's painter reads, as one string — the sprite key of a still board. `age` is left
+ * out (a still board's cards do not sway, so it changes nothing drawn), and so is everything the board
+ * array carries that the painter does not read. Memoised per board object: the measure pass and the
+ * paint pass of one frame share the frame's snapshot, so it is built once a frame at most.
+ *
+ * Measured on the stream box, 2026-11-06: painting the board's cards, tape, holes and read tags live
+ * cost ~6.7 ms a frame, and the dirty-rect measure pass replayed it for another ~6.0 — half of the
+ * page's own frame time, for a picture that changes when a lane moves.
+ */
+export function boardKey(board: WallBoard | null): string {
+  if (!board) return 'none';
+  const hit = boardKeys.get(board);
+  if (hit !== undefined) return hit;
+  const key = JSON.stringify(
+    { cols: [...board], rows: board.rows ?? null, reads: board.reads ?? null },
+    (k, v: unknown) => (k === 'age' ? undefined : v),
+  );
+  boardKeys.set(board, key);
+  return key;
+}
