@@ -143,6 +143,8 @@ withDrivers('passkey vouch over http (ADR 769)', (_o, kind) => {
     expect(held.status).toBe(202);
     const digest = held.json.held.enrollment_digest as string;
     expect(digest).toMatch(/^[0-9a-f]{64}$/);
+    // Only admins whose vouch could be signed are offered: nick, with a platform key.
+    expect(held.json.held.countersigners).toEqual(['nick']);
 
     const payload = { action: 'enroll', kind: 'passkey', member: 'ada', key: digest };
     // ada cannot vouch for herself, even with nick's proof in hand.

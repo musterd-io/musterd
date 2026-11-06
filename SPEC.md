@@ -1093,7 +1093,7 @@ advisory for every listed act.
   registration's held-enrollment digest, since an unattested ceremony is fabricable by a
   Bearer-holding agent. No countersigner, no recovery. With `hold: true` and no countersign,
   the verified registration is held against its enrollment code (written once; it lives as
-  long as the code) and the answer is `202 {held: {enrollment_digest, expires_at}}`; an admin
+  long as the code) and the answer is `202 {held: {enrollment_digest, expires_at, countersigners}}` (`countersigners`: the human admins whose vouch could be signed here — admin now, with a key that signs where the hub serves; empty means nobody can); an admin
   then completes it with `POST /teams/:slug/authority/passkeys/vouch`
   `{member, enrollment_digest, approval}` → `201 {key, member}`, on the hub only, the admin's
   A2 over that same payload, every check re-run and the code spent with the key inserted in

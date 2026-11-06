@@ -34,3 +34,14 @@ export function requestDecisionApproval(input: {
     },
   };
 }
+
+/**
+ * ADR 769: the six-digit check code for a passkey vouch. The member's sheet shows it, the admin
+ * types it on /live, and the phone works it out again from the signed `key`. One function, so the
+ * three surfaces cannot disagree. It lives in this schema-free module so /live imports it without
+ * Zod; `approval.ts` re-exports it. `digest` is the held enrollment's 64-hex sha256.
+ */
+export function vouchCheckCode(digest: string): string {
+  if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('vouchCheckCode: digest must be 64 hex');
+  return (Number.parseInt(digest.slice(0, 8), 16) % 1_000_000).toString().padStart(6, '0');
+}

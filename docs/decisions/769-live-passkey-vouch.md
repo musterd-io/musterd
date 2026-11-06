@@ -209,6 +209,23 @@ proof names no key. The relay keeps the zero-key rule (it passes no hub hosts) a
 /live on a joiner already redirects to the hub. The store tests in `store/authority.vouch.test.ts`
 are the Eval list.
 
+**2026-11-06: increment 3, /live (lane `01M64SXW85`).** The member's sheet sends `hold: true` when
+it has no approval to attach. It shows the check code and names the replaced passkeys. It offers
+**Ask <admin>** only for the admins the `202 {held}` answer lists as `countersigners` (an exported
+`countersignersFor`, the same rule as `recoveryCountersignerStands`), falls back to the recovery-code
+form when that list is empty, and polls until the vouched key lands, then offers **Revoke these** or
+**Keep them**. The admin's card sits under Waiting for you, the code-typing gate is `vouchGate`, and
+the request closes with a `resolve` on its thread. `vouchCheckCode` moved into the schema-free
+`approvalContracts.ts` (still re-exported by `approval.ts`), so /live imports it without Zod.
+
+Two parts of the Decision are not in this increment. **Vouch from your phone** needs the daemon's
+`ask-phone` route to accept the vouch payload for a descriptor that targets another member: today it
+serves only the caller's own enrollment. It lands with the mobile increment, which also shows `check`
+on the phone. Until then, an admin with no passkey that signs on the page is told to open musterd
+where one does. **The joiner card** ("its whole content is a link to the hub's /live") has no page to
+render on, because a joiner's /live already redirects the browser to the hub (lane 01M6N2WJ8P), and
+the vouch route refuses on a joiner (`requireHubLocalOnly`).
+
 ## Observability & Evaluation
 
 - **Traces:** the existing `device_key.enrolled` audit row (actor the member) and the countersign

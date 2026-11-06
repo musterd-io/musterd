@@ -287,6 +287,7 @@ import {
   activeDeviceKeys,
   buildDescriptor,
   enrollKeyGuarded,
+  countersignersFor,
   enrollPasskeyGuarded,
   vouchPasskeyGuarded,
   getDescriptorByNonce,
@@ -5832,10 +5833,14 @@ export async function handleHttp(
         if (!result.ok && result.held) {
           // ADR 769: verified and held, not enrolled. The member's sheet shows the check code
           // (`vouchCheckCode` of this digest) and asks an admin to vouch.
+          const hosts = webauthnExpectedOrigins(ctx).map((o) => new URL(o).hostname);
           return sendJson(res, 202, {
             held: {
               enrollment_digest: result.held.enrollmentDigest,
               expires_at: result.held.expiresAt,
+              // Only the admins whose vouch could be signed here (ADR 769 step 2); empty means
+              // nobody can, and the sheet points to the ADR 808 inc D recovery code instead.
+              countersigners: await countersignersFor(ctx.db, team.id, member.id, hosts),
             },
           });
         }

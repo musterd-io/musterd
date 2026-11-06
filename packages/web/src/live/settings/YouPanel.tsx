@@ -23,10 +23,12 @@ import {
 } from '../pairingClient';
 import { MyStylePart, StyleNote, useStyleEdit, type SheetNote } from '../StyleSheet';
 import { statusLineDraft, visibleStatusLine } from '../statusLine';
+import type { VouchRequest } from '../vouchRequests';
 import { Row, Segmented, Switch } from './controls';
 import { PairPhone } from './PairPhone';
 import { Passkeys } from './Passkeys';
 import { QuestionNotify } from './QuestionNotify';
+import { VouchRequests } from './VouchRequests';
 
 /**
  * The You side of settings: everything here is the viewer's own, and the daemon answers each route
@@ -37,6 +39,7 @@ export function YouPanel({
   cfg,
   me,
   pairings,
+  vouches = [],
   onPairingsChanged,
   seats = [],
 }: {
@@ -46,6 +49,8 @@ export function YouPanel({
   /** The viewer's roster row — availability and effective working hours come from it. */
   me: MemberSummary | null;
   pairings: ChannelPairing[];
+  /** ADR 769: vouch requests waiting on this admin — first, the most time-bound thing here. */
+  vouches?: readonly VouchRequest[];
   onPairingsChanged: () => void;
 }) {
   const style = useStyleEdit(cfg, false);
@@ -54,6 +59,7 @@ export function YouPanel({
   const others = pairings.filter((p) => !p.app);
   return (
     <>
+      <VouchRequests cfg={cfg} requests={vouches} />
       {others.length > 0 && (
         <Pairings cfg={cfg} pairings={others} onChanged={onPairingsChanged} />
       )}

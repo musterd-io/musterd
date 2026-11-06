@@ -51,6 +51,7 @@ import { useLiveStream } from '../live/useLiveStream';
 import { HealthBanner } from '../live/HealthBanner';
 import { useTeamHolds } from '../live/useTeamHolds';
 import { usePendingPairings } from '../live/usePendingPairings';
+import { pendingVouches } from '../live/vouchRequests';
 import { useServerHealth } from '../live/serverHealth';
 import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
@@ -311,6 +312,13 @@ function LivePage() {
         : [...streamed, ...sent.filter((s) => !streamed.some((e) => e.id === s.id))],
     [streamed, sent],
   );
+  // ADR 769: vouch requests waiting on this admin, from the stream /live already holds. They light
+  // the settings dot like a staged pairing does, and fill Settings → You's Waiting for you.
+  const vouches = useMemo(() => {
+    if (!settingsAdmin || !meRow) return [];
+    const humans = new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name));
+    return pendingVouches(envelopes, meRow.name, humans, Date.now());
+  }, [settingsAdmin, meRow, roster, envelopes]);
   const [promptbar, setPromptbar] = useState(false);
   useEffect(() => setPromptbar(promptBarFlag(window.location.search, window.location.hash)), []);
 
@@ -873,7 +881,10 @@ function LivePage() {
                 onWikiHover={preloadWiki}
                 // ADR 618 §7: a staged pairing used to be a full-width panel above the room; now it
                 // is a dot on the calendar, and the You sheet holds the confirmation.
-                settingsSpot={{ enabled: settingsHuman, flagged: pairings.length > 0 }}
+                settingsSpot={{
+                  enabled: settingsHuman,
+                  flagged: pairings.length > 0 || vouches.length > 0,
+                }}
                 // The asks & approvals rail (ADR 149) rides the top of the room itself — the office
                 // frames its own asks (nick, 2026-07-28). Still renders nothing until an ask exists.
                 topSlot={
@@ -1003,6 +1014,7 @@ function LivePage() {
                 isAdmin={settingsAdmin}
                 teamHours={stream.teamWorkingHours}
                 pairings={pairings}
+                vouches={vouches}
                 seats={roster.filter((m) => m.kind === 'agent').map((m) => m.name)}
                 origin={settingsOrigin}
                 initialTab={settingsAdmin ? settingsTab : 'you'}

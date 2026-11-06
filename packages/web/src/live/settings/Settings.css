@@ -710,6 +710,29 @@
   padding: 2px 8px;
   font-size: 11.5px;
 }
+/* ADR 769: a passkey held for an admin's vouch (member side) and the vouch card (admin side). */
+.lc-keys__vouch {
+  display: grid;
+  gap: var(--lc-3);
+  margin: 0 0 var(--lc-4);
+}
+/* The code the member reads aloud: big enough to read across a desk or over a video call. */
+.lc-keys__code {
+  margin: 0;
+  font: 700 26px/1.1 var(--font-mono);
+  letter-spacing: 0.18em;
+  color: var(--lc-text);
+}
+.lc-keys__vouchact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lc-3);
+  align-items: center;
+}
+.lc-keys__codein {
+  width: 9ch;
+  letter-spacing: 0.12em;
+}
 /* ADR 808 inc D: the recovery-code field, shown only when no key signs anywhere and no phone. */
 .lc-keys__recover {
   display: grid;
