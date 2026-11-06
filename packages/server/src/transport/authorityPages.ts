@@ -22,23 +22,31 @@ ${body}
 <script>
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
 const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
-const out = (msg, err) => { const el = document.getElementById('out'); el.textContent = msg; el.className = err ? 'err' : ''; };
 const params = new URLSearchParams(location.search);
 // WebAuthn exists only on a secure context (https, or localhost). On a plain-http hub address the
 // old page died with "Cannot read properties of undefined (reading 'get')" (nick, 2026-11-05):
-// say why, point at the hub's https origin from /health, and keep every button off.
+// say why, point at the hub's https origin from /health, and keep every button off. On an
+// insecure origin out() shows the guidance and nothing else, so a later descriptor error or an
+// empty passkey list cannot overwrite it whichever response lands first (big-body's read).
 const insecure = !(window.isSecureContext && navigator.credentials && typeof navigator.credentials.get === 'function');
+let secureOrigin = '';
+const guidance = () => 'Passkeys only work on https or localhost, and this page is on ' + location.origin + '. ' +
+  (secureOrigin ? 'Open the same link here instead: ' + secureOrigin + location.pathname + location.search + location.hash
+                : "Open the same link on the hub's https address, or on http://localhost.");
+const out = (msg, err) => {
+  const el = document.getElementById('out');
+  if (insecure) { msg = guidance(); err = true; }
+  el.textContent = msg; el.className = err ? 'err' : '';
+};
 if (insecure) {
+  out();
+  for (const b of document.querySelectorAll('button')) b.disabled = true;
   (async () => {
-    let origin = '';
     try {
       const j = await (await fetch('/health')).json();
-      if (typeof j.browser_origin === 'string' && j.browser_origin.startsWith('https://')) origin = j.browser_origin;
+      if (typeof j.browser_origin === 'string' && j.browser_origin.startsWith('https://')) secureOrigin = j.browser_origin;
     } catch {}
-    const here = location.pathname + location.search + location.hash;
-    out('Passkeys only work on https or localhost, and this page is on ' + location.origin + '. ' +
-      (origin ? 'Open the same link here instead: ' + origin + here : "Open the same link on the hub's https address, or on http://localhost."), true);
-    for (const b of document.querySelectorAll('button')) b.disabled = true;
+    out();
   })();
 }
 ${script}
