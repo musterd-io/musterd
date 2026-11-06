@@ -23,7 +23,7 @@ The design spec named some things in builder's words. On every surface a person 
 | Design spec says | Copy says | Why |
 | --- | --- | --- |
 | End / End all (§7) | **Sign out** / **Sign out everywhere on {team}** for sessions; **Revoke** for an API key; **Remove from {team}** for a computer | People recognise "Sign out". "End all" never said it covers one team only. |
-| *admin* key scope (§8) | **Owner** | brand.md §5: Owner is the human-facing word for a member holding `is_admin`. |
+| *admin* key scope (§8) | no such option: a key reads or acts as you | big-body, 2026-11-06 (#4010): an admin act needs a person in a session. Where copy names that person, the word is **Owner** (brand.md §5). |
 | a linked hub (§2, §11.3) | a **linked team**; "link this team to your musterd account" | brand.md §5 keeps the hub out of copy. A person knows their team. |
 | a machine (§6) | a **computer** | What the person calls it. A Fly machine is "a computer in musterd Cloud". |
 | "no secret is ever shown" (*What success is*) | true for signing in; an **API key** is shown once, by design | §7 below says so to the person, plainly. |
@@ -162,7 +162,6 @@ On the console (every team, for the account) and on `/live` settings (this team,
 | Field label | access | `Access` | Radio, in this order. |
 | Option | read | `Read only — see the board, inboxes and record` | Default. |
 | Option | act as me | `Act as you — send, claim and accept as {member}` | |
-| Option | owner | `Owner — change members and team settings` | Only offered to an owner. Held on design question 6 (big-body). |
 | Field label | expiry | `Expires` | Default `In 90 days`; also `In 30 days`, `In 1 year`. |
 | Hint | bot | `For a bot, create the key on the bot's seat, so the record shows the bot did it.` | Under the form. |
 | Notice | created | `Copy this key now. You won't see it again.` | The key in a selectable field with `Copy`. Leaving the page drops it. |
@@ -175,12 +174,14 @@ On the console (every team, for the account) and on `/live` settings (this team,
 
 | Surface | State | Exact string | Notes |
 | --- | --- | --- | --- |
-| Prompt line 1 | before linking | `Linking lets you sign in to {team} with your musterd account, from anywhere.` | One team on this computer. |
-| Prompt line 1 | several teams | `Linking lets you sign in to {team} and {n} other teams on this computer with your musterd account.` | One link covers every team the computer serves. |
-| Prompt line 2 | before linking | **Held**: `A linked team checks with musterd.io every few minutes for sign-in keys. It sends {…}.` | Waits on what the pull sends (design §11.3). `PRIVACY.md` line 3 changes in the same PR. |
+| Prompt line 1 | before linking | `Linking lets you sign in to {team} with your musterd account, from any device that can reach it.` | One team on this computer. A team behind NAT is reached on its network or through its federation (design §11.3); the line promises no more than that. |
+| Prompt line 1 | several teams | `Linking lets you sign in to {team} and {n} other teams on this computer with your musterd account, from any device that can reach them.` | One link covers every team the computer serves. |
+| Prompt line 2 | before linking | `A linked team checks musterd.io for sign-in keys and signed-out accounts every 5 minutes. It sends nothing about your team, its members or its work.` | Design §11.4: the key fetch sends nothing; the revocation pull sends only the link id. `PRIVACY.md` line 3 changes in the same PR as lane 8, in the design's words. |
 | Button / CLI | before linking | `Link {team}` | |
 | Success | linked | `✓ {team} is linked to your musterd account` | |
-| Offline | console unreachable | `{team} keeps working. New sign-ins with your musterd account wait until musterd.io is reachable.` | Shown on `/live` while it lasts. |
+| Offline | console unreachable, under 1 hour | `{team} can't reach musterd.io. If that lasts an hour, sign-ins with a musterd account stop until it can.` | Design §11.3–4 (big-body's fail-closed bound, #4010). On `/live`, while it lasts. |
+| Offline | console unreachable, 1 hour or more | `{team} can't reach musterd.io, so sign-ins with a musterd account are stopped. Sign-ins on this computer keep working.` | Account-derived credentials are refused at use. Local credentials and the loopback sign-in keep working. |
+| Offline | reachable again | `{team} reached musterd.io again. Sign in with your musterd account to keep going.` | Shown once, to a person whose account session was refused. |
 
 ## 9. A computer joins a team (lane 9)
 
@@ -218,6 +219,4 @@ No price, trial length or limit appears anywhere until that ADR sets it.
 
 | Held | Waits on |
 | --- | --- |
-| §7, the Owner key scope | big-body, design question 6 |
-| §8 line 2, what a linked team sends | miley / big-body, design §11.3 |
 | §11 line 3, prices and the Cloud allowance | design partners, ADR 461 §5 |
