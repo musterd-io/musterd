@@ -274,6 +274,37 @@ The anti-goals are the brief. In practice, as cider proposes it:
 The builder should mock the Now screen at full fidelity and get nick's reaction before building
 the rest; "magical" and "uniquely musterd" are judged by looking.
 
+### The feel bar (nick, 2026-11-05, on approving this document)
+
+"Every detail of the entire app, including every button click, every action, typing in the chat,
+navigation, transitions, needs to feel so extremely magical, fun, smooth, sleek, warm and responsive
+that users want to come back every day to just use the app. Some haptic feedback and animations,
+but don't go overboard. This needs to be bleeding edge: an app that no one has ever experienced
+before."
+
+What that means for the build, as cider reads it:
+
+- **Nothing is instant and nothing is slow.** Every press, every screen change and every row that
+  appears or leaves moves on a spring, off the JS thread, within one of the brand's motion
+  durations (120 to 400 ms). A tap answers within the same frame it lands (press-down scale), even
+  when the result takes longer.
+- **Haptics say what happened, not that you touched something.** A light tick on a tab switch,
+  a selection tick on picking an option, a success pattern when a nudge or an answer lands, a
+  warning pattern on a failure. Never on scroll, never on every row.
+- **One signature moment per surface, not ten.** The tab spring, the sheet rising, a sent message
+  settling into the thread, an answered ask folding away. Each is designed once and reused; nothing
+  else animates for its own sake. "Don't go overboard" is a rule the plan enforces: a motion that
+  has no meaning is cut.
+- **Typing in the chat feels like a conversation:** the field grows with the text, the send
+  button wakes when there is something to send, the bubble leaves the field on a spring and the
+  seat's "waking" state shows while it answers.
+- **Bleeding edge, in iOS's own terms:** Liquid Glass surfaces where iOS 26 offers them
+  (`expo-glass-effect`, already used), SF Symbols with their built-in animations
+  (`expo-symbols`), and 120 Hz motion on ProMotion screens. Novelty comes from doing these
+  thoroughly, not from inventing new controls.
+- **Every phase ships with a short recorded run** of its signature moments for nick to judge on the
+  phone, before it is accepted. Feel is part of the acceptance, not a polish pass after.
+
 ## Decisions this needs
 
 1. **Widen ADR 676's scope** (a new ADR): the app is now the team on the phone (asks, the team,
