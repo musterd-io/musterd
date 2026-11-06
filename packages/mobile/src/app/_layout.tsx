@@ -1,4 +1,5 @@
 import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavBar } from '../ui/nav';
 import { usePalette } from '../ui/theme';
 
@@ -19,8 +20,10 @@ export default function RootLayout() {
     },
   };
   return (
-    <ThemeProvider value={theme}>
-      <Stack
+    // ADR 815: the gesture root, so a sheet can be dragged shut anywhere in the app.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={theme}>
+        <Stack
         screenOptions={{
           // The app's own bar (ui/nav.tsx), not the stock iOS one: nick on build 48 called the
           // "< Asks" bar "extremely generic and huge". It floats, transparent, over each screen's
@@ -35,7 +38,8 @@ export default function RootLayout() {
         <Stack.Screen name="ask/[ref]" options={{ title: 'Ask' }} />
         <Stack.Screen name="seats" options={{ title: 'Seats' }} />
         <Stack.Screen name="poll" options={{ title: 'Poll' }} />
-      </Stack>
-    </ThemeProvider>
+        </Stack>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

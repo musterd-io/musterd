@@ -394,7 +394,11 @@ plugin embeds static DM Sans TTFs from `assets/fonts/`, instanced from the web's
 styles name them through `font` in `src/ui/theme.ts`; figures that must line up, like the pairing
 fingerprint, use tabular digits. `expo-haptics` gives a press a
 light tick and an answer sent or a phone paired a success buzz. Cards are Liquid Glass on iOS 26 (`expo-glass-effect`, solid
-white before it) and the app's glyphs are SF Symbols (`expo-symbols`), ADR 764. The icon is `assets/icon.svg`
+white before it) and the app's glyphs are SF Symbols (`expo-symbols`), ADR 764. The app shell's
+motion runs on the UI thread: `react-native-reanimated` with `react-native-worklets` (its babel
+plugin is last in `babel.config.js`), `react-native-gesture-handler` for the member sheet's drag
+(`GestureHandlerRootView` wraps the app in `_layout.tsx`), and `react-native-svg` for the tab
+icons, the active tab's gradient and the page glow — ADR 815. The icon is `assets/icon.svg`
 (the ADR 702 mark, full-bleed) rendered to `icon.png`; `wordmark.png` and `mark.png` are the
 ADR 704 nameplate and the mark, rendered from `docs/design/assets/`.
 
