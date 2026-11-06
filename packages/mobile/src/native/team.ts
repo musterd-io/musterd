@@ -74,12 +74,24 @@ export function teamRows(
   };
 }
 
-/** "10 here · 20 offline · 2 need you" — zero parts drop out, except here. */
-export function summaryLine(c: TeamRows['counts']): string {
-  const parts = [`${c.here} here`];
-  if (c.offline > 0) parts.push(`${c.offline} offline`);
-  if (c.needYou > 0) parts.push(`${c.needYou} ${c.needYou === 1 ? 'needs' : 'need'} you`);
-  return parts.join(' · ');
+/**
+ * Now's top line (nick, 2026-11-06: "not aligned and looks very bare"): the team's name, who is here
+ * and away under it, and a mustard chip for what needs you. Unpaired, it says where the phone stands.
+ */
+export function headerLines(input: {
+  pairing: 'paired' | 'waiting' | 'none';
+  team: string | null;
+  counts: TeamRows['counts'];
+}): { title: string; sub: string; chip: string | null } {
+  const title = input.team ?? 'musterd';
+  if (input.pairing === 'waiting') return { title, sub: 'Waiting for approval', chip: null };
+  if (input.pairing === 'none') return { title, sub: 'Not paired', chip: null };
+  const { here, offline, needYou } = input.counts;
+  return {
+    title,
+    sub: offline > 0 ? `${here} here · ${offline} away` : `${here} here`,
+    chip: needYou > 0 ? `${needYou} for you` : null,
+  };
 }
 
 /** /live's `elapsed()`: "<1m" / "42m" / "3h" / "2d" — how long the shown lane has been in hand. */

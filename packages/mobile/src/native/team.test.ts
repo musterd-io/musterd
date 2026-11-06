@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AppForYou, AppMember } from './team';
-import { forYouCount, modelLine, portraitOf, sinceLabel, summaryLine, teamRows } from './team';
+import { forYouCount, headerLines, modelLine, portraitOf, sinceLabel, teamRows } from './team';
 
 const NOW = 1_800_000_000_000;
 
@@ -98,12 +98,35 @@ describe('teamRows (ADR 814): the Now screen from the roster', () => {
 });
 
 describe('the Now header', () => {
-  it('summaryLine says here · offline · need you, dropping zero parts but here', () => {
-    expect(summaryLine({ here: 10, offline: 20, needYou: 2 })).toBe(
-      '10 here · 20 offline · 2 need you',
-    );
-    expect(summaryLine({ here: 3, offline: 0, needYou: 0 })).toBe('3 here');
-    expect(summaryLine({ here: 0, offline: 0, needYou: 1 })).toBe('0 here · 1 needs you');
+  it('headerLines names the team, who is here and away, and what needs you', () => {
+    expect(
+      headerLines({
+        pairing: 'paired',
+        team: 'revive',
+        counts: { here: 9, offline: 21, needYou: 1 },
+      }),
+    ).toEqual({ title: 'revive', sub: '9 here · 21 away', chip: '1 for you' });
+    expect(
+      headerLines({
+        pairing: 'paired',
+        team: 'revive',
+        counts: { here: 3, offline: 0, needYou: 0 },
+      }),
+    ).toEqual({ title: 'revive', sub: '3 here', chip: null });
+  });
+
+  it('headerLines says where an unpaired phone stands', () => {
+    const counts = { here: 0, offline: 0, needYou: 0 };
+    expect(headerLines({ pairing: 'waiting', team: 'revive', counts })).toEqual({
+      title: 'revive',
+      sub: 'Waiting for approval',
+      chip: null,
+    });
+    expect(headerLines({ pairing: 'none', team: null, counts })).toEqual({
+      title: 'musterd',
+      sub: 'Not paired',
+      chip: null,
+    });
   });
 
   it('sinceLabel is /live’s elapsed(): <1m, 42m, 3h, 2d, and null for none', () => {
