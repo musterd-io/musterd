@@ -1529,3 +1529,35 @@ writing. Cold act→reply now has its first clean input for ADR 816's two-week e
 the claim: one round, one machine, build `5cc47d21`, 2026-11-06 — falsify by re-running this
 round and watching the first lease expire unspawned, or act→reply exceed ~2 min with the tick
 phase accounted for.
+
+## 2026-11-06 — the ADR 662 phase-2a reading: stay parked (lane `01M55Y5DQH`)
+
+ADR 662 decision 2 parks phase 2a (one agent machine per team) behind one number: it reopens
+only if phase 1 measures compute at **more than 30% of a hosted seat's total cost** (compute
+plus model spend) over its pilot week, and then only through its own ADR. That reading was due
+~2026-10-26 and was never recorded in one place. Taken 2026-11-06, it points both ways
+depending on the seat's utilization — which is itself the finding:
+
+| basis | compute | model | compute share | gate (>30%) |
+| --- | --- | --- | --- | --- |
+| Busy pilot machine, 2026-09-14 (recorded above) | $4.24 to date | $12.66 to date | **25%** | not met |
+| Idle delta-2, always-on, 2026-10-28 → 2026-11-05 | ~$4.15 (9 d × $0.46/day, list) | $0.75 (`wake_cost` rows read off the joiner, 2026-11-06) | **~85%** | met |
+| Idle delta-2, scale-to-zero live from 2026-11-06 | ~$0.53/mo stopped + running time at ~$0.019/h | ~$0.084/day ≈ $2.51/mo at the Oct 28–Nov 5 daily rate | **~17%** at zero running time; **break-even at ~1 running h/day** (~30 h/mo); ~43% if 2.5 h/day were typical | depends on running hours |
+
+The middle row is the world ADR 662 was written in, and it no longer exists: ADR 816 removed
+~96% of an idle seat's compute line without sharing a kernel, which was the saving phase 2a
+existed to chase. Reopening on the middle row would be reading a gate through a world that
+has been replaced. On today's basis the gate turns entirely on running-hours share, which one
+evening cannot settle: an untouched seat reads ~17%, while 2026-11-06 itself ran 2.5 h+ after
+its wake because busy-main hub bounces kept resetting the idle floor — repeated daily, that
+alone crosses 30%. ADR 816's two-week eval (~2026-11-20) is already the instrument named to
+read running hours; it, not tonight, decides this gate.
+
+**Decision (nick, 2026-11-06): phase 2a stays parked.** Re-read at the ADR 816 eval: if the
+running-hours share puts compute over 30% of a seat's total on the post-816 basis, reopen
+through a new ADR as 662 requires. Falsify this stay-parked call by that eval reading — or
+sooner, by a Fly invoice showing the list-price compute lines here are wrong for this account
+by enough to cross 30% (the >20% invoice falsifier from 2026-09-14 still stands and still
+needs a human at the dashboard). Scope: list-price compute (no billing verb exists), measured
+model spend, one seat at near-zero utilization plus one busy-era data point; a seat woken
+many times a day has a larger model share and a smaller compute share still.
