@@ -28,6 +28,8 @@ export interface DeviceKey {
   rp_id?: string | null;
   created_at: number;
   revoked_at: number | null;
+  /** The WebAuthn credential id of a passkey (null for a phone key; absent from an older daemon). */
+  credential_id?: string | null;
 }
 
 /**
@@ -52,6 +54,7 @@ export async function fetchMyDeviceKeys(cfg: LiveConfig): Promise<DeviceKey[]> {
 /** Why an enrollment was refused, in words a person can act on. */
 export function enrollRefusal(e: unknown): string {
   const text = e instanceof Error ? e.message : String(e);
+  if (/already holds a passkey/.test(text)) return text;
   if (/countersign_required/.test(text)) {
     return (
       'this team already has passkeys, so an admin must vouch for your first one, and that ' +
@@ -142,6 +145,23 @@ export async function enrollPasskeyWithRecoveryCode(
   return registerPasskey(cfg, member, null, code.trim());
 }
 
+/**
+ * The credentials a registration must EXCLUDE: every active passkey of the member's whose
+ * credential id the daemon knows. A platform authenticator keeps one discoverable credential per
+ * (relying party, user handle), and this page registers every passkey under the member's name, so
+ * a create() that does not name the existing credentials REPLACES the one this device already
+ * holds while the daemon keeps listing it: nick's Nov 4 passkey died the moment his Nov 5 one was
+ * made (2026-11-05, lane 01M6Q3ZJJB). Named, the authenticator refuses with InvalidStateError and
+ * the person is told to use the key they have. Pure, so it is testable without WebAuthn.
+ */
+export function excludeCredentialsFrom(
+  keys: readonly Pick<DeviceKey, 'kind' | 'revoked_at' | 'credential_id'>[],
+): string[] {
+  return keys
+    .filter((k) => k.kind === 'passkey' && k.revoked_at === null && !!k.credential_id)
+    .map((k) => k.credential_id as string);
+}
+
 /** The registration ceremony itself, with whatever approval the caller collected (or none). */
 async function registerPasskey(
   cfg: LiveConfig,
@@ -153,12 +173,18 @@ async function registerPasskey(
   const challenge =
     recoveryCode ??
     (await apiPost<{ challenge: string }>(cfg, `${teamPath}/enrollment-challenges`, {})).challenge;
+  const held = await apiGet<{ keys: DeviceKey[] }>(cfg, `${teamPath}/keys`);
+  const exclude = excludeCredentialsFrom(held.keys);
   let cred: PublicKeyCredential | null;
   try {
     cred = (await navigator.credentials.create({
       publicKey: {
         challenge: b64urlToBytes(challenge) as BufferSource,
         rp: { name: 'musterd' },
+        excludeCredentials: exclude.map((id) => ({
+          type: 'public-key' as const,
+          id: b64urlToBytes(id) as BufferSource,
+        })),
         user: {
           id: new TextEncoder().encode(member) as BufferSource,
           name: member,
@@ -176,6 +202,10 @@ async function registerPasskey(
     // WebAuthn refuses an IP-literal origin; the daemon's localhost URL works (ADR 662 decision 5).
     if (e instanceof DOMException && e.name === 'SecurityError' && isLoopbackIp(location.hostname))
       throw new Error('open musterd’s localhost URL to use passkeys; nothing was enrolled');
+    if (e instanceof DOMException && e.name === 'InvalidStateError')
+      throw new Error(
+        'this device already holds a passkey for you — use that one, revoke it first, or add the passkey on another device; nothing was enrolled',
+      );
     if (e instanceof DOMException && ['NotAllowedError', 'AbortError'].includes(e.name))
       throw new Error('passkey cancelled; nothing was enrolled');
     throw e;

@@ -110,6 +110,16 @@ human who has no other way back — no new reach, since they can already read th
 act, now on the record. Falsifier: a recovery code minted or spent while a usable key or a
 countersigning admin stands, minted without the secret, or spent by anyone but the member.
 
+_(2026-11-05, after increments A–D landed: nick's outcome test on the hub's HTTPS /live found that
+"Add a passkey on this device" replaced the passkey the device already held. The registration
+named the member as user handle and no `excludeCredentials`, and a platform authenticator keeps one
+discoverable credential per relying party and user handle, so creating the Nov 5 key overwrote the
+Nov 4 one while the daemon still listed it active. Since lane 01M6Q3ZJJB, `GET …/authority/keys`
+carries each passkey's `credential_id` and the page passes the active ones as `excludeCredentials`;
+an authenticator that already holds one refuses, and the page says so. The same test found a revoke
+signed by the key under revocation (lane 01M6Q1QMTF, fixed) and phone keys surviving the end of
+their pairing (lane 01M6Q1RDTK).)_
+
 ## Observability & Evaluation
 
 **Traces.** The `device_key.enroll` audit row carries `origin` and `rp_id` from increment A on;

@@ -5874,6 +5874,12 @@ export async function handleHttp(
               rp_id: k.rpId,
               created_at: k.createdAt,
               revoked_at: k.revokedAt,
+              // The WebAuthn credential id (a public identifier, already served by the descriptor
+              // view) so a registration can EXCLUDE the credentials this member already holds: an
+              // authenticator keeps one discoverable credential per (rp_id, user handle), and a
+              // create() without excludeCredentials silently replaced nick's standing passkey on
+              // 2026-11-05 (lane 01M6Q3ZJJB). Null for a phone key.
+              credential_id: k.credentialId,
             })),
           });
         }

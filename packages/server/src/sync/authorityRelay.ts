@@ -101,8 +101,11 @@ export async function handleAuthorityRelay(
         keys: keys.map((key) => ({
           id: key.id,
           kind: key.kind,
+          origin: key.origin,
+          rp_id: key.rpId,
           created_at: key.createdAt,
           revoked_at: key.revokedAt,
+          credential_id: key.credentialId,
         })),
       };
       break;
