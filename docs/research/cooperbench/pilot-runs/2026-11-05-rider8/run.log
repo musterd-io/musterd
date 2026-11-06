@@ -33,9 +33,14 @@
   calls $6.68, wakes $16.90; pass 0/10, `cause: setup` on nine pairs — 16 of 20 `patch.txt` empty.
   Every one of the nine ended by `ACT_IDLE_SECONDS` (both seats ended their turns "waiting for" each
   other, no act in flight), 15–32 min in; none reached the quiet rule or the cap.
-- **Process misses, recorded:** the smoke-pair gate in `smokepair-8.sh` logged patch *existence*; both
-  smoke patches were 0 bytes and the run started anyway. The manifest's stop rule (three "ended, never
-  woken" pairs in the first five) had no live check; all five were, and the run went to ten.
+- **Process misses, recorded (corrected 2026-11-06 ~05:00Z after big-body's acceptance read):** the
+  smoke-pair gate in `smokepair-8.sh` logged patch *existence*; both smoke patches were 0 bytes and the
+  run started anyway. The manifest's loss class ("never woken", patch missing) counted **0** pairs —
+  every empty-patch seat had 1–5 wakes — so its three-in-five stop was never due and the run went to
+  ten by the rules; the deadlock that happened (woken, then both seats ended waiting, no act) was not
+  a registered class. `wake_guard.py`'s and `run_arms.py`'s totals read first-call cost only for
+  finished pairs: the guard's last line $7.18 = $6.68 (ten first calls) + $0.50 (smoke first calls),
+  against $23.58 with every wake priced; the $110 stop was judged on the smaller number.
 - Evidence here: `readout.json`, `rider7.json`, `firstcalls.txt` (each first call's cost, length and
   closing text), `r7d.json` (`firstwake.py`), `residue/` (mtools, sends, boardreads), each pair's host
   logs, residency report, result and patches (sizes are the finding), the smoke pair's. Streams stay on

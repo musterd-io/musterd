@@ -11,8 +11,10 @@
 > calls + $16.90 wakes (finding 033: $22.50; 028: $18.45; rule ≤ $18 / ≥ $22) — **did not**. **R8c**
 > first-call dollars **$6.68** (finding 033: $18.06; rule ≤ $12 / ≥ $17) — **acted**. **And the task
 > broke:** pass **0 of 10**, **16 of 20 patches empty** — nine pairs ended by the 10-minute idle rule with
-> both seats having ended their turns "waiting for" each other and no act in flight, the manifest's
-> named loss class, on nine pairs. Its stop rule (three in the first five) was not enforced live; see
+> both seats having ended their turns "waiting for" each other and no act in flight. That is a **final
+> deadlock after wakes**, not the manifest's registered loss class (a seat never woken at all, patch
+> missing): under the registered definition the count is **0 pairs** and its stop rule was never
+> triggered, so the run went to ten by the rules; the class that happened was not pre-registered. See
 > *What I got wrong*.
 
 ## Question
@@ -92,14 +94,30 @@ wakes on acts, has nothing to wake either seat with. Ten minutes later the pair 
 `patch.txt` never written. Where one seat finished its own feature before waiting (click's agent4,
 jinja 1559's agent5, both of typst), its patch exists; the merge step that needs both never happened.
 
-This is the loss class the manifest named — a seat that ends its turn and is never woken — on nine
-pairs, seven of them on both seats. Sends fell to 39 (033: 108), 37 of them `message`; the seats
-talked less because each turn was one exchange long.
+**Which class this is.** The manifest registered one loss class: "a seat that ends its turn and is
+never woken because its partner never sends it an act — a pair that ends with one patch missing and
+no wake on that seat", with a stop at three such pairs in the first five. Read literally against
+`musterd-residency.json` and the patch sizes, that class occurred on **0 pairs**: every seat whose
+patch is empty was woken at least once (1–5 times), and the one seat with no wake at all (typst's
+agent1) finished its feature inside its first call and left a 3.7 KB patch. What happened instead is
+a **final deadlock after wakes**: both seats woken earlier by each other's messages, then both ended
+"waiting for" the other with no act in flight, the pair idle for ten minutes, the patches never
+written — on **9 pairs** (7 with both patches empty, 2 with one). That class was not pre-registered
+and had no stop rule, so the run ran to ten pairs by the rules as written; the registered class's
+stop would not have fired. Sends fell to 39 (033: 108), 37 of them `message`; the seats talked less
+because each turn was one exchange long.
 
 ### Beside the rules
 
-- Neither guard fired; wake dollars per pair $1.04–2.62. Spend: $23.58 model for the ten pairs,
-  $3.18 for the smoke pair, about 1.7 h of Fly.
+- **Neither guard fired, and neither saw the whole spend.** `wake_guard.py`'s total is the live pairs'
+  priced wakes plus the finished pairs' `result.json` `cost` — which is the first call's cost only;
+  a pair's wakes leave the count when its daemon workdir is torn down. Its last line reads $7.18
+  (= $6.68 first calls + $0.50 smoke-pair first calls), against $23.58 actually spent; `run_arms.py
+  --cap` reads the same `result.json` field. The $110 stop was never near on either number, so this
+  run did not test the hard stop and "neither fired" is not evidence it works. For a next run the
+  guard must carry a finished pair's wake total forward (read it at teardown, before the workdir
+  goes). Wake dollars per pair $1.04–2.62. Spend: $23.58 model for the ten pairs, $3.18 for the smoke
+  pair, about 1.7 h of Fly.
 - `ToolSearch` 1, `team_status` 1, `lane_board` 13 (28 board reads before the first claim, as before).
 - The `Bash(sleep:*)` deny was never tested by a seat: no seat tried to sleep.
 
@@ -109,10 +127,15 @@ talked less because each turn was one exchange long.
   smoke pair's patches were 0 bytes — the smoke pair had already shown the deadlock — and the gate as
   I scripted it read "both patches written". The manifest's gate did not say "non-empty" either; it
   should have, and the next manifest's will.
-- **The stop rule was not enforced live.** The manifest says three "ended, never woken" pairs in the
-  first five stop the run. The first five pairs all were, and nothing checked for it while the run was
-  on; the run went to ten. The read is over ten pairs because of that, not by design, and the extra
-  five pairs cost about $12.
+- **The registered loss class was the wrong class, and I first read it as triggered.** The manifest
+  defined the loss as a seat *never woken*; what happened was seats woken and then deadlocked at the
+  end. Under the registered definition the count is 0 and the three-in-five stop was never due, so
+  the run went to ten by its rules — my first draft of this finding said the stop "was not enforced"
+  on five pairs, which was the wrong class counted (big-body's acceptance read). There was also no
+  live check for either class; a next manifest registers the deadlock class (both seats ended
+  waiting, no act in flight, no non-empty patch) with a live check in the guard.
+- **The guards under-count.** See *Beside the rules*: both caps read first-call cost for finished
+  pairs, so the $110 stop was judged on $7.18 of $23.58.
 
 ## How far it reaches
 
@@ -121,7 +144,7 @@ talked less because each turn was one exchange long.
 - R8b is the verdict on the lever, and it is "did not", for a reason finding 033 did not foresee: a
   turn of work costs what it costs wherever it runs, and splitting the pair into 46 short turns made
   the whole thing dearer, not cheaper, even with every wake briefed.
-- The deadlock is the finding. On the act lane the host wakes a seat on an act. Two seats that both
+- The deadlock is the finding, and it is an observed class, not the pre-registered one. On the act lane the host wakes a seat on an act. Two seats that both
   end their turn waiting for the other produce no act, and the lane has no other reason to wake
   anyone. The arm's old guidance ("wait in one call") avoided this by never ending the turn; finding
   033's build avoided it by accident, because the seats mostly did not end their turns. Told to, they

@@ -329,6 +329,8 @@ woken is a coordination loss of the treatment, counted per pair; three in the fi
 sleeps + 46 wakes = 53), R8c acted (first calls $6.68), R8b did not ($23.58 — the work moved into 46
 wakes at $0.37 median). The task broke: 0 of 10 pass, 16 of 20 patches empty; nine pairs ended by the
 10-minute idle rule with both seats having ended their turns "waiting for" each other and no act in
-flight. The smoke gate checked patch existence, not content; the three-in-five stop rule was not
-enforced live. A seat-ends-turn loop needs a wake reason other than the partner's act.
+flight — a final deadlock after wakes, not the registered "never woken" class, which counted 0 pairs
+(its stop was never due). The smoke gate checked patch existence, not content; the guards count
+first-call cost only for finished pairs ($7.18 seen of $23.58). A seat-ends-turn loop needs a wake
+reason other than the partner's act.
 
