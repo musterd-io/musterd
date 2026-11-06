@@ -104,3 +104,10 @@ accepts "isn't an instruction" and "data from".
 The skill's standing after both runs: 41 of 41 expectations with the skill against 30 of 41 without
 in run 1; no unsafe proposal in either arm; the baseline's run-1 wins on the safety cases did not
 hold once the skill's approval and provider guidance were fixed.
+
+## Acceptance — 2026-11-06
+
+nick accepted the skill in session on 2026-11-06 ("i accept"), as the human on the team while no
+member holds the commerce role (`building-a-role-skill` step 7). Lane `01M6SBAS9KEBVKM52ZZ1FF1NSJ`,
+merged in #4048. Re-run the evals when the commerce seat is added and holds the role, when an upstream
+pin moves, or when ADR 461 changes.
