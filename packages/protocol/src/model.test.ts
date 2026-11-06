@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   describeFamilyPosture,
+  shortModel,
   MODEL_UNKNOWN,
   modelFamily,
   normalizeModelId,
