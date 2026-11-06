@@ -45,11 +45,17 @@ const CHROME =
  *                      in the harness-failure refusal to say what was NOT concluded.
  * @param windowSize    Chrome's window, as `W,H`. A sweep that measures layout wants the viewport
  *                      it is judging; one that measures colour does not care.
+ * @param extraArgs     more Chrome flags, appended (the hosted sign-in e2e maps hosts and accepts
+ *                      its throwaway certificate). Sweeps pass none.
+ *
+ * Returns `exit(code)` for a CLI sweep, and `close()` — the same shutdown without `process.exit` —
+ * for a caller inside a test runner, which must not take the runner down with it.
  */
 export const openChromePage = async ({
   tool,
   verdictNoun = 'measurement',
   windowSize = '1440,900',
+  extraArgs = [],
 } = {}) => {
   const PROFILE_PREFIX = `${tool}-`;
   /** Old enough that no live run's profile can match. A sweep takes ~10s; an hour is 300x that. */
@@ -119,6 +125,7 @@ export const openChromePage = async ({
     '--no-first-run',
     '--disable-extensions',
     `--window-size=${windowSize}`,
+    ...extraArgs,
     'about:blank',
   ];
 
@@ -356,5 +363,5 @@ export const openChromePage = async ({
   await send('Page.enable');
   await send('Runtime.enable');
 
-  return { send, exit, page, chromeBinary: CHROME };
+  return { send, exit, close: shutdown, page, chromeBinary: CHROME };
 };
