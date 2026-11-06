@@ -51,9 +51,9 @@ with nick on 2026-09-28 by settling each in turn.
 **The 2026-11-06 revision.** The unified sign-in design made the musterd account the identity a
 person carries to every surface, and the home billing attaches to. nick then settled three things
 that move this ADR. Some features on your own computers may be paid, and the free line is drawn now.
-nick doesn't know of any user besides himself, and the record agrees: the repository had 1 star and
-0 forks, and `@musterd/cli` had 662 npm downloads from 2026-10-07 to 2026-11-05, most of them likely
-our own machines (`api.npmjs.org`, read 2026-11-06). musterd Cloud starts with a free allowance, then
+nick doesn't know of any user besides himself, and the record agrees. The repository had 1 star and
+0 forks. `@musterd/cli` had 662 npm downloads from 2026-10-07 to 2026-11-05, most of them likely our
+own machines (`api.npmjs.org`, read 2026-11-06). musterd Cloud starts with a free allowance, then
 paid. A free local team needs no account even when a teammate or a second computer is on another
 network.
 
@@ -189,9 +189,9 @@ does not gate the post, and it does not.
 - Named risk, accepted: the two-human free tier is generous enough that a 2-person shop never
   pays. That is the intended shape — the buyer is the team of 3–5 and the org — and the falsifier
   below measures whether the third human converts.
-- **`PRIVACY.md` changes before two things ship, each in its own PR:** linking a local team to a
-  musterd account (sign-in lane `01M6S2WB7D`), which has the team check in with musterd.io for
-  sign-in keys, and Cloud's allowance meter, which counts people and agent hours on Cloud. The
+- **`PRIVACY.md` changes before two things ship, each in its own PR.** The first is linking a local
+  team to a musterd account (sign-in lane `01M6S2WB7D`): a linked team checks in with musterd.io for
+  sign-in keys. The second is Cloud's allowance meter, which counts people and agent hours on Cloud. The
   sentence "Self-hosted musterd does not phone home" stays true for a team nobody signed in to.
 - Revised 2026-11-06 (lane `01M6S2X5F9`): §1 drawn as the line that never moves inward; §2 an
   allowance on the account; §3 the account in place of a license key. The copy for the free /
