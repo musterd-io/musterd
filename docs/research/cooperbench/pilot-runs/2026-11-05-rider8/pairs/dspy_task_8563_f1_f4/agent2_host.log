@@ -1,0 +1,7 @@
+host — wake actuator  ◉ polling
+  1 seat(s) registered · every 10s · watchdog 3600s · Ctrl-C to stop
+  wake due: agent2 [batched] — message from agent1, waited 54s (lease 01M6Q3X442XJ3FN1D95RTD65JE)
+  resume skipped for agent2: resume would re-ingest 413.7 KiB on claude-sonnet-4-5 for about $0.32 (bound $0.25) — compacted continuation: 10 turns kept, 1.2 KiB of 413.7 KiB (budget 48 KiB)
+  ⚡ woke agent2: spawn→roster 21.1s, session=compacted provenance=wake
+  run for agent2 (compacted) settled: exit=0 cost=$0.9661 wall=289.4s
+  wake cost recorded for agent2: $0.9661 (lease 01M6Q3X442XJ3FN1D95RTD65JE)

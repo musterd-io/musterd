@@ -4,7 +4,10 @@
 (2026-11-05 ~23:10Z in session, choosing the arm-guidance option from
 [finding 033](../033-cooperbench-rider7-rerun-b.md)'s decision: "lets go with your recommendation").
 The run is its own lane. **Status:** pre-registered 2026-11-05, before the arm change has run on any
-pair. Nothing below changes once a measured pair has run. **CooperBench:** `63b9d44`. **Before this:**
+pair. **Run 2026-11-06 00:22–01:38Z → [finding 034](../034-cooperbench-rider8-turn-rule.md):** R8a acted
+(53), R8c acted ($6.68), R8b did not ($23.58); pass 0 of 10, 16 of 20 patches empty — the seats ended
+their turns waiting for each other and the lane had no act to wake them with; the smoke gate read patch
+existence, not content, and the stop rule was not enforced live. Nothing below changes once a measured pair has run. **CooperBench:** `63b9d44`. **Before this:**
 [rider 7](./riders.md#rider-7-finding-028s-loop--the-musterd-arm-on-the-act-lane-where-a-seat-ends-its-turn-and-the-host-wakes-it-on-the-next-act)
 → findings 031, 032, 033; [ADR 809](../../decisions/809-harness-exit-releases-the-reclaim-hold.md) and
 [ADR 810](../../decisions/810-compacted-continuation.md).

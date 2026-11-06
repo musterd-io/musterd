@@ -1,0 +1,8 @@
+[2026-11-05T23:58:16Z] smoke pair start (guard: pair cap $6)
+[2026-11-06T00:20:23Z] smoke pair exit=0
+[2026-11-06T00:20:23Z] /data/runs/logs/r8-smoke/coop/pallets_click_task/2068/f1_f2/agent1_host.log: 2 due · 0 resumed · 0 fresh · 2 compacted · 2 brief-lines · 2 price-bound
+[2026-11-06T00:20:23Z] /data/runs/logs/r8-smoke/coop/pallets_click_task/2068/f1_f2/agent2_host.log: 4 due · 0 resumed · 0 fresh · 4 compacted · 4 brief-lines · 4 price-bound
+[2026-11-06T00:20:23Z] /data/runs/logs/r8-smoke/coop/pallets_click_task/2068/f1_f2/musterd-residency.json: wakes 6 resumed 0 compacted 6 failed 0 cost 2.67 reclaimable_s [0.0, 0.0, 0.0, 0.0, 0.0, 2.7]
+[2026-11-06T00:20:23Z] /data/runs/logs/r8-smoke/coop/pallets_click_task/2068/f1_f2/agent1_stream.jsonl: result-text='Waiting for agent2 to respond about coordinating our changes to the same files.' · sleeps=0
+[2026-11-06T00:20:23Z] /data/runs/logs/r8-smoke/coop/pallets_click_task/2068/f1_f2/agent2_stream.jsonl: result-text="Waiting for agent1's response about how to coordinate our overlapping file changes." · sleeps=0
+{"pairs": {"/tmp/cb-musterd-ab0ec820-lybgdgyd": 2.6667}, "live_wake_usd": 2.67, "finished_usd": 0.0, "total_usd": 2.67, "pair_cap": 6.0, "total_cap": 110.0, "over_pair": [], "stop": null}

@@ -1,0 +1,46 @@
+{
+  "repo": "typst_task",
+  "task_id": 6554,
+  "features": [
+    2,
+    6
+  ],
+  "setting": "coop",
+  "run_id": "13478e29",
+  "run_name": "r8-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-06T01:19:42.611339",
+  "ended_at": "2026-11-06T01:34:28.508948",
+  "duration_seconds": 885.897609,
+  "agents": {
+    "agent1": {
+      "feature_id": 2,
+      "status": "Submitted",
+      "cost": 0.7112067,
+      "steps": 49,
+      "input_tokens": 268,
+      "output_tokens": 8415,
+      "cache_read_tokens": 1308609,
+      "cache_write_tokens": 51092,
+      "patch_lines": 101,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 6,
+      "status": "Submitted",
+      "cost": 0.1643874,
+      "steps": 5,
+      "input_tokens": 42,
+      "output_tokens": 1071,
+      "cache_read_tokens": 116238,
+      "cache_write_tokens": 30220,
+      "patch_lines": 101,
+      "error": null
+    }
+  },
+  "total_cost": 0.8755940999999999,
+  "total_steps": 54,
+  "messages_sent": 0,
+  "log_dir": "logs/r8-musterd/coop/typst_task/6554/f2_f6"
+}

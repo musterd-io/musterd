@@ -1,0 +1,46 @@
+{
+  "repo": "dottxt_ai_outlines_task",
+  "task_id": 1655,
+  "features": [
+    1,
+    3
+  ],
+  "setting": "coop",
+  "run_id": "e76343a3",
+  "run_name": "r8-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-sonnet-4-5",
+  "started_at": "2026-11-06T00:22:06.472452",
+  "ended_at": "2026-11-06T00:39:56.932492",
+  "duration_seconds": 1070.46004,
+  "agents": {
+    "agent1": {
+      "feature_id": 1,
+      "status": "Submitted",
+      "cost": 0.08982390000000001,
+      "steps": 6,
+      "input_tokens": 34,
+      "output_tokens": 1313,
+      "cache_read_tokens": 110373,
+      "cache_write_tokens": 9844,
+      "patch_lines": 0,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 0.23958105,
+      "steps": 17,
+      "input_tokens": 106,
+      "output_tokens": 3567,
+      "cache_read_tokens": 422606,
+      "cache_write_tokens": 15727,
+      "patch_lines": 0,
+      "error": null
+    }
+  },
+  "total_cost": 0.32940495000000003,
+  "total_steps": 23,
+  "messages_sent": 0,
+  "log_dir": "logs/r8-musterd/coop/dottxt_ai_outlines_task/1655/f1_f3"
+}

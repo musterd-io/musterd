@@ -1,0 +1,7 @@
+[2026-11-05T23:54:06Z] musterd 0.7.0 · MUSTERD_REF=408662760d669d000ead031825a74c9a2a7a3742 · claude 2.1.307 (Claude Code)
+[2026-11-05T23:54:10Z] api check: ok
+[2026-11-05T23:54:10Z] gate_smoke start
+[2026-11-05T23:54:44Z] gate_smoke PASS
+[2026-11-05T23:54:44Z] hold_smoke_697 start
+[2026-11-05T23:57:24Z] hold_smoke_697 PASS
+[2026-11-05T23:57:24Z] preflight done
