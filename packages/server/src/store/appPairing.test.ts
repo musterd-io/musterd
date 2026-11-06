@@ -29,11 +29,17 @@ import { listAuditByAction } from './audit.js';
 import {
   buildDescriptor,
   enrollDeviceKey,
+  activeDeviceKeys,
   getDeviceKey,
   listDeviceKeys,
   requireAuthority,
 } from './authority.js';
-import { confirmPairing, recordPairingIdentity, revokeBinding } from './channelBindings.js';
+import {
+  confirmPairing,
+  killSwitchChannels,
+  recordPairingIdentity,
+  revokeBinding,
+} from './channelBindings.js';
 import { getChannelSettings } from './channelSettings.js';
 import { addMember } from './members.js';
 import { createTeam } from './teams.js';
@@ -628,6 +634,60 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
         via: 'binding_revoked',
         binding: b,
       });
+    });
+
+    it('the kill switch revokes every pairing and its phone key in one transaction', async () => {
+      const { db, team, nick } = await setup();
+      const k1 = (
+        await enrollDeviceKey(db, {
+          teamId: team.id,
+          memberId: nick.id,
+          publicKey: 'pk-1',
+          kind: 'phone',
+        })
+      ).id;
+      const k2 = (
+        await enrollDeviceKey(db, {
+          teamId: team.id,
+          memberId: nick.id,
+          publicKey: 'pk-2',
+          kind: 'phone',
+        })
+      ).id;
+      await bind(db, team.id, nick.id, { daemon: 'K1', deviceKeyId: k1 });
+      await bind(db, team.id, nick.id, { daemon: 'K1', deviceKeyId: k2 });
+      const r = await killSwitchChannels(db, { teamId: team.id, memberId: nick.id, actor: 'nick' });
+      expect(r.bindingsRevoked).toBe(2);
+      expect((await getDeviceKey(db, team.id, k1))?.revokedAt).not.toBeNull();
+      expect((await getDeviceKey(db, team.id, k2))?.revokedAt).not.toBeNull();
+      expect((await listAuditByAction(db, team.id, 'device_key.revoked', 100)).length).toBe(2);
+    });
+
+    // The recovery guard and the countersigner search read activeDeviceKeys, so a superseded
+    // pairing's phone key is not a "usable key" for them either — before any sweep has run.
+    it("a superseded pairing's phone key is not among the active keys, unswept", async () => {
+      const { db, team, nick, daemon } = await setup();
+      const kOld = (
+        await enrollDeviceKey(db, {
+          teamId: team.id,
+          memberId: nick.id,
+          publicKey: 'pk-o',
+          kind: 'phone',
+        })
+      ).id;
+      const kNew = (
+        await enrollDeviceKey(db, {
+          teamId: team.id,
+          memberId: nick.id,
+          publicKey: 'pk-n',
+          kind: 'phone',
+        })
+      ).id;
+      await bind(db, team.id, nick.id, { daemon: 'K0', deviceKeyId: kOld });
+      await bind(db, team.id, nick.id, { daemon: daemon.identityPublic, deviceKeyId: kNew });
+      const ids = (await activeDeviceKeys(db, team.id, nick.id)).map((k) => k.id);
+      expect(ids).toEqual([kNew]);
+      expect((await getDeviceKey(db, team.id, kOld))?.revokedAt).toBeNull();
     });
 
     it('the boot sweep covers every member and reports what it revoked', async () => {

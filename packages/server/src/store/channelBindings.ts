@@ -467,19 +467,41 @@ export async function killSwitchChannels(
       [input.teamId, input.memberId],
     );
     let tokensRevoked = 0;
+    let phoneKeysRevoked = 0;
     for (const binding of bindings) {
       await t.run("UPDATE channel_bindings SET status = 'revoked', revoked_at = ? WHERE id = ?", [
         now,
         binding.id,
       ]);
       tokensRevoked += await consumeBindingTokens(t, input.teamId, binding.id, now);
+      // Lane 01M6Q1RDTK: the kill switch ends every binding; each app pairing's phone key goes
+      // with it, in this transaction, the same as a single revoke.
+      const phoneKeyId = appDeviceKeyId(binding);
+      if (phoneKeyId) {
+        await t.run(
+          `UPDATE device_keys SET revoked_at = ? WHERE team_id = ? AND id = ? AND revoked_at IS NULL`,
+          [now, input.teamId, phoneKeyId],
+        );
+        await appendAudit(t, input.teamId, {
+          actor: input.actor,
+          action: 'device_key.revoked',
+          target: input.actor,
+          result: 'allow',
+          detail: { key_id: phoneKeyId, via: 'binding_revoked', binding: binding.id },
+        });
+        phoneKeysRevoked += 1;
+      }
     }
     await appendAudit(t, input.teamId, {
       actor: input.actor,
       action: 'channel.killswitch',
       target: null,
       result: 'allow',
-      detail: { bindings_revoked: bindings.length, tokens_revoked: tokensRevoked },
+      detail: {
+        bindings_revoked: bindings.length,
+        tokens_revoked: tokensRevoked,
+        phone_keys_revoked: phoneKeysRevoked,
+      },
     });
     return { bindingsRevoked: bindings.length, tokensRevoked };
   });

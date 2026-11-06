@@ -105,7 +105,11 @@ weakening decision 3: the phone never trusts, and never distinguishes, anything 
   (`requireAuthority`, `activeDeviceKeys`), since a supersession is derived from the daemon key and no
   row records it; and a sweep (`revokePhoneKeysOfEndedBindings`) runs once at daemon boot for rows
   from before, and when a pairing is confirmed. Each revocation is audited `device_key.revoked` with
-  `via: binding_superseded` or `binding_revoked`. A read never revokes.
+  `via: binding_superseded` or `binding_revoked`. A read never revokes. Third pass, same day: the
+  kill switch (`killSwitchChannels`) revokes each pairing's phone key in its transaction too; the
+  recovery guard and the countersigner search read the same derived "active" set, so an ended
+  pairing's key is not a usable key for recovery either; and `GET …/authority/keys` reports a phone
+  key whose pairing ended as `pairing_ended: true`, which /live treats as not active.
 
 ## Observability & Evaluation
 

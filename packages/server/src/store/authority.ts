@@ -155,7 +155,7 @@ export async function listDeviceKeys(
 /** The member's keys that can still sign: enrolled and not revoked. */
 /** A phone key whose pairing was superseded or revoked. A key with no binding row (test fixtures,
  *  pre-pairing enrollments) is left as it was: the lifecycle this closes is the pairing's. */
-async function pairingOver(db: Driver, teamId: string, keyId: string): Promise<boolean> {
+export async function pairingOver(db: Driver, teamId: string, keyId: string): Promise<boolean> {
   const ended = await phoneKeyPairingEnded(db, teamId, keyId);
   return ended === 'superseded' || ended === 'revoked';
 }
@@ -285,7 +285,8 @@ export async function recoveryCountersignerStands(
   const members = await listMembers(db, teamId);
   for (const m of members) {
     if (m.id === memberId || m.kind !== 'human' || !resolveCapabilities(m).is_admin) continue;
-    if (usableKeyStands(await listDeviceKeys(db, teamId, m.id), hosts)) return m.name;
+    // Lane 01M6Q1RDTK: a phone key whose pairing ended is not a usable key, here as at the spend.
+    if (usableKeyStands(await activeDeviceKeys(db, teamId, m.id), hosts)) return m.name;
   }
   return null;
 }
@@ -317,7 +318,7 @@ export async function issueRecoveryCode(
 > {
   const now = input.now ?? Date.now();
   if (input.member.kind !== 'human') return { ok: false, reason: 'agent_member' };
-  const keys = await listDeviceKeys(db, input.teamId, input.member.id);
+  const keys = await activeDeviceKeys(db, input.teamId, input.member.id);
   if (usableKeyStands(keys, input.hosts)) return { ok: false, reason: 'usable_key_stands' };
   const countersigner = await recoveryCountersignerStands(
     db,

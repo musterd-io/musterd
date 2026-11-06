@@ -30,6 +30,9 @@ export interface DeviceKey {
   revoked_at: number | null;
   /** The WebAuthn credential id of a passkey (null for a phone key; absent from an older daemon). */
   credential_id?: string | null;
+  /** A phone key whose pairing ended (superseded or unpaired): not standing authority, whatever
+   *  `revoked_at` says until the daemon's sweep catches up (lane 01M6Q1RDTK). */
+  pairing_ended?: boolean;
 }
 
 /**

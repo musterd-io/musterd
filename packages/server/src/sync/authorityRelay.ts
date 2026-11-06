@@ -23,6 +23,7 @@ import {
   getPasskeysForDescriptor,
   issueEnrollmentChallenge,
   listDeviceKeys,
+  pairingOver,
   revokeKeyGuarded,
   storePasskeyProof,
   requireAuthority,
@@ -98,15 +99,21 @@ export async function handleAuthorityRelay(
       const keys = await listDeviceKeys(ctx.db, team.id, member!.id);
       response = {
         op: request.op,
-        keys: keys.map((key) => ({
-          id: key.id,
-          kind: key.kind,
-          origin: key.origin,
-          rp_id: key.rpId,
-          created_at: key.createdAt,
-          revoked_at: key.revokedAt,
-          credential_id: key.credentialId,
-        })),
+        keys: await Promise.all(
+          keys.map(async (key) => ({
+            id: key.id,
+            kind: key.kind,
+            origin: key.origin,
+            rp_id: key.rpId,
+            created_at: key.createdAt,
+            revoked_at: key.revokedAt,
+            credential_id: key.credentialId,
+            pairing_ended:
+              key.kind === 'phone' && key.revokedAt === null
+                ? await pairingOver(ctx.db, team.id, key.id)
+                : false,
+          })),
+        ),
       };
       break;
     }
