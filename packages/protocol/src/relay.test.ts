@@ -94,3 +94,25 @@ describe('app_body ended (ADR 802)', () => {
     expect(RelayAppBodyFrameSchema.safeParse({ ...base, ended: 'gone' }).success).toBe(false);
   });
 });
+
+describe('app_nudge carries nothing but where to push (ADR 819)', () => {
+  const nudge = (over: Record<string, unknown> = {}) => ({
+    protocol: RELAY_PROTOCOL_VERSION,
+    type: 'app_nudge',
+    binding: 'b1',
+    push: { token: 'a'.repeat(64), environment: 'production' },
+    dedupe_id: 'nudge:b1:1',
+    ...over,
+  });
+
+  it('round-trips through the daemon frame union', () => {
+    expect(RelayDaemonFrameSchema.parse(nudge())).toEqual(nudge());
+  });
+
+  it('refuses any content riding it', () => {
+    expect(RelayDaemonFrameSchema.safeParse(nudge({ sealed: { enc: 'e', ct: 'c' } })).success).toBe(
+      false,
+    );
+    expect(RelayDaemonFrameSchema.safeParse(nudge({ title: 'landed X' })).success).toBe(false);
+  });
+});

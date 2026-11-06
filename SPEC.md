@@ -1263,6 +1263,16 @@ answer's text.
   what waits on the binding's person, oldest first, each `{id, from, kind, summary, ts}` with
   `summary` at most 200 characters. Both are optional: a client that does not know them MUST ignore
   them, and a client that does MUST fall back to `seats` when they are absent.
+- A roster MAY carry `moments` (ADR 819): what happened on the team since the daemon's local
+  midnight, newest first, at most 20, each `{id, kind, member, lane, goal, text, accepted?, ts}`
+  with `kind` one of `landed | goal | verdict | started | poll | said` and `text` at most 200
+  characters. A server MUST include only moments whose source the binding's person may read (ADR
+  407). A client that does not know them MUST ignore them.
+- On a lane reaching `done` or a goal finishing, a server MAY send the relay `app_nudge {binding,
+  push, dedupe_id}` (ADR 819): strict, no content. A relay MUST turn it into an APNs background
+  push whose body is exactly `{"aps":{"content-available":1}}`. A server MUST coalesce nudges to
+  one per binding per 5 seconds. A client SHOULD pull its roster on one while in the foreground and
+  MUST NOT treat it as anything but a hint to pull.
 
 ## A.34 Seats on shift (unreleased — ADR 792)
 
