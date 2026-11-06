@@ -36,7 +36,13 @@ self-hosted teams and guests still need.
 1. **On a hosted team the consent page leads with "Sign in with musterd".** It is a form that POSTs
    the same OAuth fields the other forms post, plus `via=musterd`, to `POST /oauth/:team/authorize`.
    The words are the sign-in copy spec's §4.
-2. **That POST starts the console round trip for this one authorization.** The server makes the
+2. **That POST starts the console round trip for this one authorization.** It is refused unless
+   `Sec-Fetch-Site` is `same-origin`: only the consent page this server rendered may start a
+   connect. Without that, any site could auto-submit the form with its own `client_id`, and a
+   visitor already signed in to the console would be walked to that client's redirect with a code
+   and no click (CSRF). `Origin` cannot be the check: the OAuth pages send no referrer, so a
+   browser sends `Origin: null` even on the real POST. A browser that sends no `Sec-Fetch-Site` is
+   refused. The server then makes the
    same client and `redirect_uri` checks every consent POST makes, then writes a one-time state
    record (ADR 722 §1) in a new mode, `connect`. The record carries the validated authorization
    request: `client_id`, `redirect_uri`, `code_challenge`, `scope` and the client's `state`. It
@@ -71,7 +77,9 @@ self-hosted teams and guests still need.
   `session.refused` with its reason, as today. An issued code writes `oauth.code_issued` with
   `detail.via = "musterd"`.
 - **Eval:** server tests. A hosted consent page shows Sign in with musterd and no `mscr_` field,
-  and a self-hosted one keeps the field. The POST refuses an unregistered `redirect_uri` before
+  and a self-hosted one keeps the field. A `via=musterd` POST that is cross-site, same-site, `none`
+  or missing `Sec-Fetch-Site` is refused with no state and no cookie (found by the automated
+  security review of the first commit, 2026-11-06). The POST refuses an unregistered `redirect_uri` before
   writing any state. A `connect` callback issues a code for the bound member and redirects to the
   stored `redirect_uri` with the client's `state`, and the code redeems at `/token` with the
   client's verifier. A `connect` callback creates no `browser_sessions` row. An unbound account is

@@ -554,9 +554,12 @@ describe('hosted /live sign-in (ADR 722)', () => {
     const VERIFIER = 'v'.repeat(43);
     const CHALLENGE = createHash('sha256').update(VERIFIER).digest('base64url');
     const form = (o: Record<string, string>) => new URLSearchParams(o).toString();
+    // The consent page's own POST: same-origin by Sec-Fetch-Site. The OAuth pages send no referrer,
+    // so a browser's Origin on it is `null` — which is why Origin cannot be the check.
     const formHeaders = {
       'content-type': 'application/x-www-form-urlencoded',
-      origin: TEAM_ORIGIN,
+      origin: 'null',
+      'sec-fetch-site': 'same-origin',
     };
 
     async function registerClient(): Promise<string> {
@@ -644,6 +647,26 @@ describe('hosted /live sign-in (ADR 722)', () => {
       )!;
       expect(issued.actor).toBe('ada');
       expect(JSON.parse(String(issued.detail))).toMatchObject({ via: 'musterd' });
+    });
+
+    it('refuses a Sign in with musterd POST that did not come from the consent page (CSRF)', async () => {
+      // A page on another site auto-submitting the form with its own client: if this went through,
+      // a victim signed in to the console would be walked to the attacker's redirect with a code.
+      const client_id = await registerClient();
+      for (const site of ['cross-site', 'same-site', 'none', undefined]) {
+        const r = await call('POST', '/oauth/revive/authorize', {
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            origin: 'https://evil.test',
+            ...(site ? { 'sec-fetch-site': site } : {}),
+          },
+          body: form({ ...authorizeFields(client_id), via: 'musterd' }),
+        });
+        expect(r.status).toBe(403);
+        expect(r.headers['location']).toBeUndefined();
+        expect(cookies(r).some((c) => c.startsWith(`${SIGNIN_COOKIE}=`))).toBe(false);
+      }
+      expect(await connectStates()).toBe(0);
     });
 
     it('refuses an unregistered redirect_uri before any state is written', async () => {

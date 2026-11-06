@@ -738,6 +738,19 @@ export async function handleOAuthRoutes(
     if (flat.via === 'musterd') {
       // ADR 820 §2: the same checks every consent POST makes, then the console round trip for
       // this one authorization. The callback issues the code; no browser session is involved.
+      // CSRF: only the consent page this server rendered may start a connect. Otherwise any site
+      // could auto-submit this form with its own client_id and, for a visitor already signed in to
+      // the console, walk the code to its redirect with no click. Sec-Fetch-Site is set by the
+      // browser and cannot be set by a page; Origin cannot be the check, because these pages send
+      // no referrer, so a browser's Origin on the real POST is `null`. A browser that sends no
+      // Sec-Fetch-Site is refused: fail closed.
+      if (req.headers['sec-fetch-site'] !== 'same-origin') {
+        sendOAuthError(
+          res,
+          new MusterdError('forbidden', 'sign in with musterd from this team\u2019s consent page'),
+        );
+        return true;
+      }
       if (!connectAvailable(ctx, req, slug)) {
         sendOAuthError(
           res,
