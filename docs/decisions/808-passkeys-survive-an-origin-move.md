@@ -116,7 +116,10 @@ named the member as user handle and no `excludeCredentials`, and a platform auth
 discoverable credential per relying party and user handle, so creating the Nov 5 key overwrote the
 Nov 4 one while the daemon still listed it active. Since lane 01M6Q3ZJJB, `GET …/authority/keys`
 carries each passkey's `credential_id` and the page passes the active ones as `excludeCredentials`;
-an authenticator that already holds one refuses, and the page says so. The same test found a revoke
+an authenticator that already holds one refuses, and the page says so. _(2026-11-06: the daemon's
+own `/authority/passkey` page, opened by `musterd authority enroll`, still passed none — it is
+unauthenticated, so it cannot list keys. Since lane 01M6SC8A8R the CLI lists them and puts the
+active passkeys' ids in the link's fragment, and the page excludes those.)_ The same test found a revoke
 signed by the key under revocation (lane 01M6Q1QMTF, fixed) and phone keys surviving the end of
 their pairing (lane 01M6Q1RDTK).)_
 

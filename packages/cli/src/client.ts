@@ -322,6 +322,8 @@ export interface DeviceKeySummary {
   kind: string;
   created_at: number;
   revoked_at: number | null;
+  /** The WebAuthn credential id of a passkey (public); null for a phone key, absent from an older daemon. */
+  credential_id?: string | null;
 }
 
 /** Per-human channel settings (away channels 6): nothing is on by default. */

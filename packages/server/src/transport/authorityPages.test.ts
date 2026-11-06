@@ -30,7 +30,16 @@ function el(): El {
 }
 type Deferred = { resolve: (body: unknown) => void; reject: (e: Error) => void };
 
-function boot(page: string, opts: { secure: boolean; origin: string; search: string }) {
+function boot(
+  page: string,
+  opts: {
+    secure: boolean;
+    origin: string;
+    search: string;
+    hash?: string;
+    create?: (opts: unknown) => Promise<unknown>;
+  },
+) {
   const script = page.slice(page.indexOf('<script>') + 8, page.lastIndexOf('</script>'));
   const els: Record<string, El> = {};
   const byId = (id: string) => (els[id] ??= el());
@@ -44,12 +53,14 @@ function boot(page: string, opts: { secure: boolean; origin: string; search: str
     });
   const sandbox = {
     window: { isSecureContext: opts.secure },
-    navigator: opts.secure ? { credentials: { get: () => {}, create: () => {} } } : {},
+    navigator: opts.secure
+      ? { credentials: { get: () => {}, create: opts.create ?? (() => {}) } }
+      : {},
     location: {
       origin: opts.origin,
       pathname: '/authority/approve',
       search: opts.search,
-      hash: '',
+      hash: opts.hash ?? '',
     },
     document: {
       getElementById: byId,
@@ -172,5 +183,65 @@ describe('passkey pages on a non-secure origin (lane 01M6Q1X9J0)', () => {
     });
     expect(b.byId('go').disabled).toBe(false);
     expect(b.byId('descriptor').textContent).toContain('actor:  nick');
+  });
+});
+
+describe('enroll page excludes the standing passkeys (lane 01M6SC8A8R)', () => {
+  const ENROLL_SEARCH = '?team=revive&member=nick&challenge=Y2hhbGxlbmdlLWJ5dGVzLTE2';
+  const b64u = (s: string) => Buffer.from(s).toString('base64url');
+
+  it('passes the fragment ids to create() as excludeCredentials', async () => {
+    let seen: { publicKey: { excludeCredentials: { type: string; id: Uint8Array }[] } } | undefined;
+    const b = boot(passkeyEnrollPage, {
+      secure: true,
+      origin: 'http://localhost:4849',
+      search: ENROLL_SEARCH,
+      hash: `#hold=1&exclude=${b64u('cred-one')},${b64u('cred-two')}`,
+      create: async (o) => {
+        seen = o as typeof seen;
+        throw Object.assign(new Error('stop'), { name: 'NotAllowedError' });
+      },
+    });
+    await b.byId('go').handlers['click']!();
+    const ids = seen!.publicKey.excludeCredentials.map((c) => ({
+      type: c.type,
+      id: Buffer.from(c.id).toString(),
+    }));
+    expect(ids).toEqual([
+      { type: 'public-key', id: 'cred-one' },
+      { type: 'public-key', id: 'cred-two' },
+    ]);
+  });
+
+  it('no exclude in the fragment: an empty list, the ceremony runs as before', async () => {
+    let seen: { publicKey: { excludeCredentials: unknown[] } } | undefined;
+    const b = boot(passkeyEnrollPage, {
+      secure: true,
+      origin: 'http://localhost:4849',
+      search: ENROLL_SEARCH,
+      hash: '#hold=1',
+      create: async (o) => {
+        seen = o as typeof seen;
+        throw Object.assign(new Error('stop'), { name: 'NotAllowedError' });
+      },
+    });
+    await b.byId('go').handlers['click']!();
+    expect(seen!.publicKey.excludeCredentials).toEqual([]);
+  });
+
+  it('an authenticator that already holds one says so, and nothing is posted', async () => {
+    const b = boot(passkeyEnrollPage, {
+      secure: true,
+      origin: 'http://localhost:4849',
+      search: ENROLL_SEARCH,
+      hash: `#hold=1&exclude=${b64u('cred-one')}`,
+      create: async () => {
+        throw Object.assign(new Error('excluded'), { name: 'InvalidStateError' });
+      },
+    });
+    await b.byId('go').handlers['click']!();
+    expect(b.byId('out').textContent).toContain('This device already holds a passkey for you');
+    expect(b.byId('out').className).toBe('err');
+    expect(b.pending.has('/teams/revive/authority/passkeys')).toBe(false);
   });
 });

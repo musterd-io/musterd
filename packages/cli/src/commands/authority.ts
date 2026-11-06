@@ -668,9 +668,17 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
       });
     }
     const { challenge, expires_at: challengeExpiresAt } = await http.issueEnrollmentChallenge(team);
-    const fragment = approval
-      ? `#approval=${Buffer.from(JSON.stringify(approval)).toString('base64url')}`
-      : '#hold=1';
+    // The page is unauthenticated, so it cannot list this member's passkeys itself; this command
+    // can. Without excludeCredentials an authenticator that already holds a passkey for this user
+    // handle silently replaces it (nick's, 2026-11-05 — /live's fix was lane 01M6Q3ZJJB). The
+    // fragment never reaches a server; credential ids are public identifiers anyway.
+    const exclude = active
+      .filter((k) => k.kind === 'passkey' && !!k.credential_id)
+      .map((k) => k.credential_id as string);
+    const fragment =
+      (approval
+        ? `#approval=${Buffer.from(JSON.stringify(approval)).toString('base64url')}`
+        : '#hold=1') + (exclude.length > 0 ? `&exclude=${exclude.join(',')}` : '');
     const url =
       `${await resolveCeremonyOrigin(http)}/authority/passkey?team=${encodeURIComponent(team)}` +
       `&member=${encodeURIComponent(member)}&challenge=${encodeURIComponent(challenge)}` +
