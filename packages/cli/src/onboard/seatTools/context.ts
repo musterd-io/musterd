@@ -1,4 +1,4 @@
-import { bindingSeat, type SeatToolsPolicy } from '@musterd/protocol';
+import { bindingSeat, type SeatToolServer, type SeatToolsPolicy } from '@musterd/protocol';
 import { HttpClient } from '../../client.js';
 import { readBindingAt } from '../../config.js';
 import type { HarnessContext } from '../reconcile/context.js';
@@ -73,4 +73,36 @@ async function fetchAsBoundSeat(worktreeRoot: string): Promise<SeatToolsPolicy> 
     claimSeatPerRequest: false,
   });
   return (await http.getSeatTools(binding.team)).seat_tools;
+}
+
+/**
+ * The admin server-definition map (ADR 817). A failed or timed-out read is an empty map: this
+ * function does not read a workspace file, because that file is in the seat's trust domain.
+ */
+export async function grantedServersFrom(
+  read: () => Promise<Pick<SeatToolsPolicy, 'servers'>>,
+  timeoutMs = 3_000,
+): Promise<Record<string, SeatToolServer>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const policy = await Promise.race([
+      read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('seat tools read timed out')), timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+    return policy.servers;
+  } catch {
+    return {};
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** `GET /seat-tools` for `worktreeRoot`'s bound seat, or an empty map when that read fails. */
+export async function fetchGrantedServers(
+  worktreeRoot: string,
+): Promise<Record<string, SeatToolServer>> {
+  return grantedServersFrom(() => fetchAsBoundSeat(worktreeRoot));
 }

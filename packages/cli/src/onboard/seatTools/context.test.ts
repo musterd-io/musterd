@@ -1,7 +1,7 @@
 import { SeatToolsPolicySchema } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { memoryFs, type HarnessContext } from '../reconcile/context.js';
-import { withSeatTools } from './context.js';
+import { grantedServersFrom, withSeatTools } from './context.js';
 
 function ctx(): HarnessContext {
   return {
@@ -32,5 +32,21 @@ describe('withSeatTools (ADR 794)', () => {
     const out = await withSeatTools(ctx());
     expect(out.seatTools?.source).toBe('none');
     expect(out.seatTools?.claude_plugins).toEqual([]);
+  });
+});
+
+describe('grantedServersFrom (ADR 817)', () => {
+  it('returns the map a read produced', async () => {
+    const policy = SeatToolsPolicySchema.parse({
+      servers: { warehouse: { command: 'fixture' } },
+    });
+    await expect(grantedServersFrom(() => Promise.resolve(policy))).resolves.toEqual(
+      policy.servers,
+    );
+  });
+
+  it('returns an empty map when the read fails or times out', async () => {
+    await expect(grantedServersFrom(() => Promise.reject(new Error('down')))).resolves.toEqual({});
+    await expect(grantedServersFrom(() => new Promise(() => undefined), 20)).resolves.toEqual({});
   });
 });

@@ -1488,7 +1488,8 @@ function applyGuardianTierFlag(merged: PolicyOverride, parsed: Parsed): boolean 
 
 const SEAT_TOOLS_USAGE =
   'usage: musterd team policy --seat-tools \'{"shared":{"claude_plugins":["PLUGIN@MARKETPLACE"]},' +
-  '"roles":{"<role>":{"claude_plugins":[],"codex_plugins":[],"skills":[],"mcp_servers":[]}}}\' | off';
+  '"roles":{"<role>":{"claude_plugins":[],"codex_plugins":[],"skills":[],"mcp_servers":[]}},' +
+  '"servers":{"<name>":{"command":"<bin>","args":[],"env":{}}}}\' | off';
 
 /**
  * ADR 794: the seat tool grants — what plugins, skills and human-layer MCP servers a seat may load.
@@ -1529,9 +1530,11 @@ function applySeatToolsFlag(merged: PolicyOverride, parsed: Parsed): boolean {
     set.codex_plugins.length +
     set.skills.length +
     set.mcp_servers.length;
+  const serverCount = Object.keys(doc.data.servers ?? {}).length;
   const parts = [
     ...(doc.data.shared ? [`shared ${String(count(doc.data.shared))}`] : []),
     ...Object.entries(doc.data.roles ?? {}).map(([role, set]) => `${role} ${String(count(set))}`),
+    ...(serverCount > 0 ? [`servers ${String(serverCount)}`] : []),
   ];
   process.stdout.write(`${theme.ok('✓')} seat tools: ${parts.join(', ')}\n`);
   return true;

@@ -37,6 +37,7 @@ import { defaultHarnessContext } from './reconcile/context.js';
 import { reconcileHarnesses } from './reconcile/engine.js';
 import { finishRoleEquipment, installMissingBuiltinRoleSkills } from './roleEquipment.js';
 import { roleSkillNotes, withRoleSkills } from './roleSkills.js';
+import { fetchGrantedServers } from './seatTools/context.js';
 import { GENERALIST, isBuiltin, listToolkitNames, loadToolkit, type Toolkit } from './toolkit.js';
 import { provisionToolkitIntoHarnesses } from './toolkitProvision.js';
 
@@ -1294,11 +1295,21 @@ async function provisionToolkitTools(
   sp.start(`Provisioning ${toolkit.toolkit} tools into ${harness.label}`);
   // The shared provisioning path (ADR 708) — seat creation runs the same helper, so the
   // two cannot drift. The outcome carries no target string; the harness label names it.
-  const [outcome] = await provisionToolkitIntoHarnesses(toolkit, [harness.id], process.cwd());
+  const grants = await fetchGrantedServers(process.cwd());
+  const [outcome] = await provisionToolkitIntoHarnesses(
+    toolkit,
+    [harness.id],
+    process.cwd(),
+    grants,
+  );
+  const refused =
+    outcome && outcome.refused.length > 0
+      ? ` (no matching grant: ${outcome.refused.join(', ')})`
+      : '';
   if (!outcome || outcome.error) {
     sp.stop(
       pc.yellow(
-        `Couldn't provision ${toolkit.toolkit} tools: ${outcome?.error ?? 'no outcome reported'}`,
+        `Couldn't provision ${toolkit.toolkit} tools: ${outcome?.error ?? 'no outcome reported'}${refused}`,
       ),
     );
     return;
@@ -1310,7 +1321,8 @@ async function provisionToolkitTools(
       `Provisioned ${result.servers.length} MCP server${result.servers.length === 1 ? '' : 's'}` +
         (result.servers.length ? `: ${pc.cyan(result.servers.join(', '))}` : '') +
         (permCount ? ` + ${permCount} permission${permCount === 1 ? '' : 's'}` : '') +
-        (outcome.skipped.length ? ` (skipped: ${outcome.skipped.join(', ')})` : ''),
+        (outcome.skipped.length ? ` (skipped: ${outcome.skipped.join(', ')})` : '') +
+        refused,
     );
     // Recorded for exact removal in the v2 manifest's contributions — never the v1 shape, which
     // would clobber the strict v2 file init just saved (ADR 281). Role MCP servers are not yet
