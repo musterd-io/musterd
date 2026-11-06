@@ -33,7 +33,8 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: p.bg },
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'Asks' }} />
+        {/* ADR 814: the tabs are the shell; the rest push over them with the app's own bar. */}
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="pair" options={{ title: 'Pair' }} />
         <Stack.Screen name="ask/[ref]" options={{ title: 'Ask' }} />
         <Stack.Screen name="seats" options={{ title: 'Seats' }} />

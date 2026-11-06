@@ -6,7 +6,7 @@
  * as a second accent.
  * `tint` is mustard-50: the warm glow behind a moment.
  */
-const light = {
+export const light = {
   bg: '#FAFAFA',
   surface: '#FFFFFF',
   raised: '#F4F4F5',
