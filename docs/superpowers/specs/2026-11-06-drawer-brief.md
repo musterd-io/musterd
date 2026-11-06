@@ -90,7 +90,7 @@ a shared drive: the team can see why a document changed.
    agent never deletes, and neither does a person who is not an admin.
 2. **Updates strike through.** An update never erases. Text that changed stays visible, struck
    through, with the new text beside it and the member who made the change. *(sloane's reading of
-   "strikethrough to update": confirm.)* This fits the versioned shape above: each save is a version,
+   "strikethrough to update"; nick approved it, 2026-11-06.)* This fits the versioned shape above: each save is a version,
    and a document shows what each save struck and added. A file is replaced the same way: the old
    file stays, marked replaced, until an admin deletes it.
 3. **Sharing is a requirement.** Members need easy ways to share a document or a file, including with
@@ -102,7 +102,14 @@ a shared drive: the team can see why a document changed.
    - **The record.** Each share is an act: who shared what, with whom, and until when.
    - **Privacy.** A shared item leaves the team's machine. `PRIVACY.md` says so in the same PR that
      ships sharing.
-4. **The name stays open.** nick likes "Drawer" and wants others weighed (below).
+4. **The name is Drawer.** nick weighed the names below and chose it, 2026-11-06. It joins the
+   glossary (`docs/glossary/terms.ts`) in the first PR that ships it, with "Shelf" and "Files" in its
+   Not column.
+5. **Agents add, read and update from day one**, as members do. The strike-through record is how the
+   team trusts an agent's update. Agents never delete (point 1).
+6. **Everything else in this brief is approved** (nick, 2026-11-06): the daemon as its home,
+   versioned documents first, storage counted against the Cloud allowance, the dogfood cap, and the
+   dogfood's measures and falsifier.
 
 ## Names to weigh
 
@@ -120,8 +127,8 @@ from something already in the room.
 | **Binder** | Pages people add to and annotate over time, a good fit for strike-through updates | Reads as paper documents and fits files less well |
 | **Locker** | Ownable, an office object | Reads as private storage, the opposite of a shared place |
 
-sloane's recommendation: **Drawer** for the dogfood, for its brevity and because it is the word nick
-reaches for. Re-check it after two weeks against what members called it unprompted in acts.
+**Chosen: Drawer** (nick, 2026-11-06). After two weeks, re-check it against what members called it
+unprompted in acts.
 "Shelf" is out: the wiki's bookshelf already has that word.
 
 ## Storage and its cost
@@ -144,12 +151,6 @@ This is pricing advice, and the call is nick's ([ADR 461](../../decisions/461-pr
   per-file cap of 100 MB and no refused types is enough to learn from. Executables and archives are
   the first kinds to reconsider once sharing reaches people off the team.
 
-## Questions still open
-
-1. **The name**, from the table above.
-2. **Agents' reach.** Agents add, read and update from day one, as members do. Confirm that the
-   strike-through record is enough to trust an agent's update.
-
 ## The dogfood, and how we would know
 
 - **Scope:** our team, two weeks, versioned documents and files, on `/live`, the phone app and MCP.
@@ -166,7 +167,7 @@ This is pricing advice, and the call is nick's ([ADR 461](../../decisions/461-pr
 
 ## Next steps
 
-1. nick picks the name and confirms the reading of "strikethrough to update".
+1. ~~nick picks the name and confirms the reading of "strikethrough to update".~~ Done 2026-11-06.
 2. miley designs the surfaces (`/live`, phone, the MCP tools' names and shape within the context
    budgets CI checks); an engineer designs the store and the wire.
 3. Any protocol change and any new dependency get their ADR before code (AGENTS.md hard rules 1 and 6).
