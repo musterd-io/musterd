@@ -3020,3 +3020,12 @@ raised by 1 KB and total JS by 2 KB to clear CI's read, which has run about 0.6 
 laptop's. The next feature that adds eager code to `/live` should look for a lazy split before
 raising again.
 
+## 2026-11-06 — "Where you're signed in": total JS RAISED 428,000 → 430,000 B (lane 01M6S2W39FGRWGMVTKYCDQ60AT)
+
+Unified sign-in lane 6. The list of every browser, connected app and paired phone signed in as you,
+with Sign out, lives in `/live` settings (`SignedIn.tsx`, `signIns.ts`), inside the settings chunk,
+which already loads only when settings opens. Initial JS did not move: 150.8 KB against 151.9 on
+this laptop. Total JS read 417.5 KB here and 418.1 KB in CI (run 42307352954) against 418.0. Lazy
+loading cannot move a total, so the budget is raised by 2 KB to clear CI's read, which has run about
+0.6 KB above the laptop's.
+

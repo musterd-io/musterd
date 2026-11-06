@@ -484,7 +484,12 @@ import {
   seatBindings,
   listSeatBindings,
 } from '../store/nodes.js';
-import { revokeAllForMember } from '../store/oauth.js';
+import {
+  listClientChains,
+  revokeAllForMember,
+  revokeClientChain,
+  sessionIdOfAccess,
+} from '../store/oauth.js';
 import { deriveNext, deriveNextSummary, deriveTeamReviewPromises } from '../store/orientation.js';
 import {
   currentBuild,
@@ -12344,10 +12349,16 @@ export async function handleHttp(
         if (!target || target.left_at !== null || (!self && !resolveCapabilities(caller).is_admin))
           throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
         const sessionId = sessionsMatch[2] ? decodeURIComponent(sessionsMatch[2]) : null;
-        if (method === 'GET' && sessionId === null)
+        if (method === 'GET' && sessionId === null) {
+          // "This browser" (unified sign-in lane 6): the row whose access token made this request.
+          const here = await sessionIdOfAccess(ctx.db, team.id, bearer(req));
           return sendJson(res, 200, {
-            sessions: await listBrowserSessions(ctx.db, team.id, target.id),
+            sessions: (await listBrowserSessions(ctx.db, team.id, target.id)).map((row) => ({
+              ...row,
+              current: row.id === here,
+            })),
           });
+        }
         if (method === 'DELETE' && sessionId !== null) {
           const row = await getBrowserSession(ctx.db, team.id, sessionId);
           if (!row || row.member_id !== target.id)
@@ -12358,6 +12369,40 @@ export async function handleHttp(
               actor: caller.name,
               member: target,
             });
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+      }
+
+      // ── Signed-in MCP clients (unified sign-in lane 6) ──────────────────────────────────────
+      // "Where you're signed in": a member sees the apps signed in as them (Claude, ChatGPT,
+      // Codex…), an admin anyone's; signing one out ends that chain at once (both halves, so its
+      // access token stops on its next request). Never a token or a hash — summary rows only.
+      const clientsMatch = rest.match(/^\/members\/([^/]+)\/clients(?:\/([^/]+))?$/);
+      if (clientsMatch && (method === 'GET' || method === 'DELETE')) {
+        const team = await requireTeam(ctx.db, slug);
+        const { member: caller } = await authHuman(ctx, slug, req);
+        const targetName = decodeURIComponent(clientsMatch[1]!);
+        const target = await getMemberByName(ctx.db, team.id, targetName);
+        const self = target?.id === caller.id;
+        if (!target || target.left_at !== null || (!self && !resolveCapabilities(caller).is_admin))
+          throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
+        const chainId = clientsMatch[2] ? decodeURIComponent(clientsMatch[2]) : null;
+        if (method === 'GET' && chainId === null)
+          return sendJson(res, 200, {
+            clients: await listClientChains(ctx.db, team.id, target.id),
+          });
+        if (method === 'DELETE' && chainId !== null) {
+          const ended = await revokeClientChain(ctx.db, team.id, target.id, chainId);
+          if (ended === 0) throw new MusterdError('not_found', 'no such signed-in app');
+          await appendAudit(ctx.db, team.id, {
+            actor: caller.name,
+            action: 'oauth.revoked',
+            target: target.name,
+            result: 'allow',
+            detail: { reason: 'signed_out', by: self ? 'self' : 'admin', chain_id: chainId },
+          });
           res.writeHead(204);
           res.end();
           return;

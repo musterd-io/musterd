@@ -27,6 +27,7 @@ import type { VouchRequest } from '../vouchRequests';
 import { Row, Segmented, Switch } from './controls';
 import { PairPhone } from './PairPhone';
 import { Passkeys } from './Passkeys';
+import { SignedIn } from './SignedIn';
 import { QuestionNotify } from './QuestionNotify';
 import { VouchRequests } from './VouchRequests';
 
@@ -60,10 +61,9 @@ export function YouPanel({
   return (
     <>
       <VouchRequests cfg={cfg} requests={vouches} />
-      {others.length > 0 && (
-        <Pairings cfg={cfg} pairings={others} onChanged={onPairingsChanged} />
-      )}
+      {others.length > 0 && <Pairings cfg={cfg} pairings={others} onChanged={onPairingsChanged} />}
       <Passkeys cfg={cfg} me={me?.name ?? null} />
+      <SignedIn cfg={cfg} me={me?.name ?? null} />
       <PairPhone
         cfg={cfg}
         me={me?.name ?? null}
@@ -220,7 +220,10 @@ function Presence({ cfg, me }: { cfg: LiveConfig; me: MemberSummary | null }) {
       <h3 id="lc-set-presence" className="lc-set__h">
         Where you are
       </h3>
-      <Row label="Availability" hint="Away holds asks until you are back; do not disturb lets blocking ones through.">
+      <Row
+        label="Availability"
+        hint="Away holds asks until you are back; do not disturb lets blocking ones through."
+      >
         <Segmented
           label="Availability"
           // off_hours is the daemon's word for outside your hours — not something you pick.
@@ -288,11 +291,21 @@ function StatusLineRow({ cfg, me }: { cfg: LiveConfig; me: MemberSummary | null 
             }}
           />
           <span className={`lc-set__count${draft.over ? ' is-over' : ''}`}>{draft.count}/48</span>
-          <button type="button" className="lc-set__act" disabled={busy || !draft.ready} onClick={() => void run(false)}>
+          <button
+            type="button"
+            className="lc-set__act"
+            disabled={busy || !draft.ready}
+            onClick={() => void run(false)}
+          >
             Set
           </button>
           {shown && (
-            <button type="button" className="lc-set__act is-quiet" disabled={busy} onClick={() => void run(true)}>
+            <button
+              type="button"
+              className="lc-set__act is-quiet"
+              disabled={busy}
+              onClick={() => void run(true)}
+            >
               Clear
             </button>
           )}

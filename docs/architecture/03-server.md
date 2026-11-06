@@ -582,7 +582,7 @@ Optional `MUSTERD_CLOUD_TEAM_BUDGET_PER_MIN` sets the per-team/client request al
    route, `POST /live/session/token`, which answers a 15-minute `msat_`; every other route stays
    bearer-only, so the public-face Origin skip above stays true. The WS claim accepts a human
    `msat_` (`verifyAccess`) and remembers its session, so a revoke closes that tab with 4401.
-   `GET /teams/:slug/members/:name/sessions` lists a member's sessions (self, or an admin);
+   `GET /teams/:slug/members/:name/sessions` lists a member's sessions (self, or an admin), each with `current` true for the session whose access token made the request ("This browser", unified sign-in lane 6); `GET /teams/:slug/members/:name/clients` lists the MCP apps signed in as them (one row per live OAuth chain: name, connected, last used) and `DELETE …/clients/:chain` signs one out at once (`oauth.revoked {reason: signed_out}`);
    `DELETE …/sessions/:id` ends one; credential rotate ends them all.
 
 ## Diagnostics (ADR 016)

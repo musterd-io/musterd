@@ -457,6 +457,20 @@ describe('hosted /live sign-in (ADR 722)', () => {
         headers: { authorization: `Bearer ${bearer}` },
       });
 
+    it("marks the session the request came from as current, so /live can say 'This browser'", async () => {
+      const here = await tokenFor(await signIn());
+      await signIn();
+      const rows = (bearer: string) =>
+        listSessions(bearer).then(
+          (r) => (JSON.parse(r.body) as { sessions: { id: string; current: boolean }[] }).sessions,
+        );
+      const viaHere = await rows(here);
+      expect(viaHere).toHaveLength(2);
+      expect(viaHere.filter((x) => x.current)).toHaveLength(1);
+      // From a credential, not a browser session: no row is "this browser".
+      expect((await rows(adaCred)).some((x) => x.current)).toBe(false);
+    });
+
     it('a member lists their sessions; revoking one refuses its next exchange and closes its socket', async () => {
       const cookie = await signIn();
       const token = await tokenFor(cookie);

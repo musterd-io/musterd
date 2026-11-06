@@ -752,3 +752,30 @@
   outline: 2px solid var(--lc-focus);
   outline-offset: 1px;
 }
+
+/* "Where you're signed in" (unified sign-in lane 6): the Sign out everywhere confirm, inline under
+   the list, so the decision stays next to what it ends. */
+.lc-signed__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lc-3);
+  align-items: center;
+}
+.lc-signed__confirm > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+/* One quiet mark per row; only this browser's is filled. Not the pairing tick: that one means
+   "approves", and nothing here does. */
+.lc-signed__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--lc-muted);
+}
+.lc-signed__dot--here {
+  border-color: var(--lc-success);
+  background: var(--lc-success);
+}
+
