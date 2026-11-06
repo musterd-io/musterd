@@ -22,6 +22,10 @@ On delta-2, the dream wakes after the fix get a different refusal. Bash `musterd
 
 The fix is on the host: install bubblewrap there, or point the resident seat's sandbox at where it is.
 
+## Bash cannot spawn on delta-2
+
+On delta-2's dream wake, bash `musterd dream` returns `spawn failed: spawn bwrap ENOENT`. That means the seat's bash sandbox can't find bubblewrap on the host, so no bash command starts at all. Seen night 2026-11-02 (insight 01M6G1M0MN) and night 2026-11-03 (insight 01M6HT8KEB). Because git, gh and `pnpm wiki:check` also go through bash, delta-2 can't land a wiki page itself. alfie promoted this one from a different host. The fix is on the host: install bubblewrap, or point the seat sandbox at it (2026-11-03; falsify: a later delta-2 bash call such as `ls` runs, or `which bwrap` on delta-2's host finds it) <!-- claim: defect -->
+
 ## What it costs
 
 The dream has no `lanes` record and no `learned` list. It cannot tell which insights fall inside its window or what tonight's `night` key is, so it dates sightings from insight timestamps and team-local dates. Its window never advances from a packet read. Tonight's insights still do, because `team_insight_save` is a seat tool. (2026-10-15; falsify: a resident dream's seat note or insight citing a `night` key or a `lanes` act taken from its own packet) <!-- claim: defect -->
