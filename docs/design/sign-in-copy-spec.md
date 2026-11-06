@@ -54,7 +54,6 @@ signing in does, and what stays as it is.
 | A team on musterd Cloud | `Teams on musterd Cloud need a musterd account.` | `Sign in once, and every device you use knows you.` |
 | An agent in musterd Cloud | `Agents in musterd Cloud run on your musterd account.` | `Sign in once to start one. Your local team keeps working without an account.` |
 | A paid feature on a local team | `{Feature} is on a paid plan, so it needs a musterd account.` | `Everything else on this team keeps working without one.` |
-| A teammate on another network | **Held.** Design spec open question 1 (nick). | — |
 
 **CLI** (the command the person ran pauses on this):
 
@@ -71,8 +70,9 @@ Enter opens your browser · Esc skips
 **`/live`**: a dialog. Heading is line 1, body is line 2, buttons `Sign in with musterd` and `Not now`.
 `Not now` closes the dialog and changes nothing.
 
-Note for the open question: if its answer is yes, a person can't predict "another network" before a
-join fails. Cloud is a line a person can see coming. That argues for the trigger being Cloud alone.
+A teammate or a second computer on another network never triggers this prompt. Invites keep working
+across networks with no account (nick, 2026-11-06, answering design open question 1, question
+`01M6S3SEV9`).
 
 ## 3. `musterd login` (lane 3)
 
@@ -218,7 +218,6 @@ No price, trial length or limit appears anywhere until that ADR sets it.
 
 | Held | Waits on |
 | --- | --- |
-| §2, teammate on another network | nick, design open question 1 |
 | §7, the Owner key scope | big-body, design question 6 |
 | §8 line 2, what a linked team sends | miley / big-body, design §11.3 |
 | §11 line 3 and `{paid features}` | the pricing ADR, lane `01M6S2X5F9` |
