@@ -1,21 +1,28 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import Animated, { LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { AskEntry, AsksView } from '../../native/asks';
-import { heldBody, refusalLine, waitingSubtitle } from '../../native/notice';
-import { showOffer } from '../../native/offer';
+import type { AsksView } from '../../native/asks';
+import { heldBody, refusalLine } from '../../native/notice';
 import { endedNote, type PairingEnded } from '../../native/pairingEnded';
 import type { PairingPin } from '../../native/pairingPin';
+import type { Roster } from '../../native/quickAction';
 import { summary } from '../../native/readable';
+import { summaryLine, teamRows, type AppMember, type OwnAsk } from '../../native/team';
+import { useRosterPoll } from '../../native/useRosterPoll';
 import { Button } from '../../ui/button';
 import { useChrome } from '../../ui/chrome';
+import { ForYouRow } from '../../ui/forYouRow';
 import { Backdrop, Glass } from '../../ui/glass';
 import { Icon } from '../../ui/icon';
+import { MemberRow } from '../../ui/memberRow';
+import { MemberSheet } from '../../ui/memberSheet';
 import { Breathe, Rise, Squish } from '../../ui/motion';
 import { Notice, SectionLabel } from '../../ui/notice';
+import { OfflineFold } from '../../ui/offlineFold';
 import { confirmPairAgain } from '../../ui/pairAgain';
-import { ago, Seat } from '../../ui/seat';
+import { SPRING } from '../../ui/springs';
 import { font, radius, space, usePalette } from '../../ui/theme';
 
 /**
@@ -45,6 +52,10 @@ export default function AsksScreen() {
   const [offerKey, setOfferKey] = useState(false);
   // ADR 802: the daemon says this phone's pairing ended (a key rotation, or unpaired on /live).
   const [ended, setEnded] = useState<PairingEnded | null>(null);
+  // ADR 814: the team as /live shows it, pulled with the asks and on the Now cadence.
+  const [roster, setRoster] = useState<Roster | null>(null);
+  const [showOffline, setShowOffline] = useState(false);
+  const [sheet, setSheet] = useState<AppMember | null>(null);
   const keyDeclined = useRef(false);
   const alive = useRef(true);
   // Every list refresh re-fetches each ask, which re-issues its token and spends the old one. The
@@ -108,6 +119,21 @@ export default function AsksScreen() {
       if (alive.current) setLoading(false);
     }
   }, []);
+
+  const loadRoster = useCallback(async () => {
+    try {
+      const { loadPairingPin } = await import('../../native/pairingPin');
+      const current = await loadPairingPin();
+      if (!alive.current || !current?.binding) return;
+      const { fetchRoster } = await import('../../native/quickAction');
+      const got = await fetchRoster({ pin: current });
+      if (!alive.current || 'miss' in got) return;
+      setRoster((prev) => (prev && prev.ts > got.ts ? prev : got));
+    } catch {
+      // Expo Go has no native module; the asks list still shows.
+    }
+  }, []);
+  useRosterPoll({ pin: pin ?? null, load: loadRoster });
 
   useEffect(() => {
     alive.current = true;
@@ -226,6 +252,15 @@ export default function AsksScreen() {
   const unfetched = paired ? (view?.rest.length ?? 0) : 0;
   const team = pin?.team ?? null;
   const count = unfetched > 0 ? `${asks.length}+` : asks.length;
+  const now = Date.now();
+  const own: OwnAsk[] = asks.map((entry) => ({
+    id: entry.delivery.ask.id,
+    from: entry.delivery.ask.from,
+    ts: entry.delivery.ask.ts,
+    summary: summary(entry.delivery.ask.body),
+  }));
+  const rows = teamRows(paired ? roster : null, paired ? own : [], null);
+  const askByRef = new Map(asks.map((entry) => [entry.delivery.ask.id, entry] as const));
   const status: { tone: 'on' | 'wait' | 'off'; text: string } = paired
     ? { tone: 'on', text: team ?? 'Paired' }
     : pin
@@ -233,6 +268,8 @@ export default function AsksScreen() {
       : { tone: 'off', text: 'Not paired' };
   const dot = { on: p.success, wait: p.accent, off: p.placeholder }[status.tone];
 
+  // An ask that couldn't load, or asks held for quiet hours, still need you: their notice says so.
+  const waitingElsewhere = !!ended || (!!view && (view.unreachable > 0 || !!view.held));
   // No headline (nick, 2026-11-03: "No big text, heros, headers"): the wordmark is the title, a row
   // of pills says where this phone stands, and notes are compact cards.
   const header = (
@@ -249,18 +286,7 @@ export default function AsksScreen() {
           <Text style={[styles.pillText, { color: p.text }]}>{status.text}</Text>
         </View>
         {paired ? (
-          // ADR 791: the team's seats and their quick actions.
-          <Squish
-            accessibilityRole="button"
-            accessibilityLabel="Seats"
-            accessibilityHint="Start, check or stop your team's agent seats"
-            onPress={() => router.push('/seats')}
-            style={[styles.pill, { backgroundColor: p.surface, borderColor: p.border }]}
-          >
-            <Icon name="person.2.fill" color={p.accentText} size={12} />
-            <Text style={[styles.pillText, { color: p.accentText }]}>Seats</Text>
-            <Icon name="chevron.right" color={p.placeholder} size={10} />
-          </Squish>
+          <Text style={[styles.summary, { color: p.muted }]}>{summaryLine(rows.counts)}</Text>
         ) : null}
       </Rise>
       {paired && ended ? (
@@ -332,40 +358,62 @@ export default function AsksScreen() {
           />
         </Rise>
       ) : null}
-      {paired && asks.length > 0 ? <SectionLabel label="Needs you" count={count} /> : null}
+      {paired && roster?.poll?.open ? (
+        // ADR 807: an open Twitch poll rides the roster for an admin's phone; one line, not a card.
+        <Squish
+          accessibilityRole="button"
+          accessibilityLabel={`Open the poll: ${roster.poll.open.question}`}
+          onPress={() => router.push('/poll')}
+          style={[styles.pollLine, { backgroundColor: p.tint }]}
+        >
+          <Icon name="chart.bar" color={p.accentText} size={13} />
+          <Text numberOfLines={1} style={[styles.pollText, { color: p.accentText }]}>
+            {roster.poll.open.question}
+          </Text>
+          <Text style={[styles.pollLive, { color: p.muted }]}>
+            {roster.poll.live ? 'live' : 'not live'}
+          </Text>
+        </Squish>
+      ) : null}
+      {paired && rows.forYou.length > 0 ? (
+        <SectionLabel label="For you" count={unfetched > 0 ? `${rows.forYou.length}+` : count} />
+      ) : null}
+      {paired
+        ? rows.forYou.map((item) => {
+            const entry = askByRef.get(item.id);
+            return (
+              <ForYouRow
+                key={item.id}
+                item={item}
+                now={now}
+                onPress={() =>
+                  entry
+                    ? router.push({
+                        pathname: '/ask/[ref]',
+                        params: {
+                          ref: entry.route.ref,
+                          team: entry.route.team,
+                          binding: entry.route.binding,
+                          expires_at: String(entry.route.expires_at),
+                        },
+                      })
+                    : void refresh(true)
+                }
+              />
+            );
+          })
+        : null}
+      {paired && rows.forYou.length === 0 && !waitingElsewhere ? (
+        <Text style={[styles.quiet, { color: p.placeholder }]}>Nothing waiting on you.</Text>
+      ) : null}
+      {paired && (rows.present.length > 0 || rows.offline.length > 0) ? (
+        <SectionLabel label="Team" count={`${rows.counts.here} here`} />
+      ) : null}
     </View>
   );
 
-  // "All clear" only when nothing is waiting anywhere: an ask that couldn't load, or asks held for
-  // quiet hours, still need you, and their notice above already says so (big-body's review of lane
-  // 01M6HQ4DT4: both cards showed at once).
-  const waitingElsewhere = !!ended || (!!view && (view.unreachable > 0 || !!view.held));
-  const empty = waitingElsewhere ? undefined : paired ? (
-    <Rise index={1}>
-      <Glass style={styles.calm}>
-        <View style={[styles.calmTile, { backgroundColor: p.tint }]}>
-          <Icon name="checkmark.seal.fill" color={p.accentText} size={20} bounce />
-        </View>
-        <View style={styles.words}>
-          <Text style={[styles.calmTitle, { color: p.text }]}>All clear</Text>
-          <Text style={[styles.calmText, { color: p.muted }]}>
-            New asks land here while you’re away.
-          </Text>
-        </View>
-        <Squish
-          accessibilityRole="button"
-          accessibilityLabel="Check now"
-          onPress={() => void refresh(true)}
-          style={[styles.check, { backgroundColor: p.raised }]}
-        >
-          <Icon name="arrow.clockwise" color={p.text} size={13} />
-          <Text style={[styles.checkText, { color: p.text }]}>
-            {loading ? 'Checking' : 'Check'}
-          </Text>
-        </Squish>
-      </Glass>
-    </Rise>
-  ) : (
+  // The unpaired start: the three steps and the way into pairing. Paired, the list is the team.
+  const empty = paired ? undefined : (
     <Rise index={1}>
       <Glass style={styles.start}>
         {STEPS.map((step, i) => (
@@ -398,14 +446,29 @@ export default function AsksScreen() {
         contentContainerStyle={[styles.list, { paddingTop: insets.top + space.md }]}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        data={asks}
-        keyExtractor={(entry) => entry.delivery.ask.id}
+        data={paired ? rows.present : []}
+        keyExtractor={(m) => m.name}
         ListHeaderComponent={header}
         onEndReached={() => void loadMore()}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={empty}
+        ItemSeparatorComponent={() => (
+          <View style={[styles.hairline, { backgroundColor: p.border }]} />
+        )}
         ListFooterComponent={
-          diagnostics || pin || unfetched > 0 ? (
+          <View>
+            {paired && pin ? (
+              <OfflineFold
+                members={rows.offline}
+                open={showOffline}
+                onToggle={() => setShowOffline((o) => !o)}
+              >
+                {rows.offline.map((m) => (
+                  <MemberRow key={m.name} member={m} pin={pin} now={now} onPress={setSheet} />
+                ))}
+              </OfflineFold>
+            ) : null}
+            {diagnostics || pin || unfetched > 0 ? (
             <View style={styles.footer}>
               {unfetched > 0 ? (
                 <Squish
@@ -433,22 +496,30 @@ export default function AsksScreen() {
                 </Squish>
               ) : null}
             </View>
-          ) : undefined
+            ) : null}
+          </View>
         }
         refreshControl={
           <RefreshControl
             refreshing={loading}
             tintColor={p.accent}
             progressViewOffset={insets.top}
-            onRefresh={() => void refresh(true)}
+            onRefresh={() => {
+              void refresh(true);
+              void loadRoster();
+            }}
           />
         }
-        renderItem={({ item, index }) => (
-          <Rise index={index + 2}>
-            <AskRow entry={item} />
-          </Rise>
-        )}
+        renderItem={({ item }) =>
+          pin ? (
+            // A re-sort slides the row to its new place instead of redrawing it.
+            <Animated.View layout={LinearTransition.springify().damping(SPRING.settle.damping)}>
+              <MemberRow member={item} pin={pin} now={now} onPress={setSheet} />
+            </Animated.View>
+          ) : null
+        }
       />
+      {pin ? <MemberSheet member={sheet} pin={pin} now={now} onClose={() => setSheet(null)} /> : null}
     </View>
   );
 }
@@ -459,73 +530,6 @@ const STEPS = [
   { icon: 'person.badge.key.fill', text: 'Approve with your passkey' },
 ] as const;
 
-function AskRow({ entry }: { entry: AskEntry }) {
-  const p = usePalette();
-  const { delivery, route } = entry;
-  const listed = delivery.approval !== undefined;
-  const question = delivery.ask.question;
-  // A listed act is named by the app's fixed wording; the agent's words wait for the screen.
-  const headline = listed
-    ? (showOffer(delivery.approval!.approve, { team: route.team, now: Date.now() })?.wording
-        .headline ?? 'An ask that needs the app')
-    : summary(question?.text ?? delivery.ask.body, 140);
-  const waiting = waitingSubtitle(delivery.waiting ?? 0);
-  const agent = delivery.ask.from_kind === 'agent';
-  return (
-    <Squish
-      accessibilityRole="button"
-      accessibilityLabel={`${listed ? 'Needs Face ID. ' : question ? 'Question. ' : ''}${headline}, from ${delivery.ask.from}`}
-      onPress={() =>
-        router.push({
-          pathname: '/ask/[ref]',
-          params: {
-            ref: route.ref,
-            team: route.team,
-            binding: route.binding,
-            expires_at: String(route.expires_at),
-          },
-        })
-      }
-    >
-      <Glass style={styles.row}>
-        <View style={styles.rowTop}>
-          <Seat name={delivery.ask.from} agent={agent} size={30} />
-          <Text numberOfLines={1} style={styles.rowWho}>
-            <Text style={[styles.from, { color: p.text }]}>{delivery.ask.from}</Text>
-            <Text style={[styles.meta, { color: p.placeholder }]}>
-              {'  '}
-              {ago(delivery.ask.ts, Date.now())}
-            </Text>
-          </Text>
-          {listed ? (
-            <View style={[styles.chip, { backgroundColor: p.tint }]}>
-              <Icon name="faceid" color={p.accentText} size={11} />
-              <Text style={[styles.chipText, { color: p.accentText }]}>Face ID</Text>
-            </View>
-          ) : question ? (
-            <View style={[styles.chip, { backgroundColor: p.raised }]}>
-              <Icon name="questionmark.bubble.fill" color={p.muted} size={11} />
-              <Text style={[styles.chipText, { color: p.muted }]}>Question</Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.rowBody}>
-          <Text numberOfLines={2} style={[styles.askText, { color: p.text }]}>
-            {headline}
-          </Text>
-          <Icon name="chevron.right" color={p.placeholder} size={12} />
-        </View>
-        {waiting ? (
-          <View style={styles.waitingRow}>
-            <View style={[styles.waitingDot, { backgroundColor: p.accent }]} />
-            <Text style={[styles.meta, { color: p.muted }]}>{waiting}</Text>
-          </View>
-        ) : null}
-      </Glass>
-    </Squish>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   footer: { gap: space.sm, alignItems: 'center', marginTop: space.md },
@@ -535,6 +539,19 @@ const styles = StyleSheet.create({
     paddingBottom: space.xl * 4,
   },
   header: { gap: space.sm + 2, marginBottom: space.xs },
+  summary: { fontFamily: font.medium, fontSize: 12, marginTop: -2 },
+  pollLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    minHeight: 36,
+  },
+  pollText: { flex: 1, fontFamily: font.semibold, fontSize: 12.5 },
+  pollLive: { fontFamily: font.regular, fontSize: 11 },
+  quiet: { fontFamily: font.regular, fontSize: 12.5, paddingVertical: 4 },
+  hairline: { height: StyleSheet.hairlineWidth, marginLeft: 28 + space.sm + 2 },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   pill: {
     alignSelf: 'flex-start',
@@ -584,20 +601,6 @@ const styles = StyleSheet.create({
   },
   stepLine: { width: 2, height: 14, borderRadius: 1, marginTop: 4 },
   stepText: { flex: 1, fontFamily: font.medium, fontSize: 15, lineHeight: 30 },
-  row: { padding: space.md, gap: space.sm },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm + 2 },
-  rowWho: { flex: 1 },
-  from: { fontSize: 14, fontFamily: font.semibold },
-  meta: { fontFamily: font.regular, fontSize: 12 },
-  rowBody: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: radius.pill,
-    paddingHorizontal: space.sm,
-    paddingVertical: 3,
-  },
   chipText: { fontSize: 11, fontFamily: font.semibold },
   askText: { flex: 1, fontSize: 15, lineHeight: 21, fontFamily: font.medium },
   waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

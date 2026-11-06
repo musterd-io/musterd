@@ -37,7 +37,6 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="pair" options={{ title: 'Pair' }} />
         <Stack.Screen name="ask/[ref]" options={{ title: 'Ask' }} />
-        <Stack.Screen name="seats" options={{ title: 'Seats' }} />
         <Stack.Screen name="poll" options={{ title: 'Poll' }} />
         </Stack>
       </ThemeProvider>
