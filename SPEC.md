@@ -1084,11 +1084,21 @@ advisory for every listed act.
   → `201 {challenge, expires_at}` — stored only as sha256, ten minutes, one use. The
   challenge binds a ceremony and authorizes nothing by itself: a user-verified WebAuthn
   registration over it (`POST /teams/:slug/authority/passkeys`) enrolls the first key
-  while the team has no device key at all (genesis); past genesis, a member with zero
-  active keys — first enrollment or lost-everything recovery — additionally needs
-  `countersign: {confirmer, approval}`: a different human admin's standing-key A2 over
-  `device_key_admin {action:'enroll', kind:'passkey', member}`, since an unattested
-  ceremony is fabricable by a Bearer-holding agent. No countersigner, no recovery. `POST /teams/:slug/authority/keys` `{public_key, kind, approval?}` enrolls a
+  while the team has no device key at all (genesis); past genesis, a member with no usable
+  key — none that signs where the hub serves: zero keys, or only passkeys whose recorded
+  `rp_id` is not a configured hostname or was never recorded (ADR 769) — additionally needs
+  `countersign: {confirmer, approval}`: a different human admin's A2 (never an unenrolled
+  admin's bearer pass), by a standing key that signs here, over
+  `device_key_admin {action:'enroll', kind:'passkey', member, key}`, where `key` is the
+  registration's held-enrollment digest, since an unattested ceremony is fabricable by a
+  Bearer-holding agent. No countersigner, no recovery. With `hold: true` and no countersign,
+  the verified registration is held against its enrollment code (written once; it lives as
+  long as the code) and the answer is `202 {held: {enrollment_digest, expires_at}}`; an admin
+  then completes it with `POST /teams/:slug/authority/passkeys/vouch`
+  `{member, enrollment_digest, approval}` → `201 {key, member}`, on the hub only, the admin's
+  A2 over that same payload, every check re-run and the code spent with the key inserted in
+  one transaction (ADR 769). `vouchCheckCode(enrollment_digest)` is the six-digit code both
+  people compare. `POST /teams/:slug/authority/keys` `{public_key, kind, approval?}` enrolls a
   raw-key device only behind a standing key's A2 approval over `device_key_admin`, and
   refuses `passkey_first` while no key stands. An agent member can never enroll. `GET
   /teams/:slug/authority/keys` lists the caller's own keys; `POST
@@ -1098,7 +1108,7 @@ advisory for every listed act.
   `device_key.enrolled|revoked|enrollment_challenge`, never a challenge or key. Kind `phone` is refused here: a phone key enrolls only by pairing the musterd app (ADR 676 §5), under the same standing-key approval. A key records the origin and relying-party id it was made on (`GET …/authority/keys` carries `origin`, `rp_id`; null on keys from before, ADR 808), and a passkey's `credential_id`, which a registration on /live passes as `excludeCredentials` so an authenticator that already holds one of the member's passkeys refuses to replace it (lane 01M6Q3ZJJB). When none of a human's passkeys sign on the page they are on but a phone key stands, `POST /teams/:slug/authority/descriptors/:nonce/ask-phone` `{origin?}` (the human, for their own live `device_key_admin` enrollment descriptor) raises one privileged ask to their phone carrying that descriptor as the approve offer; the phone's signed approve is verified and parked on the nonce for `GET …/authority/approvals/:nonce` to collect, and the registration presents it as `approval` (ADR 808 inc C). When no key of a human's signs anywhere the hub serves, the hub's operator mints a one-time recovery code on the hub's own loopback — `POST /teams/:slug/authority/recoveries` `{member, operator_secret, issued_by?}` → `201 {code, expires_at, redeem_at}` (refused on a joiner, from any address but loopback, without the daemon's recovery secret — the 0600 file beside its store — while a usable key stands, while another human admin holds one, or while a code is live; five minutes; audited `device_key.recovery_code`; announced to the team by the board seat) — and the registration that presents it as its `challenge`, by that member signed in as themself, needs neither `approval` nor `countersign` (ADR 808 inc D).
 - Authenticators (decision 5): `GET /authority/passkey` and `GET /authority/approve` are
   small pages the daemon serves from its own origin — never the relay. Passkey enrollment
-  is `POST /teams/:slug/authority/passkeys` `{actor, challenge, approval?, countersign?, registration}`: a
+  is `POST /teams/:slug/authority/passkeys` `{actor, challenge, approval?, countersign?, hold?, registration}`: a
   WebAuthn registration whose challenge is the enrollment challenge, verified server-side
   (challenge, user verification, origin pinned to the daemon's configured origins —
   its own origin plus `MUSTERD_WEBAUTHN_ORIGINS` — defaulting to the daemon's loopback

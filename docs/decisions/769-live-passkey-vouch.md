@@ -197,6 +197,18 @@ so the server increment follows. Showing `check` on the phone is a mobile follow
 also adds a vouch vector to `approval.vectors.json`, which holds only the phone key's public half
 today, so no new signed vector can join it without a fresh vector key.
 
+**2026-11-06: increment 2, server (lane `01M64SXW85`).** Ladder v145 adds `held_enrollments`.
+`POST /authority/passkeys` with `hold: true` returns `202 {held}` instead of refusing, and
+`POST /authority/passkeys/vouch` completes the enrollment in one transaction. The countersign branch
+opens at "no usable key", and a countersign must be an A2 signature by a standing key that signs
+here, over a payload carrying `key`. The last point closes a gap found while building: an admin with
+no enrolled key passed `requireAuthority` as `bearer_unenrolled` and so could countersign with a
+bearer token alone. Until the CLI increment lands, the terminal countersign
+(`musterd authority enroll --confirmed-by` with `--countersign-proof`) fails closed, because its
+proof names no key. The relay keeps the zero-key rule (it passes no hub hosts) and never holds.
+/live on a joiner already redirects to the hub. The store tests in `store/authority.vouch.test.ts`
+are the Eval list.
+
 ## Observability & Evaluation
 
 - **Traces:** the existing `device_key.enrolled` audit row (actor the member) and the countersign
