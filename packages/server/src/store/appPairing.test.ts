@@ -20,9 +20,16 @@ import {
   stagedAppKeys,
   startAppPairing,
   UNKNOWN_DAEMON_KEY,
+  revokePhoneKeysOfEndedBindings,
 } from './appPairing.js';
 import { listAuditByAction } from './audit.js';
-import { buildDescriptor, enrollDeviceKey, listDeviceKeys, requireAuthority } from './authority.js';
+import {
+  buildDescriptor,
+  enrollDeviceKey,
+  getDeviceKey,
+  listDeviceKeys,
+  requireAuthority,
+} from './authority.js';
 import { confirmPairing, recordPairingIdentity } from './channelBindings.js';
 import { getChannelSettings } from './channelSettings.js';
 import { addMember } from './members.js';
@@ -454,7 +461,7 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
       db: Driver,
       teamId: string,
       memberId: string,
-      over: { created_at?: number; status?: string; daemon?: string } = {},
+      over: { created_at?: number; status?: string; daemon?: string; deviceKeyId?: string } = {},
     ) {
       const id = `b-${Math.random().toString(36).slice(2)}`;
       const keys = {
@@ -463,6 +470,7 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
         attest_key_id: 'a',
         environment: 'production',
         ...(over.daemon ? { daemon_identity_public_key: over.daemon } : {}),
+        ...(over.deviceKeyId ? { device_key_id: over.deviceKeyId } : {}),
       };
       await db.run(
         `INSERT INTO channel_bindings
@@ -498,6 +506,63 @@ withDrivers('app pairing (ADR 676 §5)', (o) => {
       );
       await expect(appBindingEnded(db, team.id, gone, { current: 'K1' })).resolves.toBe('revoked');
       await expect(appBindingEnded(db, team.id, 'nope', { current: 'K1' })).resolves.toBeNull();
+    });
+
+    // Lane 01M6Q1RDTK: a pairing's phone key dies with the pairing. Measured 2026-11-05: nick had
+    // one phone paired and three active phone keys, one per pairing round, every one still
+    // standing authority. The sweep revokes the keys of superseded and revoked pairings only.
+    it('revokes the phone keys of ended pairings, keeps the live one, and is idempotent', async () => {
+      const { db, team, nick } = await setup();
+      const phoneKey = async (n: string) =>
+        (
+          await enrollDeviceKey(db, {
+            teamId: team.id,
+            memberId: nick.id,
+            publicKey: `pk-${n}`,
+            kind: 'phone',
+          })
+        ).id;
+      const kSame = await phoneKey('same');
+      const kOld = await phoneKey('old');
+      const kGone = await phoneKey('gone');
+      const same = await bind(db, team.id, nick.id, { daemon: 'K1', deviceKeyId: kSame });
+      const old = await bind(db, team.id, nick.id, { daemon: 'K0', deviceKeyId: kOld });
+      const gone = await bind(db, team.id, nick.id, {
+        daemon: 'K1',
+        status: 'revoked',
+        deviceKeyId: kGone,
+      });
+      const swept = await revokePhoneKeysOfEndedBindings(db, {
+        teamId: team.id,
+        member: { id: nick.id, name: 'nick' },
+        current: 'K1',
+      });
+      expect(swept.map((r) => [r.keyId, r.binding, r.ended]).sort()).toEqual(
+        [
+          [kOld, old, 'superseded'],
+          [kGone, gone, 'revoked'],
+        ].sort(),
+      );
+      expect((await getDeviceKey(db, team.id, kSame))?.revokedAt).toBeNull();
+      expect((await getDeviceKey(db, team.id, kOld))?.revokedAt).not.toBeNull();
+      expect((await getDeviceKey(db, team.id, kGone))?.revokedAt).not.toBeNull();
+      const via = (a: { detail: unknown }) =>
+        (typeof a.detail === 'string'
+          ? (JSON.parse(a.detail) as { via: string })
+          : (a.detail as { via: string })
+        ).via;
+      const audited = await listAuditByAction(db, team.id, 'device_key.revoked', 100);
+      expect(audited.map(via).sort()).toEqual(['binding_revoked', 'binding_superseded']);
+      // Nothing left to sweep: a second pass revokes nothing and audits nothing more.
+      await expect(
+        revokePhoneKeysOfEndedBindings(db, {
+          teamId: team.id,
+          member: { id: nick.id, name: 'nick' },
+          current: 'K1',
+        }),
+      ).resolves.toEqual([]);
+      expect((await listAuditByAction(db, team.id, 'device_key.revoked', 100)).length).toBe(2);
+      void same;
     });
 
     it('backfills an old row once: current if paired after the key file, else unknown (superseded)', async () => {
