@@ -9,7 +9,14 @@ import { endedNote, type PairingEnded } from '../../native/pairingEnded';
 import type { PairingPin } from '../../native/pairingPin';
 import type { Roster } from '../../native/quickAction';
 import { summary } from '../../native/readable';
-import { forYouCount, summaryLine, teamRows, type AppMember, type OwnAsk } from '../../native/team';
+import {
+  forYouCount,
+  portraitOf,
+  summaryLine,
+  teamRows,
+  type AppMember,
+  type OwnAsk,
+} from '../../native/team';
 import { useRosterPoll } from '../../native/useRosterPoll';
 import { Button } from '../../ui/button';
 import { useChrome } from '../../ui/chrome';
@@ -377,7 +384,7 @@ export default function AsksScreen() {
       {paired && rows.forYou.length > 0 ? (
         <SectionLabel label="For you" count={forYouCount(rows)} />
       ) : null}
-      {paired
+      {paired && pin
         ? rows.forYou.map((item) => {
             const entry = askByRef.get(item.id);
             return (
@@ -385,6 +392,8 @@ export default function AsksScreen() {
                 key={item.id}
                 item={item}
                 now={now}
+                pin={pin}
+                portrait={portraitOf(rows, item.from)}
                 onPress={() =>
                   entry
                     ? router.push({
