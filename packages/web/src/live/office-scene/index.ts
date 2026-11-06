@@ -28,6 +28,7 @@ import {
 import { helpWalks } from './mapping';
 import { REPLAY_TEMPO, replayAge } from './replay';
 import { domPropCadence, stepDomAnimations } from './domCadence';
+import { frameDt } from './frameClock';
 import {
   ambientFrameBudgetMs,
   coalesceStep,
@@ -2856,7 +2857,9 @@ export function mountOffice(
       phase = 0; // an uncapped stretch paints every rAF; the carry restarts when coalescing resumes
     }
     draws++;
-    const dt = Math.min(0.05, acc / 1000);
+    // Wall time, capped at the drift beat — not 50 ms, which ran the stream in slow motion below
+    // 20 draws/s (./frameClock.ts, lane 01M6S4FE8C).
+    const dt = frameDt(acc);
     // The DOM props (steam, motes, twinkles, fan, banner) advance by the wall time since their last
     // step, on every third draw, so the software compositor repaints them ~10 times a second, not
     // sixty — and not once per office frame either (that repaint cost ~8 draws/s on the capture box).
@@ -2951,6 +2954,7 @@ export function mountOffice(
   }
   function ensureDrift() {
     if (driftTimer || raf || reduced || STILL || suspended || disposed || !VISIBLE()) return;
+    let lastBeat = performance.now();
     driftTimer = setInterval(() => {
       // Re-check every tick, not just at arm time: a tab can hide, a panel collapse or a real act
       // wake the loop between two beats of a 250ms timer, and a drift frame drawn over a live rAF
@@ -2959,7 +2963,15 @@ export function mountOffice(
         stopDrift();
         return;
       }
-      clock += DRIFT_FRAME_MS / 1000;
+      // The beat's real elapsed time, not its nominal 250 ms: a busy box fires the timer late, and a
+      // fixed step lost that time to the room (lane 01M6S4FE8C).
+      const beatAt = performance.now();
+      const beatMs = beatAt - lastBeat;
+      lastBeat = beatAt;
+      clock += frameDt(beatMs);
+      // Broadcast holds the DOM props (fan, steam, motes) paused and steps them itself, and before
+      // this only the rAF loop did — so a parked room froze the fans for as long as it was quiet.
+      if (broadcast) stepDomAnimations(document.getAnimations(), beatMs, heldAnims);
       beats++;
       drawDynamic();
     }, DRIFT_FRAME_MS);

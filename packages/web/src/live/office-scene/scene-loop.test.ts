@@ -467,3 +467,19 @@ describe('a lane done glows the closer\'s desk (goal bell spec)', () => {
     expect(index).not.toContain('chime');
   });
 });
+
+describe('the room keeps wall time on a slow page (lane 01M6S4FE8C)', () => {
+  it('the frame loop steps by frameDt, not a hard-coded 50 ms cap', () => {
+    const tick = body('tick');
+    expect(tick).toContain('const dt = frameDt(acc)');
+    expect(tick).not.toMatch(/Math\.min\(0\.05/);
+  });
+
+  it('the drift beat advances by its measured elapsed time, and on the stream steps the held DOM props', () => {
+    const drift = body('ensureDrift');
+    expect(drift).toContain('performance.now()');
+    expect(drift).toContain('clock += frameDt(beatMs)');
+    expect(drift).not.toContain('clock += DRIFT_FRAME_MS / 1000');
+    expect(drift).toMatch(/if \(broadcast\) stepDomAnimations\(document\.getAnimations\(\), beatMs, heldAnims\)/);
+  });
+});
