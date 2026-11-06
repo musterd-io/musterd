@@ -157,17 +157,21 @@ can create teams (lane `01M3Z44MTV`, 2026-11-02).
 | Notice | unreachable | The team server could not be reached. Nothing was created. Try again in a minute. | |
 | Notice | refused | The team server refused ({reason}). Nothing was created. | `{reason}` is the server's error code, or its status. |
 
-`<title>` Team created — musterd — after a create.
+`<title>` Team created — musterd — after a create. *(Revised 2026-11-06, unified sign-in lane 5: the
+way in is one button that signs you in; the two secrets fold away under a disclosure until
+`musterd login` and `musterd join` replace them — nick, question 01M6SBB3C7. sloane's
+`sign-in-copy-spec.md` §5 is the target once those ship.)*
 
 | Surface | State | Exact string | Notes |
 | --- | --- | --- | --- |
 | Heading | created | Team created | |
 | Lede | created | {slug} is yours. You are its first owner, as {name}. | |
-| Notice | created | Copy these now. They are shown once and never again. | The page is the only place the two secrets ever appear. A reload is `/account`. |
-| Label | link | Your team | Links to `{host}/live`. |
-| Label | credential | Your credential | The `mscr_` value the person presents. |
+| Button | created | Open {slug} | Primary. Goes to `{host}/live/signin/start`, which signs you in through the console hand-back. |
+| Disclosure | created | For your terminal and agents | Closed by default. |
+| Notice | inside | Shown once and never again. Copy what you need now. | A reload is `/account`. |
+| Label | credential | Your credential | The `mscr_` value your terminal presents. |
 | Label | key | Agent key | The `mskey_` value agents present to claim a seat. |
-| Note | created | Agents present the agent key to claim a seat; you present your credential. Keep both out of chat and out of git. | |
+| Note | inside | Agents present the agent key to claim a seat; your terminal presents your credential. Keep both out of chat and out of git. | |
 | Link | created | Back to your account | |
 
 ## 9. Signing in to a team

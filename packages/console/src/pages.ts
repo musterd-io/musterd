@@ -285,17 +285,23 @@ export function teamCreatedPage(o: {
   humanCredential: string;
   agentKey: string;
 }): string {
+  // Unified sign-in lane 5: the way in is one button, which signs the creator in through the team's
+  // own start route and the console hand-back (ADR 722) — nothing to copy. The two secrets stay,
+  // folded, until `musterd login` and `musterd join` replace them (nick, question 01M6SBB3C7);
+  // until then they are still how the creator's terminal and agents get in.
   return shell(
     'Team created — musterd',
     `<h1>Team created</h1>\n` +
       `<p class="c-lede">${esc(o.slug)} is yours. You are its first owner, as ${esc(o.name)}.</p>\n` +
-      `<p class="c-notice" role="alert">Copy these now. They are shown once and never again.</p>\n` +
+      `<p><a class="c-button c-button--primary" href="${esc(o.host)}/live/signin/start">Open ${esc(o.slug)}</a></p>\n` +
+      `<details class="c-disclose">\n<summary>For your terminal and agents</summary>\n` +
+      `<p class="c-notice" role="note">Shown once and never again. Copy what you need now.</p>\n` +
       `<dl class="c-stack">\n` +
-      `<dt class="c-section-label">Your team</dt>\n<dd><a class="c-link" href="${esc(o.host)}/live">${esc(o.host)}/live</a></dd>\n` +
       `<dt class="c-section-label">Your credential</dt>\n<dd><code class="c-code">${esc(o.humanCredential)}</code></dd>\n` +
       `<dt class="c-section-label">Agent key</dt>\n<dd><code class="c-code">${esc(o.agentKey)}</code></dd>\n` +
       `</dl>\n` +
-      `<p class="c-note">Agents present the agent key to claim a seat; you present your credential. Keep both out of chat and out of git.</p>\n` +
+      `<p class="c-note">Agents present the agent key to claim a seat; your terminal presents your credential. Keep both out of chat and out of git.</p>\n` +
+      `</details>\n` +
       `<p><a class="c-link" href="/account">Back to your account</a></p>`,
   );
 }

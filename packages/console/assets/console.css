@@ -299,6 +299,75 @@ a:hover {
   outline-offset: 1px;
 }
 
+/* A fold for what most people never need: the team-created page keeps the shown-once secrets here,
+   after the one button that signs you in (unified sign-in lane 5). Quiet until opened; the marker
+   turns, nothing else moves. */
+.c-disclose {
+  margin: var(--s-5) 0 0;
+  border-top: 1px solid var(--c-rule);
+  padding-top: var(--s-3);
+}
+.c-disclose > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 24px;
+  font: var(--t-label);
+  color: var(--c-text-dim);
+  cursor: pointer;
+  list-style: none;
+}
+.c-disclose > summary::-webkit-details-marker {
+  display: none;
+}
+.c-disclose > summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--m-short) var(--m-ease);
+}
+.c-disclose[open] > summary::before {
+  transform: rotate(45deg);
+}
+.c-disclose > summary:hover {
+  color: var(--c-text);
+}
+.c-disclose > summary:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.c-disclose[open] > summary {
+  margin-bottom: var(--s-4);
+}
+/* A secret in the fold: small mono that wraps anywhere, in a field, so a 40-character key fits a
+   320 px phone without scrolling sideways (WCAG 1.4.10). Not --t-code: that is the 28 px six-digit
+   check code. */
+.c-disclose dl {
+  margin: 0;
+}
+.c-disclose dt.c-section-label {
+  margin-top: var(--s-4);
+}
+.c-disclose dd {
+  margin: 0;
+}
+.c-disclose .c-code {
+  display: block;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--c-edge);
+  border-radius: var(--r-control);
+  background: var(--c-field);
+  font: var(--t-mono-sm);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  user-select: all;
+  text-align: left;
+}
+
 /* ── the account list ───────────────────────────────────────────────────────────────────────── */
 
 .c-section-label {
@@ -388,7 +457,9 @@ a:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     transition: none !important;
   }
 }
