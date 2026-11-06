@@ -29,7 +29,7 @@ import { helpWalks } from './mapping';
 import { REPLAY_TEMPO, replayAge } from './replay';
 import { domPropCadence, stepDomAnimations } from './domCadence';
 import { frameDt } from './frameClock';
-import { makeFrameProfile, profileSnapshot, type FrameProfile } from './frameProfile';
+import { makeFrameProfile, prefixedProfile, profileSnapshot, type FrameProfile } from './frameProfile';
 import {
   ambientFrameBudgetMs,
   coalesceStep,
@@ -461,6 +461,8 @@ export function mountOffice(
   const broadcast = options.broadcast === true;
   // Broadcast only: where each drawn frame's main-thread time goes (./frameProfile.ts, lane 01M6S5V5DY).
   const frameProf = broadcast ? makeFrameProfile() : null;
+  // The measure pass's own stages, as `m.<stage>` beside the paint pass's (lane 01M6S5V5DY).
+  const measureProf = frameProf ? prefixedProfile(frameProf, 'm.') : undefined;
   // What is outside the windows (window views): `?view=` > the mount's `view` (the /live pref) > city.
   // Only the chosen view's plates are fetched; `setView` loads the next one before it swaps.
   const viewPinned = viewOverride(typeof window === 'undefined' ? '' : window.location.search);
@@ -2755,6 +2757,7 @@ export function mountOffice(
         },
       },
       f,
+      measureProf,
     );
     frameProf?.mark('measure');
     const now = performance.now();

@@ -1141,6 +1141,8 @@ export function drawWalls(
   weather: Weather = 'clear',
   /** The goal bell's angle off plumb, radians (RenderOpts.bellAngle). */
   bellAngle = 0,
+  /** Broadcast's stage timer: each fixture group marks its own `walls.*` stage (lane 01M6S5V5DY). */
+  prof?: FrameProfile,
 ): void {
   /**
    * What each wall carries. The right wall gets the clock (it is the only one whose `+t` runs screen-right,
@@ -1157,6 +1159,7 @@ export function drawWalls(
       const [fx, fy] = edge(a.tc);
       if (blitIf(ctx, fit, art, `wall/art-${i}`, fx, fy)) wallArt(ctx, fit, edge, a, i, art, env);
     });
+    prof?.mark('walls.art');
     // The signs (lane 01M6FXKVDD): rendered oak and gold; their lamps light in `drawInteriorLight`.
     for (const name of SIGN_NAMES) {
       const s = SIGNS[name];
@@ -1164,37 +1167,47 @@ export function drawWalls(
       const [sx, sy] = edge(s.tc);
       blitIf(ctx, fit, art, `wall/sign-${name}`, sx, sy);
     }
+    prof?.mark('walls.signs');
     if (wallIndex === 1) {
       const [cx, cy] = edge(0.52);
       run(() => {
         if (blitIf(ctx, fit, art, 'wall/clock', cx, cy))
           wallClock(ctx, fit, edge, 0.52, 0.62, env.hours); // dead centre, between the windows
       });
+      prof?.mark('walls.clock');
       // Painted with or without a schedule: on /live it is the door to the team's settings, so a team
       // that never set hours still needs something to reach for (nick, 2026-10-19).
       run(() => workingHoursSign(ctx, fit, edge, teamWorkingHours, t));
+      prof?.mark('walls.hours');
       // The agile board — far-right gap. Must be THIS wall: `+t` runs screen-left on the other one
       // (same constraint that fixed the clock here), and a kanban has a reading direction.
       const [bx, by] = edge(WALL_BOARD.tc);
       run(() => {
         if (blitIf(ctx, fit, art, 'wall/board', bx, by)) wallLaneBoard(ctx, fit, edge, wallBoard);
       });
+      prof?.mark('walls.board');
       // The goal bell over the board's top-left corner (lane 01M6HHH5EH): its own unit, so a swing
       // damages the bell and not the board beside it.
       run(() => goalBell(ctx, fit, art, bellAngle));
+      prof?.mark('walls.bell');
       return;
     }
     const [hx, hy] = edge(0.52);
     blitIf(ctx, fit, art, 'wall/hanger', hx, hy); // between the windows — where you'd really hang one
+    prof?.mark('walls.art');
   };
   // back-left wall (lx=0 edge): a print, the planter, and its strand. It carries no live fixture.
   dress(WALL_EDGES[0]!, 0);
   run(() => drawWeather(ctx, fit, WALL_EDGES[0]!, weather, t));
+  prof?.mark('walls.weather');
   run(() => cableStrand(ctx, fit, WALL_EDGES[0]!));
+  prof?.mark('walls.strand');
   // back-right wall (ly=0 edge): the clock, sign and board, then its strand over them.
   dress(WALL_EDGES[1]!, 1);
   run(() => drawWeather(ctx, fit, WALL_EDGES[1]!, weather, t));
+  prof?.mark('walls.weather');
   run(() => cableStrand(ctx, fit, WALL_EDGES[1]!));
+  prof?.mark('walls.strand');
 }
 
 /** A stable unit in [0, 1) per weather particle — rebakes reposition nothing. */
@@ -4581,7 +4594,7 @@ export function renderScene(
     prof?.mark('shell');
     // On the stage, in their existing order: the live fixtures over the blitted walls, then the
     // additive bulb strands (see `drawWalls`).
-    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather, opts.bellAngle);
+    drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather, opts.bellAngle, prof);
     prof?.mark('walls');
     // Source-over floor paint, so it caches cleanly on top of the shell.
     run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));
