@@ -17,7 +17,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useChrome } from './chrome';
 import { Glass } from './glass';
 import { tap } from './haptics';
-import { pillBottom, SPRING, TAB_BOUNCE, tabTint, type Tab } from './springs';
+import { pillBottom, SPRING, TAB_BOUNCE, tabOf, tabTint, type Tab } from './springs';
 import { TabIcon } from './tabIcons';
 import { font, usePalette } from './theme';
 
@@ -46,7 +46,7 @@ export function TabBar({ state, descriptors, emitter, navigateToTab }: BottomTab
           const focused = state.index === index;
           const options = descriptors[route.key]?.options;
           const label = typeof options?.title === 'string' ? options.title : route.name;
-          const tab = route.name as Tab;
+          const tab = tabOf(route.name);
           const badge = options?.tabBarBadge;
           const onPress = () => {
             tap();

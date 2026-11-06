@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pillBottom, SPRING, TAB_BOUNCE, tabTint } from './springs';
+import { pillBottom, SPRING, TAB_BOUNCE, tabOf, tabTint } from './springs';
 import { light } from './theme';
 
 describe('the tab pill (ADR 815, the app shell)', () => {
@@ -25,5 +25,11 @@ describe('the tab pill (ADR 815, the app shell)', () => {
       expect(s.damping).toBeGreaterThan(0);
       expect(s.stiffness).toBeGreaterThan(0);
     }
+  });
+
+  it('reads the index route as the Now tab, since Now must serve "/"', () => {
+    expect(tabOf('index')).toBe('now');
+    expect(tabOf('work')).toBe('work');
+    expect(tabOf('you')).toBe('you');
   });
 });
