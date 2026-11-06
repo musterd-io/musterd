@@ -37,6 +37,7 @@ own: `expo-symbols` draws SF Symbols only, and the pill's three glyphs are not i
    `src/ui/motion.tsx` stays as it is for the screens that already use it; the new shell's motion
    is written on reanimated, and `motion.tsx` moves over when a screen is rewritten, not before.
    The babel plugin `react-native-worklets/plugin` is last in `babel.config.js`.
+   _(Amended 2026-11-06: there is no `babel.config.js`; `babel-preset-expo` adds the plugin itself — see Consequences.)_
 2. The app takes `react-native-gesture-handler` (~3.3.0), for the member sheet's drag-to-dismiss.
    `GestureHandlerRootView` wraps the app in `src/app/_layout.tsx`.
 3. The app takes `react-native-svg` (15.16.0), for the pill's three tab icons, the active tab's
@@ -53,6 +54,20 @@ for three glyphs); Moti or a sheet library on top of reanimated (one more layer 
 primitives, and the sheet is one component).
 
 ## Consequences
+
+- _(2026-11-06, lane `01M6QJZF7030RYTF3JMJJVMJ2Y`.)_ TestFlight build 56 (run 42162362743) failed to
+  archive on the `babel.config.js` decision 1 added. It named `babel-preset-expo`, which pnpm keeps
+  inside expo's own tree and not in `packages/mobile`. Expo CLI resolves the preset through expo, so
+  `expo export` bundled fine; expo-updates' release step ("Generate updates resources") runs a plain
+  `node` that resolves it from the app folder, and Metro failed with "Cannot find module
+  'babel-preset-expo'", then "Cannot read properties of undefined (reading 'transformFile')".
+  Reproduced locally by running `createUpdatesResources.js` in `all`/`production` mode: it failed
+  with the file and succeeded without it. `babel-preset-expo` 58.0.24 adds
+  `react-native-worklets/plugin` by itself when the package is installed (`build/configs/expo.js`);
+  a bundle without the file carries 645 `__workletHash` markers. So the file is gone, and
+  `tests/dependency-guards.test.ts` refuses any future one that names a preset or plugin a plain
+  `node` cannot reach from `packages/mobile`. It resolves without `NODE_PATH`, because pnpm's bin
+  shim sets `NODE_PATH` to its hidden hoist folder and a pnpm-run test would find the preset anyway.
 
 - Four native modules join the build. The TestFlight run's pod list carries `RNReanimated`,
   `RNWorklets`, `RNGestureHandler` and `RNSVG`; `expo doctor` stays 20/20 (these are SDK-bundled

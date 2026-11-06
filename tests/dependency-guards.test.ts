@@ -1,6 +1,8 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // Resolve the actual dependencies Expo consumes, including pnpm's installed patches (patches/).
@@ -68,6 +70,31 @@ describe('installed dependency guards', () => {
     expect(below).toEqual([]);
   });
 
+  // TestFlight build 56 (2026-11-06) failed to archive: #3964's babel.config.js named
+  // `babel-preset-expo`, which pnpm keeps inside expo's own tree, not packages/mobile's. Expo CLI
+  // resolves the preset through expo, so `expo export` bundled fine; expo-updates' release bundle
+  // resolves it from the app folder and died ("Cannot find module 'babel-preset-expo'" → "reading
+  // 'transformFile'"). The preset adds react-native-worklets/plugin itself, so the app needs no
+  // config at all. Any config it grows must name only what packages/mobile can resolve.
+  it('a babel config in packages/mobile names only presets and plugins resolvable from there', () => {
+    const path = new URL('../packages/mobile/babel.config.js', import.meta.url);
+    const mobileDir = dirname(fileURLToPath(path));
+    if (!existsSync(path)) return;
+    const factory = mobileRequire(path.pathname) as (api: { cache: (v: boolean) => void }) => {
+      presets?: (string | [string, unknown])[];
+      plugins?: (string | [string, unknown])[];
+    };
+    const config = factory({ cache: () => undefined });
+    const names = [...(config.presets ?? []), ...(config.plugins ?? [])].map((entry) =>
+      Array.isArray(entry) ? entry[0] : entry,
+    );
+    // Resolve as a plain `node` does, with no NODE_PATH: pnpm's bin shim sets NODE_PATH to its
+    // hidden hoist folder, so `require.resolve` inside a pnpm-run test finds packages expo-updates'
+    // build script cannot (measured 2026-11-06: babel-preset-expo resolved here and not there).
+    const unresolvable = names.filter((name) => !reachableWithoutNodePath(name, mobileDir));
+    expect(unresolvable).toEqual([]);
+  });
+
   it('accepts valid RSA signatures and rejects extra digest algorithm elements', () => {
     // reason: node-forge ships no types; this fixture uses its public ASN.1/RSA API.
     const forge: any = cliRequire('node-forge');
@@ -97,3 +124,13 @@ describe('installed dependency guards', () => {
     }
   });
 });
+
+/** A package a plain `node` finds from `fromDir`: `node_modules/<pkg>` there or in a folder above it. */
+function reachableWithoutNodePath(specifier: string, fromDir: string): boolean {
+  const parts = specifier.split('/');
+  const pkg = specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]!;
+  for (let dir = fromDir; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, 'node_modules', pkg, 'package.json'))) return true;
+    if (dirname(dir) === dir) return false;
+  }
+}
