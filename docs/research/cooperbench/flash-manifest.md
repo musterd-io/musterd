@@ -122,11 +122,12 @@ Recorded after the run, not before it; nothing above is changed.
   05:03Z without having read it. The decline is answered here and in finding 035, not retroactively.
 - **"Hard stop $400" was a soft threshold.** `run_arms.py` polls finished pairs' `result.json` every
   60 s and stops at $370; a pair in flight is not bounded by it, and the "≈ $4 each" reserve for seven
-  in-flight pairs was an assumption, not an enforced ceiling. What the run actually exposed: at most
-  five pairs in flight (attempt 2: solo 1, team 2, musterd 2), the costliest single pair
-  $0.87 (musterd), $0.65 (team), $0.41 (solo), and $54.08 in all, so the
-  overshoot past any poll was at most about $4.36 (five pairs × the costliest). A future manifest states the cap as a polled threshold with its authorised
-  overshoot, or adds a live per-pair ceiling.
+  in-flight pairs was an assumption, not an enforced ceiling. What the run observed: at most five
+  pairs in flight at once (attempt 2: solo 1, team 2, musterd 2), the costliest single pair $0.87
+  (musterd), $0.65 (team), $0.41 (solo), and **$54.08 in all**. No bound on the overshoot past a poll
+  is claimed: concurrency does not limit how many pairs finish and are replaced within one 60 s
+  interval, and the run kept no poll-by-completion timeline to support one. A future manifest states
+  the cap as a polled threshold with its authorised overshoot, or adds a live per-pair ceiling.
 - **Inference.** A non-significant McNemar result is "no detectable difference at N = 50", not evidence
   the arms match; and a musterd-vs-team difference alone does not identify a missing scratchpad or
   integration as its cause. Finding 035's wording follows both.

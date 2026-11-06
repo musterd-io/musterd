@@ -83,12 +83,13 @@ authors' GPT-5.5 run (48%) or the leaderboard's Sonnet 4.5 entry (47%).
 - **Cost.** musterd costs 2.8× solo per pair ($0.49 vs $0.17) and 2.7× per pass ($0.65 vs $0.24), and
   runs about twice as long per pair (173 s vs 92 s). The coordination is free in passes and not free
   in dollars. The team harness costs 1.9× solo per pair and 3.6× per pass.
-- **All three fail 11 pairs** — task losses no coordination can recover.
+- **All three arms failed the same 11 pairs.** These runs show only that; they do not show that some
+  other coordination could not have passed them.
 - **Errors:** one musterd pair (the git-server race above), re-run once; none in solo or team. No API
   limit line. Spend $54.08 in all — $49.53 for attempt 2 and the re-run, about $3.50 for the aborted
   attempt, $1.07 for the smoke pairs. The manifest's "$400 hard stop" was in fact a threshold polled
-  every 60 s over finished pairs ($370); in-flight pairs were not bounded by it. The costliest pair was
-  $0.87 and at most five were in flight, so the threshold was never close.
+  every 60 s over finished pairs ($370); in-flight pairs were not bounded by it, and no bound on the
+  overshoot past a poll is claimed. The observed total, $54.08, was far below the threshold.
 - **Process.** The run started against an open hold: big-body declined the pre-registration lane at
   04:55Z asking for a concrete spend rule, and lazara started at 05:03Z without having read it. The
   manifest's post-run amendment records it.
