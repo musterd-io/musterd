@@ -1,5 +1,5 @@
 import { createHash, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
-import { descriptorSigningBytes, type ApprovalDescriptor } from '@musterd/protocol';
+import { descriptorSigningBytes, vouchCheckCode, type ApprovalDescriptor } from '@musterd/protocol';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
@@ -145,6 +145,19 @@ withDrivers('passkey vouch over http (ADR 769)', (_o, kind) => {
     expect(digest).toMatch(/^[0-9a-f]{64}$/);
     // Only admins whose vouch could be signed are offered: nick, with a platform key.
     expect(held.json.held.countersigners).toEqual(['nick']);
+    // The daemon's own ceremony page cannot import the protocol: the 202 carries the same code.
+    expect(held.json.held.check_code).toBe(vouchCheckCode(digest));
+    // The member's terminal reads its live hold back (it ran the ceremony in a browser).
+    const mine = await call('GET', '/teams/dawn/authority/passkeys/held', ada);
+    expect(mine.status).toBe(200);
+    expect(mine.json.held).toEqual([
+      {
+        enrollment_digest: digest,
+        expires_at: held.json.held.expires_at,
+        check_code: vouchCheckCode(digest),
+        countersigners: ['nick'],
+      },
+    ]);
 
     const payload = { action: 'enroll', kind: 'passkey', member: 'ada', key: digest };
     // ada cannot vouch for herself, even with nick's proof in hand.
@@ -163,6 +176,8 @@ withDrivers('passkey vouch over http (ADR 769)', (_o, kind) => {
     });
     expect(vouched.status).toBe(201);
     expect(vouched.json.key.kind).toBe('passkey');
+    // Spent: the hold is no longer live.
+    expect((await call('GET', '/teams/dawn/authority/passkeys/held', ada)).json.held).toEqual([]);
     const keys = await call('GET', '/teams/dawn/authority/keys', ada);
     expect(keys.json.keys.filter((k: { kind: string }) => k.kind === 'passkey')).toHaveLength(1);
 

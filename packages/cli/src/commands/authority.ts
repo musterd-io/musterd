@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
+import { createInterface } from 'node:readline/promises';
 import {
-  ApprovalProofSchema,
   PolicyOverrideSchema,
+  vouchCheckCode,
   type ApprovalDescriptor,
   type PolicyOverride,
 } from '@musterd/protocol';
@@ -15,11 +16,11 @@ import { success } from '../render/ui.js';
 import { resolve, resolveRead } from './helpers.js';
 
 const USAGE =
-  'usage: musterd authority enroll [--confirmed-by <admin> --countersign-proof <json>]\n' +
+  'usage: musterd authority enroll [--confirmed-by <admin>]\n' +
   '       musterd authority keys\n' +
   '       musterd authority revoke <key-id>\n' +
   '       musterd authority recover <member>   (on the hub machine, ADR 808)\n' +
-  '       musterd authority approve --act <act> --target <target> --payload <json>';
+  '       musterd authority approve --act <act> --target <target> --payload <json> [--code <6 digits>]';
 
 /**
  * ADR 662 decisions 5/6 — the device-key lifecycle from the terminal, passkey-first.
@@ -28,8 +29,9 @@ const USAGE =
  * readable by every process running as the human, so it qualified as nothing).
  * `enroll` runs the browser ceremony on the daemon's own origin; when a key already
  * stands, a further passkey first needs that key's approval, collected the same way.
- * Past genesis, a joiner's countersign proof is created on the hub with `approve` and
- * handed to this command; the joiner never creates a descriptor for a nonresident signer.
+ * Past genesis, with no key of yours that signs here, the passkey is held for an admin's vouch
+ * (ADR 769): `enroll` prints the check code and the exact `approve` line the admin runs on the hub,
+ * and the admin's `approve` asks for the code the member reads them before it signs.
  * `approve` fetches the descriptor from the server itself (decision 5) — the words
  * a human approves are the server's, never the caller's.
  */
@@ -60,6 +62,96 @@ function humanPrompt(text: string): void {
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+/** One live held enrollment, as `GET /authority/passkeys/held` lists it (ADR 769). */
+interface HeldEnrollment {
+  enrollment_digest: string;
+  expires_at: number;
+  check_code: string;
+  countersigners: string[];
+}
+
+/**
+ * ADR 769: the hold this terminal's ceremony made — the one whose code expires when this
+ * challenge does (both are the same enrollment code). A joiner cannot hold (the vouch is the
+ * hub's), so its refusal is said in words.
+ */
+async function heldForChallenge(
+  http: Http,
+  team: string,
+  expiresAt: number,
+): Promise<HeldEnrollment | undefined> {
+  try {
+    const { held } = await http.listHeldEnrollments(team);
+    return held.find((h) => h.expires_at === expiresAt);
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      /hub_local_required|must be performed on a Surface attached to the hub/.test(e.message)
+    ) {
+      throw new CliError(
+        "an admin's vouch runs on the hub: enroll from the hub's /live (Settings → You) or a terminal on the hub",
+        1,
+      );
+    }
+    return undefined;
+  }
+}
+
+/** What the member reads aloud, and the line the admin runs. Pure, so it is testable. */
+export function vouchInstructions(
+  member: string,
+  held: Pick<HeldEnrollment, 'enrollment_digest' | 'check_code' | 'countersigners'>,
+  confirmedBy: string | undefined,
+): string {
+  const payload = JSON.stringify({
+    action: 'enroll',
+    kind: 'passkey',
+    member,
+    key: held.enrollment_digest,
+  });
+  const line =
+    `  musterd authority approve --act device_key_admin --target ${shellQuote(member)} ` +
+    `--payload ${shellQuote(payload)}`;
+  const who =
+    held.countersigners.length === 0
+      ? 'Nobody on the team can vouch for you here: ask whoever runs the hub machine for a ' +
+        `recovery code (\`musterd authority recover ${member}\`).\n`
+      : confirmedBy && !held.countersigners.includes(confirmedBy)
+        ? `${confirmedBy} cannot vouch here (no admin key of theirs signs on this hub). ` +
+          `Admins who can: ${held.countersigners.join(', ')}.\n`
+        : `Admins who can vouch: ${held.countersigners.join(', ')}.\n`;
+  return (
+    `\nAn admin must vouch for this passkey. Read them this code on a call or in person:\n\n` +
+    `    ${held.check_code}\n\n` +
+    who +
+    `They run, on the hub (it asks them for your code before it signs):\n${line}\n\n` +
+    'waiting for their vouch…\n'
+  );
+}
+
+/** ADR 769: the vouch payload shape, `{action:'enroll', kind:'passkey', member, key}`, member = target. */
+function vouchPayloadKey(payload: unknown, target: string): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const p = payload as Record<string, unknown>;
+  if (p['action'] !== 'enroll' || p['kind'] !== 'passkey' || p['member'] !== target) return null;
+  const key = p['key'];
+  return typeof key === 'string' && /^[0-9a-f]{64}$/.test(key) ? key : null;
+}
+
+/** Ask for the vouch code on a terminal; undefined when there is no terminal to ask on. */
+async function askCode(member: string): Promise<string | undefined> {
+  if (!process.stdin.isTTY) return undefined;
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const answer = await rl.question(
+      `Call ${member} or ask in person. Enter the 6-digit code they read you: `,
+    );
+    return answer.trim() || undefined;
+  } finally {
+    rl.close();
+  }
 }
 
 /**
@@ -324,6 +416,7 @@ export const AUTHORITY_FLAGS = [
   'client',
   'close',
   'cloud-provision',
+  'code',
   'codex',
   'commit',
   'confirmed-by',
@@ -554,62 +647,30 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     const beforeIds = new Set(before.keys.map((k) => k.id));
     const active = before.keys.filter((k) => k.revoked_at === null);
     let approval: Proof | undefined;
-    let countersign: { confirmer: string; approval: Proof } | undefined;
     if (parsed.flags['confirmed-by'] === true)
       throw new CliError('--confirmed-by needs an admin name', 2);
-    if (parsed.flags['countersign-proof'] === true)
-      throw new CliError('--countersign-proof needs a JSON value', 2);
-    const confirmedBy = flagStr(parsed.flags, 'confirmed-by');
-    const countersignProofRaw = flagStr(parsed.flags, 'countersign-proof');
-    if (countersignProofRaw && !confirmedBy)
-      throw new CliError('--countersign-proof requires --confirmed-by <admin>', 2);
-    if (confirmedBy && !countersignProofRaw) {
+    if (parsed.flags['countersign-proof'] !== undefined) {
       throw new CliError(
-        `Countersigning must happen on the hub. On the hub, run:\n` +
-          `  musterd authority approve --act device_key_admin --target ${shellQuote(member)} ` +
-          `--payload ${shellQuote(JSON.stringify({ action: 'enroll', kind: 'passkey', member }))}\n` +
-          `Then pass the printed proof to this joiner with --confirmed-by ${confirmedBy} ` +
-          `--countersign-proof '<proof JSON>'.`,
+        '--countersign-proof is retired (ADR 769): run `musterd authority enroll --confirmed-by <admin>` ' +
+          'and it prints the command your admin runs on the hub, after you read them a check code',
         2,
       );
     }
-    let suppliedCountersignProof: Proof | undefined;
-    if (countersignProofRaw) {
-      try {
-        const parsedProof = ApprovalProofSchema.parse(JSON.parse(countersignProofRaw));
-        suppliedCountersignProof = {
-          nonce: parsedProof.nonce,
-          key_id: parsedProof.key_id,
-          signature: parsedProof.signature,
-          ...(parsedProof.authenticator_data
-            ? { authenticator_data: parsedProof.authenticator_data }
-            : {}),
-          ...(parsedProof.client_data_json
-            ? { client_data_json: parsedProof.client_data_json }
-            : {}),
-        };
-      } catch {
-        throw new CliError('--countersign-proof must be valid approval proof JSON', 2);
-      }
-    }
-    if (active.length > 0 && confirmedBy)
-      throw new CliError('--confirmed-by only applies when this member has no active key', 2);
-    if (active.length > 0) {
+    const confirmedBy = flagStr(parsed.flags, 'confirmed-by');
+    // ADR 769: with no key of yours, or when you say an admin vouches (your keys do not sign here),
+    // the daemon holds the passkey for that admin. Otherwise your standing key approves it.
+    const vouch = confirmedBy !== undefined || active.length === 0;
+    if (!vouch) {
       humanPrompt('A device key already stands — the new passkey needs its approval.\n');
       approval = await collectApproval(http, team, 'device_key_admin', member, {
         action: 'enroll',
         kind: 'passkey',
       });
-    } else if (confirmedBy && suppliedCountersignProof) {
-      humanPrompt(`Using ${confirmedBy}'s hub-issued countersign proof for this enrollment.\n`);
-      countersign = { confirmer: confirmedBy, approval: suppliedCountersignProof };
     }
     const { challenge, expires_at: challengeExpiresAt } = await http.issueEnrollmentChallenge(team);
     const fragment = approval
       ? `#approval=${Buffer.from(JSON.stringify(approval)).toString('base64url')}`
-      : countersign
-        ? `#countersign=${Buffer.from(JSON.stringify(countersign)).toString('base64url')}`
-        : '';
+      : '#hold=1';
     const url =
       `${await resolveCeremonyOrigin(http)}/authority/passkey?team=${encodeURIComponent(team)}` +
       `&member=${encodeURIComponent(member)}&challenge=${encodeURIComponent(challenge)}` +
@@ -618,9 +679,17 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
     // The challenge outlives a fixed 4-minute wait (10 minutes server-side); wait for
     // its whole life so a late-completed ceremony is still the one this command reports.
     const deadline = challengeExpiresAt;
+    let announced = false;
     for (;;) {
       const { keys } = await http.listDeviceKeys(team);
       const fresh = keys.find((k) => !beforeIds.has(k.id) && k.revoked_at === null);
+      if (!fresh && vouch && !announced) {
+        const held = await heldForChallenge(http, team, challengeExpiresAt);
+        if (held) {
+          humanPrompt(vouchInstructions(member, held, confirmedBy));
+          announced = true;
+        }
+      }
       if (fresh) {
         if (json) return printJson(fresh);
         process.stdout.write(
@@ -632,11 +701,9 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
       }
       if (Date.now() > deadline) {
         throw new CliError(
-          confirmedBy || active.length > 0
-            ? 'no passkey was enrolled before the challenge expired'
-            : 'no passkey was enrolled before the challenge expired — if this team already has device keys, ' +
-                'a human admin must countersign on the hub, then pass its proof with ' +
-                '--confirmed-by <admin> --countersign-proof <json>',
+          announced
+            ? 'no admin vouched before the request expired; nothing was enrolled — run `musterd authority enroll` again'
+            : 'no passkey was enrolled before the challenge expired',
           1,
         );
       }
@@ -654,6 +721,37 @@ export async function authorityCommand(parsed: Parsed): Promise<number> {
       payload = JSON.parse(payloadRaw);
     } catch {
       throw new CliError('--payload must be JSON', 2);
+    }
+    const vouchKey = act === 'device_key_admin' ? vouchPayloadKey(payload, target) : null;
+    if (vouchKey) {
+      // ADR 769: a vouch. The code the member reads you is the identity check, so it comes first
+      // and nothing is signed without it; then the daemon re-checks everything and enrolls.
+      const typed = flagStr(parsed.flags, 'code') ?? (await askCode(target));
+      if (!typed) {
+        throw new CliError(
+          `a vouch needs the 6-digit code ${target} reads you: pass --code <digits> (ADR 769)`,
+          2,
+        );
+      }
+      if (typed.replace(/\s/g, '') !== vouchCheckCode(vouchKey)) {
+        throw new CliError(
+          `that is not the code on ${target}'s screen — check you are talking to them; nothing was signed`,
+          1,
+        );
+      }
+      const proof = await collectApproval(http, team, act, target, payload);
+      const vouched = await http.vouchPasskey(team, {
+        member: target,
+        enrollment_digest: vouchKey,
+        approval: proof,
+      });
+      if (json) return printJson(vouched);
+      process.stdout.write(
+        success(`vouched — ${target}'s passkey is enrolled (${vouched.key.id})`, {
+          next: `${target}'s terminal or /live shows it now`,
+        }) + '\n',
+      );
+      return 0;
     }
     const proof = await collectApproval(http, team, act, target, payload);
     process.stdout.write(JSON.stringify(proof) + '\n');

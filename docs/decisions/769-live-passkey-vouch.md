@@ -226,6 +226,19 @@ where one does. **The joiner card** ("its whole content is a link to the hub's /
 render on, because a joiner's /live already redirects the browser to the hub (lane 01M6N2WJ8P), and
 the vouch route refuses on a joiner (`requireHubLocalOnly`).
 
+**2026-11-06: increment 4, CLI (lane `01M64SXW85`).** `musterd authority enroll` runs the
+daemon's ceremony page in hold mode (`#hold=1`) when the member has no key or names
+`--confirmed-by`. A 202 carries `check_code`, computed on the daemon, because the page cannot import
+`vouchCheckCode`. The terminal reads the hold back from the new `GET /authority/passkeys/held` (the
+member's own, on the hub only). It prints the code, who can vouch, and the exact
+`authority approve … --payload` line with the digest, then waits for the key. On that payload,
+`authority approve` asks for the code (`--code`, or a prompt on a terminal) before anything is
+signed, then posts to the vouch route. `--countersign-proof` is retired and refuses with this order
+in its place, which ends increment 2's interim refusal. `vouchCheckCode` also joins the protocol
+barrel's named re-exports in `authority.ts`: it was missing there, so daemon code importing it got
+`undefined` at runtime, a gap the server tests caught while typecheck, reading a stale build, did
+not.
+
 ## Observability & Evaluation
 
 - **Traces:** the existing `device_key.enrolled` audit row (actor the member) and the countersign

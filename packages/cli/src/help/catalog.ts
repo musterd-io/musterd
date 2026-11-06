@@ -936,17 +936,24 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'authority',
     signature:
-      'enroll [--confirmed-by <admin>] | keys | revoke <key-id> | approve --act <act> --target <t> --payload <json>',
+      'enroll [--confirmed-by <admin>] | keys | revoke <key-id> | approve --act <act> --target <t> --payload <json> [--code <6 digits>]',
     summary: 'your device keys for high-authority acts (ADR 662)',
     group: 'team',
     detail:
       'A device key binds your human authority to a passkey only you can use. `enroll` runs the ' +
       'passkey ceremony on the daemon’s own origin; with no standing key of yours, once the team ' +
-      'has keys, a human admin countersigns (`--confirmed-by`). Once enrolled, high-authority acts ' +
+      'has keys, the passkey is held for an admin to vouch: enroll prints a six-digit code to read ' +
+      'them and the `approve` line they run on the hub, which asks for that code before it signs ' +
+      '(`--confirmed-by` names the admin, and also asks for a vouch when your keys do not sign ' +
+      'here). Once enrolled, high-authority acts ' +
       '— human accepts, policy, grants, minting — need that key’s signature. On a terminal, the ' +
       'approve and enroll pages open in Google Chrome; the URL is still printed, and a pipe does ' +
       'not open a browser. `revoke` retires a key by a standing key’s signature.',
-    examples: ['musterd authority enroll', 'musterd authority keys'],
+    examples: [
+      'musterd authority enroll',
+      'musterd authority enroll --confirmed-by nick',
+      'musterd authority keys',
+    ],
   },
   {
     name: 'trace',

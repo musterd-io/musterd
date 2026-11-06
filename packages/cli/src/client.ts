@@ -1643,6 +1643,36 @@ export class HttpClient {
     }>;
   }
 
+  /** ADR 769: this human's live held passkey enrollments, waiting for an admin's vouch (hub only). */
+  async listHeldEnrollments(slug: string): Promise<{
+    held: {
+      enrollment_digest: string;
+      expires_at: number;
+      check_code: string;
+      countersigners: string[];
+    }[];
+  }> {
+    return this.request('GET', `/teams/${slug}/authority/passkeys/held`) as Promise<{
+      held: {
+        enrollment_digest: string;
+        expires_at: number;
+        check_code: string;
+        countersigners: string[];
+      }[];
+    }>;
+  }
+
+  /** ADR 769: an admin vouches for a member's held passkey enrollment (hub only). */
+  async vouchPasskey(
+    slug: string,
+    body: { member: string; enrollment_digest: string; approval: unknown },
+  ): Promise<{ key: { id: string; kind: string }; member: string }> {
+    return this.request('POST', `/teams/${slug}/authority/passkeys/vouch`, body) as Promise<{
+      key: { id: string; kind: string };
+      member: string;
+    }>;
+  }
+
   /** ADR 662 decision 6: enroll a device key by a standing key's signature. */
   async enrollDeviceKey(
     slug: string,
