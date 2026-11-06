@@ -1,0 +1,326 @@
+diff --git a/outlines/backends/xgrammar.py b/outlines/backends/xgrammar.py
+index fcb1672d..87c3b34b 100644
+--- a/outlines/backends/xgrammar.py
++++ b/outlines/backends/xgrammar.py
+@@ -1,6 +1,8 @@
+ """Backend class for XGrammar."""
+ 
+-from typing import TYPE_CHECKING
++import logging
++import threading
++from typing import TYPE_CHECKING, Optional
+ 
+ from outlines.backends.base import BaseBackend
+ from outlines.models import SteerableModel
+@@ -9,11 +11,15 @@ from outlines.processors.base_logits_processor import (
+     OutlinesLogitsProcessor,
+     TensorType
+ )
++from outlines.processors.tensor_adapters import TensorAdapter
+ 
+ if TYPE_CHECKING:
+     from xgrammar.contrib.hf import LogitsProcessor
+ 
+ 
++logger = logging.getLogger(__name__)
++
++
+ class XGrammarLogitsProcessor(OutlinesLogitsProcessor):
+     """Logits processor for XGrammar.
+ 
+@@ -22,27 +28,146 @@ class XGrammarLogitsProcessor(OutlinesLogitsProcessor):
+ 
+     """
+ 
+-    def __init__(self, compiled_grammar: str):
++    def __init__(
++        self,
++        compiled_grammar: str,
++        tensor_library_name: str = "torch",
++        custom_adapter: Optional[TensorAdapter] = None,
++        track_memory_usage: bool = False,
++    ):
+         """
+         Parameters
+         ----------
+         compiled_grammar: str
+             The compiled grammar to use to create the logits processor.
++        tensor_library_name: str
++            The name of the library to use to manipulate tensors. Use
++            "custom" to provide your own tensor adapter.
++        custom_adapter: Optional[TensorAdapter]
++            The tensor adapter to use when `tensor_library_name` is "custom".
++        track_memory_usage: bool
++            Whether to track and log the memory usage of `process_logits`
++            calls. Statistics are available through `get_memory_stats`.
+ 
+         """
++        if tensor_library_name == "custom" and custom_adapter is None:
++            raise ValueError(
++                "custom_adapter must be provided when tensor_library_name "
++                "is 'custom'"
++            )
++        if tensor_library_name != "custom" and custom_adapter is not None:
++            raise ValueError(
++                "custom_adapter should only be provided when "
++                "tensor_library_name is 'custom'"
++            )
++
+         import xgrammar as xgr
+ 
+         self.xgr = xgr
+         self.compiled_grammar = compiled_grammar
+         self.xgrammar_logits_processor = None
+-        super().__init__("torch")
++        self.tensor_library_name = tensor_library_name
++        self.custom_adapter = custom_adapter
++        super().__init__(tensor_library_name)
++        if custom_adapter is not None:
++            self.tensor_adapter = custom_adapter  # type: ignore
++
++        self.track_memory_usage = track_memory_usage
++        self._memory_lock = threading.Lock()
++        self._init_memory_stats()
++
++    def _init_memory_stats(self):
++        """Initialize (or clear) the memory usage statistics."""
++        self.memory_stats = {
++            "peak_memory_mb": 0.0,
++            "total_calls": 0,
++            "avg_memory_per_call_mb": 0.0,
++            "memory_history": [],
++        }
++
++    def _get_memory_usage(self) -> float:
++        """Return the current memory usage of the process in MB.
++
++        Returns 0.0 if the memory usage cannot be determined.
++
++        """
++        try:
++            import psutil
++
++            return psutil.Process().memory_info().rss / (1024 * 1024)
++        except Exception:
++            pass
++        try:
++            import resource
++            import sys
++
++            usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
++            # ru_maxrss is in bytes on macOS and in kilobytes on Linux
++            if sys.platform == "darwin":
++                return usage / (1024 * 1024)
++            return usage / 1024
++        except Exception:
++            return 0.0
++
++    def _update_memory_stats(self, memory_mb: float):
++        """Update the memory usage statistics with a new measurement."""
++        with self._memory_lock:
++            stats = self.memory_stats
++            stats["memory_history"].append(memory_mb)
++            stats["total_calls"] += 1
++            stats["peak_memory_mb"] = max(stats["peak_memory_mb"], memory_mb)
++            stats["avg_memory_per_call_mb"] = (
++                sum(stats["memory_history"]) / stats["total_calls"]
++            )
++
++    def get_memory_stats(self) -> dict:
++        """Return the memory usage statistics.
++
++        Returns
++        -------
++        dict
++            A dictionary with the keys `peak_memory_mb`, `total_calls`,
++            `avg_memory_per_call_mb` and `memory_history`.
++
++        """
++        with self._memory_lock:
++            stats = dict(self.memory_stats)
++            stats["memory_history"] = list(self.memory_stats["memory_history"])
++            return stats
+ 
+     def reset(self):
+         """Reset the logits processor for a new generation."""
+         self.xgrammar_logits_processor = None
++        if self.track_memory_usage:
++            with self._memory_lock:
++                self._init_memory_stats()
+ 
+     def process_logits(self, input_ids: TensorType, logits: TensorType) -> TensorType:
+         """Bias the logits."""
++        if not self.track_memory_usage:
++            return self._process_logits(input_ids, logits)
++
++        memory_before = self._get_memory_usage()
++        result = self._process_logits(input_ids, logits)
++        memory_after = self._get_memory_usage()
++        self._update_memory_stats(memory_after)
++
++        stats = self.memory_stats
++        if stats["total_calls"] % 10 == 0:
++            logger.info(
++                "XGrammar memory usage after %d calls: current=%.2f MB "
++                "(delta=%.2f MB), peak=%.2f MB, average=%.2f MB",
++                stats["total_calls"],
++                memory_after,
++                memory_after - memory_before,
++                stats["peak_memory_mb"],
++                stats["avg_memory_per_call_mb"],
++            )
++        return result
++
++    def _process_logits(
++        self, input_ids: TensorType, logits: TensorType
++    ) -> TensorType:
+         if self.xgrammar_logits_processor is None:
+             self.xgrammar_logits_processor = self.xgr.contrib.hf.LogitsProcessor(
+                 self.compiled_grammar
+@@ -79,7 +204,11 @@ class XGrammarBackend(BaseBackend):
+         self.grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+ 
+     def get_json_schema_logits_processor(
+-        self, json_schema: str
++        self,
++        json_schema: str,
++        tensor_library_name: str = "torch",
++        custom_adapter: Optional[TensorAdapter] = None,
++        track_memory_usage: bool = False,
+     ) -> "LogitsProcessor":
+         """Create a logits processor from a JSON schema.
+ 
+@@ -87,6 +216,12 @@ class XGrammarBackend(BaseBackend):
+         ----------
+         json_schema: str
+             The JSON schema to create a logits processor from.
++        tensor_library_name: str
++            The name of the library to use to manipulate tensors.
++        custom_adapter: Optional[TensorAdapter]
++            The tensor adapter to use when `tensor_library_name` is "custom".
++        track_memory_usage: bool
++            Whether to track the memory usage of the logits processor.
+ 
+         Returns
+         -------
+@@ -97,15 +232,32 @@ class XGrammarBackend(BaseBackend):
+         compiled_grammar = self.grammar_compiler.compile_json_schema(
+             json_schema
+         )
+-        return XGrammarLogitsProcessor(compiled_grammar)
++        return XGrammarLogitsProcessor(
++            compiled_grammar,
++            tensor_library_name,
++            custom_adapter,
++            track_memory_usage=track_memory_usage,
++        )
+ 
+-    def get_regex_logits_processor(self, regex: str) -> "LogitsProcessor":
++    def get_regex_logits_processor(
++        self,
++        regex: str,
++        tensor_library_name: str = "torch",
++        custom_adapter: Optional[TensorAdapter] = None,
++        track_memory_usage: bool = False,
++    ) -> "LogitsProcessor":
+         """Create a logits processor from a regex.
+ 
+         Parameters
+         ----------
+         regex: str
+             The regex to create a logits processor from.
++        tensor_library_name: str
++            The name of the library to use to manipulate tensors.
++        custom_adapter: Optional[TensorAdapter]
++            The tensor adapter to use when `tensor_library_name` is "custom".
++        track_memory_usage: bool
++            Whether to track the memory usage of the logits processor.
+ 
+         Returns
+         -------
+@@ -114,15 +266,32 @@ class XGrammarBackend(BaseBackend):
+ 
+         """
+         compiled_grammar = self.grammar_compiler.compile_regex(regex)
+-        return XGrammarLogitsProcessor(compiled_grammar)
++        return XGrammarLogitsProcessor(
++            compiled_grammar,
++            tensor_library_name,
++            custom_adapter,
++            track_memory_usage=track_memory_usage,
++        )
+ 
+-    def get_cfg_logits_processor(self, grammar: str) -> "LogitsProcessor":
++    def get_cfg_logits_processor(
++        self,
++        grammar: str,
++        tensor_library_name: str = "torch",
++        custom_adapter: Optional[TensorAdapter] = None,
++        track_memory_usage: bool = False,
++    ) -> "LogitsProcessor":
+         """Create a logits processor from a context-free grammar.
+ 
+         Parameters
+         ----------
+         grammar: str
+             The context-free grammar to create a logits processor from.
++        tensor_library_name: str
++            The name of the library to use to manipulate tensors.
++        custom_adapter: Optional[TensorAdapter]
++            The tensor adapter to use when `tensor_library_name` is "custom".
++        track_memory_usage: bool
++            Whether to track the memory usage of the logits processor.
+ 
+         Returns
+         -------
+@@ -131,4 +300,9 @@ class XGrammarBackend(BaseBackend):
+ 
+         """
+         compiled_grammar = self.grammar_compiler.compile_grammar(grammar)
+-        return XGrammarLogitsProcessor(compiled_grammar)
++        return XGrammarLogitsProcessor(
++            compiled_grammar,
++            tensor_library_name,
++            custom_adapter,
++            track_memory_usage=track_memory_usage,
++        )
+diff --git a/outlines/processors/base_logits_processor.py b/outlines/processors/base_logits_processor.py
+index 9b4e4fe5..b0aef48f 100644
+--- a/outlines/processors/base_logits_processor.py
++++ b/outlines/processors/base_logits_processor.py
+@@ -28,8 +28,10 @@ class OutlinesLogitsProcessor:
+         ----------
+         tensor_library_name
+             The name of the library to use to manipulate tensors. Possible
+-            values are "jax", "mlx", "numpy", "tensorflow" and "torch". You
+-            must choose the library that your model is using.
++            values are "jax", "mlx", "numpy", "tensorflow", "torch" and
++            "custom". You must choose the library that your model is using.
++            When using "custom", the subclass is responsible for setting the
++            `tensor_adapter` attribute.
+         """
+         # Temporary fix as torch raises a warning that can cause can an error
+         # with python 3.12.
+@@ -38,6 +40,10 @@ class OutlinesLogitsProcessor:
+ 
+             torch._dynamo.config.suppress_errors = True
+ 
++        # A custom tensor adapter is set by the subclass after initialization
++        if tensor_library_name == "custom":
++            return
++
+         tensor_adapter_class = tensor_adapters.get(tensor_library_name)
+         if tensor_adapter_class is None:
+             raise NotImplementedError(
+diff --git a/outlines/processors/tensor_adapters/__init__.py b/outlines/processors/tensor_adapters/__init__.py
+index 8e3afe7f..474fe9e3 100644
+--- a/outlines/processors/tensor_adapters/__init__.py
++++ b/outlines/processors/tensor_adapters/__init__.py
+@@ -2,6 +2,7 @@
+ 
+ from typing import Union
+ 
++from .base import TensorAdapter
+ from .jax import JAXTensorAdapter
+ from .mlx import MLXTensorAdapter
+ from .numpy import NumpyTensorAdapter

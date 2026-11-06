@@ -1,0 +1,132 @@
+diff --git a/src/jinja2/ext.py b/src/jinja2/ext.py
+index d21b83aa..a1633dba 100644
+--- a/src/jinja2/ext.py
++++ b/src/jinja2/ext.py
+@@ -264,7 +264,62 @@ class InternationalizationExtension(Extension):
+             uninstall_gettext_translations=self._uninstall,
+             extract_translations=self._extract,
+             newstyle_gettext=False,
++            i18n_cache_size=128,
+         )
++        self._init_cache()
++
++    def _init_cache(self) -> None:
++        self._cache: t.Dict[str, str] = {}
++        self._cache_order: t.List[str] = []
++        self._cache_size = 128
++        self._update_cache_size()
++
++    def _update_cache_size(self) -> None:
++        size = getattr(self.environment, "i18n_cache_size", 128)
++
++        try:
++            size = int(size)
++        except (TypeError, ValueError):
++            size = 128
++
++        self._cache_size = max(size, 0)
++
++        while len(self._cache_order) > self._cache_size:
++            oldest = self._cache_order.pop(0)
++            self._cache.pop(oldest, None)
++
++    def _get_from_cache(self, key: str) -> t.Optional[str]:
++        if key not in self._cache:
++            return None
++
++        try:
++            self._cache_order.remove(key)
++        except ValueError:
++            pass
++
++        self._cache_order.append(key)
++        return self._cache[key]
++
++    def _put_in_cache(self, key: str, value: str) -> None:
++        if self._cache_size <= 0:
++            return
++
++        if key in self._cache:
++            try:
++                self._cache_order.remove(key)
++            except ValueError:
++                pass
++        else:
++            while len(self._cache_order) >= self._cache_size:
++                oldest = self._cache_order.pop(0)
++                self._cache.pop(oldest, None)
++
++        self._cache[key] = value
++        self._cache_order.append(key)
++
++    def clear_cache(self) -> None:
++        self._cache.clear()
++        self._cache_order.clear()
+ 
+     def _install(
+         self, translations: "_SupportedTranslations", newstyle: t.Optional[bool] = None
+@@ -848,7 +903,64 @@ def babel_extract(
+ 
+ 
+ #: nicer import names
++class TranslationExtractorExtension(Extension):
++    """Adds ``{% extract %}...{% endextract %}`` blocks that annotate
++    translatable content with metadata for translation tools. The
++    markers are collected during compilation and don't affect rendering.
++    """
++
++    tags = {"extract"}
++
++    def __init__(self, environment: Environment) -> None:
++        super().__init__(environment)
++        environment.extend(extraction_markers=self._get_extraction_markers)
++
++        if not hasattr(environment, "_extraction_markers"):
++            setattr(environment, "_extraction_markers", [])
++
++    def parse(self, parser: "Parser") -> t.Union[nodes.Node, t.List[nodes.Node]]:
++        lineno = next(parser.stream).lineno
++        markers: t.Dict[str, nodes.Expr] = {}
++
++        while parser.stream.current.type != "block_end":
++            if markers:
++                parser.stream.expect("comma")
++
++            key = parser.stream.expect("name").value
++            parser.stream.expect("assign")
++            markers[key] = parser.parse_expression()
++
++        body = parser.parse_statements(("name:endextract",), drop_needle=True)
++        return self._create_extraction_marker_node(markers, body, lineno)
++
++    def _create_extraction_marker_node(
++        self,
++        markers: t.Dict[str, nodes.Expr],
++        body: t.List[nodes.Node],
++        lineno: int,
++    ) -> nodes.Node:
++        marker_info: t.Dict[str, t.Any] = {}
++
++        for key, value_node in markers.items():
++            if isinstance(value_node, nodes.Const):
++                marker_info[key] = value_node.value
++            else:
++                marker_info[key] = str(value_node)
++
++        if not hasattr(self.environment, "_extraction_markers"):
++            setattr(self.environment, "_extraction_markers", [])
++
++        self.environment._extraction_markers.append(  # type: ignore
++            {"lineno": lineno, "markers": marker_info, "body": body}
++        )
++        return nodes.Scope(body, lineno=lineno)
++
++    def _get_extraction_markers(self) -> t.List[t.Dict[str, t.Any]]:
++        return getattr(self.environment, "_extraction_markers", [])
++
++
+ i18n = InternationalizationExtension
+ do = ExprStmtExtension
+ loopcontrols = LoopControlExtension
+ debug = DebugExtension
++extractor = TranslationExtractorExtension

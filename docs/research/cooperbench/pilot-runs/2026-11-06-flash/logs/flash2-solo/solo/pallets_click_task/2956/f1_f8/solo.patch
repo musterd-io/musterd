@@ -1,0 +1,234 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index f57ada6..8375b01 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -439,6 +439,11 @@ class Context:
+         self._parameter_source: dict[str, ParameterSource] = {}
+         self._exit_stack = ExitStack()
+ 
++        #: Whether option value history tracking is enabled.
++        self._track_changes: bool = bool(getattr(command, "track_changes", False))
++        #: Map of parameter names to their value history.
++        self._option_history: dict[str, list[dict[str, t.Any]]] = {}
++
+     @property
+     def protected_args(self) -> list[str]:
+         import warnings
+@@ -839,6 +844,42 @@ class Context:
+         """
+         return self._parameter_source.get(name)
+ 
++    def _record_option_change(
++        self, name: str, value: t.Any, source: ParameterSource | None
++    ) -> None:
++        """Record a value change for a parameter if tracking is enabled."""
++        if not self._track_changes:
++            return
++
++        import time
++
++        self._option_history.setdefault(name, []).append(
++            {"value": value, "source": source, "timestamp": time.time()}
++        )
++
++    def get_option_history(self, name: str) -> list[dict[str, t.Any]] | None:
++        """Get the history of values set for an option. Each entry is a
++        dict with ``value``, ``source`` (a :class:`ParameterSource`), and
++        ``timestamp`` keys.
++
++        :param name: The parameter name (``"count"``) or one of the
++            option's flags (``"--count"``, ``"-c"``).
++        :return: ``None`` if tracking is disabled for the command, an
++            empty list if no history exists for the option.
++        """
++        if not self._track_changes:
++            return None
++
++        if name in self._option_history:
++            return list(self._option_history[name])
++
++        for param in self.command.params:
++            if name in param.opts or name in param.secondary_opts:
++                if param.name is not None:
++                    return list(self._option_history.get(param.name, []))
++
++        return []
++
+ 
+ class Command:
+     """Commands are the basic building block of command line interfaces in
+@@ -916,6 +957,7 @@ class Command:
+         no_args_is_help: bool = False,
+         hidden: bool = False,
+         deprecated: bool | str = False,
++        track_changes: bool = False,
+     ) -> None:
+         #: the name the command thinks it has.  Upon registering a command
+         #: on a :class:`Group` the group will default the command name
+@@ -945,6 +987,8 @@ class Command:
+         self.no_args_is_help = no_args_is_help
+         self.hidden = hidden
+         self.deprecated = deprecated
++        #: Whether option value history tracking is enabled.
++        self.track_changes = track_changes
+ 
+     def to_info_dict(self, ctx: Context) -> dict[str, t.Any]:
+         return {
+@@ -2420,6 +2464,9 @@ class Parameter:
+ 
+                 value = None
+ 
++        if self.name is not None:
++            ctx._record_option_change(self.name, value, source)
++
+         if self.expose_value:
+             ctx.params[self.name] = value  # type: ignore
+ 
+@@ -2549,6 +2596,7 @@ class Option(Parameter):
+         show_choices: bool = True,
+         show_envvar: bool = False,
+         deprecated: bool | str = False,
++        auto_complete: bool = False,
+         **attrs: t.Any,
+     ) -> None:
+         if help:
+@@ -2636,6 +2684,7 @@ class Option(Parameter):
+         self.show_default = show_default
+         self.show_choices = show_choices
+         self.show_envvar = show_envvar
++        self.auto_complete = auto_complete
+ 
+         if __debug__:
+             if deprecated and prompt:
+@@ -2671,9 +2720,50 @@ class Option(Parameter):
+             flag_value=self.flag_value,
+             count=self.count,
+             hidden=self.hidden,
++            auto_complete=getattr(self, "auto_complete", False),
+         )
+         return info_dict
+ 
++    def shell_complete(self, ctx: Context, incomplete: str) -> list[CompletionItem]:
++        """Return a list of completions for the incomplete value. A
++        custom ``shell_complete`` function takes precedence. Otherwise, if
++        ``auto_complete`` is enabled, :meth:`_smart_complete` is used.
++        """
++        if self._custom_shell_complete is None and self.auto_complete:
++            return self._smart_complete(ctx, incomplete)
++
++        return super().shell_complete(ctx, incomplete)
++
++    def _smart_complete(self, ctx: Context, incomplete: str) -> list[CompletionItem]:
++        """Choose a completion strategy based on the option's type, name,
++        and the current environment, falling back to the type's completion.
++        """
++        from click.shell_completion import CompletionItem
++
++        # Types with their own specific completion take priority.
++        if isinstance(self.type, (types.Choice, types.Path, types.File)):
++            return self.type.shell_complete(ctx, self, incomplete)
++
++        names = {self.name or ""}
++        names.update(o.lstrip("-").replace("-", "_") for o in self.opts)
++        names = {n.lower() for n in names if n}
++
++        for patterns, func in _SMART_COMPLETION_REGISTRY:
++            if names & patterns:
++                values = func(incomplete)
++
++                if values is None:
++                    continue
++
++                if isinstance(values, list) and values and isinstance(
++                    values[0], CompletionItem
++                ):
++                    return values
++
++                return [CompletionItem(v) for v in values]
++
++        return self.type.shell_complete(ctx, self, incomplete)
++
+     def get_error_hint(self, ctx: Context) -> str:
+         result = super().get_error_hint(ctx)
+         if self.show_envvar:
+@@ -3033,6 +3123,80 @@ class Option(Parameter):
+         return value, source
+ 
+ 
++def _complete_users(incomplete: str) -> list[str]:
++    try:
++        import pwd
++    except ImportError:
++        return []
++
++    try:
++        users = {u.pw_name for u in pwd.getpwall()}
++    except Exception:
++        return []
++
++    return sorted(u for u in users if u.startswith(incomplete))
++
++
++def _complete_git_branches(incomplete: str) -> list[str] | None:
++    import subprocess
++
++    try:
++        out = subprocess.run(
++            ["git", "branch", "-a", "--format=%(refname:short)"],
++            capture_output=True,
++            text=True,
++            timeout=5,
++        )
++    except (OSError, subprocess.SubprocessError):
++        return []
++
++    if out.returncode != 0:
++        return []
++
++    branches: list[str] = []
++
++    for line in out.stdout.splitlines():
++        line = line.strip()
++
++        if line and line.startswith(incomplete) and line not in branches:
++            branches.append(line)
++
++    return branches
++
++
++def _complete_envvars(incomplete: str) -> list[str]:
++    return sorted(k for k in os.environ if k.startswith(incomplete))
++
++
++def _complete_files(incomplete: str) -> list[CompletionItem]:
++    from click.shell_completion import CompletionItem
++
++    return [CompletionItem(incomplete, type="file")]
++
++
++def _complete_dirs(incomplete: str) -> list[CompletionItem]:
++    from click.shell_completion import CompletionItem
++
++    return [CompletionItem(incomplete, type="dir")]
++
++
++#: Maps option name patterns to completion functions used by
++#: :meth:`Option._smart_complete`. A function may return ``None`` to
++#: fall through to the next matching entry.
++_SMART_COMPLETION_REGISTRY: list[
++    tuple[set[str], t.Callable[[str], t.Any]]
++] = [
++    ({"user", "username", "users", "owner"}, _complete_users),
++    ({"branch", "branches"}, _complete_git_branches),
++    ({"env", "envvar", "env_var", "environment", "var"}, _complete_envvars),
++    ({"dir", "directory", "folder", "cwd", "workdir"}, _complete_dirs),
++    (
++        {"file", "filename", "path", "filepath", "input", "output", "config"},
++        _complete_files,
++    ),
++]
++
++
+ class Argument(Parameter):
+     """Arguments are positional parameters to a command.  They generally
+     provide fewer features than options but can have infinite ``nargs``

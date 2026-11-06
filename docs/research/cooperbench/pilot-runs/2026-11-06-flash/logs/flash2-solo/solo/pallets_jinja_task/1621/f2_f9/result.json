@@ -1,0 +1,30 @@
+{
+  "repo": "pallets_jinja_task",
+  "task_id": 1621,
+  "features": [
+    2,
+    9
+  ],
+  "setting": "solo",
+  "run_id": "c41be2ee",
+  "run_name": "flash2-solo",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T06:19:30.669371",
+  "ended_at": "2026-11-06T06:21:03.037883",
+  "duration_seconds": 92.368512,
+  "agent": {
+    "status": "Submitted",
+    "cost": 0.2010842,
+    "steps": 7,
+    "input_tokens": 12,
+    "output_tokens": 5046,
+    "cache_read_tokens": 131381,
+    "cache_write_tokens": 14768,
+    "patch_lines": 220,
+    "error": null
+  },
+  "total_cost": 0.2010842,
+  "total_steps": 7,
+  "log_dir": "logs/flash2-solo/solo/pallets_jinja_task/1621/f2_f9"
+}

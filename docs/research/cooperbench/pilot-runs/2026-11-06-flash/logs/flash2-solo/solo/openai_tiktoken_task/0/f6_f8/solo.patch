@@ -1,0 +1,70 @@
+diff --git a/tiktoken/core.py b/tiktoken/core.py
+index 6bc9736..d745720 100644
+--- a/tiktoken/core.py
++++ b/tiktoken/core.py
+@@ -1,8 +1,9 @@
+ from __future__ import annotations
+ 
++import collections
+ import functools
+ from concurrent.futures import ThreadPoolExecutor
+-from typing import TYPE_CHECKING, AbstractSet, Collection, Literal, NoReturn, Sequence
++from typing import TYPE_CHECKING, AbstractSet, Callable, Collection, Literal, NoReturn, Sequence
+ 
+ import regex
+ 
+@@ -82,9 +83,17 @@ class Encoding:
+         *,
+         allowed_special: Literal["all"] | AbstractSet[str] = set(),  # noqa: B006
+         disallowed_special: Literal["all"] | Collection[str] = "all",
+-    ) -> list[int]:
++        transformers: Callable[[str], str] | Sequence[Callable[[str], str]] | None = None,
++        return_repeated_pattern: bool = False,
++    ) -> list[int] | tuple[list[int], dict[tuple[int, int], int]]:
+         """Encodes a string into tokens.
+ 
++        If `transformers` is given (a callable or a sequence of callables taking and returning a
++        string), they are applied to the text in order before encoding.
++
++        If `return_repeated_pattern` is True, returns a tuple of the tokens and a dict mapping
++        the (up to) 3 most frequent adjacent token pairs to their occurrence counts.
++
+         Special tokens are artificial tokens used to unlock capabilities from a model,
+         such as fill-in-the-middle. So we want to be careful about accidentally encoding special
+         tokens, since they can be used to trick a model into doing something we don't want it to do.
+@@ -110,6 +119,12 @@ class Encoding:
+         [27, 91, 437, 1659, 5239, 91, 29]
+         ```
+         """
++        if transformers is not None:
++            if callable(transformers):
++                transformers = [transformers]
++            for transformer in transformers:
++                text = transformer(text)
++
+         if allowed_special == "all":
+             allowed_special = self.special_tokens_set
+         if disallowed_special == "all":
+@@ -121,7 +136,7 @@ class Encoding:
+                 raise_disallowed_special_token(match.group())
+ 
+         try:
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
+         except UnicodeEncodeError:
+             # BPE operates on bytes, but the regex operates on unicode. If we pass a str that is
+             # invalid UTF-8 to Rust, it will rightfully complain. Here we do a quick and dirty
+@@ -130,7 +145,12 @@ class Encoding:
+             # string, but given that this is input we want to support, maybe that's okay.
+             # Also we use errors="replace" to handle weird things like lone surrogates.
+             text = text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
++
++        if return_repeated_pattern:
++            pair_counts = collections.Counter(zip(tokens, tokens[1:]))
++            return tokens, dict(pair_counts.most_common(3))
++        return tokens
+ 
+     def encode_to_numpy(
+         self,

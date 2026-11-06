@@ -1,0 +1,46 @@
+{
+  "repo": "go_chi_task",
+  "task_id": 56,
+  "features": [
+    1,
+    5
+  ],
+  "setting": "coop",
+  "run_id": "db313d3a",
+  "run_name": "flash2-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:34:28.681313",
+  "ended_at": "2026-11-06T05:41:13.512497",
+  "duration_seconds": 404.831184,
+  "agents": {
+    "agent2": {
+      "feature_id": 5,
+      "status": "Submitted",
+      "cost": 0.4358622,
+      "steps": 22,
+      "input_tokens": 38,
+      "output_tokens": 8986,
+      "cache_read_tokens": 650376,
+      "cache_write_tokens": 25183,
+      "patch_lines": 423,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 1,
+      "status": "Submitted",
+      "cost": 0.4368392,
+      "steps": 22,
+      "input_tokens": 38,
+      "output_tokens": 8446,
+      "cache_read_tokens": 683536,
+      "cache_write_tokens": 26212,
+      "patch_lines": 423,
+      "error": null
+    }
+  },
+  "total_cost": 0.8727014,
+  "total_steps": 44,
+  "messages_sent": 0,
+  "log_dir": "logs/flash2-musterd/coop/go_chi_task/56/f1_f5"
+}

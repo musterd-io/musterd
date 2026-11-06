@@ -1,0 +1,37 @@
+{
+  "repo": "typst_task",
+  "task_id": 6554,
+  "features": [
+    5,
+    9
+  ],
+  "setting": "coop",
+  "apply_status": {
+    "agent1": "applied",
+    "agent2": "applied"
+  },
+  "merge": {
+    "status": "conflicts",
+    "strategy": "solo-agent1",
+    "diff": ""
+  },
+  "feature1": {
+    "feature_id": 5,
+    "passed": true,
+    "exit_code": 0,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "test_output": "Note: switching to 'b8034a343831e8609aec2ec81eb7eeda57aa5d81'.\n\nYou are in 'detached HEAD' state. You can look around, make experimental\nchanges and commit them, and you can discard any commits you make in this\nstate without impacting any branches by switching back to a branch.\n\nIf you want to create a new branch to retain commits you create, you may\ndo so (now or later) by using -c with the switch command. Example:\n\n  git switch -c <new-branch-name>\n\nOr undo this operation with:\n\n  git switch -\n\nTurn off this advice by setting config variable advice.detachedHead to false\n\nHEAD is now at b8034a343 Syntax set macro (#5138)\nHEAD is now at b8034a343 Syntax set macro (#5138)\nReset to base: b8034a343831e8609aec2ec81eb7eeda57aa5d81\nEnsuring clean repository state...\nHEAD is now at b8034a343 Syntax set macro (#5138)\nApplying feature patch: patch1.patch\nFeature patch applied successfully.\nApplying test patch: tests1.patch\nTest patch applied successfully.\nBuilding Typst...\n   Compiling typst v0.12.0 (/workspace/repo/crates/typst)\n   Compiling typst-svg v0.12.0 (/workspace/repo/crates/typst-svg)\n   Compiling typst-pdf v0.12.0 (/workspace/repo/crates/typst-pdf)\n   Compiling typst-render v0.12.0 (/workspace/repo/crates/typst-render)\n   Compiling typst-kit v0.12.0 (/workspace/repo/crates/typst-kit)\n   Compiling typst-cli v0.12.0 (/workspace/repo/crates/typst-cli)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 54s\nDeriving test filters from the test patch...\nTest blocks declared by this patch: str-count-parameter str-count-too-many \nRunning tests...\n   Compiling typst v0.12.0 (/workspace/repo/crates/typst)\n   Compiling typst-pdf v0.12.0 (/workspace/repo/crates/typst-pdf)\n   Compiling typst-render v0.12.0 (/workspace/repo/crates/typst-render)\n   Compiling typst-svg v0.12.0 (/workspace/repo/crates/typst-svg)\n   Compiling typst-tests v0.12.0 (/workspace/repo/tests)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 48s\n     Running src/tests.rs (target/debug/deps/tests-52a2759a859b1a53)\n1 passed, 0 failed, 2355 skipped\nRunning tests...\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.30s\n     Running src/tests.rs (target/debug/deps/tests-52a2759a859b1a53)\n1 passed, 0 failed, 2355 skipped\nTest execution completed!\nCleaning up repository...\nHEAD is now at b8034a343 Syntax set macro (#5138)\nRepository cleaned.\n"
+  },
+  "feature2": {
+    "feature_id": 9,
+    "passed": true,
+    "exit_code": 0,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "test_output": "HEAD is now at b8034a343 Syntax set macro (#5138)\nHEAD is now at b8034a343 Syntax set macro (#5138)\nReset to base: b8034a343831e8609aec2ec81eb7eeda57aa5d81\nEnsuring clean repository state...\nHEAD is now at b8034a343 Syntax set macro (#5138)\nApplying feature patch: patch1.patch\nFeature patch applied successfully.\nApplying test patch: tests2.patch\nTest patch applied successfully.\nBuilding Typst...\n   Compiling typst v0.12.0 (/workspace/repo/crates/typst)\n   Compiling typst-svg v0.12.0 (/workspace/repo/crates/typst-svg)\n   Compiling typst-render v0.12.0 (/workspace/repo/crates/typst-render)\n   Compiling typst-pdf v0.12.0 (/workspace/repo/crates/typst-pdf)\n   Compiling typst-kit v0.12.0 (/workspace/repo/crates/typst-kit)\n   Compiling typst-cli v0.12.0 (/workspace/repo/crates/typst-cli)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 40s\nDeriving test filters from the test patch...\nTest blocks declared by this patch: str-strip-exhaust str-strip-parameter \nRunning tests...\n   Compiling typst v0.12.0 (/workspace/repo/crates/typst)\n   Compiling typst-pdf v0.12.0 (/workspace/repo/crates/typst-pdf)\n   Compiling typst-svg v0.12.0 (/workspace/repo/crates/typst-svg)\n   Compiling typst-render v0.12.0 (/workspace/repo/crates/typst-render)\n   Compiling typst-tests v0.12.0 (/workspace/repo/tests)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 39s\n     Running src/tests.rs (target/debug/deps/tests-52a2759a859b1a53)\n1 passed, 0 failed, 2355 skipped\nRunning tests...\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s\n     Running src/tests.rs (target/debug/deps/tests-52a2759a859b1a53)\n1 passed, 0 failed, 2355 skipped\nTest execution completed!\nCleaning up repository...\nHEAD is now at b8034a343 Syntax set macro (#5138)\nRepository cleaned.\n"
+  },
+  "both_passed": true,
+  "error": null,
+  "evaluated_at": "2026-11-06T07:22:17.329882"
+}

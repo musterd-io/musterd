@@ -1,0 +1,46 @@
+{
+  "repo": "llama_index_task",
+  "task_id": 18813,
+  "features": [
+    2,
+    5
+  ],
+  "setting": "coop",
+  "run_id": "51493918",
+  "run_name": "flash2-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:44:22.143207",
+  "ended_at": "2026-11-06T05:47:20.727113",
+  "duration_seconds": 178.583906,
+  "agents": {
+    "agent2": {
+      "feature_id": 5,
+      "status": "Submitted",
+      "cost": 0.17923940000000002,
+      "steps": 14,
+      "input_tokens": 22,
+      "output_tokens": 2897,
+      "cache_read_tokens": 306932,
+      "cache_write_tokens": 11965,
+      "patch_lines": 117,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 2,
+      "status": "Submitted",
+      "cost": 0.2060928,
+      "steps": 14,
+      "input_tokens": 18,
+      "output_tokens": 3697,
+      "cache_read_tokens": 259229,
+      "cache_write_tokens": 16047,
+      "patch_lines": 117,
+      "error": null
+    }
+  },
+  "total_cost": 0.3853322,
+  "total_steps": 28,
+  "messages_sent": 0,
+  "log_dir": "logs/flash2-musterd/coop/llama_index_task/18813/f2_f5"
+}

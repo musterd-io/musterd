@@ -1,0 +1,332 @@
+{
+ "pairs": 50,
+ "arms": {
+  "solo": {
+   "passed": 37,
+   "n": 50,
+   "rate": 0.74,
+   "wilson95": [
+    0.604,
+    0.841
+   ],
+   "cost_usd": 8.74,
+   "usd_per_pair": 0.175,
+   "usd_per_pass": 0.236,
+   "median_wall_s": 92,
+   "merge": {
+    "null": 50
+   },
+   "empty_patch_pairs": 0
+  },
+  "team": {
+   "passed": 19,
+   "n": 50,
+   "rate": 0.38,
+   "wilson95": [
+    0.259,
+    0.518
+   ],
+   "cost_usd": 16.15,
+   "usd_per_pair": 0.323,
+   "usd_per_pass": 0.85,
+   "median_wall_s": 122,
+   "merge": {
+    "conflicts": 37,
+    "clean": 13
+   },
+   "empty_patch_pairs": 0
+  },
+  "musterd": {
+   "passed": 38,
+   "n": 50,
+   "rate": 0.76,
+   "wilson95": [
+    0.626,
+    0.857
+   ],
+   "cost_usd": 24.64,
+   "usd_per_pair": 0.493,
+   "usd_per_pass": 0.649,
+   "median_wall_s": 173,
+   "merge": {
+    "identical": 50
+   },
+   "empty_patch_pairs": 0
+  }
+ },
+ "tests": {
+  "C1 musterd vs solo": {
+   "musterd_only": 2,
+   "solo_only": 1,
+   "p_exact_two_sided": 1.0,
+   "verdict": "no detectable difference at N = 50",
+   "point_difference_pairs": 1
+  },
+  "C2 musterd vs team": {
+   "musterd_only": 19,
+   "team_only": 0,
+   "p_exact_two_sided": 4e-06,
+   "verdict": "musterd better",
+   "point_difference_pairs": 19
+  },
+  "C3 team vs solo": {
+   "team_only": 0,
+   "solo_only": 18,
+   "p_exact_two_sided": 8e-06,
+   "verdict": "solo better",
+   "point_difference_pairs": -18
+  }
+ },
+ "per_pair": {
+  "dottxt_ai_outlines_task/1655/f6_f7": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "dottxt_ai_outlines_task/1655/f7_f10": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 1
+  },
+  "dottxt_ai_outlines_task/1706/f4_f6": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "dottxt_ai_outlines_task/1706/f5_f8": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "dspy_task/8394/f3_f4": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "dspy_task/8394/f3_f5": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "go_chi_task/26/f1_f2": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "go_chi_task/56/f1_f5": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "huggingface_datasets_task/3997/f2_f4": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 0
+  },
+  "huggingface_datasets_task/6252/f4_f6": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "llama_index_task/18813/f1_f5": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "llama_index_task/18813/f2_f5": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "openai_tiktoken_task/0/f2_f9": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "openai_tiktoken_task/0/f3_f6": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "openai_tiktoken_task/0/f6_f8": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_click_task/2068/f1_f6": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "pallets_click_task/2068/f2_f10": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "pallets_click_task/2068/f5_f7": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "pallets_click_task/2068/f5_f11": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "pallets_click_task/2068/f6_f7": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "pallets_click_task/2068/f7_f10": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_click_task/2800/f1_f3": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_click_task/2800/f1_f7": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "pallets_click_task/2800/f2_f7": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "pallets_click_task/2800/f6_f7": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "pallets_click_task/2956/f1_f8": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1465/f2_f3": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1465/f2_f6": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1559/f1_f8": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1559/f4_f8": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1559/f4_f10": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1559/f6_f9": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1621/f1_f6": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1621/f2_f9": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1621/f3_f5": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pallets_jinja_task/1621/f4_f5": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "pallets_jinja_task/1621/f4_f10": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "pallets_jinja_task/1621/f6_f7": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pillow_task/25/f1_f5": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pillow_task/25/f2_f3": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "pillow_task/68/f1_f5": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "pillow_task/290/f2_f3": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "pillow_task/290/f3_f5": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "pillow_task/290/f4_f5": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 0
+  },
+  "samuelcolvin_dirty_equals_task/43/f2_f3": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "samuelcolvin_dirty_equals_task/43/f3_f7": {
+   "solo": 0,
+   "team": 0,
+   "musterd": 1
+  },
+  "typst_task/6554/f1_f9": {
+   "solo": 1,
+   "team": 0,
+   "musterd": 1
+  },
+  "typst_task/6554/f4_f9": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "typst_task/6554/f5_f9": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  },
+  "typst_task/6554/f7_f8": {
+   "solo": 1,
+   "team": 1,
+   "musterd": 1
+  }
+ }
+}

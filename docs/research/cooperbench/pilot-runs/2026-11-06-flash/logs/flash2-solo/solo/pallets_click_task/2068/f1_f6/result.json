@@ -1,0 +1,30 @@
+{
+  "repo": "pallets_click_task",
+  "task_id": 2068,
+  "features": [
+    1,
+    6
+  ],
+  "setting": "solo",
+  "run_id": "7b80053e",
+  "run_name": "flash2-solo",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:49:51.823875",
+  "ended_at": "2026-11-06T05:51:21.800160",
+  "duration_seconds": 89.976285,
+  "agent": {
+    "status": "Submitted",
+    "cost": 0.1758758,
+    "steps": 5,
+    "input_tokens": 10,
+    "output_tokens": 4516,
+    "cache_read_tokens": 102204,
+    "cache_write_tokens": 13015,
+    "patch_lines": 234,
+    "error": null
+  },
+  "total_cost": 0.1758758,
+  "total_steps": 5,
+  "log_dir": "logs/flash2-solo/solo/pallets_click_task/2068/f1_f6"
+}

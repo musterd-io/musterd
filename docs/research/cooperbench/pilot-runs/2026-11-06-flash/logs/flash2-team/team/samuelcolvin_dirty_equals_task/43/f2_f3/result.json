@@ -1,0 +1,64 @@
+{
+  "repo": "samuelcolvin_dirty_equals_task",
+  "task_id": 43,
+  "features": [
+    2,
+    3
+  ],
+  "setting": "team",
+  "run_id": "8928a7c5",
+  "run_name": "flash2-team",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T06:12:49.326661",
+  "ended_at": "2026-11-06T06:14:07.469807",
+  "duration_seconds": 78.143146,
+  "lead_agent": "agent1",
+  "agents": {
+    "agent1": {
+      "feature_id": 2,
+      "team_role": "lead",
+      "status": "Submitted",
+      "cost": 0.1442786,
+      "steps": 7,
+      "input_tokens": 14,
+      "output_tokens": 2772,
+      "cache_read_tokens": 145063,
+      "cache_write_tokens": 11954,
+      "patch_lines": 81,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 3,
+      "team_role": "member",
+      "status": "Submitted",
+      "cost": 0.130705,
+      "steps": 5,
+      "input_tokens": 10,
+      "output_tokens": 2465,
+      "cache_read_tokens": 101550,
+      "cache_write_tokens": 12211,
+      "patch_lines": 73,
+      "error": null
+    }
+  },
+  "total_cost": 0.2749836,
+  "total_steps": 12,
+  "messages_sent": 0,
+  "metrics": {
+    "tasks_total": 2,
+    "tasks_done": 0,
+    "unowned_at_end": 0,
+    "time_to_first_claim_seconds": null,
+    "claims_per_agent": {},
+    "updates_per_agent": {}
+  },
+  "team_features": {
+    "task_list": true,
+    "scratchpad": true,
+    "mcp": true,
+    "auto_refresh": true,
+    "protocol": true
+  },
+  "log_dir": "logs/flash2-team/team/samuelcolvin_dirty_equals_task/43/f2_f3"
+}

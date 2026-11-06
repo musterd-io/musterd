@@ -1,0 +1,41 @@
+diff --git a/src/jinja2/ext.py b/src/jinja2/ext.py
+index d21b83aa..ce9e41a4 100644
+--- a/src/jinja2/ext.py
++++ b/src/jinja2/ext.py
+@@ -1,4 +1,5 @@
+ """Extension API for adding custom tags and behavior."""
++import hashlib
+ import pprint
+ import re
+ import typing as t
+@@ -264,7 +265,30 @@ class InternationalizationExtension(Extension):
+             uninstall_gettext_translations=self._uninstall,
+             extract_translations=self._extract,
+             newstyle_gettext=False,
++            translation_version_control=True,
++            set_translation_version=self._set_translation_version,
++            get_translation_version=self._get_translation_version,
++            compare_translation_versions=self._compare_translation_versions,
+         )
++        self._translation_versions: t.Dict[str, str] = {}
++
++    @staticmethod
++    def _translation_version_key(message: str) -> str:
++        return hashlib.md5(message.encode("utf-8")).hexdigest()
++
++    def _set_translation_version(self, message: str, version: str) -> None:
++        """Store a version identifier for a translation message."""
++        self._translation_versions[self._translation_version_key(message)] = version
++
++    def _get_translation_version(self, message: str) -> t.Optional[str]:
++        """Return the version stored for a message, or ``None``."""
++        return self._translation_versions.get(self._translation_version_key(message))
++
++    def _compare_translation_versions(self, message1: str, message2: str) -> bool:
++        """Return ``True`` if both messages have the same, set version."""
++        version1 = self._get_translation_version(message1)
++        version2 = self._get_translation_version(message2)
++        return version1 is not None and version1 == version2
+ 
+     def _install(
+         self, translations: "_SupportedTranslations", newstyle: t.Optional[bool] = None

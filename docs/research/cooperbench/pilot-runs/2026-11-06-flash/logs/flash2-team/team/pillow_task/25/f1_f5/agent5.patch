@@ -1,0 +1,75 @@
+diff --git a/Tests/test_image.py b/Tests/test_image.py
+index c2e850c36..7973f5ebf 100644
+--- a/Tests/test_image.py
++++ b/Tests/test_image.py
+@@ -258,6 +258,33 @@ class TestImage:
+             assert im.readonly
+             im.save(temp_file)
+ 
++    @pytest.mark.parametrize("mode", ("RGB", "RGBA", "L"))
++    def test_save_mark_corners(self, mode: str, tmp_path: Path) -> None:
++        temp_file = tmp_path / "temp.png"
++        im = Image.new(mode, (10, 8))
++        original = im.copy()
++
++        im.save(temp_file, mark_corners=True)
++
++        # The original image is not modified
++        assert_image_equal(im, original)
++
++        expected = Image.new("RGB", (1, 1), "#f00").convert(mode).getpixel((0, 0))
++        with Image.open(temp_file) as reloaded:
++            assert reloaded.getpixel((0, 0)) == expected
++            assert reloaded.getpixel((9, 7)) == expected
++            assert reloaded.getpixel((1, 1)) == original.getpixel((1, 1))
++            assert reloaded.getpixel((9, 0)) == original.getpixel((9, 0))
++
++    def test_save_without_mark_corners(self, tmp_path: Path) -> None:
++        temp_file = tmp_path / "temp.png"
++        im = Image.new("RGB", (10, 8))
++
++        im.save(temp_file, mark_corners=False)
++
++        with Image.open(temp_file) as reloaded:
++            assert_image_equal(reloaded, im)
++
+     def test_dump(self, tmp_path: Path) -> None:
+         im = Image.new("L", (10, 10))
+         im._dump(str(tmp_path / "temp_L.ppm"))
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 233df592c..824fdade9 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -2505,6 +2505,9 @@ class Image:
+              red = Image.new("RGB", (1, 1), "#f00")
+              red.encoderinfo = {"xmp": b"test"}
+              black.save("out.mpo", save_all=True, append_images=[red])
++           If ``mark_corners=True`` is passed, the top-left and bottom-right
++           pixels of the saved image are set to red, as a simple marker that
++           the image has been processed. The original image is not modified.
+         :returns: None
+         :exception ValueError: If the output format could not be determined
+            from the file name.  Use the format option to solve this.
+@@ -2512,6 +2515,22 @@ class Image:
+            may have been created, and may contain partial data.
+         """
+ 
++        if params.pop("mark_corners", False):
++            # Mark a copy, so that the original image is left unchanged
++            marked = self.copy()
++            if hasattr(self, "encoderinfo"):
++                marked.encoderinfo = self.encoderinfo
++            if marked.width and marked.height:
++                color: float | tuple[int, ...] | None = (255, 0, 0)
++                if marked.mode != "P":
++                    red = new("RGB", (1, 1), color)
++                    color = red.convert(marked.mode).getpixel((0, 0))
++                    assert color is not None
++                marked.putpixel((0, 0), color)
++                marked.putpixel((marked.width - 1, marked.height - 1), color)
++            marked.save(fp, format, **params)
++            return
++
+         filename: str | bytes = ""
+         open_fp = False
+         if is_path(fp):

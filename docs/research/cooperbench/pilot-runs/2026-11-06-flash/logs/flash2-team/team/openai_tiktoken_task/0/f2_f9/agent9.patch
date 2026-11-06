@@ -1,0 +1,57 @@
+diff --git a/tiktoken/core.py b/tiktoken/core.py
+index 6bc9736..1cb4988 100644
+--- a/tiktoken/core.py
++++ b/tiktoken/core.py
+@@ -82,6 +82,7 @@ class Encoding:
+         *,
+         allowed_special: Literal["all"] | AbstractSet[str] = set(),  # noqa: B006
+         disallowed_special: Literal["all"] | Collection[str] = "all",
++        compress: bool = False,
+     ) -> list[int]:
+         """Encodes a string into tokens.
+ 
+@@ -109,6 +110,9 @@ class Encoding:
+         >>> enc.encode("<|endoftext|>", disallowed_special=())
+         [27, 91, 437, 1659, 5239, 91, 29]
+         ```
++
++        If `compress` is True, adjacent repeated tokens are collapsed into a single token
++        after encoding.
+         """
+         if allowed_special == "all":
+             allowed_special = self.special_tokens_set
+@@ -121,7 +125,7 @@ class Encoding:
+                 raise_disallowed_special_token(match.group())
+ 
+         try:
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
+         except UnicodeEncodeError:
+             # BPE operates on bytes, but the regex operates on unicode. If we pass a str that is
+             # invalid UTF-8 to Rust, it will rightfully complain. Here we do a quick and dirty
+@@ -130,7 +134,11 @@ class Encoding:
+             # string, but given that this is input we want to support, maybe that's okay.
+             # Also we use errors="replace" to handle weird things like lone surrogates.
+             text = text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+-            return self._core_bpe.encode(text, allowed_special)
++            tokens = self._core_bpe.encode(text, allowed_special)
++
++        if compress:
++            tokens = _compress_tokens(tokens)
++        return tokens
+ 
+     def encode_to_numpy(
+         self,
+@@ -437,3 +445,12 @@ def raise_disallowed_special_token(token: str) -> NoReturn:
+         f"by passing `disallowed_special=(enc.special_tokens_set - {{{token!r}}})`.\n"
+         "To disable this check for all special tokens, pass `disallowed_special=()`.\n"
+     )
++
++
++def _compress_tokens(tokens: list[int]) -> list[int]:
++    """Removes adjacent repeated tokens, keeping one token of each run."""
++    compressed: list[int] = []
++    for token in tokens:
++        if not compressed or compressed[-1] != token:
++            compressed.append(token)
++    return compressed

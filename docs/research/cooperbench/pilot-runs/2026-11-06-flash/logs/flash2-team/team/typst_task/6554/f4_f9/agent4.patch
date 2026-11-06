@@ -1,0 +1,99 @@
+diff --git a/crates/typst/src/foundations/str.rs b/crates/typst/src/foundations/str.rs
+index d90b6f206..39fb4ddd4 100644
+--- a/crates/typst/src/foundations/str.rs
++++ b/crates/typst/src/foundations/str.rs
+@@ -176,26 +176,80 @@ impl Str {
+         self.0.len()
+     }
+ 
+-    /// Extracts the first grapheme cluster of the string.
++    /// Extracts the first grapheme cluster of the string, or the first
++    /// `repeat` grapheme clusters if specified.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn first(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn first(
++        &self,
++        /// Number of times to repeat this operation. Fails if exceeds string length.
++        #[named]
++        #[default(1)]
++        repeat: usize,
++        /// A set of characters to strip from the start of the string before
++        /// extracting the first grapheme cluster.
++        #[named]
++        strip: Option<Str>,
++    ) -> StrResult<Str> {
++        if repeat == 0 {
++            bail!("repeat must be at least 1");
++        }
++        let s = match &strip {
++            Some(set) if !set.is_empty() => {
++                self.0.trim_start_matches(|c: char| set.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        let graphemes: Vec<&str> = s.graphemes(true).collect();
++        if graphemes.is_empty() {
++            return Err(string_is_empty());
++        }
++        if repeat > graphemes.len() {
++            bail!(
++                "not enough characters (requested {}, but string only has {})",
++                repeat,
++                graphemes.len()
++            );
++        }
++        Ok(graphemes[..repeat].concat().into())
+     }
+ 
+-    /// Extracts the last grapheme cluster of the string.
++    /// Extracts the last grapheme cluster of the string, or the last
++    /// `repeat` grapheme clusters if specified.
+     /// Fails with an error if the string is empty.
+     #[func]
+-    pub fn last(&self) -> StrResult<Str> {
+-        self.0
+-            .graphemes(true)
+-            .next_back()
+-            .map(Into::into)
+-            .ok_or_else(string_is_empty)
++    pub fn last(
++        &self,
++        /// Number of times to repeat this operation. Fails if exceeds string length.
++        #[named]
++        #[default(1)]
++        repeat: usize,
++        /// A set of characters to strip from the end of the string before
++        /// extracting the last grapheme cluster.
++        #[named]
++        strip: Option<Str>,
++    ) -> StrResult<Str> {
++        if repeat == 0 {
++            bail!("repeat must be at least 1");
++        }
++        let s = match &strip {
++            Some(set) if !set.is_empty() => {
++                self.0.trim_end_matches(|c: char| set.0.contains(c))
++            }
++            _ => self.0.as_str(),
++        };
++        let graphemes: Vec<&str> = s.graphemes(true).collect();
++        if graphemes.is_empty() {
++            return Err(string_is_empty());
++        }
++        if repeat > graphemes.len() {
++            bail!(
++                "not enough characters (requested {}, but string only has {})",
++                repeat,
++                graphemes.len()
++            );
++        }
++        Ok(graphemes[graphemes.len() - repeat..].concat().into())
+     }
+ 
+     /// Extracts the first grapheme cluster after the specified index. Returns

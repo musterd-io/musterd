@@ -1,0 +1,64 @@
+{
+  "repo": "huggingface_datasets_task",
+  "task_id": 6252,
+  "features": [
+    4,
+    6
+  ],
+  "setting": "team",
+  "run_id": "73a9695c",
+  "run_name": "flash2-team",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:32:54.808084",
+  "ended_at": "2026-11-06T05:34:30.154026",
+  "duration_seconds": 95.345942,
+  "lead_agent": "agent1",
+  "agents": {
+    "agent2": {
+      "feature_id": 6,
+      "team_role": "member",
+      "status": "Submitted",
+      "cost": 0.0785772,
+      "steps": 5,
+      "input_tokens": 10,
+      "output_tokens": 977,
+      "cache_read_tokens": 90161,
+      "cache_write_tokens": 8193,
+      "patch_lines": 13,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 4,
+      "team_role": "lead",
+      "status": "Submitted",
+      "cost": 0.1065162,
+      "steps": 4,
+      "input_tokens": 8,
+      "output_tokens": 1946,
+      "cache_read_tokens": 71646,
+      "cache_write_tokens": 10647,
+      "patch_lines": 34,
+      "error": null
+    }
+  },
+  "total_cost": 0.18509340000000002,
+  "total_steps": 9,
+  "messages_sent": 0,
+  "metrics": {
+    "tasks_total": 2,
+    "tasks_done": 0,
+    "unowned_at_end": 0,
+    "time_to_first_claim_seconds": null,
+    "claims_per_agent": {},
+    "updates_per_agent": {}
+  },
+  "team_features": {
+    "task_list": true,
+    "scratchpad": true,
+    "mcp": true,
+    "auto_refresh": true,
+    "protocol": true
+  },
+  "log_dir": "logs/flash2-team/team/huggingface_datasets_task/6252/f4_f6"
+}

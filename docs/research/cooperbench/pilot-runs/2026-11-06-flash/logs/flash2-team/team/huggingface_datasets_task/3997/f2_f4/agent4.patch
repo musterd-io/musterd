@@ -1,0 +1,66 @@
+diff --git a/src/datasets/features/features.py b/src/datasets/features/features.py
+index 6a0da6401..a09f37c3d 100644
+--- a/src/datasets/features/features.py
++++ b/src/datasets/features/features.py
+@@ -1245,15 +1245,54 @@ class Features(dict):
+         super().__delitem__(column_name)
+         del self._column_requires_decoding[column_name]
+ 
+-    def update(self, iterable, **kwds):
+-        if hasattr(iterable, "keys"):
+-            for key in iterable.keys():
+-                self[key] = iterable[key]
+-        else:
+-            for key, value in iterable:
++    def update(self, iterable=None, **kwds):
++        """Update the features with the given mapping(s), extending :meth:`dict.update`.
++
++        Supported inputs for ``iterable``:
++
++        - a mapping (e.g. a ``dict`` or :class:`Features`)
++        - an iterable of ``(key, value)`` pairs
++        - a JSON string (``str`` or ``bytes``) encoding a mapping of features
++        - a batch of the above, given as a ``list`` or ``tuple`` of mappings / JSON strings,
++          applied in order
++
++        Values that are plain dictionaries describing a feature (e.g. ``{"dtype": "string", "_type": "Value"}``)
++        are converted to feature objects with :meth:`generate_from_dict`.
++        """
++        if iterable is not None:
++            for key, value in self._iter_update_items(iterable):
+                 self[key] = value
+         for key in kwds:
+-            self[key] = kwds[key]
++            self[key] = self._convert_update_value(kwds[key])
++
++    @classmethod
++    def _iter_update_items(cls, iterable):
++        if isinstance(iterable, (str, bytes, bytearray)):
++            try:
++                iterable = json.loads(iterable)
++            except ValueError as e:
++                raise ValueError(f"Could not parse JSON string to update the features: {e}") from e
++            if not isinstance(iterable, dict):
++                raise TypeError(f"JSON features must encode a mapping, got {type(iterable).__name__}")
++        if hasattr(iterable, "keys"):
++            for key in iterable.keys():
++                yield key, cls._convert_update_value(iterable[key])
++            return
++        if isinstance(iterable, (list, tuple)) and all(
++            isinstance(item, (str, bytes, bytearray)) or hasattr(item, "keys") for item in iterable
++        ):
++            # batch update
++            for item in iterable:
++                yield from cls._iter_update_items(item)
++            return
++        for key, value in iterable:
++            yield key, cls._convert_update_value(value)
++
++    @staticmethod
++    def _convert_update_value(value):
++        if isinstance(value, dict) and not isinstance(value, Features) and "_type" in value:
++            return generate_from_dict(value)
++        return value
+ 
+     def __reduce__(self):
+         return Features, (dict(self),)

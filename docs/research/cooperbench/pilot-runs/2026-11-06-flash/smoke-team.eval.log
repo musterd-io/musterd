@@ -1,0 +1,12 @@
+
+cooperbench eval flash-smoke-team
+runs: 1
+backend: docker
+
+  evaluating samuelcolvin_dirty_equals_task/43 [2,3]
+✓ pass both features
+
+  passed       1       
+  failed       0       
+  pass rate    100.0%  
+

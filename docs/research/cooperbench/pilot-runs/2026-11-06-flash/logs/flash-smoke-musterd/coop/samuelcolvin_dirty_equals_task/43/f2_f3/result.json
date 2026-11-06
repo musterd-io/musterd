@@ -1,0 +1,46 @@
+{
+  "repo": "samuelcolvin_dirty_equals_task",
+  "task_id": 43,
+  "features": [
+    2,
+    3
+  ],
+  "setting": "coop",
+  "run_id": "b8012884",
+  "run_name": "flash-smoke-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:03:46.969000",
+  "ended_at": "2026-11-06T05:05:57.551393",
+  "duration_seconds": 130.582393,
+  "agents": {
+    "agent2": {
+      "feature_id": 3,
+      "status": "Submitted",
+      "cost": 0.31675719999999996,
+      "steps": 14,
+      "input_tokens": 22,
+      "output_tokens": 3724,
+      "cache_read_tokens": 311846,
+      "cache_write_tokens": 35964,
+      "patch_lines": 125,
+      "error": null
+    },
+    "agent1": {
+      "feature_id": 2,
+      "status": "Submitted",
+      "cost": 0.2986856,
+      "steps": 13,
+      "input_tokens": 18,
+      "output_tokens": 4238,
+      "cache_read_tokens": 239218,
+      "cache_write_tokens": 33202,
+      "patch_lines": 125,
+      "error": null
+    }
+  },
+  "total_cost": 0.6154428,
+  "total_steps": 27,
+  "messages_sent": 0,
+  "log_dir": "logs/flash-smoke-musterd/coop/samuelcolvin_dirty_equals_task/43/f2_f3"
+}

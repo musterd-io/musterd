@@ -1,0 +1,269 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index f57ada6..1aeab73 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -439,6 +439,11 @@ class Context:
+         self._parameter_source: dict[str, ParameterSource] = {}
+         self._exit_stack = ExitStack()
+ 
++        #: Whether option value history tracking is enabled for this context.
++        self._track_changes: bool = bool(getattr(command, "track_changes", False))
++        #: Map of parameter names to their value history.
++        self._option_history: dict[str, list[dict[str, t.Any]]] = {}
++
+     @property
+     def protected_args(self) -> list[str]:
+         import warnings
+@@ -839,6 +844,51 @@ class Context:
+         """
+         return self._parameter_source.get(name)
+ 
++    def _record_option_history(
++        self, name: str, value: t.Any, source: ParameterSource | None
++    ) -> None:
++        """Record a value change for a parameter if tracking is enabled."""
++        if not self._track_changes:
++            return
++
++        import time
++
++        history = self._option_history.setdefault(name, [])
++        entry: dict[str, t.Any] = {
++            "value": value,
++            "source": source,
++            "timestamp": time.time(),
++        }
++
++        if history:
++            entry["previous_value"] = history[-1]["value"]
++
++        history.append(entry)
++
++    def get_option_history(self, name: str) -> list[dict[str, t.Any]] | None:
++        """Get the history of values set for an option.
++
++        :param name: The parameter name (``"count"``) or one of the
++            option's flags (``"--count"``, ``"-c"``).
++        :return: A list of history entries, each a dict with ``value``,
++            ``source`` and ``timestamp`` keys. ``None`` if tracking is
++            disabled, or an empty list if there is no history.
++        """
++        if not self._track_changes:
++            return None
++
++        param_name = name
++
++        if name not in self._option_history:
++            for param in self.command.params:
++                if name == param.name or name in param.opts or name in getattr(
++                    param, "secondary_opts", ()
++                ):
++                    param_name = param.name  # type: ignore[assignment]
++                    break
++
++        return list(self._option_history.get(param_name, []))
++
+ 
+ class Command:
+     """Commands are the basic building block of command line interfaces in
+@@ -916,6 +966,7 @@ class Command:
+         no_args_is_help: bool = False,
+         hidden: bool = False,
+         deprecated: bool | str = False,
++        track_changes: bool = False,
+     ) -> None:
+         #: the name the command thinks it has.  Upon registering a command
+         #: on a :class:`Group` the group will default the command name
+@@ -945,6 +996,8 @@ class Command:
+         self.no_args_is_help = no_args_is_help
+         self.hidden = hidden
+         self.deprecated = deprecated
++        #: Whether to track the history of option values in the context.
++        self.track_changes = track_changes
+ 
+     def to_info_dict(self, ctx: Context) -> dict[str, t.Any]:
+         return {
+@@ -1521,9 +1574,10 @@ class Group(Command):
+         subcommand_metavar: str | None = None,
+         chain: bool = False,
+         result_callback: t.Callable[..., t.Any] | None = None,
++        track_changes: bool = False,
+         **kwargs: t.Any,
+     ) -> None:
+-        super().__init__(name, **kwargs)
++        super().__init__(name, track_changes=track_changes, **kwargs)
+ 
+         if commands is None:
+             commands = {}
+@@ -2420,6 +2474,9 @@ class Parameter:
+ 
+                 value = None
+ 
++            if self.name is not None:
++                ctx._record_option_history(self.name, value, source)
++
+         if self.expose_value:
+             ctx.params[self.name] = value  # type: ignore
+ 
+@@ -2462,6 +2519,94 @@ class Parameter:
+         return self.type.shell_complete(ctx, self, incomplete)
+ 
+ 
++def _complete_usernames() -> list[str]:
++    try:
++        import pwd
++    except ImportError:
++        pwd = None  # type: ignore[assignment]
++
++    if pwd is not None:
++        try:
++            return sorted({p.pw_name for p in pwd.getpwall()})
++        except Exception:
++            pass
++
++    import getpass
++
++    try:
++        return [getpass.getuser()]
++    except Exception:
++        return []
++
++
++def _complete_git_branches() -> list[str]:
++    import subprocess
++
++    try:
++        result = subprocess.run(
++            ["git", "branch", "-a", "--format=%(refname:short)"],
++            capture_output=True,
++            text=True,
++            timeout=5,
++        )
++    except (OSError, subprocess.SubprocessError):
++        return []
++
++    if result.returncode != 0:
++        return []
++
++    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
++
++
++def _complete_env_vars() -> list[str]:
++    return sorted(os.environ)
++
++
++_AUTO_COMPLETE_REGISTRY: dict[str, t.Callable[[], list[str]]] = {
++    "user": _complete_usernames,
++    "branch": _complete_git_branches,
++    "env": _complete_env_vars,
++}
++
++_AUTO_COMPLETE_PATTERNS: list[tuple[str, frozenset[str]]] = [
++    ("user", frozenset({"user", "username", "users", "owner", "login"})),
++    ("branch", frozenset({"branch", "branches", "ref", "git_branch"})),
++    ("env", frozenset({"env", "envvar", "env_var", "environment", "variable"})),
++    ("dir", frozenset({"dir", "directory", "folder", "dirs", "directories"})),
++    (
++        "file",
++        frozenset({"file", "files", "path", "paths", "filename", "filepath"}),
++    ),
++]
++
++
++def _detect_completion_strategy(param: Parameter) -> str | None:
++    if isinstance(param.type, types.Path):
++        if param.type.dir_okay and not param.type.file_okay:
++            return "dir"
++        return "file"
++
++    if isinstance(param.type, types.File):
++        return "file"
++
++    # Only infer from the name for free-form string values.
++    if not isinstance(param.type, types.StringParamType):
++        return None
++
++    names = [param.name or ""]
++    names.extend(o.lstrip("-/").replace("-", "_") for o in param.opts)
++
++    for name in names:
++        name = name.lower()
++        parts = set(name.split("_"))
++
++        for strategy, keywords in _AUTO_COMPLETE_PATTERNS:
++            if name in keywords or parts & keywords:
++                return strategy
++
++    return None
++
++
+ class Option(Parameter):
+     """Options are usually optional values on the command line and
+     have some extra features that arguments don't have.
+@@ -2478,6 +2623,10 @@ class Option(Parameter):
+     :param show_envvar: Controls if an environment variable should be
+         shown on the help page and error messages.
+         Normally, environment variables are not shown.
++    :param auto_complete: If ``True``, suggest completion values based on
++        the option's name, type, and environment, such as usernames for
++        ``--user``, git branches for ``--branch``, and paths for
++        ``--file``. A ``shell_complete`` callback takes precedence.
+     :param prompt: If set to ``True`` or a non empty string then the
+         user will be prompted for input. If set to ``True`` the prompt
+         will be the option name capitalized. A deprecated option cannot be
+@@ -2549,6 +2698,7 @@ class Option(Parameter):
+         show_choices: bool = True,
+         show_envvar: bool = False,
+         deprecated: bool | str = False,
++        auto_complete: bool = False,
+         **attrs: t.Any,
+     ) -> None:
+         if help:
+@@ -2636,6 +2786,7 @@ class Option(Parameter):
+         self.show_default = show_default
+         self.show_choices = show_choices
+         self.show_envvar = show_envvar
++        self.auto_complete = auto_complete
+ 
+         if __debug__:
+             if deprecated and prompt:
+@@ -2671,9 +2822,39 @@ class Option(Parameter):
+             flag_value=self.flag_value,
+             count=self.count,
+             hidden=self.hidden,
++            auto_complete=getattr(self, "auto_complete", False),
+         )
+         return info_dict
+ 
++    def shell_complete(self, ctx: Context, incomplete: str) -> list[CompletionItem]:
++        """Return a list of completions for the incomplete value. A
++        custom ``shell_complete`` function takes precedence, then smart
++        completion if ``auto_complete`` is enabled, then the type's
++        completion.
++        """
++        if self._custom_shell_complete is None and self.auto_complete:
++            return self._smart_complete(ctx, incomplete)
++
++        return super().shell_complete(ctx, incomplete)
++
++    def _smart_complete(self, ctx: Context, incomplete: str) -> list[CompletionItem]:
++        """Pick a completion strategy based on the option's name, type,
++        and the current environment, falling back to the type's
++        completion for unknown patterns.
++        """
++        from click.shell_completion import CompletionItem
++
++        strategy = _detect_completion_strategy(self)
++
++        if strategy is None:
++            return self.type.shell_complete(ctx, self, incomplete)
++
++        if strategy in ("file", "dir"):
++            return [CompletionItem(incomplete, type=strategy)]
++
++        values = _AUTO_COMPLETE_REGISTRY[strategy]()
++        return [CompletionItem(v) for v in values if v.startswith(incomplete)]
++
+     def get_error_hint(self, ctx: Context) -> str:
+         result = super().get_error_hint(ctx)
+         if self.show_envvar:

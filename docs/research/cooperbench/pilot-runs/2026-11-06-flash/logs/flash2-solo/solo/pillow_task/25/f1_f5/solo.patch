@@ -1,0 +1,80 @@
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 233df592c..b514d3c4a 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -2540,12 +2540,28 @@ class Image:
+                 msg = f"unknown file extension: {ext}"
+                 raise ValueError(msg) from e
+ 
++        from . import ImageFile
++
+         # may mutate self!
+-        self._ensure_mutable()
++        if (
++            isinstance(self, ImageFile.ImageFile)
++            and filename
++            and self.filename
++            and os.path.abspath(filename) == os.path.abspath(self.filename)
++        ):
++            self._ensure_mutable()
++        else:
++            self.load()
++
++        mark_corners = params.pop("mark_corners", False)
++        im = self
++        if mark_corners:
++            im = self.copy()
++            im._mark_corners()
+ 
+         save_all = params.pop("save_all", None)
+-        self.encoderinfo = {**getattr(self, "encoderinfo", {}), **params}
+-        self.encoderconfig: tuple[Any, ...] = ()
++        im.encoderinfo = {**getattr(self, "encoderinfo", {}), **params}
++        im.encoderconfig = ()
+ 
+         if format.upper() not in SAVE:
+             init()
+@@ -2571,7 +2587,7 @@ class Image:
+             fp = cast(IO[bytes], fp)
+ 
+         try:
+-            save_handler(self, fp, filename)
++            save_handler(im, fp, filename)
+         except Exception:
+             if open_fp:
+                 fp.close()
+@@ -2583,12 +2599,33 @@ class Image:
+             raise
+         finally:
+             try:
+-                del self.encoderinfo
++                del im.encoderinfo
+             except AttributeError:
+                 pass
+         if open_fp:
+             fp.close()
+ 
++    def _mark_corners(self) -> None:
++        """
++        Sets the top-left and bottom-right pixels of this image to red.
++        """
++        if self.width == 0 or self.height == 0:
++            return
++        color: float | tuple[int, ...]
++        if self.mode in ("P", "PA"):
++            color = (255, 0, 0)
++        elif self.mode == "CMYK":
++            color = (0, 255, 255, 0)
++        else:
++            from . import ImageColor
++
++            try:
++                color = ImageColor.getcolor("red", self.mode)
++            except (ValueError, KeyError):
++                color = 255
++        self.putpixel((0, 0), color)
++        self.putpixel((self.width - 1, self.height - 1), color)
++
+     def seek(self, frame: int) -> None:
+         """
+         Seeks to the given frame in this sequence file. If you seek

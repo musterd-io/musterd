@@ -1,0 +1,221 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 7b97bfb..aeb39e8 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -485,11 +485,129 @@ class Editor:
+         env: cabc.Mapping[str, str] | None = None,
+         require_save: bool = True,
+         extension: str = ".txt",
++        monitor_process: t.Callable[[str, int, str, float], t.Any] | None = None,
+     ) -> None:
+         self.editor = editor
+         self.env = env
+         self.require_save = require_save
+         self.extension = extension
++        self.monitor_process = monitor_process
++
++    def _notify(self, event_type: str, process_id: int, editor_command: str) -> None:
++        """Invoke the monitor callback, turning any exception into a
++        warning so monitoring continues for subsequent events.
++        """
++        callback = self.monitor_process
++
++        if callback is None:
++            return
++
++        try:
++            callback(event_type, process_id, editor_command, time.time())
++        except Exception as e:
++            import warnings
++
++            warnings.warn(
++                f"Editor monitor callback raised an exception during"
++                f" {event_type!r} event: {e!r}",
++                UserWarning,
++                stacklevel=2,
++            )
++
++    @staticmethod
++    def _read_process_state(pid: int) -> bytes | None:
++        """Return the single letter process state from ``/proc``, or
++        ``None`` if it is not available on this platform.
++        """
++        try:
++            with open(f"/proc/{pid}/stat", "rb") as f:
++                stat = f.read()
++        except OSError:
++            return None
++
++        # The state follows the command name, which is wrapped in parens
++        # and may itself contain spaces or parens.
++        end = stat.rfind(b")")
++
++        if end == -1:
++            return None
++
++        return stat[end + 2 : end + 3]
++
++    @staticmethod
++    def _child_pids(pid: int) -> list[int]:
++        children: list[int] = []
++
++        try:
++            tasks = os.listdir(f"/proc/{pid}/task")
++        except OSError:
++            return children
++
++        for tid in tasks:
++            try:
++                with open(f"/proc/{pid}/task/{tid}/children") as f:
++                    children.extend(int(c) for c in f.read().split())
++            except (OSError, ValueError):
++                pass
++
++        return children
++
++    def _is_process_stopped(self, pid: int) -> bool | None:
++        """Return whether the process, or the editor it launched through
++        the shell, is stopped (suspended). Returns ``None`` if the state
++        cannot be determined on this platform.
++        """
++        state = self._read_process_state(pid)
++
++        if state is None:
++            return None
++
++        if state in (b"T", b"t"):
++            return True
++
++        pending = self._child_pids(pid)
++        seen: set[int] = set()
++
++        while pending:
++            child = pending.pop()
++
++            if child in seen:
++                continue
++
++            seen.add(child)
++
++            if self._read_process_state(child) in (b"T", b"t"):
++                return True
++
++            pending.extend(self._child_pids(child))
++
++        return False
++
++    def _monitor(
++        self,
++        process: t.Any,
++        editor_command: str,
++        stop_event: t.Any,
++        interval: float = 0.1,
++    ) -> None:
++        """Background loop that watches the editor process for suspend and
++        resume state changes, where supported by the platform.
++        """
++        pid = process.pid
++        suspended = False
++
++        while not stop_event.wait(interval):
++            stopped = self._is_process_stopped(pid)
++
++            if stopped is None:
++                continue
++
++            if stopped and not suspended:
++                suspended = True
++                self._notify("suspend", pid, editor_command)
++            elif not stopped and suspended:
++                suspended = False
++                self._notify("resume", pid, editor_command)
+ 
+     def get_editor(self) -> str:
+         if self.editor is not None:
+@@ -517,7 +635,12 @@ class Editor:
+ 
+         try:
+             c = subprocess.Popen(f'{editor} "{filename}"', env=environ, shell=True)
+-            exit_code = c.wait()
++
++            if self.monitor_process is not None:
++                exit_code = self._wait_monitored(c, editor)
++            else:
++                exit_code = c.wait()
++
+             if exit_code != 0:
+                 raise ClickException(
+                     _("{editor}: Editing failed").format(editor=editor)
+@@ -527,6 +650,32 @@ class Editor:
+                 _("{editor}: Editing failed: {e}").format(editor=editor, e=e)
+             ) from e
+ 
++    def _wait_monitored(self, process: t.Any, editor_command: str) -> int:
++        """Wait for the editor process while a background thread reports
++        its lifecycle events to the ``monitor_process`` callback.
++        """
++        import threading
++
++        pid = process.pid
++        self._notify("start", pid, editor_command)
++        stop_event = threading.Event()
++        thread = threading.Thread(
++            target=self._monitor,
++            args=(process, editor_command, stop_event),
++            name="click-editor-monitor",
++            daemon=True,
++        )
++        thread.start()
++
++        try:
++            exit_code: int = process.wait()
++        finally:
++            stop_event.set()
++            thread.join()
++            self._notify("terminate", pid, editor_command)
++
++        return exit_code
++
+     def edit(self, text: t.AnyStr | None) -> t.AnyStr | None:
+         import tempfile
+ 
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e14e670..45cc900 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -650,6 +650,7 @@ def edit(
+     require_save: bool = True,
+     extension: str = ".txt",
+     filename: str | None = None,
++    monitor_process: t.Callable[[str, int, str, float], t.Any] | None = None,
+ ) -> t.AnyStr | None:
+     r"""Edits the given text in the defined editor.  If an editor is given
+     (should be the full path to the executable but the regular operating
+@@ -677,10 +678,26 @@ def edit(
+     :param filename: if provided it will edit this file instead of the
+                      provided text contents.  It will not use a temporary
+                      file as an indirection in that case.
++    :param monitor_process: an optional callback invoked with
++        ``(event_type, process_id, editor_command, timestamp)`` for editor
++        process lifecycle events. Event types are ``"start"``,
++        ``"terminate"``, and, where the platform supports it,
++        ``"suspend"`` and ``"resume"``. If the callback raises an
++        exception, a :exc:`UserWarning` is issued and monitoring
++        continues.
++
++    .. versionchanged:: 8.2
++        Added the ``monitor_process`` parameter.
+     """
+     from ._termui_impl import Editor
+ 
+-    ed = Editor(editor=editor, env=env, require_save=require_save, extension=extension)
++    ed = Editor(
++        editor=editor,
++        env=env,
++        require_save=require_save,
++        extension=extension,
++        monitor_process=monitor_process,
++    )
+ 
+     if filename is None:
+         return ed.edit(text)

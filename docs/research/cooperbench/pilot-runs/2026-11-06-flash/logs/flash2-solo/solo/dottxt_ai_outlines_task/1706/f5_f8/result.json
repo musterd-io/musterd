@@ -1,0 +1,30 @@
+{
+  "repo": "dottxt_ai_outlines_task",
+  "task_id": 1706,
+  "features": [
+    5,
+    8
+  ],
+  "setting": "solo",
+  "run_id": "393cdbb7",
+  "run_name": "flash2-solo",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T05:27:31.382677",
+  "ended_at": "2026-11-06T05:29:45.571774",
+  "duration_seconds": 134.189097,
+  "agent": {
+    "status": "Submitted",
+    "cost": 0.2346248,
+    "steps": 9,
+    "input_tokens": 18,
+    "output_tokens": 4944,
+    "cache_read_tokens": 224439,
+    "cache_write_tokens": 18157,
+    "patch_lines": 299,
+    "error": null
+  },
+  "total_cost": 0.2346248,
+  "total_steps": 9,
+  "log_dir": "logs/flash2-solo/solo/dottxt_ai_outlines_task/1706/f5_f8"
+}

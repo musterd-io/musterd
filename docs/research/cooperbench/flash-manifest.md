@@ -3,7 +3,11 @@
 **Lane:** `01M6QK11BG` (this page), goal `cooperbench`, asked by nick (2026-11-06 ~05:35Z in session:
 "lets do all of this", after the recommendation to stop the act-lane cost series and place musterd on
 the benchmark authors' own ground). The run is its own lane. **Status:** pre-registered 2026-11-06,
-before any pair of this comparison ran. Nothing below changes once a measured pair has run.
+before any pair of this comparison ran. **Run 2026-11-06 05:23–07:48Z → [finding
+035](../035-cooperbench-flash-comparison.md):** C1 musterd vs solo 38 vs 37, no detectable difference;
+C2 musterd vs team 38 vs 19, musterd better (p = 4 × 10⁻⁶); C3 team vs solo 19 vs 37, solo better; $54.08.
+Attempt 1 aborted on a full disk before any eval and fully re-run; concurrency lowered to 1/2/2 for
+attempt 2. Nothing below changes once a measured pair has run.
 **CooperBench:** `63b9d44` (upstream `main` on 2026-11-06). Finding **035**.
 
 ## Why

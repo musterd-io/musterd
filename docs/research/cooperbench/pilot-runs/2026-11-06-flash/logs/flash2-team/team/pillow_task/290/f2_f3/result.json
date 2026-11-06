@@ -1,0 +1,64 @@
+{
+  "repo": "pillow_task",
+  "task_id": 290,
+  "features": [
+    2,
+    3
+  ],
+  "setting": "team",
+  "run_id": "984dd922",
+  "run_name": "flash2-team",
+  "agent_framework": "claude_code",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T06:08:52.597120",
+  "ended_at": "2026-11-06T06:11:03.343124",
+  "duration_seconds": 130.746004,
+  "lead_agent": "agent1",
+  "agents": {
+    "agent1": {
+      "feature_id": 2,
+      "team_role": "lead",
+      "status": "Submitted",
+      "cost": 0.1107144,
+      "steps": 5,
+      "input_tokens": 10,
+      "output_tokens": 2069,
+      "cache_read_tokens": 94747,
+      "cache_write_tokens": 10069,
+      "patch_lines": 38,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 3,
+      "team_role": "member",
+      "status": "Submitted",
+      "cost": 0.30274359999999995,
+      "steps": 15,
+      "input_tokens": 30,
+      "output_tokens": 6338,
+      "cache_read_tokens": 390643,
+      "cache_write_tokens": 19547,
+      "patch_lines": 167,
+      "error": null
+    }
+  },
+  "total_cost": 0.41345799999999994,
+  "total_steps": 20,
+  "messages_sent": 0,
+  "metrics": {
+    "tasks_total": 2,
+    "tasks_done": 0,
+    "unowned_at_end": 0,
+    "time_to_first_claim_seconds": null,
+    "claims_per_agent": {},
+    "updates_per_agent": {}
+  },
+  "team_features": {
+    "task_list": true,
+    "scratchpad": true,
+    "mcp": true,
+    "auto_refresh": true,
+    "protocol": true
+  },
+  "log_dir": "logs/flash2-team/team/pillow_task/290/f2_f3"
+}

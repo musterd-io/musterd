@@ -1,0 +1,2883 @@
+{
+ "arms": {
+  "claude_code": {
+   "pairs": 50,
+   "passed": 19,
+   "cause:coordination": 28,
+   "cause:None": 0,
+   "cause:task": 3
+  }
+ },
+ "pairs": [
+  {
+   "pair": "/data/runs/logs/flash2-team/team/dottxt_ai_outlines_task/1655/f6_f7",
+   "task": "dottxt_ai_outlines_task/1655",
+   "features": [
+    6,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.23648620000000004,
+   "steps": 12,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/types/__init__.py"
+    ],
+    "agent2": [
+     "outlines/types/__init__.py"
+    ]
+   },
+   "common_files": [
+    "outlines/types/__init__.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/dottxt_ai_outlines_task/1655/f7_f10",
+   "task": "dottxt_ai_outlines_task/1655",
+   "features": [
+    7,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.1970826,
+   "steps": 10,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/types/__init__.py"
+    ],
+    "agent2": [
+     "outlines/types/__init__.py"
+    ]
+   },
+   "common_files": [
+    "outlines/types/__init__.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/dottxt_ai_outlines_task/1706/f4_f6",
+   "task": "dottxt_ai_outlines_task/1706",
+   "features": [
+    4,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 9,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 11,
+    "tests_failed": 0
+   },
+   "cost": 0.286426,
+   "steps": 14,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/backends/xgrammar.py"
+    ],
+    "agent2": [
+     "outlines/backends/xgrammar.py"
+    ]
+   },
+   "common_files": [
+    "outlines/backends/xgrammar.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/dottxt_ai_outlines_task/1706/f5_f8",
+   "task": "dottxt_ai_outlines_task/1706",
+   "features": [
+    5,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.4172034,
+   "steps": 17,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "outlines/backends/xgrammar.py",
+     "outlines/processors/base_logits_processor.py",
+     "outlines/processors/tensor_adapters/__init__.py"
+    ],
+    "agent2": [
+     "outlines/backends/xgrammar.py"
+    ]
+   },
+   "common_files": [
+    "outlines/backends/xgrammar.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/dspy_task/8394/f3_f4",
+   "task": "dspy_task/8394",
+   "features": [
+    3,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.43901100000000004,
+   "steps": 14,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "dspy/clients/__init__.py",
+     "dspy/clients/cache.py"
+    ],
+    "agent2": [
+     "dspy/clients/cache.py",
+     "dspy/primitives/prediction.py",
+     "dspy/primitives/program.py",
+     "dspy/utils/usage_tracker.py"
+    ]
+   },
+   "common_files": [
+    "dspy/clients/cache.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/dspy_task/8394/f3_f5",
+   "task": "dspy_task/8394",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.39248020000000006,
+   "steps": 11,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "dspy/clients/__init__.py",
+     "dspy/clients/cache.py"
+    ],
+    "agent2": [
+     "dspy/clients/__init__.py",
+     "dspy/clients/cache.py"
+    ]
+   },
+   "common_files": [
+    "dspy/clients/__init__.py",
+    "dspy/clients/cache.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/go_chi_task/26/f1_f2",
+   "task": "go_chi_task/26",
+   "features": [
+    1,
+    2
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.28988020000000003,
+   "steps": 13,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "mux.go",
+     "path_value.go",
+     "path_value_fallback.go"
+    ],
+    "agent2": [
+     "metrics.go",
+     "metrics_test.go",
+     "mux.go"
+    ]
+   },
+   "common_files": [
+    "mux.go"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/go_chi_task/56/f1_f5",
+   "task": "go_chi_task/56",
+   "features": [
+    1,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.6483038,
+   "steps": 22,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "context.go",
+     "middleware/allowed_methods.go",
+     "mux.go",
+     "tree.go"
+    ],
+    "agent2": [
+     "context.go",
+     "cors.go",
+     "mux.go",
+     "tree.go"
+    ]
+   },
+   "common_files": [
+    "context.go",
+    "mux.go",
+    "tree.go"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/huggingface_datasets_task/3997/f2_f4",
+   "task": "huggingface_datasets_task/3997",
+   "features": [
+    2,
+    4
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 26,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 25,
+    "tests_failed": 1
+   },
+   "cost": 0.3760838,
+   "steps": 20,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/datasets/features/features.py"
+    ],
+    "agent2": [
+     "src/datasets/features/features.py"
+    ]
+   },
+   "common_files": [
+    "src/datasets/features/features.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/huggingface_datasets_task/6252/f4_f6",
+   "task": "huggingface_datasets_task/6252",
+   "features": [
+    4,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.18509340000000002,
+   "steps": 9,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/datasets/features/image.py"
+    ],
+    "agent2": [
+     "src/datasets/features/image.py"
+    ]
+   },
+   "common_files": [
+    "src/datasets/features/image.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/llama_index_task/18813/f1_f5",
+   "task": "llama_index_task/18813",
+   "features": [
+    1,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.24183919999999998,
+   "steps": 13,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ],
+    "agent2": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ]
+   },
+   "common_files": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/llama_index_task/18813/f2_f5",
+   "task": "llama_index_task/18813",
+   "features": [
+    2,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.1895552,
+   "steps": 10,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ],
+    "agent2": [
+     "llama-index-core/llama_index/core/base/llms/types.py"
+    ]
+   },
+   "common_files": [
+    "llama-index-core/llama_index/core/base/llms/types.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/openai_tiktoken_task/0/f2_f9",
+   "task": "openai_tiktoken_task/0",
+   "features": [
+    2,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.2793862,
+   "steps": 10,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "tiktoken/core.py"
+    ],
+    "agent2": [
+     "tiktoken/core.py"
+    ]
+   },
+   "common_files": [
+    "tiktoken/core.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/openai_tiktoken_task/0/f3_f6",
+   "task": "openai_tiktoken_task/0",
+   "features": [
+    3,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 0.2697032,
+   "steps": 13,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "tiktoken/core.py"
+    ],
+    "agent2": [
+     "tiktoken/core.py"
+    ]
+   },
+   "common_files": [
+    "tiktoken/core.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/openai_tiktoken_task/0/f6_f8",
+   "task": "openai_tiktoken_task/0",
+   "features": [
+    6,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 0.3661694,
+   "steps": 20,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "tiktoken/core.py"
+    ],
+    "agent2": [
+     "tiktoken/core.py"
+    ]
+   },
+   "common_files": [
+    "tiktoken/core.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2068/f1_f6",
+   "task": "pallets_click_task/2068",
+   "features": [
+    1,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.28519059999999996,
+   "steps": 11,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ],
+    "agent2": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ]
+   },
+   "common_files": [
+    "src/click/_termui_impl.py",
+    "src/click/termui.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2068/f2_f10",
+   "task": "pallets_click_task/2068",
+   "features": [
+    2,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.24863460000000004,
+   "steps": 9,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ],
+    "agent2": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ]
+   },
+   "common_files": [
+    "src/click/_termui_impl.py",
+    "src/click/termui.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2068/f5_f11",
+   "task": "pallets_click_task/2068",
+   "features": [
+    5,
+    11
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.380172,
+   "steps": 16,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ],
+    "agent2": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ]
+   },
+   "common_files": [
+    "src/click/_termui_impl.py",
+    "src/click/termui.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2068/f5_f7",
+   "task": "pallets_click_task/2068",
+   "features": [
+    5,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.3023656,
+   "steps": 11,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ],
+    "agent2": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ]
+   },
+   "common_files": [
+    "src/click/_termui_impl.py",
+    "src/click/termui.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2068/f6_f7",
+   "task": "pallets_click_task/2068",
+   "features": [
+    6,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.22238439999999998,
+   "steps": 8,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ],
+    "agent2": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ]
+   },
+   "common_files": [
+    "src/click/_termui_impl.py",
+    "src/click/termui.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2068/f7_f10",
+   "task": "pallets_click_task/2068",
+   "features": [
+    7,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 65,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 65,
+    "tests_failed": 0
+   },
+   "cost": 0.2939756,
+   "steps": 16,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ],
+    "agent2": [
+     "src/click/_termui_impl.py",
+     "src/click/termui.py"
+    ]
+   },
+   "common_files": [
+    "src/click/_termui_impl.py",
+    "src/click/termui.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2800/f1_f3",
+   "task": "pallets_click_task/2800",
+   "features": [
+    1,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 68,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 72,
+    "tests_failed": 0
+   },
+   "cost": 0.4405416000000001,
+   "steps": 24,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ],
+    "agent2": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ]
+   },
+   "common_files": [
+    "src/click/core.py",
+    "src/click/shell_completion.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2800/f1_f7",
+   "task": "pallets_click_task/2800",
+   "features": [
+    1,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.3515258,
+   "steps": 18,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/shell_completion.py"
+    ],
+    "agent2": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ]
+   },
+   "common_files": [
+    "src/click/shell_completion.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2800/f2_f7",
+   "task": "pallets_click_task/2800",
+   "features": [
+    2,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.3042694,
+   "steps": 14,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ],
+    "agent2": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ]
+   },
+   "common_files": [
+    "src/click/core.py",
+    "src/click/shell_completion.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2800/f6_f7",
+   "task": "pallets_click_task/2800",
+   "features": [
+    6,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.3928406,
+   "steps": 18,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ],
+    "agent2": [
+     "src/click/core.py",
+     "src/click/shell_completion.py"
+    ]
+   },
+   "common_files": [
+    "src/click/core.py",
+    "src/click/shell_completion.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_click_task/2956/f1_f8",
+   "task": "pallets_click_task/2956",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 220,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 219,
+    "tests_failed": 0
+   },
+   "cost": 0.4950292,
+   "steps": 23,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/click/core.py",
+     "src/click/types.py"
+    ],
+    "agent2": [
+     "src/click/core.py"
+    ]
+   },
+   "common_files": [
+    "src/click/core.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1465/f2_f3",
+   "task": "pallets_jinja_task/1465",
+   "features": [
+    2,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 171,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 168,
+    "tests_failed": 0
+   },
+   "cost": 0.2749312,
+   "steps": 10,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/filters.py"
+    ],
+    "agent2": [
+     "src/jinja2/filters.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/filters.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1465/f2_f6",
+   "task": "pallets_jinja_task/1465",
+   "features": [
+    2,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 171,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 167,
+    "tests_failed": 0
+   },
+   "cost": 0.2264766,
+   "steps": 11,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/filters.py"
+    ],
+    "agent2": [
+     "src/jinja2/filters.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/filters.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1559/f1_f8",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    1,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 49,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 55,
+    "tests_failed": 0
+   },
+   "cost": 0.3943658,
+   "steps": 10,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/ext.py"
+    ],
+    "agent2": [
+     "src/jinja2/ext.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/ext.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1559/f4_f10",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    4,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 61,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 59,
+    "tests_failed": 0
+   },
+   "cost": 0.2590024,
+   "steps": 11,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/ext.py"
+    ],
+    "agent2": [
+     "src/jinja2/ext.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/ext.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1559/f4_f8",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    4,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 61,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 55,
+    "tests_failed": 0
+   },
+   "cost": 0.42860719999999997,
+   "steps": 13,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/ext.py"
+    ],
+    "agent2": [
+     "src/jinja2/ext.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/ext.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1559/f6_f9",
+   "task": "pallets_jinja_task/1559",
+   "features": [
+    6,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 54,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 61,
+    "tests_failed": 0
+   },
+   "cost": 0.2737838,
+   "steps": 12,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/ext.py"
+    ],
+    "agent2": [
+     "src/jinja2/ext.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/ext.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1621/f1_f6",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    1,
+    6
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.3300834,
+   "steps": 11,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/loaders.py"
+    ],
+    "agent2": [
+     "src/jinja2/loaders.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/loaders.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1621/f2_f9",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    2,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.3102346,
+   "steps": 13,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/loaders.py"
+    ],
+    "agent2": [
+     "src/jinja2/loaders.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/loaders.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1621/f3_f5",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 49,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 48,
+    "tests_failed": 0
+   },
+   "cost": 0.24981340000000002,
+   "steps": 10,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/loaders.py"
+    ],
+    "agent2": [
+     "src/jinja2/loaders.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/loaders.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1621/f4_f10",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    4,
+    10
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 46,
+    "tests_failed": 1
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 55,
+    "tests_failed": 0
+   },
+   "cost": 0.37438000000000005,
+   "steps": 15,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/loaders.py"
+    ],
+    "agent2": [
+     "src/jinja2/loaders.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/loaders.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1621/f4_f5",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    4,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 46,
+    "tests_failed": 1
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 48,
+    "tests_failed": 0
+   },
+   "cost": 0.25662660000000004,
+   "steps": 12,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/loaders.py"
+    ],
+    "agent2": [
+     "src/jinja2/loaders.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/loaders.py"
+   ],
+   "eval_error": null,
+   "cause": "task",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pallets_jinja_task/1621/f6_f7",
+   "task": "pallets_jinja_task/1621",
+   "features": [
+    6,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 49,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 49,
+    "tests_failed": 0
+   },
+   "cost": 0.31850560000000006,
+   "steps": 10,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/jinja2/loaders.py"
+    ],
+    "agent2": [
+     "src/jinja2/loaders.py"
+    ]
+   },
+   "common_files": [
+    "src/jinja2/loaders.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pillow_task/25/f1_f5",
+   "task": "pillow_task/25",
+   "features": [
+    1,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 193,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 194,
+    "tests_failed": 0
+   },
+   "cost": 0.39120320000000003,
+   "steps": 22,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "Tests/test_image.py",
+     "src/PIL/Image.py"
+    ],
+    "agent2": [
+     "Tests/test_image.py",
+     "src/PIL/Image.py"
+    ]
+   },
+   "common_files": [
+    "Tests/test_image.py",
+    "src/PIL/Image.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pillow_task/25/f2_f3",
+   "task": "pillow_task/25",
+   "features": [
+    2,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "clean",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 193,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 194,
+    "tests_failed": 0
+   },
+   "cost": 0.2694118,
+   "steps": 16,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "Tests/test_image.py",
+     "src/PIL/Image.py"
+    ],
+    "agent2": [
+     "Tests/test_image.py",
+     "src/PIL/Image.py"
+    ]
+   },
+   "common_files": [
+    "Tests/test_image.py",
+    "src/PIL/Image.py"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pillow_task/290/f2_f3",
+   "task": "pillow_task/290",
+   "features": [
+    2,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.41345799999999994,
+   "steps": 20,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/PIL/Image.py"
+    ],
+    "agent2": [
+     "Tests/test_image_quantize.py",
+     "src/PIL/Image.py"
+    ]
+   },
+   "common_files": [
+    "src/PIL/Image.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pillow_task/290/f3_f5",
+   "task": "pillow_task/290",
+   "features": [
+    3,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.3964192,
+   "steps": 18,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "src/PIL/Image.py"
+    ],
+    "agent2": [
+     "Tests/test_image_quantize.py",
+     "src/PIL/Image.py"
+    ]
+   },
+   "common_files": [
+    "src/PIL/Image.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pillow_task/290/f4_f5",
+   "task": "pillow_task/290",
+   "features": [
+    4,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.3228198,
+   "steps": 15,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "Tests/test_image_quantize.py",
+     "src/PIL/Image.py"
+    ],
+    "agent2": [
+     "Tests/test_image_quantize.py",
+     "src/PIL/Image.py"
+    ]
+   },
+   "common_files": [
+    "Tests/test_image_quantize.py",
+    "src/PIL/Image.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/pillow_task/68/f1_f5",
+   "task": "pillow_task/68",
+   "features": [
+    1,
+    5
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.288458,
+   "steps": 11,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "Tests/test_imageops.py",
+     "src/PIL/ImageOps.py"
+    ],
+    "agent2": [
+     "Tests/test_imageops.py",
+     "src/PIL/ImageOps.py"
+    ]
+   },
+   "common_files": [
+    "Tests/test_imageops.py",
+    "src/PIL/ImageOps.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/samuelcolvin_dirty_equals_task/43/f2_f3",
+   "task": "samuelcolvin_dirty_equals_task/43",
+   "features": [
+    2,
+    3
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.2749836,
+   "steps": 12,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "dirty_equals/__init__.py",
+     "dirty_equals/_other.py"
+    ],
+    "agent2": [
+     "dirty_equals/__init__.py",
+     "dirty_equals/_other.py"
+    ]
+   },
+   "common_files": [
+    "dirty_equals/__init__.py",
+    "dirty_equals/_other.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/samuelcolvin_dirty_equals_task/43/f3_f7",
+   "task": "samuelcolvin_dirty_equals_task/43",
+   "features": [
+    3,
+    7
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.2673054,
+   "steps": 12,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "dirty_equals/__init__.py",
+     "dirty_equals/_other.py"
+    ],
+    "agent2": [
+     "dirty_equals/__init__.py",
+     "dirty_equals/_other.py"
+    ]
+   },
+   "common_files": [
+    "dirty_equals/__init__.py",
+    "dirty_equals/_other.py"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/typst_task/6554/f1_f9",
+   "task": "typst_task/6554",
+   "features": [
+    1,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": false,
+   "merge": "conflicts",
+   "strategy": "naive",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": false,
+    "tests_passed": 0,
+    "tests_failed": 0
+   },
+   "cost": 0.2391392,
+   "steps": 13,
+   "agent_status": {
+    "agent1": "Submitted",
+    "agent2": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "crates/typst/src/foundations/str.rs"
+    ],
+    "agent2": [
+     "crates/typst/src/foundations/str.rs"
+    ]
+   },
+   "common_files": [
+    "crates/typst/src/foundations/str.rs"
+   ],
+   "eval_error": null,
+   "cause": "coordination",
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/typst_task/6554/f4_f9",
+   "task": "typst_task/6554",
+   "features": [
+    4,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 0.27471140000000005,
+   "steps": 15,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "crates/typst/src/foundations/str.rs"
+    ],
+    "agent2": [
+     "crates/typst/src/foundations/str.rs"
+    ]
+   },
+   "common_files": [
+    "crates/typst/src/foundations/str.rs"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/typst_task/6554/f5_f9",
+   "task": "typst_task/6554",
+   "features": [
+    5,
+    9
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 0.336033,
+   "steps": 20,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "crates/typst/src/foundations/str.rs"
+    ],
+    "agent2": [
+     "crates/typst/src/foundations/str.rs"
+    ]
+   },
+   "common_files": [
+    "crates/typst/src/foundations/str.rs"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  },
+  {
+   "pair": "/data/runs/logs/flash2-team/team/typst_task/6554/f7_f8",
+   "task": "typst_task/6554",
+   "features": [
+    7,
+    8
+   ],
+   "arm": "claude_code",
+   "setting": "team",
+   "passed": true,
+   "merge": "conflicts",
+   "strategy": "solo-agent1",
+   "apply": {
+    "agent1": "applied",
+    "agent2": "applied"
+   },
+   "f1": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "f2": {
+    "passed": true,
+    "tests_passed": 1,
+    "tests_failed": 0
+   },
+   "cost": 0.4464714000000001,
+   "steps": 25,
+   "agent_status": {
+    "agent2": "Submitted",
+    "agent1": "Submitted"
+   },
+   "patch_files": {
+    "agent1": [
+     "crates/typst/src/foundations/str.rs"
+    ],
+    "agent2": [
+     "crates/typst/src/foundations/str.rs"
+    ]
+   },
+   "common_files": [
+    "crates/typst/src/foundations/str.rs"
+   ],
+   "eval_error": null,
+   "cause": null,
+   "git_remote": {
+    "agent1": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    },
+    "agent2": {
+     "lookup_failures": 0,
+     "partner_merges": 0
+    }
+   }
+  }
+ ]
+}

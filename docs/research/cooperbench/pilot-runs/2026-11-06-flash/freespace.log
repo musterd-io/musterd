@@ -1,0 +1,15 @@
+== before
+/dev/vdc         79G   68G  6.2G  92% /data
+cooperbench-git Up 22 minutes
+removed akhatua/cooperbench-dspy:task8563
+removed akhatua/cooperbench-go-chi:task27
+removed akhatua/cooperbench-react-hook-form:task153
+removed akhatua/cooperbench-llama-index:task17244
+== after
+/dev/vdc         79G   60G   15G  81% /data
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          22        0         64.14GB   62.22GB (97%)
+Containers      0         0         0B        0B
+Local Volumes   20        0         24.43MB   24.43MB (100%)
+Build Cache     0         0         0B        0B
+FREED

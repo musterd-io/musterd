@@ -1,0 +1,75 @@
+diff --git a/dirty_equals/__init__.py b/dirty_equals/__init__.py
+index ba8214e..4cf4b0e 100644
+--- a/dirty_equals/__init__.py
++++ b/dirty_equals/__init__.py
+@@ -18,7 +18,7 @@ from ._numeric import (
+     IsPositiveFloat,
+     IsPositiveInt,
+ )
+-from ._other import FunctionCheck, IsJson, IsUUID
++from ._other import FunctionCheck, IsHash, IsJson, IsUUID
+ from ._sequence import Contains, HasLen, IsList, IsListOrTuple, IsTuple
+ from ._strings import IsAnyStr, IsBytes, IsStr
+ 
+@@ -67,6 +67,7 @@ __all__ = (
+     'IsInstance',
+     # other
+     'FunctionCheck',
++    'IsHash',
+     'IsJson',
+     'IsUUID',
+     # strings
+diff --git a/dirty_equals/_other.py b/dirty_equals/_other.py
+index b2b8379..1459eb3 100644
+--- a/dirty_equals/_other.py
++++ b/dirty_equals/_other.py
+@@ -145,3 +145,49 @@ class FunctionCheck(DirtyEquals[Any]):
+ 
+     def equals(self, other: Any) -> bool:
+         return self.func(other)
++
++
++class IsHash(DirtyEquals[str]):
++    """
++    A class that checks if a value is a valid cryptographic hash for the specified algorithm.
++    """
++
++    _hash_lengths = {
++        'md5': 32,
++        'sha1': 40,
++        'sha224': 56,
++        'sha256': 64,
++        'sha384': 96,
++        'sha512': 128,
++    }
++
++    def __init__(self, algorithm: str):
++        """
++        Args:
++            algorithm: The hash algorithm to validate against, one of
++                `md5`, `sha1`, `sha224`, `sha256`, `sha384` or `sha512` (case-insensitive).
++
++        ```py title="IsHash"
++        from dirty_equals import IsHash
++
++        assert 'd41d8cd98f00b204e9800998ecf8427e' == IsHash('md5')
++        assert 'da39a3ee5e6b4b0d3255bfef95601890afd80709' == IsHash('sha1')
++        assert 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' == IsHash('sha256')
++        assert 'not-a-hash' != IsHash('md5')
++        assert 'da39a3ee5e6b4b0d3255bfef95601890afd80709' != IsHash('md5')
++        ```
++        """
++        normalized = algorithm.lower()
++        if normalized not in self._hash_lengths:
++            raise ValueError(
++                f'Unsupported hash algorithm: {algorithm!r}, '
++                f'supported algorithms: {", ".join(self._hash_lengths)}'
++            )
++        self.algorithm = algorithm
++        self.expected_length = self._hash_lengths[normalized]
++        super().__init__(algorithm)
++
++    def equals(self, other: Any) -> bool:
++        if not isinstance(other, str) or len(other) != self.expected_length:
++            return False
++        return all(c in '0123456789abcdefABCDEF' for c in other)

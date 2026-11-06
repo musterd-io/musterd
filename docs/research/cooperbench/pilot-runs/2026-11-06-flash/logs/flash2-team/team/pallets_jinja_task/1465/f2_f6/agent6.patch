@@ -1,0 +1,58 @@
+diff --git a/src/jinja2/filters.py b/src/jinja2/filters.py
+index 80ea6504..0bcb3a91 100644
+--- a/src/jinja2/filters.py
++++ b/src/jinja2/filters.py
+@@ -1163,6 +1163,7 @@ def sync_do_groupby(
+     value: "t.Iterable[V]",
+     attribute: t.Union[str, int],
+     default: t.Optional[t.Any] = None,
++    key_transform: t.Optional[t.Callable[[t.Any], t.Any]] = None,
+ ) -> "t.List[t.Tuple[t.Any, t.List[V]]]":
+     """Group a sequence of objects by an attribute using Python's
+     :func:`itertools.groupby`. The attribute can use dot notation for
+@@ -1203,6 +1204,18 @@ def sync_do_groupby(
+           <li>{{ city }}: {{ items|map(attribute="name")|join(", ") }}</li>
+         {% endfor %}</ul>
+ 
++    You can pass a ``key_transform`` callable to change how each group
++    key is displayed. Grouping and sorting still use the original key.
++
++    .. sourcecode:: jinja
++
++        <ul>{% for month, items in posts|groupby("date", key_transform=fmt) %}
++          <li>{{ month }}: {{ items|length }}</li>
++        {% endfor %}</ul>
++
++    .. versionchanged:: 3.1
++        Added the ``key_transform`` parameter.
++
+     .. versionchanged:: 3.0
+         Added the ``default`` parameter.
+ 
+@@ -1211,7 +1224,9 @@ def sync_do_groupby(
+     """
+     expr = make_attrgetter(environment, attribute, default=default)
+     return [
+-        _GroupTuple(key, list(values))
++        _GroupTuple(
++            key_transform(key) if key_transform is not None else key, list(values)
++        )
+         for key, values in groupby(sorted(value, key=expr), expr)
+     ]
+ 
+@@ -1222,10 +1237,14 @@ async def do_groupby(
+     value: "t.Union[t.AsyncIterable[V], t.Iterable[V]]",
+     attribute: t.Union[str, int],
+     default: t.Optional[t.Any] = None,
++    key_transform: t.Optional[t.Callable[[t.Any], t.Any]] = None,
+ ) -> "t.List[t.Tuple[t.Any, t.List[V]]]":
+     expr = make_attrgetter(environment, attribute, default=default)
+     return [
+-        _GroupTuple(key, await auto_to_list(values))
++        _GroupTuple(
++            key_transform(key) if key_transform is not None else key,
++            await auto_to_list(values),
++        )
+         for key, values in groupby(sorted(await auto_to_list(value), key=expr), expr)
+     ]
+ 

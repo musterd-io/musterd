@@ -1,0 +1,124 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 666ad68..fc25f98 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -280,6 +280,7 @@ class Context:
+         token_normalize_func: t.Callable[[str], str] | None = None,
+         color: bool | None = None,
+         show_default: bool | None = None,
++        validate_nesting: bool = False,
+     ) -> None:
+         #: the parent context or `None` if none exists.
+         self.parent = parent
+@@ -432,6 +433,17 @@ class Context:
+         self._parameter_source: dict[str, ParameterSource] = {}
+         self._exit_stack = ExitStack()
+ 
++        if not validate_nesting and parent is not None:
++            validate_nesting = parent.validate_nesting
++
++        #: Enforce that all child contexts are closed before this
++        #: context is closed. Inherited by child contexts.
++        self.validate_nesting: bool = validate_nesting
++        self._child_contexts: list[Context] = []
++
++        if parent is not None and parent.validate_nesting:
++            parent._child_contexts.append(self)
++
+     @property
+     def protected_args(self) -> list[str]:
+         import warnings
+@@ -477,9 +489,11 @@ class Context:
+         tb: TracebackType | None,
+     ) -> None:
+         self._depth -= 1
+-        if self._depth == 0:
+-            self.close()
+-        pop_context()
++        try:
++            if self._depth == 0:
++                self.close()
++        finally:
++            pop_context()
+ 
+     @contextmanager
+     def scope(self, cleanup: bool = True) -> cabc.Iterator[Context]:
+@@ -606,11 +620,29 @@ class Context:
+         """Invoke all close callbacks registered with
+         :meth:`call_on_close`, and exit all context managers entered
+         with :meth:`with_resource`.
++
++        If :attr:`validate_nesting` is enabled, a :exc:`RuntimeError` is
++        raised if any child contexts are still open.
+         """
++        if self.validate_nesting and self._child_contexts:
++            open_children = ", ".join(
++                repr(c.info_name or c.command.name) for c in self._child_contexts
++            )
++            raise RuntimeError(
++                f"Cannot close context {self.info_name!r} while child contexts"
++                f" are still open: {open_children}."
++            )
++
+         self._exit_stack.close()
+         # In case the context is reused, create a new exit stack.
+         self._exit_stack = ExitStack()
+ 
++        if self.parent is not None:
++            try:
++                self.parent._child_contexts.remove(self)
++            except ValueError:
++                pass
++
+     @property
+     def command_path(self) -> str:
+         """The computed command path.  This is used for the ``usage``
+@@ -728,7 +760,12 @@ class Context:
+ 
+         :meta private:
+         """
+-        return type(self)(command, info_name=command.name, parent=self)
++        return type(self)(
++            command,
++            info_name=command.name,
++            parent=self,
++            validate_nesting=self.validate_nesting,
++        )
+ 
+     @t.overload
+     def invoke(
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 6fd9e54..25bdcad 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -544,6 +544,7 @@ def _resolve_context(
+     :param args: List of complete args before the incomplete value.
+     """
+     ctx_args["resilient_parsing"] = True
++    ctx_args["validate_nesting"] = False
+     ctx = cli.make_context(prog_name, args.copy(), **ctx_args)
+     args = ctx._protected_args + ctx.args
+ 
+@@ -557,7 +558,13 @@ def _resolve_context(
+                 if cmd is None:
+                     return ctx
+ 
+-                ctx = cmd.make_context(name, args, parent=ctx, resilient_parsing=True)
++                ctx = cmd.make_context(
++                    name,
++                    args,
++                    parent=ctx,
++                    resilient_parsing=True,
++                    validate_nesting=False,
++                )
+                 args = ctx._protected_args + ctx.args
+             else:
+                 sub_ctx = ctx
+@@ -575,6 +582,7 @@ def _resolve_context(
+                         allow_extra_args=True,
+                         allow_interspersed_args=False,
+                         resilient_parsing=True,
++                        validate_nesting=False,
+                     )
+                     args = sub_ctx.args
+ 

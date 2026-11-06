@@ -1,0 +1,61 @@
+diff --git a/Tests/test_image.py b/Tests/test_image.py
+index c2e850c36..8b01f6125 100644
+--- a/Tests/test_image.py
++++ b/Tests/test_image.py
+@@ -235,6 +235,21 @@ class TestImage:
+             with pytest.raises(ValueError):
+                 im.save(temp_file)
+ 
++    def test_dry_run(self, tmp_path: Path) -> None:
++        temp_file = tmp_path / "temp.png"
++        im = hopper()
++        im.save(temp_file, dry_run=True)
++        assert not temp_file.exists()
++
++        b = io.BytesIO()
++        im.save(b, format="PNG", dry_run=True)
++        assert b.getvalue() == b""
++
++        temp_file = tmp_path / "temp.jpg"
++        with pytest.raises(OSError):
++            Image.new("RGBA", (1, 1)).save(temp_file, dry_run=True)
++        assert not temp_file.exists()
++
+     def test_internals(self) -> None:
+         im = Image.new("L", (100, 100))
+         im.readonly = 1
+diff --git a/src/PIL/Image.py b/src/PIL/Image.py
+index 233df592c..3736cf269 100644
+--- a/src/PIL/Image.py
++++ b/src/PIL/Image.py
+@@ -2505,6 +2505,10 @@ class Image:
+              red = Image.new("RGB", (1, 1), "#f00")
+              red.encoderinfo = {"xmp": b"test"}
+              black.save("out.mpo", save_all=True, append_images=[red])
++
++           If ``dry_run=True`` is passed, the image is fully processed for
++           saving, but the output is discarded rather than written to ``fp``.
++           Any exceptions that would occur during saving are still raised.
+         :returns: None
+         :exception ValueError: If the output format could not be determined
+            from the file name.  Use the format option to solve this.
+@@ -2544,6 +2548,7 @@ class Image:
+         self._ensure_mutable()
+ 
+         save_all = params.pop("save_all", None)
++        dry_run = params.pop("dry_run", False)
+         self.encoderinfo = {**getattr(self, "encoderinfo", {}), **params}
+         self.encoderconfig: tuple[Any, ...] = ()
+ 
+@@ -2559,7 +2564,10 @@ class Image:
+             save_handler = SAVE[format.upper()]
+ 
+         created = False
+-        if open_fp:
++        if dry_run:
++            open_fp = False
++            fp = io.BytesIO()
++        elif open_fp:
+             created = not os.path.exists(filename)
+             if params.get("append", False):
+                 # Open also for reading ("+"), because TIFF save_all

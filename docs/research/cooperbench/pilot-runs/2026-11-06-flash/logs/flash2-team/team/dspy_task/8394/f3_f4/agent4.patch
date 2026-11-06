@@ -1,0 +1,152 @@
+diff --git a/dspy/clients/cache.py b/dspy/clients/cache.py
+index bfa7dbde8..a43712c6f 100644
+--- a/dspy/clients/cache.py
++++ b/dspy/clients/cache.py
+@@ -2,6 +2,7 @@ import copy
+ import inspect
+ import logging
+ import threading
++from collections import Counter
+ from functools import wraps
+ from hashlib import sha256
+ from typing import Any, Dict, Optional
+@@ -58,6 +59,7 @@ class Cache:
+             self.disk_cache = {}
+ 
+         self._lock = threading.RLock()
++        self._stats = Counter({"hits": 0, "mem_hits": 0, "disk_hits": 0, "misses": 0})
+ 
+     def __contains__(self, key: str) -> bool:
+         """Check if a key is in the cache."""
+@@ -106,13 +108,16 @@ class Cache:
+         if self.enable_memory_cache and key in self.memory_cache:
+             with self._lock:
+                 response = self.memory_cache[key]
++            self._record_event("mem_hits")
+         elif self.enable_disk_cache and key in self.disk_cache:
+             # Found on disk but not in memory cache, add to memory cache
+             response = self.disk_cache[key]
+             if self.enable_memory_cache:
+                 with self._lock:
+                     self.memory_cache[key] = response
++            self._record_event("disk_hits")
+         else:
++            self._record_event("misses")
+             return None
+ 
+         response = copy.deepcopy(response)
+@@ -145,6 +150,30 @@ class Cache:
+                 # Disk cache writing can fail for different reasons, e.g. disk full or the `value` is not picklable.
+                 logger.debug(f"Failed to put value in disk cache: {value}, {e}")
+ 
++    def _record_event(self, event: str) -> None:
++        """Record a cache event (`mem_hits`, `disk_hits` or `misses`) globally and in the active usage tracker."""
++        with self._lock:
++            self._stats[event] += 1
++            if event != "misses":
++                self._stats["hits"] += 1
++
++        from dspy.dsp.utils.settings import settings
++
++        tracker = settings.usage_tracker
++        if tracker is not None and hasattr(tracker, "add_cache_event"):
++            tracker.add_cache_event(event)
++
++    def stats(self) -> Dict[str, int]:
++        """Return the global cache statistics: `hits`, `mem_hits`, `disk_hits` and `misses`."""
++        with self._lock:
++            return dict(self._stats)
++
++    def reset_stats(self) -> None:
++        """Reset all global cache statistics to zero."""
++        with self._lock:
++            for k in ("hits", "mem_hits", "disk_hits", "misses"):
++                self._stats[k] = 0
++
+     def reset_memory_cache(self) -> None:
+         if not self.enable_memory_cache:
+             return
+diff --git a/dspy/primitives/prediction.py b/dspy/primitives/prediction.py
+index 670b816b2..f9a52e541 100644
+--- a/dspy/primitives/prediction.py
++++ b/dspy/primitives/prediction.py
+@@ -10,6 +10,7 @@ class Prediction(Example):
+ 
+         self._completions = None
+         self._lm_usage = None
++        self._cache_usage = None
+ 
+     def get_lm_usage(self):
+         return self._lm_usage
+@@ -17,6 +18,12 @@ class Prediction(Example):
+     def set_lm_usage(self, value):
+         self._lm_usage = value
+ 
++    def get_cache_usage(self):
++        return self._cache_usage
++
++    def set_cache_usage(self, value):
++        self._cache_usage = value
++
+     @classmethod
+     def from_completions(cls, list_or_dict, signature=None):
+         obj = cls()
+diff --git a/dspy/primitives/program.py b/dspy/primitives/program.py
+index 39457c368..63d3e3fe2 100644
+--- a/dspy/primitives/program.py
++++ b/dspy/primitives/program.py
+@@ -59,6 +59,7 @@ class Module(BaseModule, metaclass=ProgramMeta):
+                 with track_usage() as usage_tracker:
+                     output = self.forward(*args, **kwargs)
+                 output.set_lm_usage(usage_tracker.get_total_tokens())
++                output.set_cache_usage(usage_tracker.get_cache_usage())
+                 return output
+ 
+             return self.forward(*args, **kwargs)
+@@ -74,6 +75,7 @@ class Module(BaseModule, metaclass=ProgramMeta):
+                 with track_usage() as usage_tracker:
+                     output = await self.aforward(*args, **kwargs)
+                     output.set_lm_usage(usage_tracker.get_total_tokens())
++                    output.set_cache_usage(usage_tracker.get_cache_usage())
+                     return output
+ 
+             return await self.aforward(*args, **kwargs)
+diff --git a/dspy/utils/usage_tracker.py b/dspy/utils/usage_tracker.py
+index 5199f3ade..c2532811b 100644
+--- a/dspy/utils/usage_tracker.py
++++ b/dspy/utils/usage_tracker.py
+@@ -2,7 +2,7 @@
+ 
+ from collections import defaultdict
+ from contextlib import contextmanager
+-from typing import Any
++from typing import Any, Dict
+ 
+ from dspy.dsp.utils.settings import settings
+ 
+@@ -19,6 +19,8 @@ class UsageTracker:
+         #     ],
+         # }
+         self.usage_data = defaultdict(list)
++        # Cache events (hits/misses) that occurred within this tracking context.
++        self.cache_usage = {"hits": 0, "mem_hits": 0, "disk_hits": 0, "misses": 0}
+ 
+     def _flatten_usage_entry(self, usage_entry) -> dict[str, dict[str, Any]]:
+         result = dict(usage_entry)
+@@ -49,6 +51,16 @@ class UsageTracker:
+         if len(usage_entry) > 0:
+             self.usage_data[lm].append(self._flatten_usage_entry(usage_entry))
+ 
++    def add_cache_event(self, event: str):
++        """Record a cache event: one of `mem_hits`, `disk_hits` or `misses`."""
++        self.cache_usage[event] = self.cache_usage.get(event, 0) + 1
++        if event in ("mem_hits", "disk_hits"):
++            self.cache_usage["hits"] += 1
++
++    def get_cache_usage(self) -> Dict[str, int]:
++        """Return the cache usage recorded within this tracking context."""
++        return dict(self.cache_usage)
++
+     def get_total_tokens(self) -> dict[str, dict[str, Any]]:
+         """Calculate total tokens from all tracked usage."""
+         total_usage_by_lm = {}

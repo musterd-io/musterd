@@ -1,0 +1,51 @@
+# CooperBench flash comparison — run log (lane 01M6QKA03P, flash-manifest.md)
+
+- 2026-11-06 ~05:35Z: nick approved the comparison and its spend in session ("lets do all of this").
+  Model check on `cb-run-2` before the manifest: `claude-opus-5-5`, `claude-sonnet-5-5` and
+  `claude-sonnet-4-5` all reachable through Claude Code 2.1.307, each pricing itself
+  (Opus 5.5 at $4/$20 per MTok by Claude Code's own `total_cost_usd`). Opus 5.5 chosen for all arms.
+- Manifest #3979 (4b52452b) merged before any measured pair; the act-lane cost series recorded closed.
+- ~06:0xZ: image `deployment-01M6QKA5TT36G304QF0NS377EA` built from 4b52452b, `machine update` +
+  `start`; `MUSTERD_REF=4b52452b…` on the machine. Scripts: `preflight-f.sh` (api check on Opus 5.5,
+  both host smokes), `smoke-f.sh` (one pair per arm, dirty_equals 43 f2,f3, gate prints cost, statuses,
+  eval and patch sizes), `flash.sh` (pull, then `run_arms.py --cap 370` with the three arms).
+- 04:59–05:02Z (machine clock): pre-flight — api check ok on `claude-opus-5-5`, `gate_smoke` PASS,
+  `hold_smoke_697` PASS.
+- 05:03–05:07Z: smoke, dirty_equals 43 f2,f3, the three arms concurrently. **Gate met on all three:**
+  solo $0.133, both features pass, `solo.patch` 4,113 B; team $0.325, both pass, two patches (4,478 B,
+  2,293 B; merge `conflicts`, scored on the lead's integrated patch), team trajectories present;
+  musterd $0.615, both pass, merge `identical` (4,474 B each), lanes opened and claimed. Pairs ran
+  1.5–2.5 min each — far faster than the Sonnet 4.5 pairs the spend estimate was built on.
+- 05:0xZ: `flash.sh` started — pull the flash images, then `run_arms.py --cap 370` with
+  `flash-solo` (-c 3), `flash-team` (-c 2), `flash-musterd` (-c 2, `--git`), concurrently.
+- 05:13–05:20Z: **attempt 1 aborted (infrastructure).** Six minutes in, the progress check read solo
+  35/50 at $1.10 and team 16/50 with 12 errors: `claude-code install failed: E: You don't have enough
+  free space in /var/cache/apt/archives`. The Docker root is `/data` (79 GB), and the 20 flash images
+  on top of the earlier runs' core images left 2.7 GB for the containers. All arms killed at 05:20Z
+  with **no eval run** — no pass result of attempt 1 was seen by anyone. Treated as an arm error under
+  the manifest: the whole attempt is discarded (about $3.5) and every pair re-run, not only the errored
+  ones, so no selection on outcome is possible.
+- 05:2xZ: freed space — removed the four core-only images (dspy 8563, go-chi 27, react-hook-form 153,
+  llama-index 17244), stopped containers and caches: `/data` 15 GB free.
+- 05:3xZ: **attempt 2** (`flash2.sh`): run names `flash2-*`, the same arms and model, concurrency
+  lowered to solo `-c 1`, team `-c 2`, musterd `-c 2` (nine containers at most), and a disk guard that
+  stops every arm cleanly below 4 GB free. The cap counts `flash*` (smoke, attempt 1 and attempt 2)
+  against $370. Only attempt 2 is read.
+- 05:23Z: attempt 2 arms started. Attempt 1's `flash.sh` had touched `all.done` after its arms were
+  killed, which made attempt 2's built-in disk guard exit at once; the marker was moved aside
+  (`all.done.attempt1`) and a standalone `diskguard.sh` armed at 05:24Z.
+- 05:25Z: nine agent containers at 0.73–1.10 GB each left 8 GB free before any pair finished — too
+  thin. `fly volumes extend vol_vxmpy90n7y72pe84 -s 120` (online, no restart): `/data` 118 GB, 46 GB
+  free, the arms running throughout. About $6/month more while the clone's volume exists.
+- 05:23–06:48Z: attempt 2 — team finished 06:3xZ (50/50, $16.15), solo 06:48Z (50/50, $8.74), musterd
+  07:32Z (49/50, $24.16): one pair, outlines 1655 f7,f10, never started — `404 … No such container:
+  cooperbench-git` when two pairs launched in the same second (a CooperBench git-server race). Re-run once
+  as `flash2r-musterd` 07:29–07:31Z ($0.48) per the manifest's error rule.
+- Evals sequential under `run_arms` (≈ 20 min each): solo 07:11Z, team 07:32Z, musterd 07:46Z, the
+  re-run 07:48Z. `all done, spent $54.08` (every `flash*` run: smoke, attempt 1, attempt 2, re-run).
+  Neither the cap nor the disk guard fired; no API-limit line.
+- Read with `flashread.py` (pre-registered rules; script in `scripts/`) → `flash-read.json`. Machine
+  stopped 07:5xZ. Committed: readouts, the read, every pair's `result.json`, `eval.json` and patches for
+  attempt 2, the re-run and the smoke pairs, and the scripts. Not committed: agent streams and
+  trajectories (on the clone's volume under `/data/runs/logs/flash2-*`) and attempt 1's pairs (discarded).
+

@@ -1,0 +1,210 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 666ad68..b081151 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -158,6 +158,25 @@ class ParameterSource(enum.Enum):
+     """Used a prompt to confirm a default or provide a value."""
+ 
+ 
++#: Context attributes that are deep copied by :meth:`Context.save_state`
++#: and :meth:`Context.restore_state`.
++_STATE_DEEP_COPY_ATTRS = frozenset(
++    ("params", "obj", "_meta", "default_map", "_parameter_source")
++)
++
++
++def _deepcopy_or_same(value: t.Any) -> t.Any:
++    """Deep copy a value, falling back to the value itself if it can't be
++    copied.
++    """
++    import copy
++
++    try:
++        return copy.deepcopy(value)
++    except Exception:
++        return value
++
++
+ class Context:
+     """The context is a special internal object that holds state relevant
+     for the script execution at every single level.  It's normally invisible
+@@ -280,6 +299,7 @@ class Context:
+         token_normalize_func: t.Callable[[str], str] | None = None,
+         color: bool | None = None,
+         show_default: bool | None = None,
++        validate_nesting: bool = False,
+     ) -> None:
+         #: the parent context or `None` if none exists.
+         self.parent = parent
+@@ -427,6 +447,11 @@ class Context:
+         #: Show option default values when formatting help text.
+         self.show_default: bool | None = show_default
+ 
++        #: Enforce that all child contexts are closed before this
++        #: context is closed.
++        self.validate_nesting: bool = validate_nesting
++        self._child_contexts: list[Context] = []
++
+         self._close_callbacks: list[t.Callable[[], t.Any]] = []
+         self._depth = 0
+         self._parameter_source: dict[str, ParameterSource] = {}
+@@ -444,6 +469,62 @@ class Context:
+         )
+         return self._protected_args
+ 
++    def save_state(self) -> dict[str, t.Any]:
++        """Capture a snapshot of the current context state. The snapshot
++        can later be passed to :meth:`restore_state` to revert any
++        changes made to the context in the meantime.
++
++        Mutable values such as ``params``, ``obj``, ``meta``,
++        ``default_map``, and the parameter sources are deep copied so
++        that later changes to nested objects do not affect the snapshot.
++
++        .. versionadded:: 8.2
++        """
++        import copy
++
++        state: dict[str, t.Any] = {}
++
++        for key, value in self.__dict__.items():
++            if key in _STATE_DEEP_COPY_ATTRS:
++                state[key] = _deepcopy_or_same(value)
++            elif isinstance(value, (list, set, dict)):
++                state[key] = copy.copy(value)
++            else:
++                state[key] = value
++
++        return state
++
++    def restore_state(self, snapshot: dict[str, t.Any]) -> None:
++        """Restore the context to a state previously captured with
++        :meth:`save_state`. The snapshot is copied again while restoring,
++        so the same snapshot may be restored multiple times.
++
++        :param snapshot: The dictionary returned by :meth:`save_state`.
++
++        .. versionadded:: 8.2
++        """
++        import copy
++
++        for key, value in snapshot.items():
++            if key == "_exit_stack":
++                # Resources are not reverted, keep the live exit stack.
++                continue
++
++            if key in _STATE_DEEP_COPY_ATTRS:
++                value = _deepcopy_or_same(value)
++            elif isinstance(value, (list, set, dict)):
++                value = copy.copy(value)
++
++            current = self.__dict__.get(key)
++
++            if key == "_meta" and isinstance(current, dict) and current is not value:
++                # The meta dict is shared with parent contexts, update it
++                # in place so the sharing is preserved.
++                current.clear()
++                current.update(value)
++            else:
++                setattr(self, key, value)
++
+     def to_info_dict(self) -> dict[str, t.Any]:
+         """Gather information that could be useful for a tool generating
+         user-facing documentation. This traverses the entire CLI
+@@ -606,11 +687,30 @@ class Context:
+         """Invoke all close callbacks registered with
+         :meth:`call_on_close`, and exit all context managers entered
+         with :meth:`with_resource`.
++
++        If :attr:`validate_nesting` is enabled and child contexts are
++        still open, a :exc:`RuntimeError` is raised.
+         """
++        if self.validate_nesting and self._child_contexts:
++            open_children = ", ".join(
++                repr(child.info_name or child.command.name)
++                for child in self._child_contexts
++            )
++            raise RuntimeError(
++                f"Cannot close context {self.info_name!r} while child"
++                f" contexts are still open: {open_children}."
++            )
++
+         self._exit_stack.close()
+         # In case the context is reused, create a new exit stack.
+         self._exit_stack = ExitStack()
+ 
++        if self.parent is not None:
++            try:
++                self.parent._child_contexts.remove(self)
++            except ValueError:
++                pass
++
+     @property
+     def command_path(self) -> str:
+         """The computed command path.  This is used for the ``usage``
+@@ -728,6 +828,13 @@ class Context:
+ 
+         :meta private:
+         """
++        if self.validate_nesting:
++            ctx = type(self)(
++                command, info_name=command.name, parent=self, validate_nesting=True
++            )
++            self._child_contexts.append(ctx)
++            return ctx
++
+         return type(self)(command, info_name=command.name, parent=self)
+ 
+     @t.overload
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 6fd9e54..a3b5af1 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -271,8 +271,14 @@ class ShellComplete:
+         :param incomplete: Value being completed. May be empty.
+         """
+         ctx = _resolve_context(self.cli, self.ctx_args, self.prog_name, args)
+-        obj, incomplete = _resolve_incomplete(ctx, args, incomplete)
+-        return obj.shell_complete(ctx, incomplete)
++        # Snapshot the context so completion can't leak state changes.
++        state = ctx.save_state()
++
++        try:
++            obj, incomplete = _resolve_incomplete(ctx, args, incomplete)
++            return obj.shell_complete(ctx, incomplete)
++        finally:
++            ctx.restore_state(state)
+ 
+     def format_completion(self, item: CompletionItem) -> str:
+         """Format a completion item into the form recognized by the
+@@ -544,6 +550,7 @@ def _resolve_context(
+     :param args: List of complete args before the incomplete value.
+     """
+     ctx_args["resilient_parsing"] = True
++    ctx_args["validate_nesting"] = False
+     ctx = cli.make_context(prog_name, args.copy(), **ctx_args)
+     args = ctx._protected_args + ctx.args
+ 
+@@ -557,7 +564,13 @@ def _resolve_context(
+                 if cmd is None:
+                     return ctx
+ 
+-                ctx = cmd.make_context(name, args, parent=ctx, resilient_parsing=True)
++                ctx = cmd.make_context(
++                    name,
++                    args,
++                    parent=ctx,
++                    resilient_parsing=True,
++                    validate_nesting=False,
++                )
+                 args = ctx._protected_args + ctx.args
+             else:
+                 sub_ctx = ctx
+@@ -575,6 +588,7 @@ def _resolve_context(
+                         allow_extra_args=True,
+                         allow_interspersed_args=False,
+                         resilient_parsing=True,
++                        validate_nesting=False,
+                     )
+                     args = sub_ctx.args
+ 

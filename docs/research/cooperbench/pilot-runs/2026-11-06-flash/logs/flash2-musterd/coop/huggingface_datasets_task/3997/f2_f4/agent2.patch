@@ -1,0 +1,122 @@
+diff --git a/src/datasets/features/features.py b/src/datasets/features/features.py
+index 6a0da6401..b17c5d1a9 100644
+--- a/src/datasets/features/features.py
++++ b/src/datasets/features/features.py
+@@ -22,7 +22,7 @@ from collections.abc import Iterable
+ from dataclasses import InitVar, _asdict_inner, dataclass, field, fields
+ from functools import reduce
+ from operator import mul
+-from typing import Any, ClassVar, Dict, List, Optional
++from typing import Any, Callable, ClassVar, Dict, List, Optional
+ from typing import Sequence as Sequence_
+ from typing import Tuple, Union
+ 
+@@ -1178,16 +1178,22 @@ def list_of_np_array_to_pyarrow_listarray(l_arr: List[np.ndarray], type: pa.Data
+         return pa.array([], type=type)
+ 
+ 
+-def require_decoding(feature: FeatureType, ignore_decode_attribute: bool = False) -> bool:
++def require_decoding(
++    feature: FeatureType, ignore_decode_attribute: bool = False, custom_criteria: Optional[Callable] = None
++) -> bool:
+     """Check if a (possibly nested) feature requires decoding.
+ 
+     Args:
+         feature (FeatureType): the feature type to be checked
+         ignore_decode_attribute (:obj:`bool`, default ``False``): Whether to ignore the current value
+             of the `decode` attribute of the decodable feature types.
++        custom_criteria (:obj:`callable`, optional): A function taking a feature and returning a :obj:`bool`.
++            If provided, it is used instead of the default rules to decide whether the feature requires decoding.
+     Returns:
+         :obj:`bool`
+     """
++    if custom_criteria is not None:
++        return bool(custom_criteria(feature))
+     if isinstance(feature, dict):
+         return any(require_decoding(f) for f in feature.values())
+     elif isinstance(feature, (list, tuple)):
+@@ -1233,25 +1239,76 @@ class Features(dict):
+ 
+     def __init__(self, *args, **kwargs):
+         super().__init__(*args, **kwargs)
++        self._custom_decoding_criteria: Optional[Callable] = None
+         self._column_requires_decoding: Dict[str, bool] = {
+             col: require_decoding(feature) for col, feature in self.items()
+         }
+ 
+     def __setitem__(self, column_name: str, feature: FeatureType):
+         super().__setitem__(column_name, feature)
+-        self._column_requires_decoding[column_name] = require_decoding(feature)
++        self._column_requires_decoding[column_name] = require_decoding(
++            feature, custom_criteria=getattr(self, "_custom_decoding_criteria", None)
++        )
++
++    def set_custom_decoding_criteria(self, custom_criteria: Optional[Callable] = None):
++        """Set a custom function to decide whether a feature requires decoding.
++
++        Args:
++            custom_criteria (:obj:`callable`, optional): A function taking a feature and returning a :obj:`bool`.
++                Passing ``None`` restores the default behaviour.
++        """
++        if custom_criteria is not None and not callable(custom_criteria):
++            raise TypeError(f"custom_criteria must be callable or None, got {type(custom_criteria)}")
++        self._custom_decoding_criteria = custom_criteria
++        self._column_requires_decoding = {
++            col: require_decoding(feature, custom_criteria=custom_criteria) for col, feature in self.items()
++        }
+ 
+     def __delitem__(self, column_name: str):
+         super().__delitem__(column_name)
+         del self._column_requires_decoding[column_name]
+ 
+-    def update(self, iterable, **kwds):
+-        if hasattr(iterable, "keys"):
+-            for key in iterable.keys():
+-                self[key] = iterable[key]
+-        else:
+-            for key, value in iterable:
+-                self[key] = value
++    def update(self, iterable=None, **kwds):
++        """Update the features, keeping ``_column_requires_decoding`` in sync.
++
++        In addition to the usual ``dict.update`` arguments, this accepts:
++            - a JSON string encoding a mapping of column names to features
++              (features given as dicts with a ``_type`` key are deserialized),
++            - a batch of updates: a list/tuple of mappings (or JSON strings)
++              applied in order.
++        """
++
++        def _to_feature(value):
++            if isinstance(value, dict) and "_type" in value:
++                return generate_from_dict(value)
++            return value
++
++        def _apply(update):
++            if update is None:
++                return
++            if isinstance(update, (str, bytes)):
++                update = json.loads(update)
++                if isinstance(update, list):
++                    _apply(update)
++                    return
++                if not isinstance(update, dict):
++                    raise TypeError(f"JSON update must decode to an object, got {type(update).__name__}")
++                for key, value in update.items():
++                    self[key] = _to_feature(value)
++            elif hasattr(update, "keys"):
++                for key in update.keys():
++                    self[key] = update[key]
++            else:
++                items = list(update)
++                if items and all(isinstance(item, (str, bytes)) or hasattr(item, "keys") for item in items):
++                    # batch update: apply each mapping / JSON string in order
++                    for item in items:
++                        _apply(item)
++                else:
++                    for key, value in items:
++                        self[key] = value
++
++        _apply(iterable)
+         for key in kwds:
+             self[key] = kwds[key]
+ 

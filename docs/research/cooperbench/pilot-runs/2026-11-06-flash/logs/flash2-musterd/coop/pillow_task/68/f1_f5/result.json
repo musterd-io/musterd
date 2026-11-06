@@ -1,0 +1,46 @@
+{
+  "repo": "pillow_task",
+  "task_id": 68,
+  "features": [
+    1,
+    5
+  ],
+  "setting": "coop",
+  "run_id": "1ca6f0d6",
+  "run_name": "flash2-musterd",
+  "agent_framework": "claude_code_musterd",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-11-06T06:30:07.942074",
+  "ended_at": "2026-11-06T06:33:21.587585",
+  "duration_seconds": 193.645511,
+  "agents": {
+    "agent1": {
+      "feature_id": 1,
+      "status": "Submitted",
+      "cost": 0.28493540000000006,
+      "steps": 23,
+      "input_tokens": 36,
+      "output_tokens": 4488,
+      "cache_read_tokens": 527957,
+      "cache_write_tokens": 17888,
+      "patch_lines": 231,
+      "error": null
+    },
+    "agent2": {
+      "feature_id": 5,
+      "status": "Submitted",
+      "cost": 0.3869206,
+      "steps": 20,
+      "input_tokens": 34,
+      "output_tokens": 7441,
+      "cache_read_tokens": 572398,
+      "cache_write_tokens": 24697,
+      "patch_lines": 231,
+      "error": null
+    }
+  },
+  "total_cost": 0.671856,
+  "total_steps": 43,
+  "messages_sent": 0,
+  "log_dir": "logs/flash2-musterd/coop/pillow_task/68/f1_f5"
+}
