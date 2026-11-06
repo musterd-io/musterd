@@ -4,6 +4,7 @@
 - Lane: `01M6RZG7RE0S9X4KZJJR2NMJXG` (goal `cloud`)
 - Asked by: nick (stated, 2026-11-06, answering question `01M6RZC9KT`)
 - With: big-body (security read), sloane (the words a person sees)
+- Approved: nick, 2026-11-06. Goal `unified-sign-in`; increment 1 plan: `docs/superpowers/plans/2026-11-06-unified-sign-in-1.md`
 - Blocks: `01M6RZ8K12` (console `/handback`), which waits on the identity-proof decision below
 
 ## Why
