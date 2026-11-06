@@ -40,6 +40,8 @@ describe('parseVote (ADR 807)', () => {
   it('takes !vote N, any case, and nothing else', () => {
     expect(parseVote('!vote 2', 3)).toBe(1);
     expect(parseVote('  !VOTE 3 ', 3)).toBe(2);
+    expect(parseVote('!vote1', 3)).toBe(0); // nick typed this on the first live run (2026-11-05)
+    expect(parseVote('!Vote2', 3)).toBe(1);
     expect(parseVote('2', 3)).toBeNull();
     expect(parseVote('!vote 4', 3)).toBeNull();
     expect(parseVote('!vote 0', 3)).toBeNull();
@@ -72,13 +74,12 @@ describe('makeTally', () => {
 });
 
 describe('the fixed lines', () => {
-  it('opens with what the bot is, who asks, the options and how to vote', () => {
+  it('opens in two lines: who asks what, then the options and how to vote (nick, 2026-11-05)', () => {
     const lines = pollLines(POLL);
-    expect(lines[0]).toBe(
-      "👋 I'm musterd's Twitch bot. nick wants to ask you: What should team revive work on next?",
-    );
-    expect(lines.join('\n')).toContain('1 · The director camera for /broadcast');
-    expect(lines.at(-1)).toBe('Vote by typing !vote 1, !vote 2 or !vote 3 — 5 minutes.');
+    expect(lines).toEqual([
+      '🗳️ nick asks: What should team revive work on next?',
+      'Option 1 - The director camera for /broadcast, Option 2 - Viewers ask the team questions, Option 3 - Cloud accounts console. Vote by typing !vote 1, !vote 2 or !vote 3 — 5 minutes.',
+    ]);
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(500);
   });
   it('splits a long poll so no line passes 500 characters', () => {
@@ -91,10 +92,10 @@ describe('the fixed lines', () => {
   });
   it('says each outcome in one sentence', () => {
     expect(resultLine(closed())).toBe(
-      '🗳️ Poll closed — 48 votes. Winner: 2 · Viewers ask the team questions (52%). Thanks for voting!',
+      '🗳️ Poll closed — 48 votes. Winner: Option 2 - Viewers ask the team questions (52%). Thanks for voting!',
     );
     expect(resultLine(closed({ winners: [0, 1], counts: [20, 20, 8] }))).toBe(
-      '🗳️ Poll closed — 48 votes. It’s a tie: 1 · The director camera for /broadcast and 2 · Viewers ask the team questions. Thanks for voting!',
+      '🗳️ Poll closed — 48 votes. It’s a tie: Option 1 - The director camera for /broadcast and Option 2 - Viewers ask the team questions. Thanks for voting!',
     );
     expect(resultLine(closed({ winners: [], counts: [0, 0, 0], voters: 0 }))).toBe(
       '🗳️ Poll closed with no votes. Thanks for watching!',

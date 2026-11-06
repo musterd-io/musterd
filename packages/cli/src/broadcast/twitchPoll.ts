@@ -7,7 +7,8 @@ import { POLL_LIMITS, type OpenPoll, type PollCounts, type PollMeta } from '@mus
  * its deps carry a poster (the bot's chat API) and a counts reporter, and nothing else.
  */
 
-const VOTE = /^!vote\s+(\d{1,2})\s*$/i;
+/** `!vote 1` and `!vote1` alike: the first live run (2026-11-05) lost the broadcaster's own votes to the space. */
+const VOTE = /^!vote\s*(\d{1,2})\s*$/i;
 const CHAT_MAX = 500;
 
 /** `!vote N` (case-insensitive, N from 1 to the option count) as a zero-based index; else null. */
@@ -64,22 +65,28 @@ function chunk(text: string, max = CHAT_MAX): string[] {
   return out;
 }
 
-/** The poll's opening lines: what the bot is, who asks, the options, how to vote. */
+/** `Option N - text`, the shape nick asked for after reading `N · text | …` in chat (2026-11-05). */
+const option = (options: readonly string[], i: number) => `Option ${i + 1} - ${options[i]}`;
+
+/** The poll's opening lines: who asks what, then the options and how to vote. Two lines, because
+ *  Twitch's chat column is narrow and the first live run's three read badly (nick, 2026-11-05). */
 export function pollLines(poll: OpenPoll): string[] {
   const n = poll.options.length;
   const votes = poll.options.map((_, i) => `!vote ${i + 1}`);
   const how = `${votes.slice(0, -1).join(', ')} or ${votes[n - 1]}`;
+  const options = poll.options.map((_, i) => option(poll.options, i)).join(', ');
   return [
-    ...chunk(`👋 I'm musterd's Twitch bot. ${poll.opened_by} wants to ask you: ${poll.question}`),
-    ...chunk(poll.options.map((o, i) => `${i + 1} · ${o}`).join(' | ')),
-    `Vote by typing ${how} — ${poll.minutes} ${poll.minutes === 1 ? 'minute' : 'minutes'}.`,
+    ...chunk(`🗳️ ${poll.opened_by} asks: ${poll.question}`),
+    ...chunk(
+      `${options}. Vote by typing ${how} — ${poll.minutes} ${poll.minutes === 1 ? 'minute' : 'minutes'}.`,
+    ),
   ];
 }
 
 /** One sentence for how the poll ended. Never names a voter. */
 export function resultLine(r: Extract<PollMeta, { state: 'closed' }>): string {
   const votes = `${r.voters} ${r.voters === 1 ? 'vote' : 'votes'}`;
-  const pick = (i: number) => `${i + 1} · ${r.options[i]}`;
+  const pick = (i: number) => option(r.options, i);
   if (r.end === 'cancelled') return `🗳️ ${r.opened_by} cancelled the poll.`;
   if (r.end === 'interrupted')
     return `🗳️ The poll ended when the stream dropped — ${votes} counted.`;
