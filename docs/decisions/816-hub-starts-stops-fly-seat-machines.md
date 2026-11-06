@@ -32,6 +32,13 @@ Measured 2026-11-06 (full reading in `docs/perf/cloud-seat.md`, same date):
   is the hub on `musterd-joiner-1`; the machine's own joiner daemon folds from it.
 - Fly's own auto-stop/start keys on inbound HTTP traffic. The cloud-agent app has no `[[services]]`
   block — nothing listens (`deploy/cloud-agent/fly.toml`) — so Fly cannot do this for us.
+- Leases are claimed at poll time, never minted ahead (`claimWakeLeases` runs inside the
+  `/residency/wake-leases` POST), and attempts are counted from `residency.woke` /
+  `residency.wake_failed` audit rows (`attemptsForAct`). A stopped machine polls nothing, claims
+  nothing, and writes neither row — stopped and starting time already consumes no attempt budget
+  and no deferral snooze. Rule 4 is therefore a constraint on the start trigger (it must not mint
+  leases early), not new accounting. Periodic daemon sweeps already have a home:
+  `packages/server/src/protocol/*Watch.ts`, registered per mode in `cloud/loops.ts`.
 
 ## Problem
 
