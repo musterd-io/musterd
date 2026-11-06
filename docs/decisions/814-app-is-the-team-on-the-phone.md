@@ -84,6 +84,10 @@ decides the shell and the team.
   timeline. A state the two disagree on is a bug in whichever moved last.
 - The phase 1 plan carries this into the protocol (task 2), the daemon (task 3) and the app
   (tasks 5 to 7).
+- _(2026-11-06, lane `01M6Q58GSP66VKS1V08NHYNH42`.)_ Decisions 2 and 3's shapes are
+  `AppMemberSchema` (with `APP_MEMBER_STATES`) and `AppForYouSchema` in `appChannel.ts`, optional
+  on the roster delivery as `members` (at most `APP_ROSTER_MAX`) and `for_you` (at most
+  `APP_FOR_YOU_MAX` 32, summaries at most `APP_FOR_YOU_SUMMARY_MAX` 200). SPEC A.33 says so.
 
 ## Observability & Evaluation
 
