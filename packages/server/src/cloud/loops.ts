@@ -23,6 +23,10 @@ export const LOOPS = [
   'shift_watch',
   // ADR 807: closes Twitch polls at their deadline, or when the stream has been offline 90 s.
   'poll_watch',
+  // ADR 816: starts a mapped Fly seat machine on wake-due, stops it on proven idle. Inert
+  // without the hub-local token + mapping, in every mode — a Cloud server is also a
+  // lease-minting daemon, so the loop is not excluded there; its config is.
+  'fly_watch',
 ] as const;
 export type LoopName = (typeof LOOPS)[number];
 

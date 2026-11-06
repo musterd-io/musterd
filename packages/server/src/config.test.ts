@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   assertBindSecurity,
@@ -8,7 +11,11 @@ import {
   isLocalPeer,
   isLoopbackHost,
   AGENT_IDLE_MS,
+  FLY_IDLE_STOP_MS,
+  FLY_NO_POLL_STOP_MS,
+  FLY_WATCH_MS,
   PRESENCE_TIMEOUT_MS,
+  readFlyMachines,
   RECLAIM_GRACE_MS,
   resolveConfig,
 } from './config.js';
@@ -29,6 +36,9 @@ const TOUCHED = [
   'MUSTERD_ALLOWED_ORIGINS',
   'MUSTERD_WEBAUTHN_ORIGINS',
   'MUSTERD_WEBAUTHN_NODE_ORIGINS',
+  'MUSTERD_FLY_API_TOKEN',
+  'MUSTERD_FLY_IDLE_STOP_MS',
+  'MUSTERD_CONFIG',
 ];
 let saved: Record<string, string | undefined>;
 beforeEach(() => {
@@ -241,5 +251,61 @@ describe('resolveConfig', () => {
     expect(c.trustProxy).toBe(true);
     expect(c.allowedHosts).toEqual(['a.example', 'b.example']);
     expect(c.allowedOrigins).toEqual(['https://app.example']);
+  });
+  it('fly scale-to-zero (ADR 816) is off by absence: no token, no machines, compiled-in windows', () => {
+    process.env['MUSTERD_CONFIG'] = join(mkdtempSync(join(tmpdir(), 'musterd-cfg-')), 'nope.json');
+    const c = resolveConfig();
+    expect(c.flyApiToken).toBeNull();
+    expect(c.flyMachines).toEqual({});
+    expect(c.flyIdleStopMs).toBe(FLY_IDLE_STOP_MS);
+    expect(c.flyNoPollStopMs).toBe(FLY_NO_POLL_STOP_MS);
+    expect(c.flyWatchMs).toBe(FLY_WATCH_MS);
+  });
+  it('reads the fly token from env and the windows as positive-ms tunables', () => {
+    process.env['MUSTERD_FLY_API_TOKEN'] = ' tok-1 ';
+    process.env['MUSTERD_FLY_IDLE_STOP_MS'] = '60000';
+    const c = resolveConfig();
+    expect(c.flyApiToken).toBe('tok-1');
+    expect(c.flyIdleStopMs).toBe(60_000);
+    process.env['MUSTERD_FLY_IDLE_STOP_MS'] = '-1';
+    expect(() => resolveConfig()).toThrow(/positive integer/);
+  });
+});
+
+describe('readFlyMachines (ADR 816 rule 3)', () => {
+  function configFile(content: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'musterd-cfg-'));
+    const path = join(dir, 'config.json');
+    writeFileSync(path, content);
+    return path;
+  }
+
+  it('reads team → host label → machine from the global config', () => {
+    const path = configFile(
+      JSON.stringify({
+        flyMachines: {
+          revive: { 'cloud-delta-2': { app: 'musterd-agent-delta-2', machine: 'm1' } },
+        },
+      }),
+    );
+    expect(readFlyMachines({ MUSTERD_CONFIG: path })).toEqual({
+      revive: { 'cloud-delta-2': { app: 'musterd-agent-delta-2', machine: 'm1' } },
+    });
+  });
+
+  it('skips malformed entries without poisoning well-formed neighbours, and never throws', () => {
+    const path = configFile(
+      JSON.stringify({
+        flyMachines: {
+          revive: { good: { app: 'a', machine: 'm' }, bad: { app: 3 }, worse: null },
+          'not-a-map': 'nope',
+        },
+      }),
+    );
+    expect(readFlyMachines({ MUSTERD_CONFIG: path })).toEqual({
+      revive: { good: { app: 'a', machine: 'm' } },
+    });
+    expect(readFlyMachines({ MUSTERD_CONFIG: '/does/not/exist.json' })).toEqual({});
+    expect(readFlyMachines({ MUSTERD_CONFIG: configFile('not json') })).toEqual({});
   });
 });

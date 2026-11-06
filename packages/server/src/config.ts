@@ -12,6 +12,12 @@ export interface TlsConfig {
   keyPath: string;
 }
 
+/** One Fly seat machine a host label maps to (ADR 816 rule 3). */
+export interface FlyMachineRef {
+  app: string;
+  machine: string;
+}
+
 export interface ResolvedConfig {
   /** `MUSTERD_MODE` (spec 2026-09-29 §5): every cloud effect keys on this; unset is self-hosted. */
   mode: 'self-hosted' | 'cloud';
@@ -76,6 +82,20 @@ export interface ResolvedConfig {
    * Resolved by the embedder (`musterd serve`) at boot; surfaced on `/health` as `build` so
    * `service status` can name how far the running daemon is behind `origin/main`. */
   buildRef: string | null;
+  /** ADR 816 rule 2: the app-scoped Fly deploy token the fly watch spends, from
+   * `MUSTERD_FLY_API_TOKEN` (this daemon's own service env — never the team store, which
+   * replicates to joiners). Null ⇒ scale-to-zero is off and the fly watch is inert. */
+  flyApiToken: string | null;
+  /** ADR 816 rule 3: team slug → host label → Fly machine, from the `flyMachines` key of the
+   * global `~/.musterd/config.json` (daemon-local operating fact, beside `rosterHome`). A host
+   * label with no entry is never started or stopped. */
+  flyMachines: Record<string, Record<string, FlyMachineRef>>;
+  /** ADR 816 rule 5: no wake activity for this long ⇒ a mapped machine is idle-stoppable. */
+  flyIdleStopMs: number;
+  /** ADR 816 rule 5: a hub-started machine that has not polled within this is stopped (`no_poll`). */
+  flyNoPollStopMs: number;
+  /** ADR 816: the fly watch sweep cadence. */
+  flyWatchMs: number;
 }
 
 export const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -126,6 +146,12 @@ export const AUDIT_CHURN_RETENTION_MS = 432_000_000; // 5d
 /** ADR 478 §3: how long trace content stays locally — ~20 MB/day measured 2026-09-29, so 30 days
  *  (ADR 445's figure) would reach ~600 MB before the first prune; 7 caps it near 140 MB. */
 export const TRACE_CONTENT_RETENTION_MS = 604_800_000; // 7d
+/** ADR 816 rule 5: idle window before a mapped Fly seat machine is stopped (15 min). */
+export const FLY_IDLE_STOP_MS = 900_000;
+/** ADR 816 rule 5: a hub-started machine that never polls within this is stopped (`no_poll`). */
+export const FLY_NO_POLL_STOP_MS = 600_000;
+/** ADR 816: how often the fly watch evaluates mapped machines. */
+export const FLY_WATCH_MS = 60_000;
 export const DEFAULT_PORT = 4849;
 export const DEFAULT_HOST = '127.0.0.1';
 
@@ -297,6 +323,10 @@ export interface ConfigOptions {
   webRoot?: string;
   /** The commit this daemon boots from (ADR 130) — resolved by the embedder, e.g. `musterd serve`. */
   buildRef?: string;
+  /** ADR 816: Fly deploy token (tests); env MUSTERD_FLY_API_TOKEN otherwise. */
+  flyApiToken?: string;
+  /** ADR 816: team slug → host label → Fly machine (tests); `~/.musterd/config.json` otherwise. */
+  flyMachines?: Record<string, Record<string, FlyMachineRef>>;
 }
 
 export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
@@ -359,7 +389,46 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
     allowedOrigins: envList('MUSTERD_ALLOWED_ORIGINS'),
     webRoot: webRootOf(opts?.webRoot ?? process.env['MUSTERD_WEB_ROOT']),
     buildRef: opts?.buildRef?.trim() || null,
+    flyApiToken: opts?.flyApiToken?.trim() || process.env['MUSTERD_FLY_API_TOKEN']?.trim() || null,
+    flyMachines: opts?.flyMachines ?? readFlyMachines(process.env),
+    flyIdleStopMs: envMs('MUSTERD_FLY_IDLE_STOP_MS', FLY_IDLE_STOP_MS),
+    flyNoPollStopMs: envMs('MUSTERD_FLY_NO_POLL_STOP_MS', FLY_NO_POLL_STOP_MS),
+    flyWatchMs: envMs('MUSTERD_FLY_WATCH_MS', FLY_WATCH_MS),
   };
+}
+
+/**
+ * ADR 816 rule 3: the daemon-local host-label → Fly machine map, from the `flyMachines` key of the
+ * global `~/.musterd/config.json` — the same file and best-effort posture as
+ * {@link resolveRosterRoots}: an absent, unreadable, or malformed config is simply "no machines
+ * mapped" (the fly watch stays inert), never a boot error, and a malformed entry is skipped rather
+ * than poisoning its well-formed neighbours. The map is this box's operating fact, so it is read
+ * here and never enters the team store, which replicates to joiners.
+ */
+export function readFlyMachines(
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, Record<string, FlyMachineRef>> {
+  try {
+    const cfgPath = env['MUSTERD_CONFIG'] ?? join(homedir(), '.musterd', 'config.json');
+    const raw = JSON.parse(readFileSync(cfgPath, 'utf8')) as { flyMachines?: unknown };
+    const out: Record<string, Record<string, FlyMachineRef>> = {};
+    if (!raw.flyMachines || typeof raw.flyMachines !== 'object') return out;
+    for (const [team, hosts] of Object.entries(raw.flyMachines as Record<string, unknown>)) {
+      if (!hosts || typeof hosts !== 'object') continue;
+      const byHost: Record<string, FlyMachineRef> = {};
+      for (const [label, ref] of Object.entries(hosts as Record<string, unknown>)) {
+        const r = ref as { app?: unknown; machine?: unknown } | null;
+        if (!r || typeof r.app !== 'string' || typeof r.machine !== 'string') continue;
+        const app = r.app.trim();
+        const machine = r.machine.trim();
+        if (app && machine) byHost[label] = { app, machine };
+      }
+      if (Object.keys(byHost).length > 0) out[team] = byHost;
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 /** Resolve a web-root path to absolute, or null when unset/blank (static serving stays off). */

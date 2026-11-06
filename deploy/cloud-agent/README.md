@@ -192,6 +192,29 @@ fly machine start <id> --app musterd-agent-$SEAT    # boot is idempotent; polls 
 Parking the seat server-side (residency off / sponsor revokes the host key) and stopping the
 machine are independent: do both to stop spend entirely, either to pause one half.
 
+### Scale-to-zero (ADR 816) **$**
+
+With the hub staging below, parking stops needing a human: the hub daemon's fly watch starts a
+stopped mapped machine when a wake falls due for its seat, and stops it after 15 minutes proven
+idle (10 if it never polls after a hub start — audit `fly.machine_stop`, reason `no_poll`). The
+machine holds no Fly credential and never starts or stops itself. Stage it on the **hub** (the
+lease-minting daemon's box), never on the seat machine:
+
+1. Mint the token (a human with the Fly account; short expiry, never the 20-year default):
+   `fly tokens create deploy -a musterd-agent-$SEAT -n "musterd hub scale-to-zero" -x 720h`.
+   Its reach is deploy-grade on that one app, and every seat on the hub box can read it from the
+   daemon's `/proc/<pid>/environ` — both accepted for the one-seat pilot only (ADR 816 rule 2).
+2. Give it to the daemon's service env as `MUSTERD_FLY_API_TOKEN` (mode 600; shown once — never
+   into the repo, the team store, or an act).
+3. Map the host label in the hub's `~/.musterd/config.json`:
+   `"flyMachines": { "<team>": { "<MUSTERD_HOST>": { "app": "musterd-agent-$SEAT", "machine": "<id>" } } }`.
+4. Restart the hub daemon the usual announced way. Verify at the boundary, not by the log alone:
+   `fly machine stop` the seat machine, send the seat a `steer`, and watch `fly status` flip to
+   `started` and the reply land. **Turn it off** by removing the token (or the mapping) and
+   restarting — absence is the off switch, and with it off the machine is manual park/start
+   again, exactly as above. Check it is behaving in `musterd report`'s audit trail:
+   `fly.machine_start` / `fly.machine_stop` rows, one per action, failures carrying the Fly status.
+
 ## Teardown **$**
 
 ```sh
