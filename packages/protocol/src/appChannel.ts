@@ -213,6 +213,63 @@ const portraitPng = b64url.max(Math.ceil((PORTRAIT_MAX_BYTES * 4) / 3));
 /** ADR 797: what /live sends to store a member's portrait (`PUT …/members/:name/portrait`). */
 export const PortraitUploadSchema = z.object({ png: portraitPng });
 export type PortraitUpload = z.infer<typeof PortraitUploadSchema>;
+/** ADR 814: /live's six card states, as `teamCards()` computes them — the phone invents none. */
+export const APP_MEMBER_STATES = [
+  'working',
+  'review',
+  'blocked',
+  'asking',
+  'between',
+  'away',
+] as const;
+export type AppMemberState = (typeof APP_MEMBER_STATES)[number];
+
+/**
+ * ADR 814 decision 2: one member of the team as /live's team card reads it. `label` is the card's
+ * `stateLabel` verbatim ("working on", "waiting for review", "asking nick", "waiting on nick · 42m");
+ * `title`/`source` the shown lane's title or the member's own status; `goal` the lane's goal name;
+ * `since` what the age counts from; `model` the model badge's label ("opus 5.5", "human", "model
+ * unknown"). The seat fields the phone already uses (ADR 791/797/806) ride along, so one row has
+ * what the Seats screen had.
+ */
+export const AppMemberSchema = z.object({
+  name: z.string(),
+  kind: z.enum(['agent', 'human']),
+  state: z.enum(APP_MEMBER_STATES),
+  label: z.string(),
+  title: z.string().nullable(),
+  source: z.enum(['lane', 'status']).nullable(),
+  goal: z.string().nullable(),
+  since: z.number().int().nullable(),
+  more_lanes: z.number().int().nonnegative(),
+  model: z.string().nullable(),
+  online: z.boolean(),
+  wakeable: z.boolean(),
+  lane: z.object({ id: z.string(), title: z.string() }).nullable(),
+  portrait: PortraitDigestSchema.nullable(),
+  waiting: z.object({ to: z.string().nullable(), since: z.number().int() }).optional(),
+});
+export type AppMember = z.infer<typeof AppMemberSchema>;
+
+/** ADR 814 decision 3: at most this many for-you items ride a roster. */
+export const APP_FOR_YOU_MAX = 32;
+/** ADR 814 decision 3: a for-you summary is one line of at most this many characters. */
+export const APP_FOR_YOU_SUMMARY_MAX = 200;
+
+/**
+ * ADR 814 decision 3: one thing waiting on the binding's person, as /live counts it — an open ask
+ * to them or the team, or an open question to them. The phone unions this with the asks that
+ * reached it as pushes, by `id`, so its badge and /live agree even for a held ask.
+ */
+export const AppForYouSchema = z.object({
+  id: z.string(),
+  from: z.string(),
+  kind: z.enum(['approve', 'question', 'review', 'help']),
+  summary: z.string().max(APP_FOR_YOU_SUMMARY_MAX),
+  ts: z.number().int(),
+});
+export type AppForYou = z.infer<typeof AppForYouSchema>;
+
 /** A quick action's seal must expire within this window of the daemon's clock (replay bound). */
 export const APP_QUICK_ACTION_WINDOW_MS = 10 * 60_000;
 
@@ -327,6 +384,13 @@ export const AppDeliverySchema = z.discriminatedUnion('kind', [
       .max(APP_ROSTER_MAX),
     /** ADR 807: the team's Twitch poll, for a binding whose person is a human admin. */
     poll: z.lazy(() => AppPollStateSchema).optional(),
+    /**
+     * ADR 814: every standing member with /live's card state. Optional: a daemon before ADR 814
+     * sends none and the phone draws the team from `seats`; a phone before it ignores this.
+     */
+    members: z.array(AppMemberSchema).max(APP_ROSTER_MAX).optional(),
+    /** ADR 814: what waits on the binding's person, oldest first. Optional for the same reason. */
+    for_you: z.array(AppForYouSchema).max(APP_FOR_YOU_MAX).optional(),
   }),
   /**
    * ADR 807: what a phone poll request did, and the poll as it stands after it. `nonce` is the

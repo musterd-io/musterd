@@ -1256,6 +1256,13 @@ answer's text.
   seats, `lane` the seat's one live lane or null. A server MUST NOT push a roster (ADR 791,
   amended 2026-11-03). A seat MAY carry `portrait` (ADR 797) and `waiting {to, since}`: its oldest
   open question, `to` null for a question to the team, omitted when it has none (ADR 806).
+- A roster MAY carry `members` (ADR 814): every standing member, agent and human, at most 64, each
+  `{name, kind, state, label, title, source, goal, since, more_lanes, model, online, wakeable, lane,
+  portrait, waiting?}` with `state` one of `working | review | blocked | asking | between | away` —
+  the same six a `/live` team card shows, by the same rule. It MAY carry `for_you` (at most 32):
+  what waits on the binding's person, oldest first, each `{id, from, kind, summary, ts}` with
+  `summary` at most 200 characters. Both are optional: a client that does not know them MUST ignore
+  them, and a client that does MUST fall back to `seats` when they are absent.
 
 ## A.34 Seats on shift (unreleased — ADR 792)
 
