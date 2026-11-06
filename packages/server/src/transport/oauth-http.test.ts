@@ -6,7 +6,7 @@ import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { __setInviteKeyForTest } from '../store/invites.js';
-import { addMember } from '../store/members.js';
+import { addMember, mintCredential } from '../store/members.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { CimdResolverCapacityError } from './cimd.js';
 import {
@@ -1773,6 +1773,59 @@ withDrivers('oauth-http', (_o, kind) => {
         );
         expect(r.status, policy).toBe(403);
       }
+    });
+  });
+  describe("where you're signed in: MCP clients (unified sign-in lane 6)", () => {
+    const authed = (cred: string) => ({ authorization: `Bearer ${cred}` });
+    const del = async (path: string, headers: Record<string, string>) => {
+      const res = await fetch(base + path, { method: 'DELETE', headers });
+      return { status: res.status };
+    };
+
+    it("lists the member's signed-in apps by name, and signing one out ends its chain", async () => {
+      const { pair } = await signInPair(nickCred);
+      expect(pair.access_token).toMatch(/^msat_/);
+      const list = await get('/teams/dawn/members/nick/clients', authed(nickCred));
+      expect(list.status).toBe(200);
+      expect(list.json.clients).toHaveLength(1);
+      const row = list.json.clients[0];
+      expect(row.client_name).toBe('Claude');
+      expect(typeof row.chain_id).toBe('string');
+      expect(typeof row.last_used_at).toBe('number');
+      expect(JSON.stringify(list.json)).not.toMatch(/msat_|msrt_/);
+
+      const out = await del(`/teams/dawn/members/nick/clients/${row.chain_id}`, authed(nickCred));
+      expect(out.status).toBe(204);
+      expect(
+        (await get('/teams/dawn/members/nick/clients', authed(nickCred))).json.clients,
+      ).toEqual([]);
+      // The client's token stops working at once.
+      expect(
+        (await get('/teams/dawn/members/nick/clients', authed(pair.access_token))).status,
+      ).toBe(401);
+      const audit = (await listAudit(server.store, (await getTeamBySlug(server.store, 'dawn'))!.id))
+        .filter((a) => a.action === 'oauth.revoked')
+        .map((a) => JSON.parse(String(a.detail)));
+      expect(audit).toContainEqual(expect.objectContaining({ reason: 'signed_out', by: 'self' }));
+    });
+
+    it("another member can neither see nor end someone else's apps; an unknown chain is 404", async () => {
+      await signInPair(nickCred);
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const adaRow = (await addMember(server.store, team, { name: 'ada', kind: 'human' })).row;
+      const ada = { token: (await mintCredential(server.store, adaRow.id)).credential };
+      const nickChain = (await get('/teams/dawn/members/nick/clients', authed(nickCred))).json
+        .clients[0].chain_id;
+      expect((await get('/teams/dawn/members/nick/clients', authed(ada.token))).status).toBe(404);
+      expect(
+        (await del(`/teams/dawn/members/nick/clients/${nickChain}`, authed(ada.token))).status,
+      ).toBe(404);
+      expect(
+        (await del(`/teams/dawn/members/ada/clients/${nickChain}`, authed(ada.token))).status,
+      ).toBe(404);
+      expect(
+        (await get('/teams/dawn/members/nick/clients', authed(nickCred))).json.clients,
+      ).toHaveLength(1);
     });
   });
 });
