@@ -371,8 +371,15 @@ describe('hosted /live sign-in (ADR 722)', () => {
       const cookie = await signIn();
       const r = await exchange(cookie);
       expect(r.status).toBe(200);
-      const body = JSON.parse(r.body) as { as: string; access_token: string; expires_in: number };
+      const body = JSON.parse(r.body) as {
+        as: string;
+        team: string;
+        access_token: string;
+        expires_in: number;
+      };
       expect(body.as).toBe('ada');
+      // The callback lands on a bare /live; the page learns its team from this answer.
+      expect(body.team).toBe(team.slug);
       expect(body.access_token.startsWith('msat_')).toBe(true);
       expect(body.expires_in).toBe(900);
       expect(r.body).not.toContain('refresh');

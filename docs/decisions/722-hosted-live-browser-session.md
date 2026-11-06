@@ -164,6 +164,13 @@ ADR 698 shipped the verifier (`verifyIdentityStatement`) and the binding (`membe
   button is lane `01M6S2TXHV`.
 
   Follows-up: 01M6S2TXHVHRZZ38ARRX4BR5PD
+- _(2026-11-06, lane 01M6S2TXHV, the `/live` half.)_ `/live` asks `POST /live/session/token` once
+  on load: a 404 is a self-hosted daemon and everything after it is unchanged; a 401 shows one
+  **Sign in with musterd** link to `/live/signin/start` and no paste field; a 200 connects with the
+  `msat_` held in memory, re-asked a minute before it expires. The token answer also carries
+  `team`, because the callback lands on a bare `/live`. A refused refresh, a 401 or a 4401 close
+  returns to the button with "You were signed out. Sign in again to keep going." A refresh changes
+  the page's credential, so the stream reconnects every 14 minutes, painting its snapshot first.
 
 ## Observability & Evaluation
 
