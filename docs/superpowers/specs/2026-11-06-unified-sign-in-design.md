@@ -32,8 +32,8 @@ happened to bind `members.account_id`.
   specific team and specific user with proper credentials regardless of state of other surfaces"*.)
 - **Every surface recognises the same you**: the same account, the same member of the same team,
   the same permissions. A revoke or removal anywhere holds everywhere, within the bounds §11.4
-  states: about 20 minutes on a connected server, at most 1 h 15 min on a linked hub that
-  has lost the console.
+  states: one 5-minute poll on a connected server, at most 1 h on a linked hub that has lost the
+  console — for every credential the account authorised, MCP and API keys included.
 - **No secret is ever shown or pasted in order to sign in**, on any surface. The one secret a
   person ever sees is an API key they asked for (§8), shown once. *(Corrected 2026-11-06 after
   sloane's read: the first wording contradicted §8.)*
@@ -228,26 +228,35 @@ each changes what gets built, so each is settled here as **my call**.
    team list for an account is what was registered or bound; a hub that is not publicly reachable
    is listed with no URL (the phone and `join` reach it the way they do today: on its network or
    through its federation). **Offline, a linked hub fails closed for account sessions, with a bound**
-   (big-body, 2026-11-06): once its revocation list is more than **1 hour** old, it stops minting
-   `msat_` for any session that came from an account sign-in, and refuses new account sign-ins,
-   until it reaches the console again. A revoked account therefore loses a stale hub within
-   1 h 15 min at most (the hour plus one 15-minute token). Local credentials (`mscr_`, the hub
+   (big-body, 2026-11-06): once its last successful pull is more than **1 hour** old, it refuses
+   every account-derived credential at use and refuses new account sign-ins, until it reaches the
+   console again (§11.4 has the bounds and the restart rule). Local credentials (`mscr_`, the hub
    operator's loopback) keep working offline: a hub never locks its own operator out.
 4. **How far a revoke reaches.** Ending a session (§7) is per surface, per team, as written. **An
    account-level event** — the account suspended or deleted, or a sign-in method removed and its
    sessions ended — is published on the console's revocation list. Every team server and linked hub
-   pulls it on a 5-minute timer and ends that account's sessions on it. Two bounds, stated
-   separately (big-body, 2026-11-06):
+   pulls it on a 5-minute timer. Two bounds, stated separately (big-body, 2026-11-06):
 
-   - **Connected** (the server reaches the console): a revoke is seen within one poll (5 min). The
-     account's `msat_` already minted live out their 15 minutes; the server refuses every new mint
-     and closes the account's open sockets on the pull. Worst case about **20 min**.
-   - **Stale** (a linked hub that cannot reach the console): §11.3's fail-closed rule stops new
-     mints once its last successful pull is over 1 h old. Worst case: the revoke lands just after
-     that pull, so the hub mints for up to 1 h and the last token lives 15 min — **1 h 15 min**.
-   - Assumptions: "age" is measured on the hub's own monotonic clock from the last successful
-     pull, not from a console timestamp, so console–hub clock skew does not move either bound; the
-     list response is `no-store`, so no HTTP cache sits between the pull and the console.
+   - **What a revoke ends.** Everything the account authorised on that server: browser sessions
+     (`mbs_`), every OAuth chain of a member bound to the account (`msat_` **and** `msrt_` — MCP
+     clients included), the CLI's and phone's per-device credentials, and API keys that act **as**
+     that member. Each is a row the server checks on every use (`verifyAccess` reads
+     `oauth_tokens.revoked_at`), so marking them revoked ends them at once, and the server closes
+     the member's open sockets (4401). **Not** ended: keys of a bot seat the person created — a bot
+     seat belongs to the team, and an admin ends it.
+   - **Connected** (the server reaches the console): within **one poll, 5 min**. No credential
+     outlives the pull, whatever its own lifetime (a 1 h MCP `msat_`, a 30-day `msrt_`, a 90-day
+     key).
+   - **Stale** (a linked hub that cannot reach the console): once its last successful pull is over
+     **1 h** old, the hub refuses **every** account-derived credential **at use** — not only new
+     mints and refreshes — until a pull succeeds. Worst case **1 h** (the revoke lands just after
+     the last pull). Local credentials (`mscr_`, the operator's loopback) are not account-derived
+     and keep working.
+   - **The staleness clock survives a restart.** The hub persists the wall-clock time of its last
+     successful pull. While running, age is measured on the monotonic clock from that pull. After a
+     restart, age is wall-clock now minus the persisted time; a missing value, or one in the future
+     (the clock went back), counts as stale. So a restart can make the hub staler, never fresher.
+   - The list response is `no-store`, so no HTTP cache sits between the pull and the console.
 
    **What the pull sends** (sloane, for PRIVACY.md; big-body to confirm): the keys are a plain GET of
    the public JWKS and send nothing. The revocation pull is one GET carrying the hub's **link id**
