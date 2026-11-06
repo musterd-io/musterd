@@ -46,6 +46,13 @@ import {
   loadMemberIdentity,
   saveMemberIdentity,
 } from '../live/memberIdentity';
+import { HostedSignIn } from '../live/HostedSignIn';
+import {
+  probeHostedSession,
+  refreshDelayMs,
+  signOutHosted,
+  type HostedSession,
+} from '../live/hostedSession';
 import { firehoseSound, roomTone, setSoundInBackground, soundInBackground } from '../live/sound';
 import { useLiveStream } from '../live/useLiveStream';
 import { HealthBanner } from '../live/HealthBanner';
@@ -96,6 +103,8 @@ export const Route = createFileRoute('/live')({
 });
 
 const TEAM_KEY = 'musterd.live.team';
+/** Sign-in copy spec §4: a hosted session that ended somewhere else. */
+const SIGNED_OUT_ELSEWHERE = 'You were signed out. Sign in again to keep going.';
 const COLLAPSE_KEY = 'musterd.live.collapsed';
 
 /** Work lives in the team column (ADR 464) — not on plates, and no longer in the floating stack. */
@@ -111,11 +120,17 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
 /** The log drawer only exists while open (L, or the log button); its chunk loads then. */
 // The "Outside" button (window views inc 3) is lazy: the office it changes is a lazy chunk too, so
 // the button arriving with it costs nothing a viewer could use earlier, and keeps /live's eager JS in budget.
-const LazyViewToggle = lazy(() => import('../live/ViewToggle').then((m) => ({ default: m.ViewToggle })));
-const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })));
+const LazyViewToggle = lazy(() =>
+  import('../live/ViewToggle').then((m) => ({ default: m.ViewToggle })),
+);
+const LazyLogDrawer = lazy(() =>
+  import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })),
+);
 /** "Who is here" (ADR 692) is chrome the room does not need to paint: it follows the first roster
  *  read in its own chunk, so the faces and their cards stay off /live's eager graph. */
-const LazyWhoIsHere = lazy(() => import('../live/WhoIsHere').then((m) => ({ default: m.WhoIsHere })));
+const LazyWhoIsHere = lazy(() =>
+  import('../live/WhoIsHere').then((m) => ({ default: m.WhoIsHere })),
+);
 /** ADR 744: the header's allowance chips load after the first roster read, as Who is here does. */
 const LazyAllowanceChips = lazy(() =>
   import('../live/AllowanceChips').then((m) => ({ default: m.AllowanceChips })),
@@ -192,6 +207,11 @@ function LivePage() {
   /** True when `cfg` is a real member (ADR 222) rather than an observer or a watch-link seat — the
    *  difference between an office you can act in and one you can only read. */
   const [signedIn, setSignedIn] = useState(false);
+  // Hosted `/live` (ADR 722, unified sign-in §5): which world the page is in, learned once from
+  // the team's own token route. `idle` until it is asked; `probing` while it is. Self-hosted pages
+  // land on `self_hosted` and behave exactly as before.
+  const [hosted, setHosted] = useState<'idle' | 'probing' | HostedSession['kind']>('idle');
+  const [hostedExpiresAt, setHostedExpiresAt] = useState<number | null>(null);
   /** Connected via an explicit watch link — read-only by the team's choice, not by accident. */
   const [watchLink, setWatchLink] = useState(false);
   /** The grade the sharer chose for that link (ADR 616), read from `&grade=` — a label for the viewer,
@@ -229,6 +249,23 @@ function LivePage() {
   // cannot mint a replacement observer on its own, so there is no silent re-provision to try first.
   // `recoveredToken` dedupes the HTTP-401 + WS-refused double-signal for one credential.
   const recoveredToken = useRef<string | null>(null);
+  /** Hosted, signed out: the one-button card, optionally saying why (sign-in copy spec §4). */
+  const hostedSignedOut = useCallback((notice: string | null) => {
+    setHosted('signed_out');
+    setHostedExpiresAt(null);
+    setSignedIn(false);
+    setCfg(null);
+    setFormError(notice);
+  }, []);
+  /** Hosted, signed in: the member and token the team's token route answered — in memory only. */
+  const hostedSignedIn = useCallback((s: Extract<HostedSession, { kind: 'signed_in' }>) => {
+    setHosted('signed_in');
+    setHostedExpiresAt(s.expiresAt);
+    setTeam(s.team);
+    setSignedIn(true);
+    setFormError(null);
+    setCfg({ team: s.team, as: s.as, token: s.token });
+  }, []);
   const recoverObserver = useCallback(() => {
     const team = cfg?.team;
     const staleToken = cfg?.token;
@@ -236,6 +273,12 @@ function LivePage() {
     if (!team || !staleToken) return;
     if (recoveredToken.current === staleToken) return; // already handling this exact credential
     recoveredToken.current = staleToken;
+    // A hosted session ended elsewhere (revoked, signed out on another tab, the socket closed
+    // 4401): back to the one sign-in button, with the copy spec's sentence. Nothing is stored.
+    if (hosted === 'signed_in') {
+      hostedSignedOut(SIGNED_OUT_ELSEWHERE);
+      return;
+    }
     // A signed-in human is NOT silently demoted to an observer (ADR 222). Doing that would take the
     // answer buttons away again with no explanation — the exact defect this arc exists to fix — so a
     // dead member credential falls back to this browser's cached watching seat, if it has one, and
@@ -255,7 +298,7 @@ function LivePage() {
     setFormError("this browser's watching seat expired — sign in to watch again");
     setAdvanced({ open: true, as: '', token: '' });
     setCfg(null);
-  }, [cfg?.team, cfg?.token, cfg?.as, signedIn]);
+  }, [cfg?.team, cfg?.token, cfg?.as, signedIn, hosted, hostedSignedOut]);
 
   // Cloud spec §7: a server that cannot reach its database says so on /health; show it.
   const outage = useServerHealth();
@@ -421,6 +464,13 @@ function LivePage() {
    *  watching seat is minted with the outgoing credential (ADR 580), so only an admin's sign-out
    *  can leave the room watching; anyone else's lands on the connect form. */
   const signOut = useCallback(() => {
+    if (hosted === 'signed_in') {
+      // Ends this browser's session on the team (the server closes its sockets); nothing local.
+      void signOutHosted()
+        .catch(() => undefined)
+        .finally(() => hostedSignedOut(null));
+      return;
+    }
     const slug = cfg?.team;
     const as = cfg?.as;
     const outgoing = cfg?.token;
@@ -432,19 +482,22 @@ function LivePage() {
       setFormError(null);
       setCfg(null);
     });
-  }, [cfg?.team, cfg?.as, cfg?.token]);
+  }, [cfg?.team, cfg?.as, cfg?.token, hosted, hostedSignedOut]);
 
   /**
    * The rail's one button, both meanings (ADR 222). If this machine has an identity, becoming
    * yourself is a click and nothing else happens. If it does not — off-machine, or no CLI identity
    * here — the same button falls back to the credential form, which does work over the network.
    */
-  const signInHere = useCallback((as?: string) => {
-    const id = localCreds.current.find((i) => i.as === as) ?? localCreds.current[0];
-    const slug = cfg?.team;
-    if (id && slug) signIn(slug, { as: id.as, token: id.credential });
-    else promptSignIn();
-  }, [cfg?.team, signIn, promptSignIn]);
+  const signInHere = useCallback(
+    (as?: string) => {
+      const id = localCreds.current.find((i) => i.as === as) ?? localCreds.current[0];
+      const slug = cfg?.team;
+      if (id && slug) signIn(slug, { as: id.as, token: id.credential });
+      else promptSignIn();
+    },
+    [cfg?.team, signIn, promptSignIn],
+  );
 
   const watch = async (explicit?: string) => {
     setFormError(null);
@@ -632,13 +685,36 @@ function LivePage() {
       // the office to someone else must never hand them whoever last signed in on this browser.
       setSignedIn(false);
       setCfg({ team: urlTeam, as: urlAs, token: watchTok });
-    } else if (urlTeam) {
-      void watch(urlTeam);
     } else {
-      setTeam(window.localStorage.getItem(TEAM_KEY) ?? '');
+      // Ask the team's own origin whether this is a hosted team first (ADR 722 §3): one same-origin
+      // POST, a 404 on a self-hosted daemon, after which everything below runs exactly as before.
+      setHosted('probing');
+      void probeHostedSession().then((s) => {
+        if (s.kind === 'signed_in') return hostedSignedIn(s);
+        if (s.kind === 'signed_out') return hostedSignedOut(null);
+        setHosted('self_hosted');
+        if (urlTeam) void watch(urlTeam);
+        else setTeam(window.localStorage.getItem(TEAM_KEY) ?? '');
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Hosted: re-ask the token route a minute before the 15-minute `msat_` expires. A refusal means
+  // the session ended (revoked, signed out elsewhere): back to the button, saying so.
+  useEffect(() => {
+    if (hosted !== 'signed_in' || hostedExpiresAt === null) return;
+    const t = window.setTimeout(
+      () => {
+        void probeHostedSession().then((s) => {
+          if (s.kind === 'signed_in') hostedSignedIn(s);
+          else hostedSignedOut(SIGNED_OUT_ELSEWHERE);
+        });
+      },
+      refreshDelayMs({ expiresAt: hostedExpiresAt }, Date.now()),
+    );
+    return () => window.clearTimeout(t);
+  }, [hosted, hostedExpiresAt, hostedSignedIn, hostedSignedOut]);
 
   // Restore saved panel collapse state (SSR-safe; once on the client, before paint).
   useBeforePaint(() => {
@@ -745,7 +821,9 @@ function LivePage() {
         )}
         {connected && watchLink && (
           <span className="lc-watchgrade">
-            {watchGrade === 'broadcast' ? 'demo view · agent DMs shown' : 'watching · team-wide only'}
+            {watchGrade === 'broadcast'
+              ? 'demo view · agent DMs shown'
+              : 'watching · team-wide only'}
           </span>
         )}
         {connected && <span id={NOW_SLOT_ID} className="lc__nowslot" />}
@@ -796,7 +874,9 @@ function LivePage() {
         </span>
       </header>
 
-      {!connected ? (
+      {!connected && hosted === 'signed_out' ? (
+        <HostedSignIn notice={formError} />
+      ) : !connected && hosted === 'probing' ? null : !connected ? (
         <ConnectForm
           team={team}
           onTeam={setTeam}
@@ -813,11 +893,7 @@ function LivePage() {
               {error} <button onClick={reset}>reset &amp; reconnect</button>
             </div>
           )}
-          {phone && (
-            <div className="lc__phone-asks">
-              {asksStrip}
-            </div>
-          )}
+          {phone && <div className="lc__phone-asks">{asksStrip}</div>}
           {/* On a phone the room is inert (below), so its wall board and bookshelf are not doors any
               more. These two are: the same overlays, opened from the button instead of the
               furniture (lane 01M61QMGJC). */}
@@ -887,13 +963,7 @@ function LivePage() {
                 }}
                 // The asks & approvals rail (ADR 149) rides the top of the room itself — the office
                 // frames its own asks (nick, 2026-07-28). Still renders nothing until an ask exists.
-                topSlot={
-                  phone ? null : (
-                    <>
-                              {asksStrip}
-                    </>
-                  )
-                }
+                topSlot={phone ? null : <>{asksStrip}</>}
                 workCues={WORK_CUES}
                 onCaption={setCaption}
                 linked={lit ?? linked}
@@ -1078,7 +1148,8 @@ const WATCH_GRADES: { grade: WatchGrade; label: string; says: string }[] = [
 function watchLinkFailure(e: unknown): string {
   const msg = e instanceof Error ? e.message : '';
   if (/no_signature/.test(msg)) return 'No link made: this needs your passkey. Try again.';
-  if (/passkey|localhost URL/i.test(msg)) return `No link made: ${msg.replace(/; nothing was sent$/, '')}.`;
+  if (/passkey|localhost URL/i.test(msg))
+    return `No link made: ${msg.replace(/; nothing was sent$/, '')}.`;
   if (/admin|unauthorized|forbidden/i.test(msg)) return 'Only a team admin can share a watch link.';
   return 'Could not make a watch link. Try again.';
 }
@@ -1303,7 +1374,11 @@ function ConnectForm({
           />
         </label>
 
-        <MemberSignInFields advanced={advanced} onAdvanced={onAdvanced} seatLabel="Sign in as (seat)" />
+        <MemberSignInFields
+          advanced={advanced}
+          onAdvanced={onAdvanced}
+          seatLabel="Sign in as (seat)"
+        />
 
         {error && <p className="lc-form__error">{error}</p>}
 

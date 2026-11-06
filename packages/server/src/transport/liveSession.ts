@@ -51,7 +51,7 @@ import { isTlsPeer } from './oauth.js';
  *
  *   GET|POST /live/signin/start   — write a one-time state, set `__Host-musterd_signin`, go to the console
  *   POST     /live/signin/callback — the console's form POST: state + identity statement → a session
- *   POST     /live/session/token  — the session cookie, same-origin only → a 15-minute `msat_`
+ *   POST     /live/session/token  — the session cookie, same-origin only → `{as, team}` + a 15-minute `msat_`
  *   POST     /live/signout        — the session cookie, same-origin only → revoked
  *
  * Cloud only: a self-hosted daemon answers 404 on all four (ADR 722 §5: self-hosted is untouched).
@@ -456,6 +456,8 @@ async function exchange(env: Env, req: IncomingMessage, res: ServerResponse): Pr
   // The refresh half is never handed out on this path; it dies with the session's revoke.
   sendJsonNoStore(res, 200, {
     as: member.name,
+    // The callback lands on a bare `/live`; this is how the page learns which team it is on.
+    team: team.slug,
     access_token: pair.access_token,
     expires_in: pair.expires_in,
   });

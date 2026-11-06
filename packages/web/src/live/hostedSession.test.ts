@@ -35,17 +35,24 @@ describe('probeHostedSession (ADR 722 §3)', () => {
   });
 
   it('200 is signed in, with the member and the token’s expiry', async () => {
-    const f = reply(200, { as: 'ada', access_token: 'msat_x', expires_in: 900 });
+    const f = reply(200, { as: 'ada', team: 'acme', access_token: 'msat_x', expires_in: 900 });
     expect(await probeHostedSession(f as unknown as typeof fetch, () => NOW)).toEqual({
       kind: 'signed_in',
       as: 'ada',
+      team: 'acme',
       token: 'msat_x',
       expiresAt: NOW + 900_000,
     });
   });
 
   it('a 200 without a usable body is signed out, not a crash', async () => {
-    for (const body of [{}, { as: 'ada' }, { as: 'ada', access_token: 'x', expires_in: 900 }, 'no'])
+    for (const body of [
+      {},
+      { as: 'ada' },
+      { as: 'ada', team: 'acme', access_token: 'x', expires_in: 900 },
+      { as: 'ada', access_token: 'msat_x', expires_in: 900 },
+      'no',
+    ])
       expect(await probeHostedSession(reply(200, body) as unknown as typeof fetch)).toEqual({
         kind: 'signed_out',
       });

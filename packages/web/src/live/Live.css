@@ -10300,3 +10300,9 @@ a.lc-xp__hit:focus-visible {
   background: var(--lc-ground-2);
   border: 1.5px solid var(--lc-warn);
 }
+
+/* The hosted sign-in's one button is a link (it leaves for the console), styled as the connect
+   button. Unified sign-in §5, ADR 722. */
+.lc-form__connect--link {
+  text-decoration: none;
+}
