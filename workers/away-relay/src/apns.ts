@@ -104,26 +104,65 @@ export async function sendApns(
   fetchImpl: typeof fetch = fetch,
   timing: ApnsTiming = {},
 ): Promise<ApnsResult> {
+  const headers: Record<string, string> = {
+    'apns-push-type': 'alert',
+    'apns-priority': '10',
+    'apns-expiration': String(Math.ceil(input.expiresAt / 1000)),
+  };
+  if (new TextEncoder().encode(input.collapseId).length <= 64)
+    headers['apns-collapse-id'] = input.collapseId;
+  return postApns(config, push, headers, input.body, nowMs, fetchImpl, timing);
+}
+
+/** The live nudge's push (ADR 819): no alert, no musterd payload, only "something happened". */
+export const APNS_BACKGROUND_BODY = '{"aps":{"content-available":1}}';
+/** A nudge is worth nothing a minute later: the next open pulls anyway. */
+export const APNS_BACKGROUND_TTL_S = 60;
+
+/**
+ * Send one content-free background push (ADR 819): `apns-push-type: background` at priority 5,
+ * expiring after {@link APNS_BACKGROUND_TTL_S}. The app pulls its roster on it if it is in front.
+ */
+export async function sendApnsBackground(
+  config: ApnsConfig,
+  push: { token: string; environment: 'production' | 'development' },
+  nowMs: number,
+  fetchImpl: typeof fetch = fetch,
+  timing: ApnsTiming = {},
+): Promise<ApnsResult> {
+  const headers = {
+    'apns-push-type': 'background',
+    'apns-priority': '5',
+    'apns-expiration': String(Math.ceil(nowMs / 1000) + APNS_BACKGROUND_TTL_S),
+  };
+  return postApns(config, push, headers, APNS_BACKGROUND_BODY, nowMs, fetchImpl, timing);
+}
+
+async function postApns(
+  config: ApnsConfig,
+  push: { token: string; environment: 'production' | 'development' },
+  pushHeaders: Record<string, string>,
+  body: string,
+  nowMs: number,
+  fetchImpl: typeof fetch,
+  timing: ApnsTiming,
+): Promise<ApnsResult> {
   const tokenStart = Date.now();
   const token = await bearer(config, nowMs);
   timing.tokenMs = Date.now() - tokenStart;
   const headers: Record<string, string> = {
     authorization: `bearer ${token}`,
     'apns-topic': config.topic,
-    'apns-push-type': 'alert',
-    'apns-priority': '10',
-    'apns-expiration': String(Math.ceil(input.expiresAt / 1000)),
+    ...pushHeaders,
     'content-type': 'application/json',
   };
-  if (new TextEncoder().encode(input.collapseId).length <= 64)
-    headers['apns-collapse-id'] = input.collapseId;
   let res: Response;
   const fetchStart = Date.now();
   try {
     res = await fetchImpl(`${APNS_HOSTS[push.environment]}/3/device/${push.token}`, {
       method: 'POST',
       headers,
-      body: input.body,
+      body,
       signal: AbortSignal.timeout(RELAY_PROVIDER_TIMEOUT_MS),
     });
   } catch {

@@ -212,3 +212,31 @@ describe('socket liveness (ADR 756)', () => {
     expect(socketSilent(now - RELAY_SILENT_MS - 1, now)).toBe(true);
   });
 });
+
+describe('app_nudge frames (ADR 819)', () => {
+  const nudge = (over: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      protocol: 1,
+      type: 'app_nudge',
+      binding: 'b1',
+      push: { token: 'ab'.repeat(32), environment: 'production' },
+      dedupe_id: 'nudge:b1:1',
+      ...over,
+    });
+
+  it('parses a nudge and keeps nothing but the route', () => {
+    expect(parseDaemonFrame(nudge())).toEqual({
+      protocol: 1,
+      type: 'app_nudge',
+      binding: 'b1',
+      push: { token: 'ab'.repeat(32), environment: 'production' },
+      dedupe_id: 'nudge:b1:1',
+    });
+  });
+
+  it('refuses a nudge with content riding it, or without a push target', () => {
+    expect(parseDaemonFrame(nudge({ sealed: { v: 1, enc: 'e', ct: 'c' } }))).toBeNull();
+    expect(parseDaemonFrame(nudge({ push: null }))).toBeNull();
+    expect(parseDaemonFrame(nudge({ dedupe_id: '' }))).toBeNull();
+  });
+});
