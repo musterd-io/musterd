@@ -13,16 +13,19 @@
 | Official MCP Registry | `io.musterd/musterd` 0.7.1 listed ([API](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.musterd/musterd)) | Car 4 of the release train, `mcp-publisher publish`, nick ([ADR 669](../../decisions/669-the-release-train.md) D1, D4). `pnpm train status` checks it |
 | mcprush | Security grade A ([listing](https://mcprush.com/musterd/musterd-mcp)); badge in `README.md` | Re-graded by mcprush |
 | PulseMCP | Its submit page says it takes no new servers for now and picks servers up from the official registry later | Nothing to do: the registry listing covers it |
+| Glama | Listed 2026-11-06 at [glama.ai/mcp/servers/musterd-io/musterd](https://glama.ai/mcp/servers/musterd-io/musterd), marked official; submitted by nick | Claim it from the listing page: `glama.json` names `Nas4146` |
+| awesome-mcp-servers | PR [punkpeye/awesome-mcp-servers#18787](https://github.com/punkpeye/awesome-mcp-servers/pull/18787), opened 2026-11-06 by nick (`~/submit.sh`, prepared by sloane; the title carries the list's agent marker) | Waits on the list's maintainers |
+| mcp.so | Issue [chatmcp/mcpso#6869](https://github.com/chatmcp/mcpso/issues/6869), opened 2026-11-06 by nick, in the format other submissions use | Waits on mcp.so |
 
 ## 2. To submit, in order
 
 | # | Directory | Why | How a person submits | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | **Glama** ([glama.ai/mcp/servers](https://glama.ai/mcp/servers)) | Not listed (searched 2026-11-06). One 2026 guide says awesome-mcp-servers asks for a Glama listing before it merges | Sign in with GitHub, **Add Server**, the repository URL. Browser only; there is no submission API | Claim it after it is listed: `glama.json` at the repository root names `Nas4146` as maintainer (lane `01M6S7JWVZ`). Run the claim flow again after any change to that file |
-| 2 | **awesome-mcp-servers** ([punkpeye](https://github.com/punkpeye/awesome-mcp-servers)) | A large curated list of MCP servers on GitHub | A PR that edits `README.md`: one line, in the right category, alphabetical | Read the README's legend and categories on the day. A person opens the PR; the list's agent fast-track is for automated submitters and is not used |
+| 1 | done 2026-11-06 (§1): **Glama** ([glama.ai/mcp/servers](https://glama.ai/mcp/servers)) | Not listed (searched 2026-11-06). One 2026 guide says awesome-mcp-servers asks for a Glama listing before it merges | Sign in with GitHub, **Add Server**, the repository URL. Browser only; there is no submission API | Claim it after it is listed: `glama.json` at the repository root names `Nas4146` as maintainer (lane `01M6S7JWVZ`). Run the claim flow again after any change to that file |
+| 2 | done 2026-11-06 (§1): **awesome-mcp-servers** ([punkpeye](https://github.com/punkpeye/awesome-mcp-servers)) | A large curated list of MCP servers on GitHub | A PR that edits `README.md`: one line, in the right category, alphabetical | Read the README's legend and categories on the day. A person opens the PR; the list's agent fast-track is for automated submitters and is not used |
 | 3 | **awesome-claude-code** ([hesreallyhim](https://github.com/hesreallyhim/awesome-claude-code)) | Read by Claude Code users, the first user in the traction plan | The web issue form "recommend a resource". No PR. **A person, in the browser**: its rules refuse `gh` submissions and require submissions "created by human beings" | One resource at a time. Eligible: at least 14 days old with active development. Description "not a sales pitch", one line, no emoji |
-| 4 | **mcp.so** | A large MCP directory | Its submit page (sources disagree between a form and the `chatmcp/mcpso` repository; the page answered 403 to a script on 2026-11-06, so read it in a browser) | |
-| 5 | **Smithery** ([smithery.ai](https://smithery.ai)) | Still a directory, now run by Arcade.dev | Check whether it lists a local stdio server: its hosted proxy shut down on 2026-10-31 | Skip if it lists hosted servers only |
+| 4 | done 2026-11-06 (§1): **mcp.so** | A large MCP directory | Its submit page (sources disagree between a form and the `chatmcp/mcpso` repository; the page answered 403 to a script on 2026-11-06, so read it in a browser) | |
+| 5 | **Smithery** ([smithery.ai](https://smithery.ai)) | Still a directory, now run by Arcade.dev | Skipped 2026-11-06: a local server is published as an MCPB bundle through the signed-in website, and musterd ships no bundle | Revisit if musterd ships an MCPB bundle |
 
 The docs indexes Context7 and DeepWiki were submitted with 0.6.0 (train spec, `docs/superpowers/specs/2026-10-19-publish-launch-train-design.md`).
 Confirm each still resolves before launch day.
