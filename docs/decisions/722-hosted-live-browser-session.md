@@ -158,6 +158,12 @@ ADR 698 shipped the verifier (`verifyIdentityStatement`) and the binding (`membe
     which session opened the socket. The refresh half is minted but never handed out.
 
   Follows-up: 01M3Z458B261P8DW8VX4A7XCHG
+- _(2026-11-06, lane 01M6RZ8K12.)_ The statement the callback verifies carries
+  `use: "identity"` and may lack an email ([ADR 818](818-identity-proof-use-claim.md)), so a
+  GitHub-made account signs in. The console's `/handback` lands in the same lane; the `/live`
+  button is lane `01M6S2TXHV`.
+
+  Follows-up: 01M6S2TXHVHRZZ38ARRX4BR5PD
 
 ## Observability & Evaluation
 

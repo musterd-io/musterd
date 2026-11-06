@@ -162,8 +162,10 @@ const Claims = z.object({
   aud: z.union([z.string(), z.array(z.string())]),
   jti: z.string().min(1),
   exp: z.number().int(),
-  /** The verified email — present on an identity statement (ADR 698), absent on an admin token. */
+  /** A provider-verified email, when the console holds one (ADR 698; optional since ADR 818). */
   email: z.string().min(1).optional(),
+  /** `identity` marks an identity statement (ADR 818); an admin token carries no `use`. */
+  use: z.enum(['identity']).optional(),
 });
 
 function segment(s: string): unknown {
@@ -217,13 +219,17 @@ export async function verifyConsoleToken(
   opts: { jwks: JwksCache; audience: string; nowMs?: number },
 ): Promise<ConsoleClaims> {
   const c = await verifyJws(token, opts);
+  // ADR 818: one console key signs both kinds, so the kinds refuse each other by `use`.
+  if (c.use === 'identity')
+    throw refuse('malformed', 'an identity statement is not an admin token');
   return { sub: c.sub, aud: opts.audience, jti: c.jti, exp: c.exp };
 }
 
 /** A verified identity statement (ADR 698, spec §4.4): who the console authenticated. */
 export interface IdentityClaims {
   accountId: string;
-  email: string;
+  /** Null for an account the console holds no verified email for (a GitHub sign-in, ADR 818). */
+  email: string | null;
   jti: string;
   exp: number;
 }
@@ -231,7 +237,8 @@ export interface IdentityClaims {
 /**
  * Verify an identity statement for this team server — the same JWS path, refusal order, and
  * single-use redemption ({@link redeemJti}) as the admin token, plus the one claim that makes
- * it a statement: a verified `email`, absent ⇒ `malformed`. Asserts identity only; which member
+ * it a statement: `use: "identity"`, absent ⇒ `malformed` (ADR 818; the email it replaced as the
+ * marker is optional, because a GitHub account has none). Asserts identity only; which member
  * the account binds to is the team server's own lookup (§4.2), never the statement's claim.
  */
 export async function verifyIdentityStatement(
@@ -239,8 +246,8 @@ export async function verifyIdentityStatement(
   opts: { jwks: JwksCache; audience: string; nowMs?: number },
 ): Promise<IdentityClaims> {
   const c = await verifyJws(token, opts);
-  if (!c.email) throw refuse('malformed', 'identity statement lacks a verified email');
-  return { accountId: c.sub, email: c.email, jti: c.jti, exp: c.exp };
+  if (c.use !== 'identity') throw refuse('malformed', 'not an identity statement');
+  return { accountId: c.sub, email: c.email ?? null, jti: c.jti, exp: c.exp };
 }
 
 /** Rows stay this long past their token's `exp` — far beyond any clock skew between servers. */

@@ -116,7 +116,7 @@ describe('hosted /live sign-in (ADR 722)', () => {
   }
 
   function statement(sub = 'acct_ada', over: Record<string, unknown> = {}): string {
-    return issuer.token(AUD, { sub, email: `${sub}@example.test`, ...over });
+    return issuer.token(AUD, { sub, use: 'identity', ...over });
   }
 
   function postCallback(
@@ -175,6 +175,7 @@ describe('hosted /live sign-in (ADR 722)', () => {
     expect(c).not.toMatch(/Domain=/i);
   });
 
+  // statement() carries no email, as a GitHub-made account's does (ADR 818).
   it('the callback signs a bound account in: a __Host- Lax session cookie, the signin cookie cleared', async () => {
     const state = await startSignin();
     const r = await postCallback({ state, statement: statement() });
@@ -222,9 +223,14 @@ describe('hosted /live sign-in (ADR 722)', () => {
       (
         await postCallback({
           state: e,
-          statement: issuer.token('https://other.test', { sub: 'acct_ada', email: 'a@x' }),
+          statement: issuer.token('https://other.test', { sub: 'acct_ada', use: 'identity' }),
         })
       ).status,
+    ).toBe(403);
+    // An admin token (no use:"identity") presented as a statement (ADR 818).
+    const g = await startSignin();
+    expect(
+      (await postCallback({ state: g, statement: issuer.token(AUD, { sub: 'acct_ada' }) })).status,
     ).toBe(403);
     // An unbound account: the page says so without naming anyone.
     const f = await startSignin();
