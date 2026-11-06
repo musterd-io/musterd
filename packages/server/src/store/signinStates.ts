@@ -15,7 +15,11 @@ import { hashToken } from './members.js';
 export const SIGNIN_STATE_TTL_MS = 10 * 60_000;
 const PRUNE_AFTER_MS = 60 * 60_000;
 
-export type SigninMode = 'signin' | 'invite' | 'link' | 'connect';
+/**
+ * `connect` (ADR 820) starts a connector's round trip; `grant` is the one-time state between the
+ * callback and the person's Allow — it pins the member the account resolved to, and the request.
+ */
+export type SigninMode = 'signin' | 'invite' | 'link' | 'connect' | 'grant';
 
 /** ADR 820: the MCP client authorization a `connect` state was started for, already validated. */
 export interface ConnectRequest {

@@ -77,6 +77,7 @@ const ROWS: Row[] = [
   { gate: 'session', method: 'GET', path: '/live/signin/start', want: 403 },
   { gate: 'session', method: 'POST', path: '/live/signin/start', want: 403 },
   { gate: 'session', method: 'POST', path: '/live/signin/callback', want: 403 },
+  { gate: 'session', method: 'POST', path: '/live/signin/connect', want: 403 },
   { gate: 'session', method: 'POST', path: '/live/session/token', want: 403 },
   { gate: 'session', method: 'POST', path: '/live/signout', want: 403 },
 ];

@@ -19,6 +19,7 @@ import {
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import { createTeam } from '../store/teams.js';
 import { SESSION_COOKIE, SIGNIN_COOKIE, SIGNED_OUT_CLOSE_CODE } from './liveSession.js';
+import { __resetOAuthBucketsForTest } from './oauth.js';
 
 /**
  * ADR 722 §1–4 against a real Cloud server and the test issuer: the falsifier list in its
@@ -550,6 +551,8 @@ describe('hosted /live sign-in (ADR 722)', () => {
   });
 
   describe('connecting an MCP client (ADR 820)', () => {
+    // The OAuth per-IP buckets are process-wide; each test here registers a client.
+    beforeEach(() => __resetOAuthBucketsForTest());
     const REDIRECT = 'https://claude.ai/api/mcp/auth_callback';
     const VERIFIER = 'v'.repeat(43);
     const CHALLENGE = createHash('sha256').update(VERIFIER).digest('base64url');
@@ -614,39 +617,145 @@ describe('hosted /live sign-in (ADR 722)', () => {
       expect(r.body).toContain('name="agent_connect"');
     });
 
-    it('signs in through the console and hands the client a code for the bound member', async () => {
-      const client_id = await registerClient();
+    /** The callback's answer for a connect: the confirm page and its one-time grant state. */
+    async function reachConfirm(
+      client_id: string,
+      sub = 'acct_ada',
+    ): Promise<{ grant: string; body: string }> {
       const state = await startConnect(client_id);
-      const cb = await postCallback({ state, statement: statement() });
-      expect(cb.status).toBe(302);
-      const back = new URL(String(cb.headers['location']));
+      const cb = await postCallback({ state, statement: statement(sub) });
+      expect(cb.status).toBe(200);
+      const grant = cookieValue(cb, SIGNIN_COOKIE)!;
+      expect(grant).toBeTruthy();
+      expect(grant).not.toBe(state);
+      return { grant, body: cb.body };
+    }
+
+    function confirm(
+      grant: string,
+      decision: 'allow' | 'deny',
+      opts: { cookie?: string | null; site?: string; extra?: Record<string, string> } = {},
+    ): Promise<Res> {
+      const headers: Record<string, string> = {
+        'content-type': 'application/x-www-form-urlencoded',
+        origin: TEAM_ORIGIN,
+        'sec-fetch-site': opts.site ?? 'same-origin',
+      };
+      const c = opts.cookie === undefined ? grant : opts.cookie;
+      if (c !== null) headers['cookie'] = `${SIGNIN_COOKIE}=${c}`;
+      return call('POST', '/live/signin/connect', {
+        headers,
+        body: form({ state: grant, decision, ...(opts.extra ?? {}) }),
+      });
+    }
+
+    it('after sign-in, names the client, the team and the member before anything is issued', async () => {
+      const client_id = await registerClient();
+      const { body } = await reachConfirm(client_id);
+      expect(body).toContain('Claude');
+      expect(body).toContain('revive');
+      expect(body).toContain('ada');
+      expect(body).toContain('action="/live/signin/connect"');
+      expect(body).toContain('value="allow"');
+      expect(body).toContain('value="deny"');
+      // Nothing issued yet, and no browser session ever.
+      expect((await listAudit(seed, team.id)).some((a) => a.action === 'oauth.code_issued')).toBe(
+        false,
+      );
+      expect(await sessionRows()).toBe(0);
+    });
+
+    it('Allow hands the client a code for that member, which redeems only with its own verifier', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      const r = await confirm(grant, 'allow');
+      expect(r.status).toBe(302);
+      const back = new URL(String(r.headers['location']));
       expect(`${back.origin}${back.pathname}`).toBe(REDIRECT);
       expect(back.searchParams.get('state')).toBe('client-state-1');
       const code = back.searchParams.get('code')!;
-      expect(code).toBeTruthy();
-      // No browser session: a connector never rides, or leaves, a /live cookie.
+      expect(cookies(r).find((c) => c.startsWith(`${SIGNIN_COOKIE}=`))).toContain('Max-Age=0');
       expect(await sessionRows()).toBe(0);
-      expect(cookies(cb).some((c) => c.startsWith(`${SESSION_COOKIE}=`))).toBe(false);
-      expect(cookies(cb).find((c) => c.startsWith(`${SIGNIN_COOKIE}=`))).toContain('Max-Age=0');
-      // The code redeems with the client's own PKCE verifier, as ada.
-      const tok = await call('POST', '/oauth/revive/token', {
+      const token = (verifier: string) =>
+        call('POST', '/oauth/revive/token', {
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: form({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: REDIRECT,
+            client_id,
+            code_verifier: verifier,
+          }),
+        });
+      // A PKCE mismatch is refused (and burns the code, as ADR 446 does).
+      expect((await token('w'.repeat(43))).status).toBe(400);
+      const { code: code2 } = Object.fromEntries(
+        new URL(
+          String(
+            (await confirm((await reachConfirm(client_id)).grant, 'allow')).headers['location'],
+          ),
+        ).searchParams,
+      ) as { code: string };
+      const ok = await call('POST', '/oauth/revive/token', {
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: form({
           grant_type: 'authorization_code',
-          code,
+          code: code2,
           redirect_uri: REDIRECT,
           client_id,
           code_verifier: VERIFIER,
         }),
       });
-      expect(tok.status).toBe(200);
-      const access = (JSON.parse(tok.body) as { access_token: string }).access_token;
-      expect(access.startsWith('msat_')).toBe(true);
+      expect(ok.status).toBe(200);
+      expect((JSON.parse(ok.body) as { access_token: string }).access_token).toMatch(/^msat_/);
       const issued = (await listAudit(seed, team.id)).find(
         (a) => a.action === 'oauth.code_issued',
       )!;
       expect(issued.actor).toBe('ada');
       expect(JSON.parse(String(issued.detail))).toMatchObject({ via: 'musterd' });
+    });
+
+    it('Cancel sends the client access_denied with its state, and issues nothing', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      const r = await confirm(grant, 'deny');
+      expect(r.status).toBe(302);
+      const back = new URL(String(r.headers['location']));
+      expect(`${back.origin}${back.pathname}`).toBe(REDIRECT);
+      expect(back.searchParams.get('error')).toBe('access_denied');
+      expect(back.searchParams.get('state')).toBe('client-state-1');
+      expect(back.searchParams.get('code')).toBeNull();
+      expect((await listAudit(seed, team.id)).some((a) => a.action === 'oauth.code_issued')).toBe(
+        false,
+      );
+    });
+
+    it('refuses a confirm that is cross-site, has no or another cookie, is replayed, or names another request', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      expect((await confirm(grant, 'allow', { site: 'cross-site' })).status).toBe(403);
+      expect((await confirm(grant, 'allow', { cookie: null })).status).toBe(403);
+      expect((await confirm(grant, 'allow', { cookie: 'someone-elses-state' })).status).toBe(403);
+      // Fields that try to swap the request are ignored: the grant carries it.
+      const swapped = await confirm(grant, 'allow', {
+        extra: { client_id: 'other', redirect_uri: 'https://evil.test/cb', code_challenge: 'x' },
+      });
+      expect(swapped.status).toBe(302);
+      expect(String(swapped.headers['location']).startsWith(REDIRECT)).toBe(true);
+      // Spent: a second Allow on the same grant is refused.
+      expect((await confirm(grant, 'allow')).status).toBe(403);
+      // A connect state is not a grant: it cannot skip the callback.
+      const raw = await startConnect(client_id);
+      expect((await confirm(raw, 'allow')).status).toBe(403);
+    });
+
+    it('refuses Allow when the member left between sign-in and the click', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      await seed.run('UPDATE members SET left_at = ? WHERE id = ?', [Date.now(), ada.id]);
+      const r = await confirm(grant, 'allow');
+      expect(r.status).toBe(403);
+      expect(r.headers['location']).toBeUndefined();
     });
 
     it('refuses a Sign in with musterd POST that did not come from the consent page (CSRF)', async () => {
@@ -690,7 +799,7 @@ describe('hosted /live sign-in (ADR 722)', () => {
       expect(stranger.status).toBe(403);
       expect(stranger.headers['location']).toBeUndefined();
       const b = await startConnect(client_id);
-      expect((await postCallback({ state: b, statement: statement() })).status).toBe(302);
+      expect((await postCallback({ state: b, statement: statement() })).status).toBe(200);
       expect((await postCallback({ state: b, statement: statement() })).status).toBe(403);
       expect(await refusals()).toEqual(expect.arrayContaining(['unbound', 'state_spent']));
     });

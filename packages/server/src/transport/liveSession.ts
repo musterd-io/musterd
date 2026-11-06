@@ -37,7 +37,7 @@ import {
   mintTokenPair,
   revokeChainsForSession,
 } from '../store/oauth.js';
-import { issueCode, type OAuthClientSource } from '../store/oauth.js';
+import { getClient, issueCode, type OAuthClientSource } from '../store/oauth.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import {
   consumeSigninState,
@@ -67,6 +67,7 @@ export const LIVE_SESSION_ROUTES = [
   { method: 'GET', path: '/live/signin/start' },
   { method: 'POST', path: '/live/signin/start' },
   { method: 'POST', path: '/live/signin/callback' },
+  { method: 'POST', path: '/live/signin/connect' },
   { method: 'POST', path: '/live/session/token' },
   { method: 'POST', path: '/live/signout' },
 ] as const;
@@ -84,6 +85,8 @@ const FORM_MAX_BYTES = 16 * 1024;
 export type SessionRefusal =
   | 'origin'
   | 'connect_malformed'
+  | 'not_grant'
+  | 'client_gone'
   | 'not_same_origin'
   | 'no_cookie'
   | 'state_mismatch'
@@ -179,6 +182,7 @@ export async function handleLiveSessionRoutes(
   const env = envFor(rootCtx, team, cloud);
   if (path === '/live/signin/start') await start(env, req, res, method, url);
   else if (path === '/live/signin/callback') await callback(env, req, res);
+  else if (path === '/live/signin/connect') await confirmConnect(env, req, res);
   else if (path === '/live/session/token') await exchange(env, req, res);
   else await signout(env, req, res);
   return true;
@@ -251,7 +255,33 @@ export async function beginConnectSignin(
   return { location: handbackUrl(env, s.state), cookie: signinCookie(s.state) };
 }
 
-/** ADR 820 §3: the callback's end for a `connect` state — a code for the client, no session. */
+/** The client, if it is still registered with exactly this redirect (ADR 446 §5's exact match). */
+async function clientStill(
+  env: Env,
+  request: ConnectStart,
+): Promise<{ client_name: string } | null> {
+  try {
+    const client = await getClient(env.ctx.db, env.team.id, request.client_id);
+    const uris = JSON.parse(client.redirect_uris) as unknown;
+    return Array.isArray(uris) && uris.includes(request.redirect_uri) ? client : null;
+  } catch {
+    return null;
+  }
+}
+
+const parseConnect = (raw: string | null): ConnectStart | null => {
+  try {
+    return ConnectRequestSchema.parse(JSON.parse(raw ?? ''));
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * ADR 820 §3: the callback's end for a `connect` state. Nothing is issued yet: the console may
+ * have signed with whatever account was already signed in there, so the person is shown who they
+ * are about to connect as, and the code waits for their Allow on a one-time `grant` state.
+ */
 async function connectBack(
   env: Env,
   res: ServerResponse,
@@ -260,12 +290,67 @@ async function connectBack(
   refuse: (reason: SessionRefusal) => Promise<void>,
 ): Promise<void> {
   const { ctx, team } = env;
-  let request: ConnectStart;
-  try {
-    request = ConnectRequestSchema.parse(JSON.parse(record.oauth_request ?? ''));
-  } catch {
-    return refuse('connect_malformed');
-  }
+  const request = parseConnect(record.oauth_request);
+  if (!request) return refuse('connect_malformed');
+  const client = await clientStill(env, request);
+  if (!client) return refuse('client_gone');
+  const grant = await startSigninState(ctx.db, {
+    teamId: team.id,
+    mode: 'grant',
+    memberId: member.id,
+    oauthRequest: request,
+  });
+  confirmPage(res, {
+    client: client.client_name,
+    team: team.slug,
+    member: member.name,
+    state: grant.state,
+    cookie: signinCookie(grant.state),
+  });
+}
+
+/**
+ * ADR 820 §3: the person's Allow or Cancel. Same-origin only (the confirm page is the only form
+ * that may post here); the cookie, the form and an unspent `grant` state must agree. The request
+ * comes from the grant, never from the form, so no field can swap the client or the redirect.
+ */
+async function confirmConnect(env: Env, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const { ctx, team } = env;
+  const refuse = async (reason: SessionRefusal): Promise<void> => {
+    await refusedRow(ctx.db, team.id, reason);
+    page(res, 403, "That didn't complete. Start again from the app you were connecting.", [
+      CLEAR_SIGNIN,
+    ]);
+  };
+  if (req.headers['sec-fetch-site'] !== 'same-origin') return refuse('not_same_origin');
+  const cookieState = parseCookies(req.headers.cookie).get(SIGNIN_COOKIE);
+  const form = ConfirmSchema.safeParse(await readForm(req));
+  if (!cookieState) return refuse('no_cookie');
+  if (!form.success || form.data.state !== cookieState) return refuse('state_mismatch');
+  const consumed = await consumeSigninState(ctx.db, team.id, form.data.state);
+  if (!consumed.ok) return refuse(`state_${consumed.reason}`);
+  if (consumed.record.mode !== 'grant') return refuse('not_grant');
+  const request = parseConnect(consumed.record.oauth_request);
+  if (!request) return refuse('connect_malformed');
+  const back = (query: string): void => {
+    const sep = request.redirect_uri.includes('?') ? '&' : '?';
+    res.writeHead(302, {
+      location: `${request.redirect_uri}${sep}${query}&state=${encodeURIComponent(request.state)}`,
+      'cache-control': 'no-store',
+      pragma: 'no-cache',
+      'set-cookie': CLEAR_SIGNIN,
+      'content-length': '0',
+    });
+    res.end();
+  };
+  if (form.data.decision === 'deny') return back('error=access_denied');
+  // Re-checked at the click, not trusted from the callback a minute ago.
+  const member = consumed.record.member_id
+    ? await getMemberById(ctx.db, consumed.record.member_id)
+    : undefined;
+  if (!member || member.left_at !== null || member.team_id !== team.id || member.kind !== 'human')
+    return refuse('member_left');
+  if (!(await clientStill(env, request))) return refuse('client_gone');
   const { code } = await issueCode(ctx.db, {
     teamId: team.id,
     memberId: member.id,
@@ -282,15 +367,44 @@ async function connectBack(
     result: 'allow',
     detail: { via: 'musterd' },
   });
-  const sep = request.redirect_uri.includes('?') ? '&' : '?';
-  res.writeHead(302, {
-    location: `${request.redirect_uri}${sep}code=${encodeURIComponent(code)}&state=${encodeURIComponent(request.state)}`,
+  back(`code=${encodeURIComponent(code)}`);
+}
+
+const ConfirmSchema = z.object({
+  state: z.string().min(1).max(256),
+  decision: z.enum(['allow', 'deny']),
+});
+
+/**
+ * The confirm page. Never framed (the Allow button is a clickjacking target), no script, and no
+ * `form-action`: a browser applies it to the 302 the POST answers, which goes to the client.
+ */
+function confirmPage(
+  res: ServerResponse,
+  o: { client: string; team: string; member: string; state: string; cookie: string },
+): void {
+  const e = (v: string) => v.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  const body = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect ${e(o.client)} to ${e(o.team)} — musterd</title></head>
+<body style="font-family:system-ui,sans-serif;margin:3rem auto;max-width:32rem;padding:0 1rem;line-height:1.5">
+<h1 style="font-size:1.375rem;margin:0 0 .5rem">Connect ${e(o.client)} to ${e(o.team)}?</h1>
+<p style="margin:0 0 1.5rem">As <strong>${e(o.member)}</strong>. ${e(o.client)} will be able to read the team and send as you until you sign it out.</p>
+<form method="post" action="/live/signin/connect" style="display:flex;gap:.75rem">
+<input type="hidden" name="state" value="${e(o.state)}">
+<button type="submit" name="decision" value="allow" style="min-height:2.75rem;padding:0 1.25rem;font:inherit;font-weight:600;border-radius:8px;border:1px solid #e1ad01;background:#e1ad01;color:#18181b">Allow</button>
+<button type="submit" name="decision" value="deny" style="min-height:2.75rem;padding:0 1.25rem;font:inherit;border-radius:8px;border:1px solid #71717a;background:#fff;color:#18181b">Cancel</button>
+</form></body></html>`;
+  res.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
     'cache-control': 'no-store',
-    pragma: 'no-cache',
-    'set-cookie': CLEAR_SIGNIN,
-    'content-length': '0',
+    'content-security-policy':
+      "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'no-referrer',
+    'set-cookie': [o.cookie],
   });
-  res.end();
+  res.end(body);
 }
 
 // ── start ───────────────────────────────────────────────────────────────────────────────────────
