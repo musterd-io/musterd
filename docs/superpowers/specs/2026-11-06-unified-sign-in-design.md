@@ -33,7 +33,9 @@ happened to bind `members.account_id`.
 - **Every surface recognises the same you**: the same account, the same member of the same team,
   the same permissions. A revoke or removal anywhere holds everywhere (within 5 minutes for an
   account-level event; §11.4).
-- **No secret is ever shown to be copied or pasted** by a person, on any surface.
+- **No secret is ever shown or pasted in order to sign in**, on any surface. The one secret a
+  person ever sees is an API key they asked for (§8), shown once. *(Corrected 2026-11-06 after
+  sloane's read: the first wording contradicted §8.)*
 
 ## Anti-goals (a failure even if it works)
 
@@ -76,7 +78,8 @@ identity of ADR 557/580 and the CLI's chmod-600 config. The no-phone-home test f
 (lane `01M3Z42SKR`) stays a gate.
 
 **Sign in to musterd** is asked for once, at the first moment something needs it — a paid local
-feature, a cloud agent, a Cloud team, or (open question 1) a teammate on another network. After
+feature, a cloud agent, or a Cloud team. A teammate on another network does **not** need it:
+invites keep working accountless (nick, 2026-11-06). After
 that the local hub is **linked**: it trusts the console's keys for this account, and every local
 surface knows you as that account.
 
@@ -180,12 +183,15 @@ teams, cloud agents and musterd Cloud are **mostly paid, maybe with a free trial
 normal. ADR 461 instead says self-hosted is entirely free and uncapped, and Cloud is free for two
 humans. This design does not decide prices. It records that:
 
-- the account is the billing unit's home (ADR 461 §2's "human seat" becomes "account with a seat on
-  a paid team");
+- the account is the billing unit's home (ADR 461 §2's per-human charge attaches to the account
+  of each human member of a paid team; "seat" is not the billing word — sloane, 2026-11-06);
 - a paid **local** feature needs the account, which is why free local stays account-free and the
   first paid step asks for sign-in;
 - ADR 461 should be revised (or superseded) by a pricing ADR before billing is built. Owner: sloane
-  with nick.
+  with nick (lane `01M6S2X5F9`).
+- nick, 2026-11-06 (question `01M6S3SEV9`, via sloane): **invites keep working across networks with
+  no account.** The account line is Cloud plus the paid features. **Trial:** a free allowance on
+  Cloud, then paid.
 
 ### 11. Calls made after the builder check (miley; big-body to confirm)
 
@@ -210,8 +216,8 @@ each changes what gets built, so each is settled here as **my call**.
    - **Anyone else:** an admin sends them a fresh invite, which binds on use. No admin rebind
      (ADR 698's deferred unbinding stays deferred).
 3. **Linking a self-hosted hub** registers it with the console: the hub's public URL (if it has one)
-   and the audience string it pins. The hub **pulls** the console's keys and a revocation list (item
-   4) on a timer. The console **never calls in**, so a hub behind NAT links fine. The console's
+   and the audience string it pins; the console answers with a **link id** for that hub. The hub
+   **pulls** the console's keys and its revocation list (item 4) on a timer. The console **never calls in**, so a hub behind NAT links fine. The console's
    team list for an account is what was registered or bound; a hub that is not publicly reachable
    is listed with no URL (the phone and `join` reach it the way they do today: on its network or
    through its federation). A linked hub stays usable offline: existing sessions live out their
@@ -222,6 +228,15 @@ each changes what gets built, so each is settled here as **my call**.
    pulls it with the keys (at most 5 minutes stale) and ends that account's sessions on it. A hub
    offline for longer catches up when it next reaches the console. ("A revoke holds everywhere" in
    *What success is* means this, within those 5 minutes.)
+
+   **What the pull sends** (sloane, for PRIVACY.md; big-body to confirm): the keys are a plain GET of
+   the public JWKS and send nothing. The revocation pull is one GET carrying the hub's **link id**
+   and nothing else — no team name, member, act, lane or count. The console answers only with
+   revocations for accounts **bound on that hub** (it learns a binding when the hub's callback
+   binds an account, which already goes through a console-signed proof for that audience). An
+   unlinked hub makes neither request (the no-phone-home test). PRIVACY.md's "does not phone home"
+   line becomes: *an unlinked hub never contacts musterd.io; a linked hub fetches musterd.io's
+   public keys and its own revocation list every 5 minutes, sending only its link id.*
 5. **Who may vouch for a machine.** A member may join a machine that holds **only their own seats**
    (their human seat and the agents they own). The join is an act on the team, visible on `/live`.
    A seat owned by someone else, or an admin capability, needs an admin's approval on `/live`. ADR
@@ -251,14 +266,19 @@ each changes what gets built, so each is settled here as **my call**.
 | 17 | Second machine (`msinv_` + trust act) | **Replaced** by `musterd login` + `join` on linked/hosted teams. |
 | 18 | Note key | Unchanged (automatic). |
 
-## Open questions for nick
+## Questions nick answered (2026-11-06)
 
-1. **Does a free local team that reaches across networks** (a teammate on another network, a second
-   laptop elsewhere) need an account? Yes makes "the account" the line where hybrid starts and
-   probably where paid starts; no keeps today's invites and `msinv_` working accountless across
-   networks.
-2. **Trial shape** — time-boxed, or a free allowance (seats, agent-hours)? It does not change this
-   design's flows, only where "upgrade" appears; sloane's pricing ADR.
+1. **Does a free local team that reaches across networks need an account?** No — invites and
+   `msinv_` keep working accountless across networks. The account is asked for by Cloud and by paid
+   features only (§2's "first moment" list drops "a teammate on another network").
+2. **Trial shape:** a free allowance on Cloud, then paid. Detail is the pricing ADR's (lane
+   `01M6S2X5F9`).
+
+## Display name without an email
+
+(sloane's question 2.) An account with no email is shown on the console by its sign-in method —
+*your GitHub account* — never by an id. On a team, a person is always shown by their member name.
+A display name an account sets itself is later work; this design adds none.
 
 ## For big-body (security)
 
@@ -277,6 +297,9 @@ each changes what gets built, so each is settled here as **my call**.
    rule (§11.5).
 
 ## For sloane (the words)
+
+Superseded by sloane's copy spec, `docs/design/sign-in-copy-spec.md` (lane `01M6S3BYBY`), which
+lanes 1b and 3–10 take their strings from verbatim. The list below is what it covers.
 
 - The one-line prompt at the first moment an account is needed (§2), per trigger.
 - The button label, everywhere: **Sign in with musterd**.
