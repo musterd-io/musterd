@@ -23,6 +23,7 @@ import {
   WAKE_DEFER_ACTUATOR_RESTART,
   WAKE_DEFER_SNOOZE_MS,
   WAKE_DEFER_SNOOZE_CAP_MS,
+  COLD_FIRST_LEASE_TTL_MS,
   WAKE_LEASE_TTL_MS,
   WAKE_POLICY_DEFAULTS,
   WORK_ORDER_CONTINUATION_SUCCESS_CAP,
@@ -528,6 +529,72 @@ withDrivers('residency', (o, kind) => {
       );
       expect(leased).toHaveLength(1);
       expect(leased[0]!.target).toBe('Ada');
+    });
+
+    async function flyStartRow(
+      db: Database,
+      team: TeamRow,
+      host: string,
+      backdateMs = 0,
+    ): Promise<void> {
+      await appendAudit(db, team.id, {
+        actor: null,
+        action: 'fly.machine_start',
+        target: null,
+        result: 'allow',
+        detail: { app: 'musterd-agent-x', machine: 'm1', host },
+      });
+      if (backdateMs > 0) {
+        await db.run(
+          'UPDATE audit SET ts = ? WHERE id = (SELECT id FROM audit ORDER BY id DESC LIMIT 1)',
+          [Date.now() - backdateMs],
+        );
+      }
+    }
+
+    it('ADR 816: the first lease after a hub machine start gets the cold TTL, audited', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await flyStartRow(db, team, HOST);
+      await msg(db, team, nick, ada, 'steer', 'cold1', Date.now());
+      const before = Date.now();
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders).toHaveLength(1);
+      expect(orders[0]!.expires_at - before).toBeGreaterThan(COLD_FIRST_LEASE_TTL_MS - 5_000);
+      expect(orders[0]!.expires_at - before).toBeLessThanOrEqual(COLD_FIRST_LEASE_TTL_MS + 5_000);
+      const leased = (await listAudit(db, team.id)).filter(
+        (r) => r.action === 'residency.wake_leased',
+      );
+      expect(leased).toHaveLength(1);
+      const detail =
+        typeof leased[0]!.detail === 'string'
+          ? (JSON.parse(leased[0]!.detail) as Record<string, unknown>)
+          : leased[0]!.detail;
+      expect(detail).toMatchObject({ cold_first: true, ttl_ms: COLD_FIRST_LEASE_TTL_MS });
+    });
+
+    it('ADR 816: a woke since the hub start ends the cold window — the warm TTL applies', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await flyStartRow(db, team, HOST);
+      await wakeOutcomeRow(db, team, 'Ada', 'earlier', 'residency.woke');
+      await msg(db, team, nick, ada, 'steer', 'warm1', Date.now());
+      const before = Date.now();
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders).toHaveLength(1);
+      expect(orders[0]!.expires_at - before).toBeLessThanOrEqual(WAKE_LEASE_TTL_MS + 5_000);
+    });
+
+    it('ADR 816: a hub start outside the cold window, or for another host, gets the warm TTL', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await flyStartRow(db, team, HOST, 601_000);
+      await flyStartRow(db, team, 'someone-else.local');
+      await msg(db, team, nick, ada, 'steer', 'warm2', Date.now());
+      const before = Date.now();
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders).toHaveLength(1);
+      expect(orders[0]!.expires_at - before).toBeLessThanOrEqual(WAKE_LEASE_TTL_MS + 5_000);
     });
 
     it("ignores a peer machine's wake rows: the hourly cap counts what this daemon minted", async () => {
