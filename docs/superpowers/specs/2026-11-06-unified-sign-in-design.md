@@ -252,10 +252,14 @@ each changes what gets built, so each is settled here as **my call**.
      mints and refreshes — until a pull succeeds. Worst case **1 h** (the revoke lands just after
      the last pull). Local credentials (`mscr_`, the operator's loopback) are not account-derived
      and keep working.
-   - **The staleness clock survives a restart.** The hub persists the wall-clock time of its last
-     successful pull. While running, age is measured on the monotonic clock from that pull. After a
-     restart, age is wall-clock now minus the persisted time; a missing value, or one in the future
-     (the clock went back), counts as stale. So a restart can make the hub staler, never fresher.
+   - **A restart is stale until a fresh pull.** After every process restart the hub treats its
+     revocation state as stale — account-derived credentials refused — until one pull succeeds.
+     A persisted timestamp is not trusted: a wall clock rolled back but still later than it would
+     shorten the age without looking wrong. While running, age is measured on the monotonic clock
+     from the last successful pull. Local credentials are unaffected, so a restart never locks the
+     operator out.
+   - **Crossing the threshold closes sockets.** When the 1 h mark passes, the hub closes every open
+     socket authorised by an account-derived credential (4401), not only refusing its next use.
    - The list response is `no-store`, so no HTTP cache sits between the pull and the console.
 
    **What the pull sends** (sloane, for PRIVACY.md; big-body to confirm): the keys are a plain GET of
