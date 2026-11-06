@@ -33,6 +33,7 @@ const ROLE_SKILLS = [
   'steward',
   'observer',
   'ios-engineer',
+  'commerce',
 ];
 
 /** Roles whose rebuild by the ADR 586 method is still owed, with the lane that owes it. */
