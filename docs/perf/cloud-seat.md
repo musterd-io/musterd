@@ -1333,3 +1333,47 @@ checks as run by one operator and reported second-hand; big-body did not indepen
 re-run them. Falsify: an independent re-run of those presence/mode/UID checks showing any
 different reading. The lane's own falsifier (a human step on the machine, or a
 `bound_elsewhere` in the week) was separately not observed in this run's record.
+
+## 2026-11-06 — delta-2's cost, read for scale-to-zero (lane `01M64B25QM`)
+
+Fifty's instruction on handing ghost the scale-to-zero lane: the phase 1 per-day Fly figure was
+never filled in for delta-2; read it before designing the stop. **Same provenance split as
+2026-09-14:** utilisation is measured, infrastructure is list-price arithmetic at Fly's published
+rates fetched 2026-11-06 (`https://docs.fly.io/about/pricing` — `shared-cpu-2x` with 2 GB RAM
+$13.39/month at 30 days continuous, volumes $0.15/GB/month, stopped rootfs $0.15/GB/month; the
+table's basis is `iad`/`ewr`, Fly's cheapest regions, and delta-2 is `sjc`, so treat the machine
+line as a floor). No billing verb exists in `fly` (re-checked) and the GraphQL invoice gap from
+2026-09-15 stands, so the invoice falsifier (>20% off ⇒ these rates are wrong for this account)
+is still the check and still needs a human at the dashboard.
+
+**Measured utilisation: none.** `musterd report residency` (last 7 days, read 2026-11-06) has no
+`delta-2` row — zero wakes in the window. The machine (`87e126c01399e8`, created 2026-10-27,
+relaunched 2026-11-04, `started` throughout) has been bought and paid for as pure reachability
+since the 2026-10-28 pilot wakes above.
+
+| line | rate | /month |
+| --- | --- | --- |
+| `shared-cpu-2x` / 2 GB, started | $13.39 (bundled preset price, current list) | $13.39 |
+| 3 GB volume `agent_data` (attached) | $0.15/GB/mo | $0.45 |
+| **always-on total** | | **$13.84/mo ≈ $0.46/day** |
+| stopped (rootfs ~506 MB at $0.15/GB/mo + volume) | | **~$0.53/mo** |
+
+Against the 2026-09-14 reading ($11.99/month for the same shape) the machine line rose ~15% —
+Fly now bundles the 2 GB preset at $13.39 where the old arithmetic summed a $4.04 preset and
+$7.50 of extra RAM. Same conclusion, bigger stakes: **at zero wakes a week, scale-to-zero saves
+~$13.31/month (96%) on this one seat**, and the saving is per machine, so it is the difference
+between phase 2a (one machine per team) costing ~$14/team/month idle and ~$0.50. Infra to date
+for delta-2 at these rates: ~$4.61 for its 10 days, against $0.0356 of measured model spend (the
+two pilot wakes) — the inverse of the 2026-09-14 machine, where model spend was 3× the machine.
+An idle cloud seat's cost is all machine.
+
+Two loose threads in the same read. A second 3 GB `agent_data` volume (`vol_4m3ed3gm612klo3v`)
+sits detached in `sjc` billing $0.45/month attached to nothing — the 2026-11-04 relaunch's
+leftover, kept only as long as a rollback might want it. And the stopped figure's rootfs term
+reuses the earlier machine's 506 MB image measurement; delta-2's own rootfs size is not exposed
+by `fly machine status`, so $0.53 is an estimate within a few cents, not a reading.
+
+**What this does not settle:** cold act→reply latency. That is the lane's falsifier (~2 min) and
+it cannot be read until the start path exists (ADR 816). Boot to daemon-up was ~8 s on
+2026-10-28; the unbounded term is the joiner's fold drain on a cold start after days stopped,
+which no reading on this page has measured yet.
