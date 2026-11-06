@@ -57,3 +57,14 @@ export function tabTint(tab: Tab, p: Palette): string {
 export function pillBottom(insetBottom: number): number {
   return Math.max(insetBottom - 16, 2);
 }
+
+/**
+ * How long a sent answer's moment stays before it fades and returns you (nick, 2026-11-06: "an
+ * overlay that magically fades away after say 5 seconds so you naturally return").
+ */
+export const AUTO_RETURN_MS = 5_000;
+
+/** Where a finished moment returns to: back where you came from, or Now when nothing is behind. */
+export function leaveTo(canGoBack: boolean): 'back' | 'home' {
+  return canGoBack ? 'back' : 'home';
+}
