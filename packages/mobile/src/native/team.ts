@@ -24,7 +24,6 @@ export interface TeamRows {
   counts: { here: number; offline: number; needYou: number };
 }
 
-
 /** /live's `byReach`: wakeable agents (they have a button), then the other agents, then people. */
 function byReach(a: AppMember, b: AppMember): number {
   const rank = (m: AppMember) => (m.kind === 'human' ? 2 : m.wakeable ? 0 : 1);
