@@ -1435,3 +1435,61 @@ the sweep's tick). At the time of writing (17:37Z) it is still `stopped`: the fi
 the pilot cost the volume and ~80 min of compute across both rounds, against the $0.46/day
 always-on line. The two-week eval reads the running-hours share from the `fly.machine_*` audit
 rows themselves.
+
+## 2026-11-06 (later) — cold-lease rounds 3–5: the spawn was never slow, the order was stranded (lane `01M6RZ0NRA`)
+
+Lane `01M6RZ0NRA` first implemented the candidate named above: a 420 s first lease when the
+lease follows a hub `fly.machine_start` within 10 min with no `woke` since (#3995), then made
+`fly.machine_start` a replicated ledger verb so the row reaches the joiner daemon where leases
+mint (#3997). Three live rounds then falsified the premise the TTL was built on.
+
+**Round 3** (hub + delta-2 on the #3995 build, before the fold fix): steer 17:56:17.5Z → start
+17:56:43.4Z → first lease 17:57:06.6Z → `lease_expired` 17:59:09.9Z → retry woke 17:59:18.6Z →
+reply 17:59:19.7Z = **182.2 s**. No `fly.*` row existed on the joiner (read over `fly ssh`), so
+the cold TTL could not fire — the finding #3997 fixed. The improvement over round 2's 291 s was
+only retry-cadence luck.
+
+**Round 4** (both sides on #3997, hub build `90d4fbdb` from 18:14:46Z, delta-2 redeployed
+18:16Z): hand-stop 18:20:34Z → steer ~18:20:41Z → start minted on the hub 18:20:45.2Z and
+**folded into the joiner's audit 18:20:57.8Z** — the fold fix proven live. No lease followed:
+round 3 had left `wake_failed` 17:59:09.9Z + `woke` 17:59:18.6Z inside the trailing hour
+against the default residency cap of 2 (`wakesSince`, `residency.ts`). Host and daemon on the
+machine were healthy throughout (host polling from 18:21:11Z, `host_seen` cadence intact); the
+gate writes no new row while its state is unchanged, which reads as silence. The cap lifted
+exactly on the arithmetic: `wake_gate passed` 18:59:13.3Z, lease 18:59:13.3Z (warm — 38 min
+after the start, outside the 10 min cold window, correctly unstamped), `woke` 18:59:16.5Z,
+reply ~18:59:19Z. Act→reply 38.6 min, cap-held; not a latency read.
+
+**Round 5** (clean cold read, cap clear at 1 wake in the trailing hour):
+
+| leg | at (UTC) | Δ |
+| --- | --- | --- |
+| machine hand-stopped | 18:59:54 | — |
+| `steer` to the stopped seat | ~19:00:11 | — |
+| audit `fly.machine_start` (hub mint) | 19:01:02.9 | ~52 s (tick phase) |
+| daemon up on the machine; start row folded in | 19:01:11 / 19:01:11.7 | 8.8 s fold |
+| first `residency.wake_leased` — `cold_first: true, ttl_ms: 420000` | 19:01:22.4 | 19.4 s after start |
+| host loop starting / ◉ polling | 19:01:25 / 19:01:27 | — |
+| `residency.wake_failed` — `lease_expired`, never spawned | 19:08:26.0 | 423.6 s (the cold TTL) |
+| `wake_gate hourly_cap` again (`woke` 18:59:16 + this failure = 2) | 19:08:27.8 | reply held to ~19:59 |
+
+**Root cause, and it is not spawn speed.** A wake order is issued exactly once: in the poll
+that mints the lease (`deriveSeatPasses` skips any seat already holding a live lease,
+`gate('lease_live')`). The cloud-agent boot sequence probes the host key by POSTing the real
+`/residency/wake-leases` endpoint (`deploy/cloud-agent/agent.sh`, the "host key honoured"
+loop) and discards the response body. That probe — not the host loop — minted the first lease
+in every cold round (round 5: lease 19:01:22.4Z, probe's success line 19:01:24Z, host loop
+starting 19:01:25Z; `ps` inside the machine at 19:06Z showed no spawn process at all, only
+daemon + host). The host then polls into `lease_live` forever. Rounds 2–3 read the same way in
+hindsight: the retry lease, minted on a genuine host-loop poll, spawned in 2.8–6 s every time.
+The "slow cold spawn" was a stranded order, and the 420 s TTL made round 5 strictly worse
+than the 120 s it replaced: five extra minutes before the working retry path, and the burnt
+`wake_failed` re-tripped the hourly cap.
+
+What stands: the fold (#3997) is proven and the start row is now readable where leases mint;
+scale-to-zero start/stop mechanics are unaffected; cold act→reply has still never had a clean
+read. What is falsified: "the first lease expires before its spawn occupies" — no spawn is
+ever attempted on the probe-minted lease. The fix decision (stop the boot probe consuming the
+claim endpoint, and the cold TTL's fate now that its premise is gone) is with the lane's
+acceptor; the two-week ADR 816 eval is unaffected except that its cold-p50 input starts
+counting only once a cold round can complete on the first lease.
