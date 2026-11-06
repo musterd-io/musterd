@@ -81,6 +81,8 @@ export const KNOWN_WHOLE_CONTEXT: readonly string[] = [
   'deploy/cloud-agent/Dockerfile',
   // Lane 01M5AQE75K: the CooperBench run machine, built from the repo root by deploy/cooperbench/create.sh.
   'deploy/cooperbench/Dockerfile',
+  // Lane 01M6S9N6HK: the image Glama builds to inspect the MCP server, built from the repo root.
+  'deploy/glama/Dockerfile',
   'scripts/broadcast/hosted.Dockerfile',
   'scripts/perf/broadcast-bench.Dockerfile',
   'scripts/perf/loadbench.Dockerfile',
