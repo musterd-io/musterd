@@ -629,3 +629,22 @@ export async function revokeClientChain(
   );
   return r.changes;
 }
+
+/**
+ * The browser session an access token was minted for, or null (ADR 722 §3: a session's `msat_`
+ * carries `scope = 'session:<id>'`). Lets "Where you're signed in" mark the row the request came
+ * from as this browser. Reads by hash; the token itself goes nowhere.
+ */
+export async function sessionIdOfAccess(
+  db: Driver,
+  teamId: string,
+  token: string,
+): Promise<string | null> {
+  if (!token.startsWith(TOKEN_PREFIXES.oauth_access)) return null;
+  const row = await db.get<{ scope: string | null }>(
+    "SELECT scope FROM oauth_tokens WHERE token_hash = ? AND team_id = ? AND kind = 'access'",
+    [hashToken(token), teamId],
+  );
+  const scope = row?.scope ?? '';
+  return scope.startsWith('session:') ? scope.slice('session:'.length) : null;
+}

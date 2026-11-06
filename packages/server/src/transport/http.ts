@@ -484,7 +484,12 @@ import {
   seatBindings,
   listSeatBindings,
 } from '../store/nodes.js';
-import { listClientChains, revokeAllForMember, revokeClientChain } from '../store/oauth.js';
+import {
+  listClientChains,
+  revokeAllForMember,
+  revokeClientChain,
+  sessionIdOfAccess,
+} from '../store/oauth.js';
 import { deriveNext, deriveNextSummary, deriveTeamReviewPromises } from '../store/orientation.js';
 import {
   currentBuild,
@@ -12344,10 +12349,16 @@ export async function handleHttp(
         if (!target || target.left_at !== null || (!self && !resolveCapabilities(caller).is_admin))
           throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
         const sessionId = sessionsMatch[2] ? decodeURIComponent(sessionsMatch[2]) : null;
-        if (method === 'GET' && sessionId === null)
+        if (method === 'GET' && sessionId === null) {
+          // "This browser" (unified sign-in lane 6): the row whose access token made this request.
+          const here = await sessionIdOfAccess(ctx.db, team.id, bearer(req));
           return sendJson(res, 200, {
-            sessions: await listBrowserSessions(ctx.db, team.id, target.id),
+            sessions: (await listBrowserSessions(ctx.db, team.id, target.id)).map((row) => ({
+              ...row,
+              current: row.id === here,
+            })),
           });
+        }
         if (method === 'DELETE' && sessionId !== null) {
           const row = await getBrowserSession(ctx.db, team.id, sessionId);
           if (!row || row.member_id !== target.id)
