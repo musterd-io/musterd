@@ -5,9 +5,20 @@
  * counted as round 2).
  */
 import { describe, expect, it } from 'vitest';
-import { areasOf, classify, report, tally, type AuditRow, type LaneRow } from './outcome-quality.ts';
+import {
+  areasOf,
+  classify,
+  report,
+  tally,
+  type AuditRow,
+  type LaneRow,
+} from './outcome-quality.ts';
 
-const lane = (id: string, globs: string[] = ['packages/server/src/**'], areas?: string[]): LaneRow => ({
+const lane = (
+  id: string,
+  globs: string[] = ['packages/server/src/**'],
+  areas?: string[],
+): LaneRow => ({
   id,
   title: `lane ${id}`,
   surface_globs: JSON.stringify(globs),
@@ -31,10 +42,10 @@ const closed = (ts: number, l: string, reason: string, by = 'acc'): AuditRow => 
   actor: by,
   detail: JSON.stringify({ lane: l, closed_by: by, reason }),
 });
-const kindOf = (n: string | null) => (n === 'nick' ? 'human' : n ? 'agent' : 'unknown') as
-  | 'human'
-  | 'agent'
-  | 'unknown';
+const confirm = (ts: number, l: string): AuditRow => closed(ts, l, 'counterpart_confirm');
+function kindOf(n: string | null): 'human' | 'agent' | 'unknown' {
+  return n === 'nick' ? 'human' : n ? 'agent' : 'unknown';
+}
 
 describe('classify', () => {
   it('a confirm on the first submit is accepted first round', () => {
@@ -88,17 +99,13 @@ describe('classify', () => {
 
 describe('areasOf', () => {
   it('declared areas win over scope', () => {
-    expect(areasOf({ surface_globs: '["packages/web/**"]', areas_json: '["Design","docs"]' })).toEqual([
-      'design',
-      'docs',
-    ]);
+    const declared = { surface_globs: '["packages/web/**"]', areas_json: '["Design","docs"]' };
+    expect(areasOf(declared)).toEqual(['design', 'docs']);
   });
   it('derives package, docs and top-level areas from scope', () => {
-    expect(
-      areasOf({
-        surface_globs: JSON.stringify(['packages/cli/src/**', 'docs/x.md', 'README.md', 'scripts/a.ts']),
-      }),
-    ).toEqual(['cli', 'docs', 'scripts']);
+    const globs = ['packages/cli/src/**', 'docs/x.md', 'README.md', 'scripts/a.ts'];
+    const surface_globs = JSON.stringify(globs);
+    expect(areasOf({ surface_globs })).toEqual(['cli', 'docs', 'scripts']);
   });
   it('an empty scope is unscoped', () => {
     expect(areasOf({ surface_globs: '[]' })).toEqual(['unscoped']);
@@ -109,7 +116,7 @@ describe('tally and report', () => {
   const lanes = [lane('a'), lane('b', ['packages/web/**']), lane('c'), lane('d', ['docs/**'])];
   const rows = new Map<string, AuditRow[]>([
     ['a', [ready(10, 'a'), closed(11, 'a', 'counterpart_confirm')]],
-    ['b', [ready(20, 'b'), back(21, 'b', 'nick'), ready(22, 'b'), closed(23, 'b', 'counterpart_confirm')]],
+    ['b', [ready(20, 'b'), back(21, 'b', 'nick'), ready(22, 'b'), confirm(23, 'b')]],
     ['c', [ready(30, 'c'), closed(31, 'c', 'acceptance_exempt', 'owner')]],
     ['d', [ready(40, 'd'), back(41, 'd')]],
   ]);
