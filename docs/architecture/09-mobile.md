@@ -443,7 +443,7 @@ src/
     questionKey.ts         // the question key: enrollment (question_key callback), and answering a question in the app
     rosterPoll.ts          // ADR 814: the Now screen's 30 s pull cadence, as a pure schedule (nextPollDelay)
     useRosterPoll.ts       // the hook that runs that schedule: on focus, on a delivery, on the cadence while in front and active
-    team.ts                // teamRows: the roster folded for Now — present in the daemon's order, offline by reach, for-you unioned with the phone's own asks
+    team.ts                // teamRows: the roster folded for Now — present in the daemon's order, offline by reach, for-you unioned with the phone's own asks; headerLines for the top line
     quickAction.ts         // quick actions (ADR 791): sign, seal and send one; pull the seat roster by ref; pull a seat portrait by digest (ADR 797); check the pairing stands (ADR 802)
     readable.ts            // an ask's text cleaned for a phone: one-line summary, or paragraphs and bullets
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
@@ -485,6 +485,7 @@ src/ui/floor.tsx      // the live floor (ADR 819): warm wood (svg gradient), des
 src/ui/momentRow.tsx  // one "Happening now" moment: a landing or goal as a full row with portrait, lane or outcome, goal and accepted seal; the rest one quiet line
 src/ui/offlineFold.tsx // the "N offline" fold with stacked faces and Show / Hide
 src/ui/memberSheet.tsx // a member's sheet (reanimated + gesture-handler): rises on a spring, dragged shut; today's quick actions
+src/ui/nowHeader.tsx  // Now's top line on one centre line: the musterd mark with the phone's state dot, the team over "N here · M away", a mustard "N for you" chip that opens the oldest
 src/ui/notice.tsx     // Notice (a short note: symbol tile, title, a line) and SectionLabel (a label with a count)
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```

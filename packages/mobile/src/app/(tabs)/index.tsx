@@ -11,14 +11,7 @@ import { endedNote, type PairingEnded } from '../../native/pairingEnded';
 import type { PairingPin } from '../../native/pairingPin';
 import type { Roster } from '../../native/quickAction';
 import { summary } from '../../native/readable';
-import {
-  forYouCount,
-  portraitOf,
-  summaryLine,
-  teamRows,
-  type AppMember,
-  type OwnAsk,
-} from '../../native/team';
+import { forYouCount, portraitOf, teamRows, type AppMember, type OwnAsk } from '../../native/team';
 import { useRosterPoll } from '../../native/useRosterPoll';
 import { Button } from '../../ui/button';
 import { useChrome } from '../../ui/chrome';
@@ -30,8 +23,9 @@ import { Icon } from '../../ui/icon';
 import { MemberRow } from '../../ui/memberRow';
 import { MemberSheet } from '../../ui/memberSheet';
 import { MomentRow } from '../../ui/momentRow';
-import { Breathe, Rise, Squish } from '../../ui/motion';
+import { Rise, Squish } from '../../ui/motion';
 import { Notice, SectionLabel } from '../../ui/notice';
+import { NowHeader } from '../../ui/nowHeader';
 import { OfflineFold } from '../../ui/offlineFold';
 import { confirmPairAgain } from '../../ui/pairAgain';
 import { GLIDE, GLOW_MS } from '../../ui/springs';
@@ -302,16 +296,23 @@ export default function AsksScreen() {
   }));
   const rows = teamRows(paired ? roster : null, paired ? own : [], null);
   const askByRef = new Map(asks.map((entry) => [entry.delivery.ask.id, entry] as const));
+  const openForYou = (id: string) => {
+    const entry = askByRef.get(id);
+    if (!entry) return void refresh(true);
+    router.push({
+      pathname: '/ask/[ref]',
+      params: {
+        ref: entry.route.ref,
+        team: entry.route.team,
+        binding: entry.route.binding,
+        expires_at: String(entry.route.expires_at),
+      },
+    });
+  };
   const floor = floorDesks(rows.present);
   const askingYou = new Set(rows.forYou.map((f) => f.from));
   const moments = paired ? (roster?.moments ?? []) : [];
   const kindOf = new Map([...rows.present, ...rows.offline].map((m) => [m.name, m] as const));
-  const status: { tone: 'on' | 'wait' | 'off'; text: string } = paired
-    ? { tone: 'on', text: team ?? 'Paired' }
-    : pin
-      ? { tone: 'wait', text: 'Waiting for approval' }
-      : { tone: 'off', text: 'Not paired' };
-  const dot = { on: p.success, wait: p.accent, off: p.placeholder }[status.tone];
 
   // An ask that couldn't load, or asks held for quiet hours, still need you: their notice says so.
   const waitingElsewhere = !!ended || (!!view && (view.unreachable > 0 || !!view.held));
@@ -319,20 +320,13 @@ export default function AsksScreen() {
   // of pills says where this phone stands, and notes are compact cards.
   const header = (
     <View style={styles.header}>
-      <Rise style={styles.pills}>
-        <View
-          accessible
-          accessibilityLabel={paired ? `Paired with ${team}` : status.text}
-          style={[styles.pill, { backgroundColor: p.surface, borderColor: p.border }]}
-        >
-          <Breathe>
-            <View style={[styles.pillDot, { backgroundColor: dot }]} />
-          </Breathe>
-          <Text style={[styles.pillText, { color: p.text }]}>{status.text}</Text>
-        </View>
-        {paired ? (
-          <Text style={[styles.summary, { color: p.muted }]}>{summaryLine(rows.counts)}</Text>
-        ) : null}
+      <Rise>
+        <NowHeader
+          pairing={paired ? 'paired' : pin ? 'waiting' : 'none'}
+          team={team}
+          counts={rows.counts}
+          onPressChip={() => rows.forYou[0] && openForYou(rows.forYou[0].id)}
+        />
       </Rise>
       {paired && ended ? (
         <Rise>
@@ -439,7 +433,6 @@ export default function AsksScreen() {
       ) : null}
       {paired && pin
         ? rows.forYou.map((item) => {
-            const entry = askByRef.get(item.id);
             return (
               <ForYouRow
                 key={item.id}
@@ -447,19 +440,7 @@ export default function AsksScreen() {
                 now={now}
                 pin={pin}
                 portrait={portraitOf(rows, item.from)}
-                onPress={() =>
-                  entry
-                    ? router.push({
-                        pathname: '/ask/[ref]',
-                        params: {
-                          ref: entry.route.ref,
-                          team: entry.route.team,
-                          binding: entry.route.binding,
-                          expires_at: String(entry.route.expires_at),
-                        },
-                      })
-                    : void refresh(true)
-                }
+                onPress={() => openForYou(item.id)}
               />
             );
           })
@@ -624,7 +605,6 @@ const styles = StyleSheet.create({
     paddingBottom: space.xl * 4,
   },
   header: { gap: space.sm + 2, marginBottom: space.xs },
-  summary: { fontFamily: font.medium, fontSize: 12, marginTop: -2 },
   pollLine: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -637,19 +617,6 @@ const styles = StyleSheet.create({
   pollLive: { fontFamily: font.regular, fontSize: 11 },
   quiet: { fontFamily: font.regular, fontSize: 12.5, paddingVertical: 4 },
   hairline: { height: StyleSheet.hairlineWidth, marginLeft: 34 + space.sm + 2 },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  pill: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.pill,
-    paddingHorizontal: space.md,
-    minHeight: 32,
-  },
-  pillDot: { width: 7, height: 7, borderRadius: radius.pill },
-  pillText: { fontFamily: font.medium, fontSize: 13 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   grow: { flex: 1 },
   words: { flex: 1, gap: 1 },
