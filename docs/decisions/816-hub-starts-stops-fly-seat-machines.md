@@ -128,6 +128,13 @@ Alternatives considered:
 
 ## Consequences
 
+- _(2026-11-06, cold-lease follow-up, lane `01M6RZ0NRA`.)_ The cold first lease (420 s for the
+  first lease inside 10 min of a hub machine start, no `woke` since) is decided where leases
+  mint — in hub mode the seat machine's own joiner daemon — so `fly.machine_start` joined
+  `REPLICATED_LEDGER_VERBS` and crosses hub → joiner as a ledger row. Its first live test proved
+  why: with the TTL fix deployed but the row hub-local, round 3's first lease still expired warm
+  at 120 s (no `fly.*` row existed on the joiner). `fly.machine_stop` stays hub-local; nothing
+  off the hub reads it.
 - _(2026-11-06, first live round on delta-2.)_ "Directed-undelivered" in rules 4–5 is read
   hub-side as **directed newer than both the seat's read cursor and its last wake activity**. The
   cursor alone does not exist on the hub for a hub-mode seat — delta-2 has no `inbox_cursors` row
