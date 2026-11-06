@@ -200,6 +200,12 @@ does not gate the post, and it does not.
   allowance on the account; §3 the account in place of a license key. The copy for the free /
   account / paid lines is [`sign-in-copy-spec.md`](../design/sign-in-copy-spec.md) §11, held until
   nick accepts.
+- 2026-11-06 (nick, in session; lane `01M6SA1B52`): the §2 allowance takes its shape. **Two people
+  on a team are free; billing is per person from the third, plus Cloud agent-hours** past an included
+  block. Model keys are the customer's own; a musterd native harness and LLM are in progress and
+  would add model compute as its own line when they ship. The amounts are still set with design
+  partners (§5). Cost-to-serve, packaging, ranges to test and a willingness-to-pay questions:
+  [`2026-11-06-pricing-proposal.md`](../superpowers/specs/2026-11-06-pricing-proposal.md).
 - Dated notes go here as design-partner figures, conversions and the cookoff refresh land.
 
 ## Observability & Evaluation
