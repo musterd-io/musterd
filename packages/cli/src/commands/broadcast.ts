@@ -836,7 +836,7 @@ export const DRAW_FLOOR_WINDOW_MS = 60_000;
  */
 export function parseOfficeStats(
   raw: unknown,
-): { ticks: number; draws: number; beats: number } | undefined {
+): { ticks: number; draws: number; beats: number; prof?: OfficeProfile } | undefined {
   if (typeof raw !== 'string') return undefined;
   let parsed: unknown;
   try {
@@ -845,11 +845,29 @@ export function parseOfficeStats(
     return undefined;
   }
   if (!parsed || typeof parsed !== 'object') return undefined;
-  const { ticks, draws, beats } = parsed as Record<string, unknown>;
+  const { ticks, draws, beats, prof: rawProf } = parsed as Record<string, unknown>;
   if (typeof ticks !== 'number' || typeof draws !== 'number' || typeof beats !== 'number') {
     return undefined;
   }
-  return { ticks, draws, beats };
+  const prof = parseOfficeProfile(rawProf);
+  return prof ? { ticks, draws, beats, prof } : { ticks, draws, beats };
+}
+
+/** The page's per-stage frame timings (`stats().prof`, lane 01M6S5V5DY): frames covered, ms per stage. */
+export interface OfficeProfile {
+  frames: number;
+  ms: Record<string, number>;
+}
+
+/** Only a well-formed profile passes — a page from before the profiler has none, and that is fine. */
+function parseOfficeProfile(raw: unknown): OfficeProfile | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const { frames, ms } = raw as Record<string, unknown>;
+  if (typeof frames !== 'number' || !ms || typeof ms !== 'object') return undefined;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(ms as Record<string, unknown>))
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+  return { frames, ms: out };
 }
 
 /** How often the page's counters are read. Six readings to a window is enough to anchor it and

@@ -491,4 +491,10 @@ export interface OfficeStats {
     /** Frames where nothing changed, so nothing was painted. */
     skipped: number;
   };
+  /**
+   * Broadcast only: cumulative main-thread milliseconds per stage of a drawn frame
+   * (./frameProfile.ts, lane 01M6S5V5DY). `frame` is the whole rAF interval; the gap between it and
+   * the sum of the other stages is raster/composite work no mark can attribute, plus idle.
+   */
+  prof?: { frames: number; ms: Record<string, number> };
 }

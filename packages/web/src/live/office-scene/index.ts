@@ -29,6 +29,7 @@ import { helpWalks } from './mapping';
 import { REPLAY_TEMPO, replayAge } from './replay';
 import { domPropCadence, stepDomAnimations } from './domCadence';
 import { frameDt } from './frameClock';
+import { makeFrameProfile, profileSnapshot, type FrameProfile } from './frameProfile';
 import {
   ambientFrameBudgetMs,
   coalesceStep,
@@ -458,6 +459,8 @@ export function mountOffice(
   options: OfficeOptions = {},
 ): OfficeHandle {
   const broadcast = options.broadcast === true;
+  // Broadcast only: where each drawn frame's main-thread time goes (./frameProfile.ts, lane 01M6S5V5DY).
+  const frameProf = broadcast ? makeFrameProfile() : null;
   // What is outside the windows (window views): `?view=` > the mount's `view` (the /live pref) > city.
   // Only the chosen view's plates are fetched; `setView` loads the next one before it swaps.
   const viewPinned = viewOverride(typeof window === 'undefined' ? '' : window.location.search);
@@ -2540,6 +2543,7 @@ export function mountOffice(
     c: CanvasRenderingContext2D,
     units?: UnitHook,
     f: FrameInputs = frameInputs(),
+    prof?: FrameProfile,
   ): SceneAnchors {
     if (!rendered) return { heads: new Map(), bases: new Map() }; // the art is not in yet
     const anchors = renderScene(
@@ -2556,10 +2560,11 @@ export function mountOffice(
       recep,
       f.board,
       teamWorkingHours,
-      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, deskGlows, bellAngle: bellSwing(clock - bellRungAt, reduced ? 0.08 : 0.35), visitor: visit?.dog ?? null, view, nowMs: outsideNow() },
+      { sprites, dpr, welcome: welcomeRoom.paint, units, rendered, weather, deskGlows, bellAngle: bellSwing(clock - bellRungAt, reduced ? 0.08 : 0.35), visitor: visit?.dog ?? null, view, nowMs: outsideNow(), prof },
     );
     if (units) units.run(() => drawCues(c));
     else drawCues(c);
+    prof?.mark('cues');
     return anchors;
   }
 
@@ -2572,8 +2577,9 @@ export function mountOffice(
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, width, height);
-    const anchors = paintRoom(ctx);
+    const anchors = paintRoom(ctx, undefined, frameInputs(), frameProf ?? undefined);
     positionLabels(anchors.heads);
+    frameProf?.mark('labels');
   }
 
   /*
@@ -2615,7 +2621,7 @@ export function mountOffice(
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, width, height);
       c.beginPath(); // the recorder starts each frame with no path; so does the stage
-      paintRoom(c, undefined, f);
+      paintRoom(c, undefined, f, c === ctx ? (frameProf ?? undefined) : undefined);
       return true;
     }
     const rects = plan.rects;
@@ -2636,6 +2642,7 @@ export function mountOffice(
         },
       },
       f,
+      c === ctx ? (frameProf ?? undefined) : undefined,
     );
     c.restore();
     return i === units.length;
@@ -2749,6 +2756,7 @@ export function mountOffice(
       },
       f,
     );
+    frameProf?.mark('measure');
     const now = performance.now();
     /* The parity check pauses the safety net: a missed damage then builds up where it can be seen,
        instead of being wiped every few seconds and passing as residue. */
@@ -2757,6 +2765,7 @@ export function mountOffice(
       ? ({ kind: 'full' } as const)
       : planRepaint(prevUnits, units, canvas.width, canvas.height);
     prevUnits = units;
+    frameProf?.mark('plan');
     if (plan.kind === 'none') skippedRepaints++;
     else if (plan.kind === 'full') {
       lastFullAt = now;
@@ -2771,6 +2780,7 @@ export function mountOffice(
     if (!applyPlan(ctx, plan, units, f)) prevUnits = null;
     if (import.meta.env.DEV && parity) checkParity(plan, units, f);
     positionLabels(anchors.heads);
+    frameProf?.mark('labels');
   }
 
   /**
@@ -2830,6 +2840,7 @@ export function mountOffice(
   const since = performance.now();
   function tick(now: number) {
     ticks++;
+    frameProf?.begin();
     // Frame-rate coalescing: viewers cap ambient-only motion to ~20fps (ADR 086 Phase 2). Broadcast
     // coalesces *every* stretch to the capture fps so paint matches encode (no #368 judder, no full-rAF
     // waste). `dt` accumulates either way, so walk maths stay correct with fewer samples.
@@ -2866,6 +2877,11 @@ export function mountOffice(
     if (broadcast) {
       const owed = domPropDue(acc);
       if (owed !== null) stepDomAnimations(document.getAnimations(), owed, heldAnims);
+    }
+    if (frameProf) {
+      frameProf.add('frame', acc); // the whole rAF interval this frame covers; stages are its parts
+      frameProf.frames++;
+      frameProf.mark('domProps');
     }
     acc = 0;
     clock += dt;
@@ -2913,12 +2929,14 @@ export function mountOffice(
     // freezing the instant a long walk ends (#5).
     if (walking || cues.length) lastActive = now;
     const alive = living();
+    frameProf?.mark('sim');
     if (walking || alive || petActive || recepActive || welcomeActive) {
       drawDynamic();
     } else {
       if (wasActive) bake(); // walkers just re-seated (or the pet/receptionist dozed off) — refresh
       drawStatic();
     }
+    frameProf?.mark('static');
     wasActive = walking || alive || petActive || recepActive || welcomeActive;
     // Keep animating while anything moves *or* while the room is alive (someone at a desk breathing and
     // typing — capped to ~20fps above). When the last walk/cue clears and nobody is working, we draw one
@@ -4296,6 +4314,7 @@ export function mountOffice(
         partial: partialRepaints,
         skipped: skippedRepaints,
       },
+      ...(frameProf ? { prof: { frames: frameProf.frames, ms: profileSnapshot(frameProf.totals) } } : {}),
     }),
     ambientLog: () => [...ambientLog],
     floorSamples: () =>
