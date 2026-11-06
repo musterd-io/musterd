@@ -886,7 +886,11 @@ export function createConsoleServer(deps: ConsoleDeps): Server {
             const action = callbackUrl(h.team, teams.suffix);
             const headers = {
               'content-security-policy': handbackCsp(new URL(action).origin),
-              'referrer-policy': 'no-referrer',
+              // The form POSTs cross-site to the team, which checks Origin. Under `no-referrer` or
+              // the page default `same-origin`, a browser sends `Origin: null` on that POST and the
+              // team refuses it; `strict-origin` sends the console's origin and never this URL's
+              // path or query (found by the real-browser e2e, 2026-11-06).
+              'referrer-policy': 'strict-origin',
             };
             // A HEAD signs nothing: it answers what the page would, without a statement.
             if (req.method === 'HEAD') return sendHtml(res, 200, '', headers);

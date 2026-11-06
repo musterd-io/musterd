@@ -184,7 +184,9 @@ describe('GET /handback', () => {
     expect(r.headers['content-security-policy']).toContain(
       'form-action https://acme.musterd.test;',
     );
-    expect(r.headers['referrer-policy']).toBe('no-referrer');
+    // strict-origin, not no-referrer or same-origin: under either, a browser sends `Origin: null` on
+    // this cross-site POST and the team refuses it (found by the real-browser e2e, 2026-11-06).
+    expect(r.headers['referrer-policy']).toBe('strict-origin');
     expect(r.headers['cache-control']).toBe('no-store');
   });
 
