@@ -1,52 +1,11 @@
+import type { AppForYou, AppMember, AppMemberState } from '@musterd/protocol/app-channel';
 import type { Roster } from './quickAction';
 
 /**
  * The Now screen's view of the roster (ADR 814): who is present and in what state, who is away,
  * and what waits on the viewer. A pure fold, so the screen only draws it.
- *
- * Until the protocol lane (01M6Q58GSP) lands `AppMemberSchema`, the member shape is declared here
- * in the same words as the ADR; the import moves to `@musterd/protocol/app-channel` then.
  */
-export const APP_MEMBER_STATES = [
-  'working',
-  'review',
-  'blocked',
-  'asking',
-  'between',
-  'away',
-] as const;
-export type AppMemberState = (typeof APP_MEMBER_STATES)[number];
-
-export interface AppMember {
-  name: string;
-  kind: 'agent' | 'human';
-  /** /live's card state (`teamCards.ts`): the same six words, the same rule. */
-  state: AppMemberState;
-  /** /live's `stateLabel`, verbatim: "working on", "waiting for review", "asking nick", … */
-  label: string;
-  /** The shown lane's title, or the member's own status line. */
-  title: string | null;
-  source: 'lane' | 'status' | null;
-  goal: string | null;
-  since: number | null;
-  more_lanes: number;
-  /** The model badge's label: "opus 5.5", "human", "model unknown"; null from an old daemon. */
-  model: string | null;
-  online: boolean;
-  wakeable: boolean;
-  lane: { id: string; title: string } | null;
-  portrait: string | null;
-  waiting?: { to: string | null; since: number };
-}
-
-export interface AppForYou {
-  id: string;
-  from: string;
-  kind: 'approve' | 'question' | 'review' | 'help';
-  summary: string;
-  ts: number;
-}
-
+export type { AppForYou, AppMember, AppMemberState };
 /** An ask the phone holds itself (a push that reached it), reduced to what For you needs. */
 export interface OwnAsk {
   id: string;
@@ -65,7 +24,6 @@ export interface TeamRows {
   counts: { here: number; offline: number; needYou: number };
 }
 
-type RosterIn = Roster & { members?: AppMember[]; for_you?: AppForYou[] };
 
 /** /live's `byReach`: wakeable agents (they have a button), then the other agents, then people. */
 function byReach(a: AppMember, b: AppMember): number {
@@ -96,7 +54,7 @@ function fromSeat(seat: Roster['seats'][number]): AppMember {
 }
 
 export function teamRows(
-  roster: RosterIn | null,
+  roster: Roster | null,
   ownAsks: readonly OwnAsk[],
   _viewer: string | null,
 ): TeamRows {
