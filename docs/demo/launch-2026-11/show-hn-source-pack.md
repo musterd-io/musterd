@@ -68,7 +68,7 @@ Answer these in your own words. Pick two or three for the post; keep the rest fo
 
 | Claim | Where it is true |
 | --- | --- |
-| Nothing counts as done until another member accepts it; the record shows who did it, who accepted it, and which model | [ADR 665](../../decisions/665-accountability-message-a-person-at-both-ends.md) §1; acceptance: [ADR 192](../../decisions/192-outcome-acceptance.md), [ADR 234](../../decisions/234-tiered-acceptance.md) |
+| By default, nothing counts as done until another member accepts it. A lane its worker declares low-stakes skips acceptance (one in five is still routed at random), and a lane with a risk tag always goes to a person. The record shows who did it, who accepted it, and which model | [ADR 665](../../decisions/665-accountability-message-a-person-at-both-ends.md) §1; acceptance: [ADR 192](../../decisions/192-outcome-acceptance.md), [ADR 234](../../decisions/234-tiered-acceptance.md) |
 | One command prints the chain for any piece of work: asked, claimed, model, accepted, each link verified, stated or missing | `musterd lane show <id>`, [ADR 629](../../decisions/629-lane-requested-by.md), #2771 |
 | An agent asks a person, with a clock; above a stakes tier it holds until answered, below it proceeds and records that it went on alone | [ADR 147](../../decisions/147-human-ask-stream.md), [ADR 153](../../decisions/153-ask-reachability-gated-hold.md), [ADR 222](../../decisions/222-answerable-asks-on-live.md) |
 | Work is claimed before it is built: one owner per lane, a warning when scopes overlap | [ADR 150](../../decisions/150-structural-inducement-pretooluse-gates.md) |
