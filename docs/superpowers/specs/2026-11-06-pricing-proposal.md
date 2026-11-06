@@ -57,8 +57,8 @@ What follows from the table:
 | Plan | Who | What it includes | What it costs |
 | --- | --- | --- | --- |
 | **Local** | Anyone, on their own computers | Everything in the team layer: members, agents, lanes, `/live`, the Drawer, federation. No account | **Free, uncapped, for good** (ADR 461 §1) |
-| **Cloud Free** | A team of up to two people on musterd Cloud | A hosted team; agents connected from your own computers, unlimited and uncounted; **an included block of Cloud agent-hours** | **Free** |
-| **Cloud Team** | A team that adds a third person | Everything in Cloud Free; **per person from the third**; a larger included block of agent-hours per paid person; Drawer storage included | **Per person per month**, plus agent-hours past the included block |
+| **Cloud Free** | A team of up to two people on musterd Cloud | A hosted team; agents connected from your own computers, unlimited and uncounted; **a one-time trial block of Cloud agent-hours** | **Free** |
+| **Pro** | A team that adds a third person | Everything in Cloud Free; **per person from the third**; a larger included block of agent-hours per paid person; Drawer storage included | **Per person per month**, plus agent-hours past the included block |
 | **Org** | Several teams, or a governance buyer | SSO, signed audit export, retention policy, multi-team admin, support (ADR 461 §3), on Cloud or your own computers | Per person, at a premium, usually yearly |
 
 Rules that keep the bill predictable (the pricing checklist in
@@ -79,8 +79,8 @@ $60 per user per month for Teams.
 
 | Item | Range to test | Why there |
 | --- | --- | --- |
-| **Cloud Team, per person from the third** | **$15–25 a month**, $20 as the first number said aloud | Inside the band the neighbours set for one person, below Conductor's team seat. Five paid people at $20 cover the fixed floor (§2) |
-| **Included agent-hours, Cloud Free** | **20–50 hours a month** per team | At ≈ $0.019 an hour, 50 hours cost us under $1. Enough to try a Cloud agent for real |
+| **Pro, per person from the third** | **$15–25 a month**, $20 as the first number said aloud | Inside the band the neighbours set for one person, below Conductor's team seat. Five paid people at $20 cover the fixed floor (§2) |
+| **Trial agent-hours, Cloud Free** | **About 10 hours, once** per team | Enough to see an agent keep working while every laptop is closed, which is what the hours pay for. At ≈ $0.019 an hour it costs us about 20 cents a team, and nothing after |
 | **Included agent-hours, per paid person** | **50–100 hours a month** | Under $2 of our cost per person |
 | **Agent-hours past the block** | **$0.05–0.10 an hour** | Several times our ≈ $0.019 cost, so idle-machine and support overhead are covered; still small next to the model spend the customer already pays with their own keys |
 | **Org** | Quoted per deal; test **$40–60 per person** a month on a yearly contract | Governance buyers compare with seats in their existing tools; no ledger row yet, so this is the least certain line |
@@ -108,13 +108,24 @@ sensitivity method. Ask them as written, after the session, and record the words
 Five to ten answers make a range worth acting on. Under about forty, report them as "k of n", never as
 a percent (comms hard rule 4).
 
-## 6. What is still nick's to decide
+## 6. Decided, and what is still open
 
-1. The ranges in §4: test them as written, or move any before the first conversation.
-2. Whether Cloud Free includes agent-hours at all, or Cloud agents start on the first paid person.
-3. The name of the paid plan ("Team" is a placeholder).
-4. When musterd's own harness and LLM ship: whether model compute is sold as credits, per token, or
-   inside the plan.
+Decided by nick, 2026-11-06:
+
+1. **Test the ranges in §4 as written.**
+2. **Cloud Free gets a one-time trial block of agent-hours** of about 10, used once. Cloud
+   Free without hours still holds a hosted team with nothing to run, members on any network, agents
+   connected from their own computers (unlimited and uncounted), the board, asks, `/live`, the record
+   and the Drawer. The hours buy agents that keep working while every laptop is closed; the trial lets
+   a team feel that once.
+3. **The paid plan is called Pro.** The ladder is Local / Cloud Free / Pro / Org. "Team" was ruled out
+   because it is the glossary's word for the group itself.
+4. **"musterd Cloud" keeps its name** for now (sloane's advice; nick did not move it).
+
+Still open:
+
+1. When musterd's own harness and LLM ship: whether model compute is sold as credits, per token, or
+   inside the plan. This is the first lane for the commerce role (goal `commerce-role`).
 
 ## 7. Next steps
 
