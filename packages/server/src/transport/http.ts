@@ -190,6 +190,7 @@ import {
   type AuthorityRelayResponse,
   AuthorityRelayRequestSchema,
   QuestionNotifyPrefsSchema,
+  vouchCheckCode,
 } from '@musterd/protocol';
 import { requestDecisionApproval } from '@musterd/protocol/approval';
 import { ulid } from 'ulid';
@@ -289,6 +290,7 @@ import {
   enrollKeyGuarded,
   countersignersFor,
   enrollPasskeyGuarded,
+  liveHeldEnrollments,
   vouchPasskeyGuarded,
   getDescriptorByNonce,
   getParkedProof,
@@ -5847,6 +5849,9 @@ export async function handleHttp(
             held: {
               enrollment_digest: result.held.enrollmentDigest,
               expires_at: result.held.expiresAt,
+              // Worked out here by the one protocol function, for a page that cannot import it
+              // (the daemon's own ceremony page) — the same digits /live and the phone compute.
+              check_code: vouchCheckCode(result.held.enrollmentDigest),
               // Only the admins whose vouch could be signed here (ADR 769 step 2); empty means
               // nobody can, and the sheet points to the ADR 808 inc D recovery code instead.
               countersigners: await countersignersFor(ctx.db, team.id, member.id, hosts),
@@ -5860,6 +5865,27 @@ export async function handleHttp(
           );
         }
         return sendJson(res, 201, { key: { id: result.key.id, kind: result.key.kind } });
+      }
+      // ADR 769: the member's own held enrollments, so a terminal that ran the ceremony in a browser
+      // can print the check code and the admin's approve line. Hub only, like the vouch.
+      if (method === 'GET' && rest === '/authority/passkeys/held') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        if (member.kind !== 'human')
+          throw new MusterdError('forbidden', `seat "${member.name}" is not a human`);
+        await requireHubLocalOnly(ctx, team, 'a held passkey enrollment');
+        const hosts = webauthnExpectedOrigins(ctx).map((o) => new URL(o).hostname);
+        const held = await liveHeldEnrollments(ctx.db, team.id, member.id);
+        const countersigners =
+          held.length > 0 ? await countersignersFor(ctx.db, team.id, member.id, hosts) : [];
+        return sendJson(res, 200, {
+          held: held.map((h) => ({
+            enrollment_digest: h.enrollmentDigest,
+            expires_at: h.expiresAt,
+            check_code: vouchCheckCode(h.enrollmentDigest),
+            countersigners,
+          })),
+        });
       }
       // ADR 769: an admin vouches for a member's held passkey enrollment — on the hub only (ADR
       // 728 §4: the countersign is served from the hub's origin). The caller is the admin.

@@ -9,6 +9,7 @@ export {
   descriptorSigningBytes,
   HIGH_AUTHORITY_ACTS,
   isHighAuthorityAct,
+  vouchCheckCode,
   type ApprovalDescriptor,
   type ApprovalProof,
   type ApprovalWording,

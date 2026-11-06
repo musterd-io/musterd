@@ -73,6 +73,8 @@ document.getElementById('go').addEventListener('click', async () => {
   try { approval = frag.get('approval') ? JSON.parse(new TextDecoder().decode(unb64u(frag.get('approval')))) : undefined; } catch { approval = undefined; }
   let countersign;
   try { countersign = frag.get('countersign') ? JSON.parse(new TextDecoder().decode(unb64u(frag.get('countersign')))) : undefined; } catch { countersign = undefined; }
+  // ADR 769: \`musterd authority enroll\` asks for a hold when an admin must vouch for this passkey.
+  const hold = frag.get('hold') === '1' && !approval && !countersign;
   try {
     out('Waiting for your passkey…');
     const cred = await navigator.credentials.create({ publicKey: {
@@ -85,13 +87,18 @@ document.getElementById('go').addEventListener('click', async () => {
     }});
     const res = await fetch('/teams/' + encodeURIComponent(team) + '/authority/passkeys', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ actor: member, challenge, ...(approval ? { approval } : {}), ...(countersign ? { countersign } : {}), registration: {
+      body: JSON.stringify({ actor: member, challenge, ...(approval ? { approval } : {}), ...(countersign ? { countersign } : {}), ...(hold ? { hold: true } : {}), registration: {
         attestation_object: b64u(cred.response.attestationObject),
         client_data_json: new TextDecoder().decode(cred.response.clientDataJSON),
       }}),
     });
     const json = await res.json().catch(() => null);
     if (!res.ok) throw new Error((json && json.error && json.error.message) || ('HTTP ' + res.status));
+    if (res.status === 202 && json && json.held) {
+      out('Held for an admin to vouch. Read them this code on a call or in person: ' + json.held.check_code +
+        '. Your terminal prints the command they run.');
+      return;
+    }
     out('Enrolled. Key ' + json.key.id + ' — high-authority acts now ask this passkey.');
   } catch (e) { out(String(e && e.message || e), true); }
 });

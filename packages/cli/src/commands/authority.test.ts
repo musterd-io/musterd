@@ -1,3 +1,4 @@
+import { vouchCheckCode } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import type { Parsed } from '../args.js';
 import { CliError } from '../errors.js';
@@ -9,6 +10,7 @@ import {
   openCeremony,
   resolveCeremonyOrigin,
   setPolicySigned,
+  vouchInstructions,
 } from './authority.js';
 
 const h = vi.hoisted(() => ({
@@ -35,6 +37,17 @@ const h = vi.hoisted(() => ({
   getParkedApproval: vi.fn(async () => ({
     proof: { key_id: 'key-1', nonce: 'nonce-at-least-16-chars', signature: 'sig' },
   })),
+  listHeldEnrollments: vi.fn(
+    async (): Promise<{
+      held: {
+        enrollment_digest: string;
+        expires_at: number;
+        check_code: string;
+        countersigners: string[];
+      }[];
+    }> => ({ held: [] }),
+  ),
+  vouchPasskey: vi.fn(async () => ({ key: { id: 'key-ada', kind: 'passkey' }, member: 'ada' })),
 }));
 
 vi.mock('./helpers.js', () => ({
@@ -49,6 +62,8 @@ vi.mock('./helpers.js', () => ({
       revokeDeviceKey: h.revokeDeviceKey,
       createAuthorityDescriptor: h.createAuthorityDescriptor,
       getParkedApproval: h.getParkedApproval,
+      listHeldEnrollments: h.listHeldEnrollments,
+      vouchPasskey: h.vouchPasskey,
       presenceNeutral: () => ({}),
     },
   }),
@@ -119,40 +134,96 @@ describe('musterd authority (ADR 662 decisions 5/6, passkey-first)', () => {
     vi.restoreAllMocks();
   });
 
-  it('enroll passes a hub-issued countersign proof into the ceremony link', async () => {
-    const proof = { key_id: 'admin-key', nonce: 'nonce-at-least-16-chars', signature: 'sig' };
+  it('ADR 769: enroll with no key holds the passkey, prints the code and the admin line, waits', async () => {
     h.createAuthorityDescriptor.mockClear();
-    h.listDeviceKeys.mockResolvedValueOnce({ keys: [] }).mockResolvedValue({
-      keys: [{ id: 'key-7', kind: 'passkey', created_at: 2, revoked_at: null }],
+    const digest = 'abababababababababababababababababababababababababababababababab';
+    h.listDeviceKeys
+      .mockResolvedValueOnce({ keys: [] })
+      .mockResolvedValueOnce({ keys: [] })
+      .mockResolvedValue({
+        keys: [{ id: 'key-v', kind: 'passkey', created_at: 3, revoked_at: null }],
+      });
+    h.listHeldEnrollments.mockResolvedValue({
+      held: [
+        {
+          enrollment_digest: digest,
+          expires_at: 9999999999999,
+          check_code: vouchCheckCode(digest),
+          countersigners: ['root'],
+        },
+      ],
     });
     const out = captureStdout();
     const err = captureStderr();
-    expect(
-      await authorityCommand(
-        parsed(['enroll'], {
-          'confirmed-by': 'root',
-          'countersign-proof': JSON.stringify(proof),
-        }),
-      ),
-    ).toBe(0);
+    expect(await authorityCommand(parsed(['enroll'], { 'confirmed-by': 'root' }))).toBe(0);
+    const said = err.join('');
+    expect(said).toContain('#hold=1');
+    expect(said).toContain(vouchCheckCode(digest));
+    expect(said).toContain(`"key":"${digest}"`);
+    expect(said).toContain('musterd authority approve --act device_key_admin --target');
+    expect(out.join('')).toContain('passkey enrolled for nick (key-v)');
+    // No standing-key approval was asked for: the admin's vouch is the authority here.
     expect(h.createAuthorityDescriptor).not.toHaveBeenCalled();
-    expect(out.join('')).not.toContain('#countersign=');
-    const encoded = err.join('').match(/#countersign=([^\s]+)/)?.[1];
-    expect(encoded).toBeDefined();
-    expect(JSON.parse(Buffer.from(encoded!, 'base64url').toString('utf8'))).toEqual({
-      confirmer: 'root',
-      approval: proof,
-    });
+    h.listHeldEnrollments.mockResolvedValue({ held: [] });
     vi.restoreAllMocks();
   });
 
-  it('requires the countersign proof to be minted on the hub', async () => {
+  it('ADR 769: --countersign-proof is retired with the new order in its place', async () => {
     h.issueEnrollmentChallenge.mockClear();
     h.listDeviceKeys.mockResolvedValue({ keys: [] });
-    await expect(authorityCommand(parsed(['enroll'], { 'confirmed-by': 'root' }))).rejects.toThrow(
-      /Countersigning must happen on the hub/,
-    );
+    await expect(
+      authorityCommand(parsed(['enroll'], { 'confirmed-by': 'root', 'countersign-proof': '{}' })),
+    ).rejects.toThrow(/retired \(ADR 769\)/);
     expect(h.issueEnrollmentChallenge).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it('ADR 769: the vouch instructions name who can vouch, or that nobody can', () => {
+    const held = {
+      enrollment_digest: 'abababababababababababababababababababababababababababababababab',
+      check_code: '123456',
+      countersigners: ['root', 'swetha'],
+    };
+    expect(vouchInstructions('ada', held, undefined)).toContain(
+      'Admins who can vouch: root, swetha.',
+    );
+    expect(vouchInstructions('ada', held, 'bo')).toContain('bo cannot vouch here');
+    expect(vouchInstructions('ada', { ...held, countersigners: [] }, 'root')).toContain(
+      'musterd authority recover ada',
+    );
+    expect(vouchInstructions('ada', held, 'root')).toContain('    123456');
+  });
+
+  it('ADR 769: approve on a vouch payload signs nothing without the right code, then vouches', async () => {
+    const digest = 'abababababababababababababababababababababababababababababababab';
+    const payload = JSON.stringify({
+      action: 'enroll',
+      kind: 'passkey',
+      member: 'ada',
+      key: digest,
+    });
+    const flags = { act: 'device_key_admin', target: 'ada', payload };
+    h.createAuthorityDescriptor.mockClear();
+    h.vouchPasskey.mockClear();
+    const wrong = vouchCheckCode(digest) === '000000' ? '000001' : '000000';
+    await expect(authorityCommand(parsed(['approve'], { ...flags, code: wrong }))).rejects.toThrow(
+      /not the code on ada's screen/,
+    );
+    expect(h.createAuthorityDescriptor).not.toHaveBeenCalled();
+    expect(h.vouchPasskey).not.toHaveBeenCalled();
+
+    const out = captureStdout();
+    captureStderr();
+    expect(
+      await authorityCommand(parsed(['approve'], { ...flags, code: vouchCheckCode(digest) })),
+    ).toBe(0);
+    expect(h.createAuthorityDescriptor).toHaveBeenCalled();
+    expect(h.vouchPasskey).toHaveBeenCalledWith('revive', {
+      member: 'ada',
+      enrollment_digest: digest,
+      approval: { key_id: 'key-1', nonce: 'nonce-at-least-16-chars', signature: 'sig' },
+    });
+    expect(out.join('')).toContain("vouched — ada's passkey is enrolled (key-ada)");
     vi.restoreAllMocks();
   });
 

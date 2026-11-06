@@ -1268,6 +1268,28 @@ export async function enrollPasskeyGuarded(
 }
 
 /**
+ * ADR 769: this member's held enrollments still waiting for a vouch — the code unspent and
+ * unexpired — newest first. The member's own read: a terminal that ran the ceremony in a browser
+ * learns the digest here, to print the admin's approve line and the check code.
+ */
+export async function liveHeldEnrollments(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+  now = Date.now(),
+): Promise<{ enrollmentDigest: string; expiresAt: number }[]> {
+  const rows = await db.all<{ digest: string; expires_at: number }>(
+    `SELECT h.digest, c.expires_at
+       FROM held_enrollments h
+       JOIN enrollment_codes c ON c.team_id = h.team_id AND c.code_hash = h.code_hash
+      WHERE h.team_id = ? AND h.member_id = ? AND c.used_at IS NULL AND c.expires_at >= ?
+      ORDER BY h.created_at DESC`,
+    [teamId, memberId, now],
+  );
+  return rows.map((r) => ({ enrollmentDigest: r.digest, expiresAt: Number(r.expires_at) }));
+}
+
+/**
  * ADR 769: a countersign or vouch counts only as a real signature (A2) by a key that is still
  * standing and, when the hub's hosts are known, signs where this hub serves. An admin with no
  * enrolled key passes `requireAuthority` as `bearer_unenrolled`: that is no countersign.
