@@ -32,6 +32,7 @@ import type { Ctx } from '../context.js';
 import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { deliverAskToAppChannels, tickVerdictQueue } from '../notify/appAdapter.js';
+import { nudgeAppsOnMoment } from '../notify/appNudge.js';
 import { ringDoorbell } from '../notify/doorbell.js';
 import { deliverAskToSlackChannels } from '../notify/slackAdapter.js';
 import { appendAudit, appendReplicatedEvent } from '../store/audit.js';
@@ -1181,6 +1182,8 @@ async function routeEnvelopeInner(
   // surface beside the durable inbox reach, never a condition of the send.
   void deliverAskToSlackChannels(ctx, team, firehoseEnv);
   void deliverAskToAppChannels(ctx, team, firehoseEnv);
+  // ADR 819: a landing or a finished goal nudges each paired phone to pull its roster now.
+  void nudgeAppsOnMoment(ctx, team, firehoseEnv, laneVerdict);
 
   log.info({
     msg: 'route',

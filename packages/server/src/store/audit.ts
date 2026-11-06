@@ -568,6 +568,8 @@ export type AuditAction =
   | 'quick_action.start_all'
   // ADR 791: a quick action from the phone — action, seat, key kind and counts, never a body.
   | 'app.quick_action'
+  // ADR 819: a content-free silent push told a phone to pull — the binding and whether it coalesced.
+  | 'app.nudge'
   // ADR 792: a seat's shift opened and closed — who, the reason, never a body.
   | 'shift.started'
   | 'shift.stopped'
@@ -993,6 +995,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'quick_action.sent': 'actor',
   'quick_action.start_all': 'actor',
   'app.quick_action': 'actor',
+  'app.nudge': 'none',
   'shift.started': 'target',
   'shift.stopped': 'target',
   'shift.recommended': 'target',
