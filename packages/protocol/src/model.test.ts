@@ -303,3 +303,21 @@ describe('reviewGrade (ADR 188) — the diversity spectrum', () => {
     expect(reviewGrade('unknown', 'claude-opus-5')).toBeNull();
   });
 });
+
+describe('shortModel lives in protocol (ADR 814): the daemon and /live label a model alike', () => {
+  it('reads the Claude families with their version and no vendor prefix', () => {
+    expect(shortModel('claude-opus-5-5')).toBe('opus 5.5');
+    expect(shortModel('claude-fable-5-1')).toBe('fable 5.1');
+    expect(shortModel('claude-haiku-4-5-20251001')).toBe('haiku 4.5');
+  });
+
+  it('keeps a named variant and drops route words', () => {
+    expect(shortModel('gpt-6.1-terra')).toBe('gpt 6.1 terra');
+    expect(shortModel('muse-spark-1.3-contributor-free')).toBe('muse spark 1.3');
+  });
+
+  it('is empty for no model or unknown', () => {
+    expect(shortModel(null)).toBe('');
+    expect(shortModel('unknown')).toBe('');
+  });
+});
