@@ -110,6 +110,35 @@ export interface ApprovalWording {
   headline: string;
   /** "As <actor> on <team>" — whose authority, and where. */
   scope: string;
+  /**
+   * ADR 769: for an admin's vouch, the check code worked out here from the payload about to be
+   * signed (never from the ask body), and the fixed instruction shown with it.
+   */
+  check?: { code: string; instruction: string };
+}
+
+/**
+ * ADR 769: the six-digit check code for a passkey vouch. The member's sheet shows it, the admin
+ * types it on /live, and the phone works it out again from the signed `key`. One function, so the
+ * three surfaces cannot disagree. `digest` is the held enrollment's 64-hex sha256.
+ */
+export function vouchCheckCode(digest: string): string {
+  if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('vouchCheckCode: digest must be 64 hex');
+  return (Number.parseInt(digest.slice(0, 8), 16) % 1_000_000).toString().padStart(6, '0');
+}
+
+/**
+ * ADR 769: the one vouch payload shape the phone words beyond ADR 812 —
+ * `{action:'enroll', kind:'passkey', member, key}`, `member` equal to the target, `key` a 64-hex
+ * digest, no `decision`. Anything else returns null and keeps ADR 812's words.
+ */
+function passkeyVouchKey(target: string, payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const p = payload as { action?: unknown; kind?: unknown; member?: unknown; key?: unknown };
+  if (p.action !== 'enroll' || p.kind !== 'passkey') return null;
+  if ((payload as { decision?: unknown }).decision !== undefined) return null;
+  if (p.member !== target) return null;
+  return typeof p.key === 'string' && /^[0-9a-f]{64}$/.test(p.key) ? p.key : null;
 }
 
 /** A `human_accept` payload the wording knows: a verdict on a lane (`route.ts` builds it). */
@@ -169,5 +198,16 @@ const WORDING: Record<HighAuthorityAct, (target: string, payload: unknown) => st
 };
 
 export function approvalWording(d: ApprovalDescriptor, payload: unknown): ApprovalWording {
-  return { headline: WORDING[d.act](d.target, payload), scope: `As ${d.actor} on ${d.audience}` };
+  const wording: ApprovalWording = {
+    headline: WORDING[d.act](d.target, payload),
+    scope: `As ${d.actor} on ${d.audience}`,
+  };
+  const key = d.act === 'device_key_admin' ? passkeyVouchKey(d.target, payload) : null;
+  if (key !== null) {
+    wording.check = {
+      code: vouchCheckCode(key),
+      instruction: `Only approve if ${d.target} read you this code on a call or in person.`,
+    };
+  }
+  return wording;
 }

@@ -5,6 +5,7 @@ import { AppApprovalOfferSchema, AppAnswerSchema, appAnswerSigningBytes } from '
 import {
   ApprovalDescriptorSchema,
   approvalWording,
+  vouchCheckCode,
   canonicalJson,
   descriptorSigningBytes,
   HIGH_AUTHORITY_ACTS,
@@ -178,5 +179,53 @@ describe('approvalWording (ADR 676 §6)', () => {
       approvalWording(keys, { action: 'enroll', kind: 'passkey', decision: 'yes, trust me' })
         .headline,
     ).toBe('Change the device keys of nick');
+  });
+
+  describe('a passkey vouch (ADR 769)', () => {
+    const keys = { ...base, act: 'device_key_admin' as const, target: 'ada' };
+    const digest = 'a'.repeat(8) + '0'.repeat(56);
+
+    it('works the check code out from the signed key, with the fixed instruction', () => {
+      const w = approvalWording(keys, {
+        action: 'enroll',
+        kind: 'passkey',
+        member: 'ada',
+        key: digest,
+      });
+      expect(w.headline).toBe('Add a new passkey for ada');
+      expect(w.check).toEqual({
+        code: vouchCheckCode(digest),
+        instruction: 'Only approve if ada read you this code on a call or in person.',
+      });
+    });
+
+    it('shows no check code for any other shape', () => {
+      const vouch = { action: 'enroll', kind: 'passkey', member: 'ada', key: digest };
+      for (const payload of [
+        { action: 'enroll', kind: 'passkey' }, // ADR 812's standing-key approval
+        { ...vouch, member: 'eve' }, // member is not the target
+        { ...vouch, key: 'not-a-digest' },
+        { ...vouch, key: digest.toUpperCase() },
+        { ...vouch, decision: 'reject' },
+        { ...vouch, kind: 'phone' },
+      ]) {
+        expect(approvalWording(keys, payload).check).toBeUndefined();
+      }
+      expect(approvalWording({ ...keys, act: 'grant_issue' }, vouch).check).toBeUndefined();
+    });
+  });
+});
+
+describe('vouchCheckCode (ADR 769)', () => {
+  it('is six digits, deterministic, from the digest only', () => {
+    const d = 'ffffffff' + '0'.repeat(56);
+    expect(vouchCheckCode(d)).toBe((0xffffffff % 1_000_000).toString().padStart(6, '0'));
+    expect(vouchCheckCode('0'.repeat(64))).toBe('000000');
+    expect(vouchCheckCode(d)).toMatch(/^\d{6}$/);
+  });
+
+  it('refuses anything that is not a 64-hex lowercase digest', () => {
+    expect(() => vouchCheckCode('abc')).toThrow();
+    expect(() => vouchCheckCode('F'.repeat(64))).toThrow();
   });
 });
