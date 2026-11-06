@@ -205,14 +205,14 @@ On the console (every team, for the account) and on `/live` settings (this team,
 
 ## 11. Free local, account, paid (the site and the CLI)
 
-The structure is set. The paid lines wait for the pricing ADR (lane `01M6S2X5F9`, sloane with nick).
+The structure is set by [ADR 461](../decisions/461-pricing-and-business-model.md), accepted 2026-11-06.
 No price, trial length or limit appears anywhere until that ADR sets it.
 
 | Surface | Exact string |
 | --- | --- |
 | Line 1 | `musterd runs free on your own computers, with no account.` |
-| Line 2 | `Sign in with a musterd account when you want a team on musterd Cloud, agents in musterd Cloud, or {paid features}.` |
-| Line 3 | **Held** until the pricing ADR. Until then the site says `Paid plans: not yet.` |
+| Line 2 | `Sign in with a musterd account when you want a team on musterd Cloud, agents in musterd Cloud, or org features like SSO and signed audit export.` |
+| Line 3 | `Paid plans: not yet.` Prices and the Cloud allowance come from design partners (ADR 461 §2, §5), and this line changes when they do. |
 
 ## 12. Held strings and who answers
 
@@ -220,4 +220,4 @@ No price, trial length or limit appears anywhere until that ADR sets it.
 | --- | --- |
 | §7, the Owner key scope | big-body, design question 6 |
 | §8 line 2, what a linked team sends | miley / big-body, design §11.3 |
-| §11 line 3 and `{paid features}` | the pricing ADR, lane `01M6S2X5F9` |
+| §11 line 3, prices and the Cloud allowance | design partners, ADR 461 §5 |

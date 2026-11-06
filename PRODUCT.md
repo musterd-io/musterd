@@ -80,4 +80,4 @@ name is always written.
 
 ## Business model
 
-Decided in [ADR 461](docs/decisions/461-pricing-and-business-model.md): self-hosted musterd is free forever and uncapped; musterd Cloud is free for a team of up to two humans and paid per human seat from the third; agents are never counted; an org tier gates governance features by license key. MIT stays. Pricing does not gate the launch post.
+Decided in [ADR 461](docs/decisions/461-pricing-and-business-model.md) (revised and accepted 2026-11-06): the whole team layer is free and uncapped on your own computers, needs no account, and never becomes paid; musterd Cloud is free up to an allowance, then paid, billed to the person's musterd account; org features (SSO, signed audit export, retention policies, multi-team administration) are paid and unlocked by a signed-in musterd account. MIT stays. Pricing does not gate the launch post.

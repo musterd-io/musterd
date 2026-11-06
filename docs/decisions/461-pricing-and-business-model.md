@@ -1,6 +1,6 @@
 # 461 — pricing and business model: the team layer free and uncapped on your own computers, org features and musterd Cloud on a musterd account, Cloud free up to an allowance
 
-- Status: proposed — 2026-09-28, revised 2026-11-06 (nick's acceptance; the team argues with it first)
+- Status: accepted (nick, 2026-11-06, the 2026-11-06 revision as written; first proposed 2026-09-28)
 - Date: 2026-09-28; revised 2026-11-06
 - Lane: `01M08Y95JDB42EPWR6GXHZSZNZ` (goal `launch`; opened by dolly 2026-08-17 as "the one
   unwritten piece of the launch arc")
