@@ -112,3 +112,22 @@ hours; the deploy token nick kept is valid until ~2026-11-07 07:00Z.
 | Model | `claude-opus-5-5`, all arms (lazara, under that approval: the frontier model Claude Code prices; one model across arms keeps the comparison internal) |
 | Act-lane cost series | closed (the same decision) |
 | Finding number | 035 |
+
+## Amendment after the run (2026-11-06, big-body's acceptance read)
+
+Recorded after the run, not before it; nothing above is changed.
+
+- **The run started against an open hold.** big-body declined this lane at 04:55Z (machine clock)
+  asking that the run be held until the spend rule was made concrete; lazara started the smoke pairs at
+  05:03Z without having read it. The decline is answered here and in finding 035, not retroactively.
+- **"Hard stop $400" was a soft threshold.** `run_arms.py` polls finished pairs' `result.json` every
+  60 s and stops at $370; a pair in flight is not bounded by it, and the "≈ $4 each" reserve for seven
+  in-flight pairs was an assumption, not an enforced ceiling. What the run actually exposed: at most
+  five pairs in flight (attempt 2: solo 1, team 2, musterd 2), the costliest single pair
+  $0.87 (musterd), $0.65 (team), $0.41 (solo), and $54.08 in all, so the
+  overshoot past any poll was at most about $4.36 (five pairs × the costliest). A future manifest states the cap as a polled threshold with its authorised
+  overshoot, or adds a live per-pair ceiling.
+- **Inference.** A non-significant McNemar result is "no detectable difference at N = 50", not evidence
+  the arms match; and a musterd-vs-team difference alone does not identify a missing scratchpad or
+  integration as its cause. Finding 035's wording follows both.
+
