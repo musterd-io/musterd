@@ -85,6 +85,51 @@ import { releaseLateWakeHolds } from './wakeHold.js';
  *  Mechanism, not owner policy — deliberately NOT a `ResidencyPolicySchema` knob. */
 export const WAKE_LEASE_TTL_MS = 120_000;
 
+/**
+ * First-lease TTL after the hub started this host's machine (ADR 816, lane `01M6RZ0NRA`).
+ * Measured 2026-11-06 on delta-2: a cold spawn leased at +20 s had not occupied the seat when
+ * the 120 s TTL reaped it (`lease_expired` at 123.8 s), and the retry that then woke in 2.8 s
+ * only leased 119 s later — 291 s act→reply against a warm 10.9 s. A cold first spawn (cold
+ * workspace, cold session) legitimately outruns a TTL sized for warm actuations, so the FIRST
+ * lease minted inside {@link COLD_START_WINDOW_MS} of a `fly.machine_start` for this host, with
+ * no `woke` for the seat since that start, gets this longer leash instead. Same mechanism class
+ * as the TTL it extends — deliberately NOT a policy knob.
+ */
+export const COLD_FIRST_LEASE_TTL_MS = 420_000;
+/** How long after a hub machine start its first lease still counts as the cold one. Covers the
+ *  fly watch's tick phase plus boot and fold drain with room; a wake first leased later than
+ *  this is not the start's wake. */
+export const COLD_START_WINDOW_MS = 600_000;
+
+/**
+ * Is this lease the cold first one after the hub started the host's machine (ADR 816)? Reads the
+ * folded `fly.machine_start` audit row for this host — minted on the hub, read here on whichever
+ * daemon mints leases (in hub mode the seat machine's own joiner daemon, which folds hub audit
+ * before its host first polls, so the row is already local). Deliberately NOT `MINTED_HERE`:
+ * the row being a peer's is the whole point. A `woke` for the seat since that start ends the
+ * cold window — the machine has actuated warm at least once.
+ */
+async function isColdFirstLease(
+  db: Driver,
+  teamId: string,
+  host: string,
+  seatName: string,
+  now: number,
+): Promise<boolean> {
+  const start = await db.get<{ ts: number | null }>(
+    `SELECT CAST(MAX(ts) AS INTEGER) AS ts FROM audit
+      WHERE team_id = ? AND action = 'fly.machine_start' AND result = 'allow'
+        AND json_extract(detail, '$.host') = ?`,
+    [teamId, host],
+  );
+  if (!start?.ts || now - start.ts > COLD_START_WINDOW_MS || start.ts > now) return false;
+  const woke = await db.get<{ one: number }>(
+    `SELECT 1 AS one FROM audit WHERE team_id = ? AND action = 'residency.woke' AND target = ? AND ts >= ? LIMIT 1`,
+    [teamId, seatName, start.ts],
+  );
+  return woke === undefined;
+}
+
 /** A harness id as stored and compared (ADR 715): trimmed, no trailing slash — `claude-code/` once
  *  enrolled a seat that then matched no per-harness chart. */
 export const normalizeHarness = (h: string): string => h.trim().replace(/\/+$/, '');
@@ -3023,6 +3068,10 @@ async function writeSeatPass(
         );
         if (changes === 0) return null;
       }
+      // ADR 816 (lane 01M6RZ0NRA): the first lease after the hub started this host's machine
+      // gets the cold TTL — a cold spawn outruns the warm 120 s leash before it occupies.
+      const coldFirst = await isColdFirstLease(t, teamId, host, member.name, now);
+      const leaseTtlMs = coldFirst ? COLD_FIRST_LEASE_TTL_MS : WAKE_LEASE_TTL_MS;
       const candidate = plan.kind === 'candidate' ? plan.candidate : null;
       const edge = plan.kind === 'candidate' ? plan.edge : null;
       const lane: WakeLane =
@@ -3041,7 +3090,7 @@ async function writeSeatPass(
         lane,
         status: 'leased',
         created_at: now,
-        expires_at: now + WAKE_LEASE_TTL_MS,
+        expires_at: now + leaseTtlMs,
         edge,
         spawned_at: null,
       };
@@ -3068,6 +3117,7 @@ async function writeSeatPass(
           result: 'allow',
           detail: {
             lease_id: lease.id,
+            ...(coldFirst ? { cold_first: true, ttl_ms: leaseTtlMs } : {}),
             reason: 'provisioned',
             provision_id: plan.provisionId,
             sponsor: plan.sponsorName,
@@ -3100,6 +3150,7 @@ async function writeSeatPass(
           result: 'allow',
           detail: {
             lease_id: lease.id,
+            ...(coldFirst ? { cold_first: true, ttl_ms: leaseTtlMs } : {}),
             act: 'dream',
             sender: 'dream',
             lane: 'batched',
@@ -3137,6 +3188,7 @@ async function writeSeatPass(
         result: 'allow',
         detail: {
           lease_id: lease.id,
+          ...(coldFirst ? { cold_first: true, ttl_ms: leaseTtlMs } : {}),
           act: plan.exhKey,
           sender: c.sender ?? 'board',
           lane: c.lane,
