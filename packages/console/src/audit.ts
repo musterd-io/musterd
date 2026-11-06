@@ -17,6 +17,7 @@ export type AuditAction =
   | 'identity.link'
   | 'identity.unlink'
   | 'token.issue'
+  | 'statement.issue'
   | 'team.create';
 
 export async function appendAudit(

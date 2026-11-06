@@ -132,6 +132,7 @@ Sign in and Check your email do. The body is the rest of that row.
 | Google refused | Google didn't complete sign-in | You can try again. | Same. |
 | Account disabled | This account is disabled | You can't sign in with it. | Shown only after a redemption or a provider callback resolved to a disabled account. The check-your-email page stays the sent strings. ADR 620 names no support address, so the page shows none. |
 | Too many attempts | Too many attempts | Try again in a little while. | A pause on this request (decision 9). ADR 620 names no window, so the string names none. The account is unchanged. Do not say locked or disabled. |
+| Hand-back link not valid | This sign-in link isn't valid | Go back to your team and choose Sign in with musterd again. | `/handback` with a query this console did not build for a team it serves (ADR 722 §1). Nothing was signed. |
 | Unknown failure | Something went wrong | Quote this if you ask for help: {request_id} | `{request_id}` is the server-generated id (decision 10), as selectable text. This is the unknown-cause state. A known cause uses its own row. |
 
 ## 8. Create a team
@@ -168,4 +169,21 @@ can create teams (lane `01M3Z44MTV`, 2026-11-02).
 | Label | key | Agent key | The `mskey_` value agents present to claim a seat. |
 | Note | created | Agents present the agent key to claim a seat; you present your credential. Keep both out of chat and out of git. | |
 | Link | created | Back to your account | |
+
+## 9. Signing in to a team
+
+The team hand-back (ADR 722 §1, ADR 818, lane `01M6RZ8K12`, 2026-11-06): a hosted team's
+**Sign in with musterd** comes here, and the page sends the person straight back. They see it for
+a moment, or — with script off — press the button. Strings drafted by miley; sloane reviews.
+
+`<title>` Signing you in — musterd
+
+| Surface | State | Exact string | Notes |
+| --- | --- | --- | --- |
+| Heading | handing back | Signing you in to {team} | `{team}` is the team slug. |
+| Lede | handing back | One moment — taking you back to your team. | |
+| Button | handing back | Continue | The same POST the script makes. |
+
+With no console session, the page is the sign-in page (§2) unchanged; after signing in, the person
+lands back here.
 

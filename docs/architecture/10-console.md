@@ -35,7 +35,8 @@ Two routes, and everything else is refused:
 | `POST /logout` | ADR 620: exact Origin, a form body, the session's CSRF token; revokes the session row, clears the cookie, `303 /`. A GET is a 405 |
 | `GET /` | the sign-in page (design `2026-10-15-console-signin-design.md`, words `console-signin-copy-spec.md`): provider POST forms to the start routes above and the email form, each way shown only when configured; a signed-in browser is sent to `/account`, a stale session cookie shows the expired banner once and is cleared |
 | `GET /account` | the signed-in page: the account's sign-in methods, `Signed in with this` on the identity this session used, and the sign-out POST form (with its CSRF field); no session is a `303 /` |
-| `GET /console.css`, `/favicon.svg`, `/fonts/*.woff2` | the screens' own assets (in `packages/console/assets/`), under the page CSP below; fonts are immutable, the rest cache for 300 s |
+| `GET /handback?aud&team&state` | ADR 722 §1, ADR 818: the team hand-back. 404 unless a signer and `MUSTERD_CONSOLE_TEAM_*` are configured. The query must be exactly the three params, `aud` the configured team audience, `team` a slug, `state` 16–128 base64url — else the "This sign-in link isn't valid" page (400), nothing signed. No session: the sign-in page, whose forms carry the canonical hand-back path as `return`. Signed in: 30 a minute per account (the `/tokens` bucket), an identity statement (`use: "identity"`, the email only when one is held) audited as `statement.issue` with `aud`, `team`, `jti`, and a page whose form POSTs `statement` + `state` to `https://<team>.<suffix>/live/signin/callback` — built here, never from the query — submitted by `/handback.js`, under a CSP whose only `form-action` is that origin, `referrer-policy: no-referrer`. HEAD signs nothing |
+| `GET /console.css`, `/handback.js`, `/favicon.svg`, `/fonts/*.woff2` | the screens' own assets (in `packages/console/assets/`), under the page CSP below; fonts are immutable, the rest cache for 300 s |
 
 The browser flows answer in pages, not JSON: a bad email address re-renders the sign-in page
 with its field error, a sent (or silently failed) send renders check-your-email, the magic
@@ -45,6 +46,7 @@ a caller-chosen path. The session marker on the account row this session used is
 `Signed in with this` (copy spec §6). The row has no date.
 
 Sign-in is ADR 620. Console tokens are ADR 685 (`POST /tokens` when KMS is configured). Identity
+statements are ADR 698 as amended by ADR 818, issued only by `GET /handback`. Identity
 binding (`01M3Z44K46`) and create-team (`01M3Z44MTV`) are not this token route. There is no
 development issuer.
 
@@ -144,16 +146,17 @@ src/
   email.ts        // sendSignInEmail(cfg, {to, link, expiresMinutes}): one POST to Cloudflare Email Service's REST endpoint, no SDK, no tracking; signInMessage (copy spec §4, text only)
   http.ts         // createConsoleServer: host allow-list, GET/HEAD except the POST routes (Origin, form, CSRF), bounded headers and timeouts, request ids, security headers, /health, the JWKS (the signer's public key, or empty), POST /tokens, the sign-in and account pages and their assets, one error shape, one log line per request by route label
   kms.ts          // Cloud KMS over REST (ADR 685): service-account JWT for a bearer, getPublicKey, asymmetricSign of a precomputed SHA-256, DER to ieee-p1363; errors name the call and the HTTP status, never the assertion or the credential file
-  pages.ts        // the sign-in screens (design 2026-10-15, copy spec words): shell, signInPage, checkEmailPage, finishPage, wrongBrowserPage, errorPages, accountPage; PAGE_CSP and assetFor for assets/ — no script, nothing inline
+  handback.ts     // the team hand-back (ADR 722 §1): parseHandbackShape (exactly /handback?aud&team&state), handbackPath (the one canonical spelling), callbackUrl(team, suffix), handbackCsp (form-action = the callback origin, script-src 'self'), statementEmail (the session identity's, else the account's first, else null); TEAM_SLUG, HANDBACK_STATE
+  pages.ts        // the sign-in screens (design 2026-10-15, copy spec words): shell, signInPage (with an optional hidden return), checkEmailPage, finishPage, wrongBrowserPage, handbackPage, errorPages, accountPage; PAGE_CSP and assetFor for assets/ — nothing inline; the one script is assets/handback.js, on the hand-back page only
   log.ts          // makeLog / redact: JSON lines, secret-named fields dropped, every string through scrubCredentials
   providers.ts    // PINNED GitHub/Google endpoints, startFlow (state, PKCE S256, Google nonce; pinned callback), finishFlow (openid-client code exchange; Google ID token claims; GitHub numeric id from /user); ProviderOverrides for tests only
   ratelimit.ts    // hit(db, {bucket, max, windowMs}, now): one atomic upsert per hit, held across servers; pruneRateLimits
   request.ts      // SESSION_COOKIE, cookie(req, name), readForm(req) — urlencoded only, at most 8 KiB, else FormError 415/413
-  returnpath.ts   // RETURN_PATHS allowlist and safeReturnPath(input): exactly a listed path, else "/"
+  returnpath.ts   // RETURN_PATHS allowlist and safeReturnPath(input): exactly a listed path, or exactly a canonical team hand-back path, else "/"
   schema.ts       // SCHEMA_VERSION, MIGRATIONS (v1 accounts, identities, audit, console_meta; v2 sessions, auth_transactions, rate_limits), grantsFor(runtimeRole) (INSERT-only audit; no DELETE on sessions or transactions), migrate(owner, role)
   secrets.ts      // newSecret (256-bit base64url), hashSecret (SHA-256 hex — the only form a secret is stored in), sameSecret (constant time)
   sessions.ts     // IDLE_MS / ABSOLUTE_MS / FRESH_MS; createSession (always a new id), loadSession (one query: not revoked, both expiries, account live, generation current; touches at most once a minute), isFresh, revokeSession, revokeAllSessions
   testing.ts      // tests only: pglite() — a PGlite instance behind Queryable
-  tokens.ts       // signConsoleToken (ES256, 60 s, one audience, one jti), audienceOk, derToP1363, publicJwkFromPem, localSigner (tests and the in-process console; not a production fallback)
+  tokens.ts       // signConsoleToken (ES256, 60 s, one audience, one jti, no use claim) and signIdentityStatement (the same, plus use:"identity" and the email when known — ADR 818), audienceOk, derToP1363, publicJwkFromPem, localSigner (tests and the in-process console; not a production fallback)
   transactions.ts // TX_COOKIE, TX_TTL_MS; createOAuthTx (hashed cookie id and state), consumeOAuthTx (one atomic UPDATE … WHERE consumed_at IS NULL; cookie, provider, state, TTL); createMagicTx, lookupMagic (read-only: confirm / other_browser / expired), consumeMagic (token AND browser cookie, atomic)
 ```

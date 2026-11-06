@@ -33,6 +33,7 @@ function asset(name: string, type: string, cache: string): void {
   }
 }
 asset('console.css', 'text/css; charset=utf-8', 'public, max-age=300');
+asset('handback.js', 'text/javascript; charset=utf-8', 'public, max-age=300');
 asset('favicon.svg', 'image/svg+xml', 'public, max-age=300');
 for (const f of ['dm-sans-latin.woff2', 'jetbrains-mono-latin.woff2'])
   asset(`fonts/${f}`, 'font/woff2', 'public, max-age=31536000, immutable');
@@ -86,15 +87,18 @@ export interface SignInOptions {
   email: boolean;
   expired?: boolean;
   error?: { message: string; value: string } | null;
+  /** Where to land after signing in — only ever a `safeReturnPath` value (the team hand-back). */
+  returnTo?: string;
 }
 
 export function signInPage(o: SignInOptions): string {
   const ways: string[] = [];
+  const back = o.returnTo ? `<input type="hidden" name="return" value="${esc(o.returnTo)}">` : '';
   if (o.providers.length) {
     const buttons = o.providers
       .map(
         (p) =>
-          `<form method="post" action="/auth/${p}/start"><button class="c-button" type="submit">${p === 'github' ? GITHUB_ICON : GOOGLE_ICON}Continue with ${p === 'github' ? 'GitHub' : 'Google'}</button></form>`,
+          `<form method="post" action="/auth/${p}/start">${back}<button class="c-button" type="submit">${p === 'github' ? GITHUB_ICON : GOOGLE_ICON}Continue with ${p === 'github' ? 'GitHub' : 'Google'}</button></form>`,
       )
       .join('\n');
     ways.push(`<div class="c-stack">\n${buttons}\n</div>`);
@@ -105,7 +109,7 @@ export function signInPage(o: SignInOptions): string {
       ? `<div class="c-field c-field--error">\n<label for="email">Email</label>\n<input id="email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required placeholder="you@example.com" value="${esc(e.value)}" aria-invalid="true" aria-describedby="email-error" autofocus>\n<p class="c-field__error" id="email-error">${esc(e.message)}</p>\n</div>`
       : `<div class="c-field">\n<label for="email">Email</label>\n<input id="email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required placeholder="you@example.com">\n</div>`;
     ways.push(
-      `${o.providers.length ? '<p class="c-or">or</p>\n' : ''}<form class="c-stack" method="post" action="/auth/email/start">\n${field}\n<button class="c-button c-button--primary" type="submit">Email me a link</button>\n</form>`,
+      `${o.providers.length ? '<p class="c-or">or</p>\n' : ''}<form class="c-stack" method="post" action="/auth/email/start">\n${back}${field}\n<button class="c-button c-button--primary" type="submit">Email me a link</button>\n</form>`,
     );
   }
   const note =
@@ -149,7 +153,34 @@ function errorPage(heading: string, body: string | null, extra = ''): string {
   );
 }
 
+/**
+ * The team hand-back (ADR 722 §1, ADR 818): a form that POSTs the identity statement and the team's
+ * state to the team's own callback. `/handback.js` submits it on load; the button is the same
+ * action for a browser that runs no script. The statement is in a hidden field, never a URL.
+ */
+export function handbackPage(o: {
+  action: string;
+  team: string;
+  statement: string;
+  state: string;
+}): string {
+  return shell(
+    'Signing you in — musterd',
+    `<h1>Signing you in to ${esc(o.team)}</h1>\n<p class="c-lede">One moment — taking you back to your team.</p>\n` +
+      `<form class="c-stack" method="post" action="${esc(o.action)}">\n` +
+      `<input type="hidden" name="statement" value="${esc(o.statement)}">\n` +
+      `<input type="hidden" name="state" value="${esc(o.state)}">\n` +
+      `<button class="c-button c-button--primary" type="submit">Continue</button>\n</form>\n` +
+      `<script src="/handback.js"></script>`,
+  );
+}
+
 export const errorPages = {
+  handback: () =>
+    errorPage(
+      "This sign-in link isn't valid",
+      'Go back to your team and choose Sign in with musterd again.',
+    ),
   link: () =>
     errorPage('This link is no longer valid', 'It works once, for 15 minutes. Ask for a new one.'),
   github: () => errorPage("GitHub didn't complete sign-in", 'You can try again.'),
