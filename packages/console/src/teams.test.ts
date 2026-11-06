@@ -144,9 +144,19 @@ describe('POST /teams', () => {
     const r = await post({ slug: 'Acme', display: 'Acme', name: 'ada' });
     expect(r.status).toBe(200);
     expect(r.body).toContain('Team created');
-    expect(r.body).toContain('mscr_SHOWN_ONCE');
-    expect(r.body).toContain('mskey_SHOWN_ONCE');
-    expect(r.body).toContain('https://acme.musterd.test/live');
+    // The way in is one button that signs the creator in through the hand-back (unified sign-in
+    // lane 5): the team's own start route, which comes back to the console and lands on /live.
+    expect(r.body).toContain(
+      '<a class="c-button c-button--primary" href="https://acme.musterd.test/live/signin/start">Open acme</a>',
+    );
+    // The secrets stay until `musterd login` / `join` exist (nick, question 01M6SBB3C7), but
+    // folded away under one disclosure that starts closed, after the button.
+    const fold = r.body.indexOf('<details class="c-disclose">');
+    expect(fold).toBeGreaterThan(r.body.indexOf('Open acme'));
+    expect(r.body).toContain('<summary>For your terminal and agents</summary>');
+    expect(r.body).not.toContain('<details class="c-disclose" open');
+    expect(r.body.indexOf('mscr_SHOWN_ONCE')).toBeGreaterThan(fold);
+    expect(r.body.indexOf('mskey_SHOWN_ONCE')).toBeGreaterThan(fold);
     const sent = seen.at(-1)!;
     expect(sent.url).toBe('https://acme.musterd.test/teams');
     expect(sent.body).toEqual({ slug: 'acme', display: 'Acme', creator: { name: 'ada' } });
