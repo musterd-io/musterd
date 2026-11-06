@@ -47,8 +47,8 @@
  *     # a REMOTE server (musterd Cloud, spec §8.1): no child daemon. The harness seeds the team over
  *     # its admin API (LANES lanes, then every human and agent seat with its credential), and every
  *     # population goes the long way — OAuth + /mcp, the hook rail, /live's reads and its WS, and the
- *     # /health prober, all through the edge. Use a FRESH team per run (scripts/cloud/staging-issuer.mjs
- *     # create-team) so every run starts from the same board. One driver is one address, so the
+ *     # /health prober, all through the edge. Use a FRESH team per run (create it through the
+ *     # console) so every run starts from the same board. One driver is one address, so the
  *     # per-IP OAuth limits bind as on a tunnel run: RAMP ≥ 12 s per human. No child means no CPU or
  *     # loop delay from here; the report prints the run window to read the host's own metrics for.
  *     # Runs on a bench machine next to the target, never the shared laptop (scripts/cloud/bench-run.mjs).

@@ -20,7 +20,6 @@ primary_region = "iad"
   MUSTERD_CLOUD_HOST_SUFFIX = "musterd.dev"
   # Edge half of team/client admission (ADR 634): deploy/cloud/per-team-rate-limit.json.
   # Checked in here. This file does not post it. Deploy stays scripts/cloud/deploy.mjs.
-  # Increment 1D's staging issuer (workers/staging-jwks). Increment 2's console replaces both lines.
   MUSTERD_CONSOLE_AUDIENCE = "https://musterd.dev"
   # The console's own key set (ADR 685; cut over from the staging issuer in lane 01M5E0543H).
   MUSTERD_CONSOLE_JWKS_URL = "https://app.musterd.io/.well-known/jwks.json"
