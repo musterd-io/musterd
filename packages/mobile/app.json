@@ -21,7 +21,8 @@
               "NSExceptionAllowsInsecureHTTPLoads": true
             }
           }
-        }
+        },
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {

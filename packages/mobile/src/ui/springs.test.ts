@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AUTO_RETURN_MS,
   GLIDE,
+  GLOW_MS,
   leaveTo,
   pillBottom,
   SPRING,
@@ -54,5 +55,10 @@ describe('the tab pill (ADR 815, the app shell)', () => {
   it('returns to where you came from, or to Now when there is nothing behind (a notification opened it cold)', () => {
     expect(leaveTo(true)).toBe('back');
     expect(leaveTo(false)).toBe('home');
+  });
+
+  it('a landing’s glow lives one beat, inside the brand’s band (ADR 819)', () => {
+    expect(GLOW_MS).toBeGreaterThanOrEqual(120);
+    expect(GLOW_MS).toBeLessThanOrEqual(1_500);
   });
 });

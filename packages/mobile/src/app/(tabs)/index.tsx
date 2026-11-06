@@ -1,9 +1,11 @@
+import type { AppMoment } from '@musterd/protocol/app-channel';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AsksView } from '../../native/asks';
+import { floorDesks, glowQueue, newLandings } from '../../native/floor';
 import { heldBody, refusalLine } from '../../native/notice';
 import { endedNote, type PairingEnded } from '../../native/pairingEnded';
 import type { PairingPin } from '../../native/pairingPin';
@@ -20,16 +22,19 @@ import {
 import { useRosterPoll } from '../../native/useRosterPoll';
 import { Button } from '../../ui/button';
 import { useChrome } from '../../ui/chrome';
+import { Floor } from '../../ui/floor';
 import { ForYouRow } from '../../ui/forYouRow';
 import { Backdrop, Glass } from '../../ui/glass';
+import { heavy, success } from '../../ui/haptics';
 import { Icon } from '../../ui/icon';
 import { MemberRow } from '../../ui/memberRow';
 import { MemberSheet } from '../../ui/memberSheet';
+import { MomentRow } from '../../ui/momentRow';
 import { Breathe, Rise, Squish } from '../../ui/motion';
 import { Notice, SectionLabel } from '../../ui/notice';
 import { OfflineFold } from '../../ui/offlineFold';
 import { confirmPairAgain } from '../../ui/pairAgain';
-import { GLIDE } from '../../ui/springs';
+import { GLIDE, GLOW_MS } from '../../ui/springs';
 import { font, radius, space, usePalette } from '../../ui/theme';
 
 /**
@@ -63,6 +68,10 @@ export default function AsksScreen() {
   const [roster, setRoster] = useState<Roster | null>(null);
   const [showOffline, setShowOffline] = useState(false);
   const [sheet, setSheet] = useState<AppMember | null>(null);
+  // ADR 819: the moments the screen last showed; a landing not among them glows and buzzes, once.
+  const seenMoments = useRef<AppMoment[] | null>(null);
+  const [glows, setGlows] = useState<string[]>([]);
+  const [bell, setBell] = useState(false);
   const keyDeclined = useRef(false);
   const alive = useRef(true);
   // Every list refresh re-fetches each ask, which re-issues its token and spends the old one. The
@@ -141,6 +150,32 @@ export default function AsksScreen() {
     }
   }, []);
   useRosterPoll({ pin: pin ?? null, load: loadRoster });
+
+  // ADR 819: a landing or a finished goal that arrived while you watched is a small celebration —
+  // the member's desk glows (one at a time), a success buzz, and for a goal the bell and a heavier
+  // one. What landed while you were elsewhere is just a row: no glow for what you were not here for.
+  useEffect(() => {
+    const moments = roster?.moments;
+    if (!moments) return;
+    const fresh = newLandings(seenMoments.current, moments);
+    seenMoments.current = moments;
+    if (fresh.length === 0 || !focused.current || AppState.currentState !== 'active') return;
+    setGlows((q) => [...q, ...glowQueue(fresh.filter((m) => m.kind === 'landed'))]);
+    if (fresh.some((m) => m.kind === 'goal')) {
+      heavy();
+      setBell(true);
+    } else success();
+  }, [roster]);
+  useEffect(() => {
+    if (glows.length === 0) return;
+    const t = setTimeout(() => setGlows((q) => q.slice(1)), GLOW_MS + 150);
+    return () => clearTimeout(t);
+  }, [glows]);
+  useEffect(() => {
+    if (!bell) return;
+    const t = setTimeout(() => setBell(false), GLOW_MS * 2);
+    return () => clearTimeout(t);
+  }, [bell]);
 
   useEffect(() => {
     alive.current = true;
@@ -267,6 +302,10 @@ export default function AsksScreen() {
   }));
   const rows = teamRows(paired ? roster : null, paired ? own : [], null);
   const askByRef = new Map(asks.map((entry) => [entry.delivery.ask.id, entry] as const));
+  const floor = floorDesks(rows.present);
+  const askingYou = new Set(rows.forYou.map((f) => f.from));
+  const moments = paired ? (roster?.moments ?? []) : [];
+  const kindOf = new Map([...rows.present, ...rows.offline].map((m) => [m.name, m] as const));
   const status: { tone: 'on' | 'wait' | 'off'; text: string } = paired
     ? { tone: 'on', text: team ?? 'Paired' }
     : pin
@@ -381,6 +420,20 @@ export default function AsksScreen() {
           </Text>
         </Squish>
       ) : null}
+      {paired && pin && roster ? (
+        <Rise>
+          <Floor
+            desks={floor.desks}
+            more={floor.more}
+            live={rows.present.some((m) => m.state === 'working')}
+            askingYou={askingYou}
+            glowing={glows[0] ?? null}
+            bell={bell}
+            pin={pin}
+            onPressMember={setSheet}
+          />
+        </Rise>
+      ) : null}
       {paired && rows.forYou.length > 0 ? (
         <SectionLabel label="For you" count={forYouCount(rows)} />
       ) : null}
@@ -413,6 +466,25 @@ export default function AsksScreen() {
         : null}
       {paired && rows.forYou.length === 0 && !waitingElsewhere ? (
         <Text style={[styles.quiet, { color: p.placeholder }]}>Nothing waiting on you.</Text>
+      ) : null}
+      {paired && pin && moments.length > 0 ? (
+        <>
+          <SectionLabel label="Happening now" />
+          {moments.map((m) => {
+            const who = kindOf.get(m.member);
+            return (
+              <MomentRow
+                key={m.id}
+                moment={m}
+                agent={who?.kind !== 'human'}
+                portrait={portraitOf(rows, m.member)}
+                pin={pin}
+                now={now}
+                onPress={() => who && setSheet(who)}
+              />
+            );
+          })}
+        </>
       ) : null}
       {paired && (rows.present.length > 0 || rows.offline.length > 0) ? (
         <SectionLabel label="Team" count={`${rows.counts.here} here`} />

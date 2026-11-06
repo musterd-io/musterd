@@ -117,3 +117,23 @@ describe('the Swift extension matches the TypeScript sentences', () => {
     expect(config).toContain('MusterdPushSubscriber');
   });
 });
+
+describe('the live nudge wakes only a phone in front (ADR 819)', () => {
+  const subscriber = read('packages/mobile/modules/musterd-keys/ios/MusterdPushSubscriber.swift');
+  const app = JSON.parse(read('packages/mobile/app.json')) as {
+    expo: { ios: { infoPlist: Record<string, unknown> } };
+  };
+
+  it('pulls on a background push only while the app is active, and always completes', () => {
+    const hook = subscriber.slice(subscriber.indexOf('didReceiveRemoteNotification'));
+    expect(hook.length).toBeLessThan(subscriber.length);
+    const body = hook.slice(0, hook.indexOf('\n  }\n'));
+    expect(body).toContain('applicationState == .active');
+    expect(body.indexOf('applicationState == .active')).toBeLessThan(body.indexOf('onDelivery'));
+    expect(body).toContain('completionHandler(.noData)');
+  });
+
+  it('declares remote-notification as a background mode', () => {
+    expect(app.expo.ios.infoPlist['UIBackgroundModes']).toContain('remote-notification');
+  });
+});

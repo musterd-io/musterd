@@ -68,3 +68,9 @@ export const AUTO_RETURN_MS = 5_000;
 export function leaveTo(canGoBack: boolean): 'back' | 'home' {
   return canGoBack ? 'back' : 'home';
 }
+
+/**
+ * One landing's glow at its member's desk (ADR 819): /live's "soft ding and a little glow", one at
+ * a time. A burst queues; nothing glows at once with another.
+ */
+export const GLOW_MS = 1_200;
