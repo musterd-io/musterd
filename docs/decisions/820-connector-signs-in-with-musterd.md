@@ -3,8 +3,8 @@
 - Status: proposed
 - Date: 2026-11-06
 - Lane: `01M6S2VPWRQ2TXTP3X4G4ERRZ6` (goal `unified-sign-in`, increment 4)
-- Builds on: [ADR 446](446-remote-mcp-oauth.md) (the team server as an OAuth server for MCP
-  clients), [ADR 450](450-phone-joins-by-invite.md) (invites on the consent page),
+- Builds on: [ADR 446](446-remote-mcp-https-oauth.md) (the team server as an OAuth server for MCP
+  clients), [ADR 450](450-team-invite-join.md) (invites on the consent page),
   [ADR 722](722-hosted-live-browser-session.md) (the console round trip),
   [ADR 818](818-identity-proof-use-claim.md) (the identity proof)
 - Spec: [`2026-11-06-unified-sign-in-design.md`](../superpowers/specs/2026-11-06-unified-sign-in-design.md)
@@ -17,7 +17,7 @@ consent page, `GET /oauth/:team/authorize`. That page has three forms:
 
 - **I'm new — I have an invite** (ADR 450): a room code or link secret, and a chosen name;
 - **I already have a seat**: the seat name and its permanent `mscr_`, pasted;
-- **Connecting an agent?** (ADR 452): an agent's connect link.
+- **Connecting an agent?** ([ADR 452](452-agent-connect-over-oauth.md)): an agent's connect link.
 
 A member of a hosted team has a musterd account and, since ADR 722 and ADR 818, can prove it with
 one click. They usually have no `mscr_` at all: a member admitted through the console never sees
