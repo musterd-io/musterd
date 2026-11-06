@@ -1,7 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { LiveConfig } from '../client';
+import { fetchMyDeviceKeys } from '../passkeyEnroll';
 import type { SheetNote } from '../StyleSheet';
-import { resolveVouch, vouchFor, vouchGate, vouchRefusal, type VouchRequest } from '../vouch';
+import {
+  resolveVouch,
+  vouchFor,
+  vouchGate,
+  vouchRefusal,
+  vouchViaPhone,
+  type VouchRequest,
+} from '../vouch';
 
 /**
  * ADR 769 step 3, the admin's side, under Waiting for you. The card does NOT show the check code:
@@ -18,6 +26,17 @@ export function VouchRequests({
 }) {
   // Settled here before the stream shows the resolve, so a card does not linger after its answer.
   const [settled, setSettled] = useState<ReadonlySet<string>>(new Set());
+  // Whether this admin has a paired phone to vouch from (ADR 769, ADR 808 inc C's path).
+  const [phone, setPhone] = useState(false);
+  const any = requests.length > 0;
+  useEffect(() => {
+    if (!any) return;
+    fetchMyDeviceKeys(cfg).then(
+      (keys) =>
+        setPhone(keys.some((k) => k.kind === 'phone' && k.revoked_at === null && !k.pairing_ended)),
+      () => setPhone(false),
+    );
+  }, [cfg, any]);
   const open = requests.filter((r) => !settled.has(r.id));
   if (open.length === 0) return null;
   return (
@@ -30,6 +49,7 @@ export function VouchRequests({
           key={r.id}
           cfg={cfg}
           request={r}
+          phone={phone}
           onSettled={() => setSettled((s) => new Set(s).add(r.id))}
         />
       ))}
@@ -40,25 +60,35 @@ export function VouchRequests({
 function VouchCard({
   cfg,
   request,
+  phone,
   onSettled,
 }: {
   cfg: LiveConfig;
   request: VouchRequest;
+  phone: boolean;
   onSettled: () => void;
 }) {
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
+  const [via, setVia] = useState<'passkey' | 'phone'>('passkey');
   const [note, setNote] = useState<SheetNote>(null);
   const gate = vouchGate(typed, request.digest);
   const matches = gate === 'match';
   const complete = gate !== 'partial';
   const inputId = `lc-vouch-code-${request.id}`;
 
-  const vouch = async () => {
+  const vouch = async (path: 'passkey' | 'phone') => {
+    setVia(path);
     setBusy(true);
     setNote(null);
     try {
-      await vouchFor(cfg, request.member, request.digest);
+      if (path === 'phone') {
+        await vouchViaPhone(cfg, request.member, request.digest, () =>
+          setNote({ tone: 'ok', text: 'sent to your phone — check the code there matches, then approve' }),
+        );
+      } else {
+        await vouchFor(cfg, request.member, request.digest);
+      }
       setNote({ tone: 'ok', text: `vouched — ${request.member}'s passkey is enrolled` });
       await resolveVouch(cfg, request, 'vouched').catch(() => undefined);
       onSettled();
@@ -95,7 +125,7 @@ function VouchCard({
         className="lc-keys__vouchact"
         onSubmit={(e) => {
           e.preventDefault();
-          if (matches) void vouch();
+          if (matches) void vouch('passkey');
         }}
       >
         <label className="lc-set__hint" htmlFor={inputId}>
@@ -115,8 +145,18 @@ function VouchCard({
           disabled={busy}
         />
         <button type="submit" className="lc-set__btn lc-set__btn--go" disabled={busy || !matches}>
-          {busy ? 'Waiting for your passkey…' : 'Vouch with passkey'}
+          {busy && via === 'passkey' ? 'Waiting for your passkey…' : 'Vouch with passkey'}
         </button>
+        {phone && (
+          <button
+            type="button"
+            className="lc-set__btn"
+            disabled={busy || !matches}
+            onClick={() => void vouch('phone')}
+          >
+            {busy && via === 'phone' ? 'Waiting for your phone…' : 'Vouch from your phone'}
+          </button>
+        )}
         <button type="button" className="lc-set__btn" disabled={busy} onClick={() => void decline()}>
           Don’t vouch
         </button>

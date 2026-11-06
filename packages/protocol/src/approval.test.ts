@@ -31,6 +31,22 @@ interface Vectors {
     signing_bytes: string;
     signature_der: string;
   };
+  /** ADR 769: an admin's vouch, with its own phone key. */
+  vouch: {
+    phone_signing_key: { spki_der_b64url: string };
+    offer: {
+      payload: { action: string; kind: string; member: string; key: string };
+      canonical_json: string;
+      descriptor: ApprovalDescriptor;
+      signing_bytes: string;
+      wording: {
+        headline: string;
+        scope: string;
+        check: { code: string; instruction: string };
+      };
+      signature_der: string;
+    };
+  };
 }
 const vectors = JSON.parse(read('./approval.vectors.json')) as Vectors;
 const phoneKey = createPublicKey({
@@ -122,6 +138,33 @@ describe('ADR 694 test vectors — the contract the app is built to', () => {
       approval: { key_id: 'key_1', nonce: offer.descriptor.nonce, signature: offer.signature_der },
     });
     expect(parsed.approval?.nonce).toBe(offer.descriptor.nonce);
+  });
+});
+
+describe("ADR 769 vouch vector — the phone words and signs an admin's vouch", () => {
+  const o = vectors.vouch.offer;
+  const vouchKey = createPublicKey({
+    key: Buffer.from(vectors.vouch.phone_signing_key.spki_der_b64url, 'base64url'),
+    format: 'der',
+    type: 'spki',
+  });
+
+  it('recomputes every derived field from the payload, and words the check code itself', () => {
+    expect(
+      AppApprovalOfferSchema.safeParse({ descriptor: o.descriptor, payload: o.payload }).success,
+    ).toBe(true);
+    expect(canonicalJson(o.payload)).toBe(o.canonical_json);
+    expect(payloadDigest(o.payload)).toBe(o.descriptor.payload_digest);
+    expect(descriptorSigningBytes(ApprovalDescriptorSchema.parse(o.descriptor))).toBe(
+      o.signing_bytes,
+    );
+    expect(approvalWording(o.descriptor, o.payload)).toEqual(o.wording);
+    expect(o.wording.check.code).toBe(vouchCheckCode(o.payload.key));
+  });
+
+  it('its DER signature verifies as the daemon checks a phone key', () => {
+    const sig = Buffer.from(o.signature_der, 'base64url');
+    expect(verify(null, Buffer.from(o.signing_bytes, 'utf8'), vouchKey, sig)).toBe(true);
   });
 });
 

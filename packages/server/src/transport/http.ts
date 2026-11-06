@@ -190,6 +190,7 @@ import {
   type AuthorityRelayResponse,
   AuthorityRelayRequestSchema,
   QuestionNotifyPrefsSchema,
+  payloadDigest,
   vouchCheckCode,
 } from '@musterd/protocol';
 import { requestDecisionApproval } from '@musterd/protocol/approval';
@@ -1439,6 +1440,10 @@ const ChannelSettingsChannel = z.enum(['slack', APP_CHANNEL]);
 /** ADR 808 inc C: the page's origin, named in the phone ask so the human knows where the key goes. */
 const AskPhoneBody = z.object({
   origin: z.string().url().max(512).optional(),
+  /** ADR 769: an admin's vouch for another member's held passkey, approved on the admin's phone. */
+  vouch: z
+    .object({ member: z.string().min(1), key: z.string().regex(/^[0-9a-f]{64}$/) })
+    .optional(),
 });
 
 const DescriptorRequestBody = z.object({
@@ -5655,15 +5660,32 @@ export async function handleHttp(
         const nonce = decodeURIComponent(askPhoneMatch[1]!);
         const body = parseOrBadRequest(AskPhoneBody, await readJson(req));
         const descriptor = await getDescriptorByNonce(ctx.db, team.id, team.slug, nonce);
+        // ADR 769: a vouch descriptor targets the member being vouched for, and its payload names
+        // them and the held enrollment's digest. Only a human admin asks their phone for one, and
+        // only for the exact payload the descriptor was minted over.
+        const vouch = body.vouch;
+        if (vouch && (vouch.member === member.name || !resolveCapabilities(member).is_admin))
+          throw new MusterdError('forbidden', 'only an admin vouches, and never for themself');
+        const vouchDigest = vouch
+          ? payloadDigest({
+              action: 'enroll',
+              kind: 'passkey',
+              member: vouch.member,
+              key: vouch.key,
+            })
+          : null;
         if (
           !descriptor ||
           descriptor.act !== 'device_key_admin' ||
           descriptor.actor !== member.name ||
-          descriptor.target !== member.name
+          descriptor.target !== (vouch ? vouch.member : member.name) ||
+          (vouchDigest !== null && descriptor.payload_digest !== vouchDigest)
         )
           throw new MusterdError(
             'not_found',
-            'no live passkey-enrollment descriptor of yours for that nonce',
+            vouch
+              ? 'no live vouch descriptor of yours for that nonce and payload'
+              : 'no live passkey-enrollment descriptor of yours for that nonce',
           );
         const phones = (await activeDeviceKeys(ctx.db, team.id, member.id)).filter(
           (k) => k.kind === 'phone',
@@ -5677,8 +5699,14 @@ export async function handleHttp(
           from: member.name,
           to: { kind: 'member', name: member.name },
           act: 'ask',
-          body: `Approve a new passkey for ${member.name}${where}`,
-          meta: { species: 'approve', tier: 'standard', device_key_enroll: { nonce } },
+          body: vouch
+            ? `Vouch for a new passkey for ${vouch.member}${where}: check code ${vouchCheckCode(vouch.key)}`
+            : `Approve a new passkey for ${member.name}${where}`,
+          meta: {
+            species: 'approve',
+            tier: 'standard',
+            device_key_enroll: { nonce, ...(vouch ? { vouch } : {}) },
+          },
         });
         await routeEnvelope(ctx, team, member, env, undefined, true);
         return sendJson(res, 201, { ask_id: env.id });

@@ -2,7 +2,7 @@ import type { Envelope } from '@musterd/protocol';
 // The schema-free module: the barrel would carry Zod into the settings chunk.
 import { vouchCheckCode } from '@musterd/protocol/approval-contracts';
 import { authorityProofForVouch } from './authorityProof';
-import { apiPost, sendAct, type LiveConfig } from './client';
+import { apiGet, apiPost, LiveFetchError, sendAct, type LiveConfig } from './client';
 import { signsHere, type DeviceKey } from './passkeyEnroll';
 import type { VouchRequest } from './vouchRequests';
 
@@ -77,6 +77,50 @@ export async function vouchFor(cfg: LiveConfig, member: string, digest: string):
   );
 }
 
+/**
+ * ADR 769: the admin vouches from their PHONE — for an admin with no passkey that signs on this
+ * page. Mints the key-bound descriptor, asks the daemon to send it to the admin's own paired phone
+ * (the phone works the check code out from the payload it signs), waits up to four minutes for the
+ * signed approval to be parked, then posts the vouch exactly as the passkey path does. `onWaiting`
+ * fires once the ask is on its way.
+ */
+export async function vouchViaPhone(
+  cfg: LiveConfig,
+  member: string,
+  digest: string,
+  onWaiting?: () => void,
+): Promise<void> {
+  const teamPath = `/teams/${encodeURIComponent(cfg.team)}/authority`;
+  const created = await apiPost<{ descriptor: { nonce: string } }>(cfg, `${teamPath}/descriptors`, {
+    act: 'device_key_admin',
+    target: member,
+    payload: { action: 'enroll', kind: 'passkey', member, key: digest },
+  });
+  const nonce = created.descriptor.nonce;
+  await apiPost<{ ask_id: string }>(cfg, `${teamPath}/descriptors/${encodeURIComponent(nonce)}/ask-phone`, {
+    origin: location.origin,
+    vouch: { member, key: digest },
+  });
+  onWaiting?.();
+  const deadline = Date.now() + 4 * 60_000;
+  let approval: unknown = null;
+  while (!approval) {
+    if (Date.now() > deadline)
+      throw new Error('no answer from your phone in four minutes; nothing was vouched');
+    await new Promise((r) => setTimeout(r, 2_000));
+    try {
+      approval = (await apiGet<{ proof: unknown }>(cfg, `${teamPath}/approvals/${encodeURIComponent(nonce)}`)).proof;
+    } catch (e) {
+      if (!(e instanceof LiveFetchError && e.status === 404)) throw e;
+    }
+  }
+  await apiPost<{ key: { id: string } }>(cfg, `${teamPath}/passkeys/vouch`, {
+    member,
+    enrollment_digest: digest,
+    approval,
+  });
+}
+
 /** Close the request on its thread, so it leaves "Waiting for you" and the member's stream says so. */
 export async function resolveVouch(
   cfg: LiveConfig,
@@ -104,6 +148,7 @@ export function vouchRefusal(e: unknown): string {
     return 'they now have a passkey that works here, so they need no vouch';
   if (/not_a_countersigner/.test(text)) return 'only another admin can vouch for this';
   if (/countersigner_unenrolled|countersigner_key_unusable/.test(text))
-    return 'your vouch has to be signed by a passkey that works on this hub';
+    return 'your vouch has to be signed by a key that works on this hub — a passkey here, or your paired phone';
+  if (/no paired phone/.test(text)) return 'you have no paired phone to vouch from';
   return text;
 }

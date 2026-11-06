@@ -71,5 +71,47 @@
     },
     "signing_bytes": "musterd-app-answer/v1\nrevive\nbnd_01\nask_01\ntok_01\napprove\nnonce_01\n-",
     "signature_der": "MEUCIQCr1QOMTee6GmwDSQz1Xa_QYjegovm7_iO_mttmTiOPhAIgHpsFqfCsKCWthpTEoH8tCID8QH-uMGBSs9atpJu4mzo"
+  },
+  "vouch": {
+    "_note": "ADR 769: an admin vouches for ada's held passkey from the phone. Its own phone key (public half only), so the offers above keep theirs.",
+    "phone_signing_key": {
+      "spki_der_b64url": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEfF5g619EZK70_XHFcI9B-_vjRdKa_7Cfd2XZr5GyrWmu3e_PZ4WwMZ_ija9XU4_ugdpIgdNALbligSRl4O0-aA",
+      "jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "fF5g619EZK70_XHFcI9B-_vjRdKa_7Cfd2XZr5GyrWk",
+        "y": "rt3vz2eFsDGf4o2vV1OP7oHaSIHTQC25YoEkZeDtPmg"
+      }
+    },
+    "offer": {
+      "decision": "approve",
+      "payload": {
+        "action": "enroll",
+        "kind": "passkey",
+        "member": "ada",
+        "key": "e29bdbd808116694c33085be1677c0363b525ceec0d9851dce2de29fbd9eebdc"
+      },
+      "canonical_json": "{\"action\":\"enroll\",\"key\":\"e29bdbd808116694c33085be1677c0363b525ceec0d9851dce2de29fbd9eebdc\",\"kind\":\"passkey\",\"member\":\"ada\"}",
+      "descriptor": {
+        "v": 1,
+        "actor": "nick",
+        "act": "device_key_admin",
+        "target": "ada",
+        "payload_digest": "9b900ff99a1485449fc6b34c8b408095223cda9d7666f64e6ca7e41c5117f8a2",
+        "audience": "revive",
+        "expiry": 1792650000000,
+        "nonce": "bm9uY2Vfdm91Y2hfdGVzdF92ZWN0b3JfMDAwMDAwMA"
+      },
+      "signing_bytes": "musterd-approval/v1\nnick\ndevice_key_admin\nada\n9b900ff99a1485449fc6b34c8b408095223cda9d7666f64e6ca7e41c5117f8a2\nrevive\n1792650000000\nbm9uY2Vfdm91Y2hfdGVzdF92ZWN0b3JfMDAwMDAwMA",
+      "wording": {
+        "headline": "Add a new passkey for ada",
+        "scope": "As nick on revive",
+        "check": {
+          "code": "865176",
+          "instruction": "Only approve if ada read you this code on a call or in person."
+        }
+      },
+      "signature_der": "MEQCIHkFpP7KgTjjHI4Q1cO68fXQ6pp8eDDqpdqYgI4JiEu_AiAMckY9IvzpD80pGs7lrtq2G9g6eoV7HKXDgUDchb_9SQ"
+    }
   }
 }

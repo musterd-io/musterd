@@ -12,6 +12,7 @@ import {
   canonicalJson,
   descriptorSigningBytes,
   makeEnvelope,
+  vouchCheckCode,
   type AppApprovalOffer,
   type AppDelivery,
   type ApprovalDescriptor,
@@ -906,6 +907,89 @@ withDrivers('app channel adapter (ADR 676 §2, §6–§8)', (o) => {
       await expect(
         handleRelayCallback(s.ctx, s.team, callback('ask-e', body), NOW + 2_000),
       ).resolves.toEqual({ ok: false, reason: 'consumed' });
+    });
+
+    /** ADR 769: nick, an admin, vouches for ada's held enrollment from his phone. */
+    async function raiseVouchAsk(
+      st: Awaited<ReturnType<typeof seed>>,
+      over: { askKey?: string } = {},
+    ) {
+      const key = 'c3'.repeat(32);
+      const payload = { action: 'enroll', kind: 'passkey', member: 'ada', key };
+      const d = await buildDescriptor(st.db, {
+        teamId: st.team.id,
+        audience: st.team.slug,
+        memberId: st.nick.id,
+        actor: 'nick',
+        act: 'device_key_admin',
+        target: 'ada',
+        payload,
+        now: NOW,
+      });
+      const env = makeEnvelope({
+        id: 'ask-v',
+        team: st.team.slug,
+        from: 'nick',
+        to: { kind: 'member', name: 'nick' },
+        act: 'ask',
+        body: `Vouch for a new passkey for ada: check code ${vouchCheckCode(key)}`,
+        meta: {
+          species: 'approve',
+          tier: 'standard',
+          device_key_enroll: { nonce: d.nonce, vouch: { member: 'ada', key: over.askKey ?? key } },
+        },
+        ts: NOW,
+      });
+      await insertMessage(st.db, st.team.id, st.nick.id, st.nick.id, env);
+      return { env, nonce: d.nonce, key, payload };
+    }
+
+    it('ADR 769: a vouch ask offers the key-bound payload for the member, and the phone words its code', async () => {
+      const s = await seed();
+      const { env, nonce, key, payload } = await raiseVouchAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await delivered(s);
+      expect(d.approval.approve.descriptor.nonce).toBe(nonce);
+      expect(d.approval.approve.payload).toEqual(payload);
+      expect(d.approval.reject.payload).toEqual({ ...payload, decision: 'reject' });
+      for (const offer of [d.approval.approve, d.approval.reject]) {
+        expect(offer.descriptor).toMatchObject({
+          actor: 'nick',
+          act: 'device_key_admin',
+          target: 'ada',
+        });
+      }
+      // What the phone computes from the payload it signs — never from the ask body.
+      const approve = approvalWording(d.approval.approve.descriptor, d.approval.approve.payload);
+      expect(approve.headline).toBe('Add a new passkey for ada');
+      expect(approve.check?.code).toBe(vouchCheckCode(key));
+      const reject = approvalWording(d.approval.reject.descriptor, d.approval.reject.payload);
+      expect(reject.headline).toBe("Don't add a new passkey for ada");
+      expect(reject.check).toBeUndefined();
+    });
+
+    it('ADR 769: a vouch ask whose key does not match its descriptor gets no enrollment offers', async () => {
+      const s = await seed();
+      const { env, nonce } = await raiseVouchAsk(s, { askKey: 'd4'.repeat(32) });
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await receive(s, lastAppFrame(s.sent));
+      if (d.kind !== 'ask') throw new Error('expected an ask');
+      expect(d.approval?.approve.descriptor.nonce).not.toBe(nonce);
+    });
+
+    it('ADR 769: an approved vouch parks its proof on the nonce for the admin to collect', async () => {
+      const s = await seed();
+      const { env, nonce } = await raiseVouchAsk(s);
+      await deliverAskToAppChannels(s.ctx, s.team, env);
+      const d = await delivered(s);
+      const body = await answerBody(s, d, { approval: phoneSigns(s, d.approval.approve) });
+      await expect(
+        handleRelayCallback(s.ctx, s.team, callback('ask-v', body), NOW + 1_000),
+      ).resolves.toEqual({ ok: true });
+      expect(await getParkedProof(s.db, s.team.id, nonce)).toMatchObject({
+        key_id: s.deviceKeyId,
+        nonce,
+      });
     });
 
     it('a reject parks nothing; a proof over the reject descriptor or by another key is refused', async () => {
