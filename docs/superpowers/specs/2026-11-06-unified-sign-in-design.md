@@ -30,7 +30,8 @@ happened to bind `members.account_id`.
   passkey on that origin, no CLI run, no second admin. (nick: *"if I can sign into live for a
   specific team and specific user with proper credentials regardless of state of other surfaces"*.)
 - **Every surface recognises the same you**: the same account, the same member of the same team,
-  the same permissions. A revoke or removal anywhere holds everywhere.
+  the same permissions. A revoke or removal anywhere holds everywhere (within 5 minutes for an
+  account-level event; §11.4).
 - **No secret is ever shown to be copied or pasted** by a person, on any surface.
 
 ## Anti-goals (a failure even if it works)
@@ -185,6 +186,47 @@ humans. This design does not decide prices. It records that:
 - ADR 461 should be revised (or superseded) by a pricing ADR before billing is built. Owner: sloane
   with nick.
 
+### 11. Calls made after the builder check (miley; big-body to confirm)
+
+A builder reading this cold asked five things this spec had not settled. None is nick's to decide;
+each changes what gets built, so each is settled here as **my call**.
+
+1. **The console keeps an account session per device; team servers keep team sessions.** The
+   console already holds a session per browser (ADR 620). The CLI (`musterd login`) and the phone
+   get the same kind of **account device session** from the console, held in chmod-600 config or
+   the Keychain. To reach a team, that device session asks the console for a fresh identity proof
+   (§4) for that team's audience, and the team server turns it into its own session. So the console
+   issues exactly two things — account sessions, and 60-second proofs — and never a team
+   credential. API keys (§8) are minted **by the team server**, even when the page that asks is the
+   console (the console sends a proof and the request; the team answers with the key once).
+2. **Binding a member who has no account yet, without a paste:**
+   - **CLI:** `musterd login` on a machine whose config already holds that member's `mscr_` starts
+     ADR 722's *link* mode with that bearer itself. One browser sign-in binds it. (nick on revive
+     is exactly this case.)
+   - **`/live` in a browser that already holds the member's credential** (localStorage, as today):
+     a **Link my musterd account** button does the same.
+   - **Team creator:** bound at creation (already shipped, lane `01M6F37KSW`).
+   - **Anyone else:** an admin sends them a fresh invite, which binds on use. No admin rebind
+     (ADR 698's deferred unbinding stays deferred).
+3. **Linking a self-hosted hub** registers it with the console: the hub's public URL (if it has one)
+   and the audience string it pins. The hub **pulls** the console's keys and a revocation list (item
+   4) on a timer. The console **never calls in**, so a hub behind NAT links fine. The console's
+   team list for an account is what was registered or bound; a hub that is not publicly reachable
+   is listed with no URL (the phone and `join` reach it the way they do today: on its network or
+   through its federation). A linked hub stays usable offline: existing sessions live out their
+   lifetimes; new account sign-ins wait for the console.
+4. **How far a revoke reaches.** Ending a session (§7) is per surface, per team, as written. **An
+   account-level event** — the account suspended or deleted, or a sign-in method removed and its
+   sessions ended — is published on the console's revocation list. Every team server and linked hub
+   pulls it with the keys (at most 5 minutes stale) and ends that account's sessions on it. A hub
+   offline for longer catches up when it next reaches the console. ("A revoke holds everywhere" in
+   *What success is* means this, within those 5 minutes.)
+5. **Who may vouch for a machine.** A member may join a machine that holds **only their own seats**
+   (their human seat and the agents they own). The join is an act on the team, visible on `/live`.
+   A seat owned by someone else, or an admin capability, needs an admin's approval on `/live`. ADR
+   662's one-machine-per-hosted-seat rule holds: joining a second machine to a hosted seat is
+   refused, not silently doubled.
+
 ## How the eighteen paths fold in
 
 | # | Today | After |
@@ -229,6 +271,9 @@ humans. This design does not decide prices. It records that:
    than trust the console for every account.
 6. API key scopes (*read*, *act as me*, *admin*): is *admin* by key acceptable at all, or admin acts
    only from a person in a session?
+7. The five calls in §11, in particular the account device session (§11.1), the CLI starting link
+   mode from a stored `mscr_` (§11.2), the 5-minute revocation pull (§11.4) and the machine-vouch
+   rule (§11.5).
 
 ## For sloane (the words)
 
