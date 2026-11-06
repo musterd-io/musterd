@@ -55,6 +55,16 @@ def act_lane() -> bool:
     return os.environ.get(ACT_LANE_ENV, "") == "act"
 
 
+# The cost-fix run (docs/research/cooperbench/costfix-manifest.md, finding 036): the lean arm drops
+# the stale "first action is team_inbox_check" step (ADR 707 joins at session start), names one
+# integrator, and removes the musterd tools the flash run never called from the up-front set.
+LEAN_ENV = "MUSTERD_ARM_LEAN"
+
+
+def lean_arm() -> bool:
+    return os.environ.get(LEAN_ENV, "") == "1"
+
+
 
 def container_ip(name: str) -> str | None:
     """The first IP docker reports for a container, or None."""

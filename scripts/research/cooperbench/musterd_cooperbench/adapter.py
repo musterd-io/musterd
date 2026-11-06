@@ -39,7 +39,7 @@ from cooperbench.agents.registry import register
 
 from . import config as cfg
 from .prompt import build_instruction
-from .team import CONTAINER_NETWORK_ARGS, REGISTRY, act_lane, host_reachable_git_url
+from .team import CONTAINER_NETWORK_ARGS, REGISTRY, act_lane, host_reachable_git_url, lean_arm
 
 logger = logging.getLogger(__name__)
 
@@ -324,6 +324,8 @@ class ClaudeCodeMusterdRunner:
         extra_flags = f"--mcp-config {CONTAINER_MCP_CONFIG} --strict-mcp-config "
         if config.get("max_turns"):
             extra_flags += f"--max-turns {int(config['max_turns'])} "
+        if lean_arm():
+            disallowed_tools = [*(disallowed_tools or []), *cfg.LEAN_DISALLOWED]
         if disallowed_tools:
             extra_flags += f"--disallowedTools {shlex.quote(','.join(disallowed_tools))} "
 
@@ -409,7 +411,12 @@ class ClaudeCodeMusterdRunner:
 
             # 4. The instruction and the run.
             instruction = build_instruction(
-                task, agents=agents, agent_id=agent_id, git_enabled=use_git, lane="act" if act_lane() else "launch"
+                task,
+                agents=agents,
+                agent_id=agent_id,
+                git_enabled=use_git,
+                lane="act" if act_lane() else "launch",
+                lean=lean_arm(),
             )
             write_file_in_container(env, CONTAINER_INSTRUCTION_PATH, instruction)
             cred_env = {**credentials, **endpoint_overrides}
