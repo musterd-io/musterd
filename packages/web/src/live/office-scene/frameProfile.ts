@@ -55,3 +55,22 @@ export function profileSnapshot(totals: Readonly<Record<string, number>>): Recor
   for (const [k, v] of Object.entries(totals)) out[k] = Math.round(v * 10) / 10;
   return out;
 }
+
+/**
+ * The same profile under a stage prefix — the dirty-rect measure pass runs the whole paint sequence
+ * into a recorder, and `m.walls.board` beside `walls.board` says how much of `measure` is each stage.
+ */
+export function prefixedProfile(p: FrameProfile, prefix: string): FrameProfile {
+  return {
+    begin: () => p.begin(),
+    mark: (stage) => p.mark(prefix + stage),
+    add: (stage, ms) => p.add(prefix + stage, ms),
+    get frames() {
+      return p.frames;
+    },
+    set frames(n) {
+      p.frames = n;
+    },
+    totals: p.totals,
+  };
+}
