@@ -32,6 +32,7 @@ on the pricing page and in billing emails; this role owns that their numbers are
 | --- | --- |
 | ADR 461 §1 | The team layer is free and uncapped on your own computers, needs no account, and never becomes paid |
 | ADR 461 §2 + Consequences 2026-11-06 | Cloud: two people free; per person from the third; Cloud agent-hours past an included block; the musterd account is the billing home |
+| ADR 461 Consequences, 2026-11-06 (question `01M6SCHH9K`) | A person is billed once per account: the third or later member on several paid teams pays one Pro seat, counted on their musterd account across those teams |
 | ADR 461 §3 | Org features are paid and unlocked by the musterd account; no license key |
 | ADR 461 §5 | Prices are ranges set with design partners; a paid seat is priced well under one hour a month of the agent compute it saves |
 | [`PRIVACY.md`](../../../../PRIVACY.md) | Self-hosted musterd does not phone home and carries no usage analytics. Measure conversion from Cloud and billing records only |
