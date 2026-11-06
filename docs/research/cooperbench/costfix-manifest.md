@@ -19,7 +19,7 @@ Three things in the arm's turns are not load-bearing, and nick chose to test the
 package ("Lean package"):
 
 1. **The stale join call.** The prompt makes `team_inbox_check` the first action "which joins you to
-   the team"; since ADR 707 the MCP server joins at session start. 100 first calls, ≤ $0.79 of
+   the team"; since ADR 707 the MCP server joins at session start. 100 first calls, about $0.79 of
    reads and output across the arm (their one-time context write moves to the next call, not away).
 2. **Six always-loaded tools no seat called** — `team_join`, `team_status`, `team_next`,
    `lane_claim`, `team_memory_read`, `team_memory_save` (≈ 3.1 KB of schema in every call). The arm
@@ -29,7 +29,8 @@ package ("Lean package"):
    prompt names one: the agent that finishes second merges the first's pushed branch, leaving the
    first agent's lines unchanged, so CooperBench's merge of the two patches sees identical hunks.
 
-Finding 036's ceilings put the package at roughly **8–12% of the arm's cost** — not parity with solo.
+Finding 036's illustrative estimates (not bounds: a descriptive split cannot say what removing a
+behaviour saves) put the package at roughly **8–12% of the arm's cost** — not parity with solo.
 This run is worth doing because each piece is a fix for every team if it holds, and because the
 same window buys the second seed finding 035's C1 needs before a public claim (lane `01M6S2P0T9`).
 
