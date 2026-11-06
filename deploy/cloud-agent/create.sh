@@ -29,7 +29,7 @@
 #
 # Sponsor steps run as the sponsor. From a folder already bound to the team they run there; from
 # anywhere else the script binds a scratch folder to the team itself, as the member whose
-# credential staging-issuer saved in ~/.musterd/cloud/teams/<team>.json (`create-team`), so the
+# credential was saved in ~/.musterd/cloud/teams/<team>.json when the team was created, so the
 # whole thing is ONE command. The host key is minted, captured into a shell variable, and handed
 # straight to `fly secrets set` — it is never printed.
 #
