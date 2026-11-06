@@ -58,7 +58,8 @@ for working, offline etc — align with what /live does".
    badge and `/live` agree even for an ask the hourly ceiling held (ADR 676 §8).
 4. **The roster stays pulled, and the Now screen pulls it on a cadence.** On open, on
    pull-to-refresh, on any delivery, and every 30 seconds while the Now screen is in the foreground
-   and the app is active. Never pushed (ADR 791, as amended 2026-11-03). The pull pauses while the
+   and the app is active. Never pushed (ADR 791, as amended 2026-11-03). _(Amended 2026-11-06: a
+   content-free silent push now tells a foreground phone to pull at once — [ADR 819](819-app-moments-and-live-nudge.md).)_ The pull pauses while the
    ask screen is in front, because that screen holds a token of its own.
 5. **The app's shell is three tabs under one floating pill: Now, Work, You.** Now holds what waits
    on you and the team; the Seats screen folds into it. Work holds goals and lanes, then the wiki.
@@ -95,6 +96,10 @@ decides the shell and the team.
   `notify/` cannot import the transport that imports it; without the hook, no `members` is sent.
   The open asks behind "asking <name>" and `for_you` go through the timeline's ADR 407 read scope
   at the binding person's grade, so a phone never shows an ask its person's /live would hide.
+
+- 2026-11-06: [ADR 819](819-app-moments-and-live-nudge.md) adds `moments` to the roster and a
+  content-free silent push on a landing or a finished goal, so a foreground Now pulls within
+  seconds. The roster itself is still only pulled.
 
 ## Observability & Evaluation
 
