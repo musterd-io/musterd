@@ -13,6 +13,7 @@ import { sendSeatQuickAction } from '../protocol/quickActions.js';
 import { spendAppQuickActionNonce, type AppKeys } from '../store/appPairing.js';
 import { appendAudit } from '../store/audit.js';
 import type { ChannelBinding } from '../store/channelBindings.js';
+import { listGoals } from '../store/goals.js';
 import { listLanes } from '../store/lanes.js';
 import { getMemberById, listMembers } from '../store/members.js';
 import { portraitsOf } from '../store/portraits.js';
@@ -23,6 +24,7 @@ import { getTeamBySlug } from '../store/teams.js';
 import { rosterPoll } from './appPoll.js';
 import { verifyPhoneSigned } from './appQuestion.js';
 import { loadAppChannelKeys, openFromPhone } from './appSeal.js';
+import { appForYou, appMembers, type ForYouSource } from './appTeam.js';
 
 /**
  * The phone's quick actions and seat roster (ADR 791). A quick action is the same person's `steer`
@@ -223,6 +225,7 @@ export async function buildAppRoster(
   }
   // ADR 807: the team's Twitch poll rides the roster, for an admin's binding only.
   const poll = await rosterPoll(ctx, team.id, binding, now);
+  const team814 = await appTeamFor(ctx, team, binding, seats, waiting, now);
   return {
     v: 1,
     kind: 'roster',
@@ -231,5 +234,94 @@ export async function buildAppRoster(
     ts: now,
     seats,
     ...(poll ? { poll } : {}),
+    ...team814,
   };
+}
+
+/** How far back an open ask is looked for: past any review window a team sets (as appAdapter). */
+const OPEN_ASK_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
+
+/**
+ * ADR 814: `members` (the team as /live's column folds it) and `for_you` (what waits on the
+ * binding's person). `members` needs the injected roster read; without it, neither field is sent
+ * and the phone keeps to `seats`. Open asks are undecided asks to a person or the team in the last
+ * week, questions excluded (they are `openQuestions`, listed once as questions).
+ */
+async function appTeamFor(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  binding: ChannelBinding,
+  seats: { seat: string; wakeable: boolean; portrait?: string | null }[],
+  waiting: ReadonlyMap<string, { to: string | null; since: number }>,
+  now: number,
+): Promise<Pick<Extract<AppDelivery, { kind: 'roster' }>, 'members' | 'for_you'>> {
+  if (!ctx.memberSummaries) return {};
+  const person = binding.member_id ? await getMemberById(ctx.db, binding.member_id) : null;
+  const viewer = person && person.kind === 'human' ? person : null;
+  const asks = await ctx.db.all<{
+    id: string;
+    body: string;
+    meta: string | null;
+    ts: number;
+    to_kind: string;
+    to_member: string | null;
+    from_name: string;
+    to_name: string | null;
+    to_member_kind: string | null;
+  }>(
+    `SELECT msg.id, msg.body, msg.meta, msg.ts, msg.to_kind, msg.to_member,
+            mf.name AS from_name, mt.name AS to_name, mt.kind AS to_member_kind
+       FROM messages msg
+       JOIN members mf ON mf.id = msg.from_member AND mf.team_id = msg.team_id
+       LEFT JOIN members mt ON mt.id = msg.to_member AND mt.team_id = msg.team_id
+      WHERE msg.team_id = ? AND msg.act = 'ask' AND msg.ts > ?
+        AND (msg.meta IS NULL OR json_extract(msg.meta, '$.question') IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = msg.team_id AND d.ask_id = msg.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM messages a JOIN members author ON author.id = a.from_member AND author.team_id = a.team_id
+           WHERE a.team_id = msg.team_id AND a.act IN ('accept', 'decline') AND author.kind = 'human'
+             AND json_extract(a.meta, '$.in_reply_to') = msg.id
+        )
+      ORDER BY msg.ts, msg.id`,
+    [team.id, now - OPEN_ASK_LOOKBACK_MS],
+  );
+  // /live's teamCards: the freshest open ask per asker addressed to a person (or the team).
+  const asking = new Map<string, { to: string | null }>();
+  for (const a of asks) {
+    const toPerson = a.to_kind === 'team' || a.to_member_kind === 'human';
+    if (toPerson) asking.set(a.from_name, { to: a.to_kind === 'team' ? null : a.to_name });
+  }
+  const members = appMembers({
+    roster: await ctx.memberSummaries(team, viewer),
+    lanes: await listLanes(ctx.db, team.id, team.slug, { states: [...LIVE_LANE_STATES] }),
+    goals: await listGoals(ctx.db, team.id, team.slug),
+    asking,
+    waiting,
+    seats: new Map(
+      seats.map((s) => [s.seat, { wakeable: s.wakeable, portrait: s.portrait ?? null }] as const),
+    ),
+    now,
+  });
+  if (!viewer) return { members };
+  const owed: ForYouSource[] = asks
+    .filter((a) => a.to_member === viewer.id || a.to_kind === 'team')
+    .map((a) => ({
+      id: a.id,
+      from: a.from_name,
+      kind: parseLaneReview(a.meta) ? 'review' : 'approve',
+      body: a.body,
+      ts: a.ts,
+    }));
+  for (const q of await openQuestions(ctx.db, team.id, { forPerson: viewer.name }))
+    owed.push({ id: q.id, from: q.asker, kind: 'question', body: q.question.text, ts: q.asked_at });
+  return { members, for_you: appForYou(owed) };
+}
+
+function parseLaneReview(meta: string | null): boolean {
+  if (!meta) return false;
+  try {
+    return (JSON.parse(meta) as { lane_review?: unknown }).lane_review !== undefined;
+  } catch {
+    return false;
+  }
 }

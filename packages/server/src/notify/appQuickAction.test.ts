@@ -1,4 +1,4 @@
-import { makeEnvelope } from '@musterd/protocol';
+import { makeEnvelope, type MemberSummary } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { operatorCtx } from '../context.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
@@ -103,6 +103,103 @@ withDrivers('app roster waiting', (_o, kind) => {
       expect(seat('bo')?.waiting).toBeUndefined();
       expect(seat('cy')?.waiting).toBeUndefined();
       void cy;
+    });
+  });
+
+  describe('ADR 814: the roster carries the team as /live shows it, and what waits on you', () => {
+    it('folds the injected roster into members and lists the binding person’s open asks', async () => {
+      const ctx = operatorCtx({
+        db: server.store,
+        traceDb: server.traceStore,
+        hub: new Hub(),
+        config: server.config,
+        rosterRoots: [],
+      });
+      const res = await fetch(`http://127.0.0.1:${port}/teams`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug: 'dusk', creator: { name: 'nick', kind: 'human' } }),
+      });
+      expect(res.status).toBe(201);
+      const team = (await getTeamBySlug(ctx.db, 'dusk'))!;
+      const nick = (await ctx.db.get<{ id: string }>(
+        `SELECT id FROM members WHERE team_id = ? AND name = 'nick'`,
+        [team.id],
+      ))!;
+      const ada = (await addMember(ctx.db, team, { name: 'ada', kind: 'agent' })).row!;
+      const send = (id: string, ts: number, meta: Record<string, unknown>) =>
+        insertMessage(
+          ctx.db,
+          team.id,
+          ada.id,
+          nick.id,
+          makeEnvelope({
+            id,
+            team: 'dusk',
+            from: 'ada',
+            to: { kind: 'member', name: 'nick' },
+            act: 'ask',
+            body: id === 'ask-1' ? 'Merge #3961?' : 'Which?',
+            ts,
+            meta,
+          }),
+        );
+      await send('ask-1', 2_000, { species: 'approve', tier: 'standard' });
+      await send('q-1', 2_500, {
+        species: 'consult',
+        question: { text: 'Which?', options: [{ label: 'A' }, { label: 'B' }] },
+      });
+
+      const people = [
+        {
+          name: 'nick',
+          kind: 'human',
+          presence: 'online',
+          posture: 'active',
+          presences: [],
+          state: null,
+        },
+        {
+          name: 'ada',
+          kind: 'agent',
+          presence: 'online',
+          posture: 'working',
+          presences: [{ status: 'online', model: 'claude-opus-5-5' }],
+          state: null,
+        },
+      ] as unknown as MemberSummary[];
+      ctx.memberSummaries = async () => people;
+      const binding = { id: 'b1', member_id: nick.id } as ChannelBinding;
+      const roster = await buildAppRoster(ctx, team, binding, 3_000);
+
+      expect(roster.members?.map((m) => [m.name, m.state, m.label])).toEqual([
+        ['ada', 'asking', 'asking nick'],
+        ['nick', 'between', 'between tasks'],
+      ]);
+      expect(roster.members?.find((m) => m.name === 'ada')?.model).toBe('opus 5.5');
+      // The ask and the question each once, oldest first.
+      expect(roster.for_you?.map((f) => [f.id, f.kind, f.summary])).toEqual([
+        ['ask-1', 'approve', 'Merge #3961?'],
+        ['q-1', 'question', 'Which?'],
+      ]);
+    });
+
+    it('carries no members without the hook, so the phone falls back to seats', async () => {
+      const ctx = operatorCtx({
+        db: server.store,
+        traceDb: server.traceStore,
+        hub: new Hub(),
+        config: server.config,
+        rosterRoots: [],
+      });
+      await fetch(`http://127.0.0.1:${port}/teams`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug: 'noon', creator: { name: 'nick', kind: 'human' } }),
+      });
+      const team = (await getTeamBySlug(ctx.db, 'noon'))!;
+      const roster = await buildAppRoster(ctx, team, { id: 'b1' } as ChannelBinding, 3_000);
+      expect(roster.members).toBeUndefined();
     });
   });
 });
