@@ -110,7 +110,7 @@ Enter opens your browser · Esc skips
 | `/live` | signed in, header | `{member} on {team}` | e.g. `nick on revive`. |
 | `/live` | signed in, menu | `Sign out` | Ends this browser's sign-in only. |
 | `/live` | session ended elsewhere | `You were signed out. Sign in again to keep going.` | On the 4401 return to signed-out. |
-| `/live` | browser holds a member credential, not linked | `Link my musterd account` | Button, settings. |
+| `/live` | browser holds an unlinked member credential | `Link my musterd account` | Button, settings. |
 | `/live` | link confirm | `This links {member} on {team} to your musterd account. A member links to one account, for good.` | Buttons `Link account` · `Cancel`. |
 | `/live` | linked | `{member} is linked to your musterd account.` | |
 | MCP authorize | default | `Sign in with musterd` | First, and the primary. |
