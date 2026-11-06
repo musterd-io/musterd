@@ -128,6 +128,12 @@ Alternatives considered:
 
 ## Consequences
 
+- _(2026-11-06, first live round on delta-2.)_ "Directed-undelivered" in rules 4–5 is read
+  hub-side as **directed newer than both the seat's read cursor and its last wake activity**. The
+  cursor alone does not exist on the hub for a hub-mode seat — delta-2 has no `inbox_cursors` row
+  there (it reads on its joiner daemon) — so the first implementation's cursor-only read counted
+  five already-answered acts forever and the idle stop never fired. An act older than the last
+  wake was in front of that wake; leasing keeps its own cursor logic on the polling daemon.
 - A stopped cloud seat becomes wakeable without a human, at cold-start latency instead of poll
   latency. The lane's falsifier stands: if act→reply on a cold start regularly exceeds ~2 minutes
   (Fly start + tailnet + daemon boot + fold drain + first poll), the saving is bought with
