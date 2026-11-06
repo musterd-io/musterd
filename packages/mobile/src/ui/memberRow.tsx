@@ -8,7 +8,7 @@ import { StateDot } from './stateDot';
 import { font, space, usePalette } from './theme';
 
 /** A row's fixed height, so a portrait arriving late never moves the list. */
-export const MEMBER_ROW_HEIGHT = 44;
+export const MEMBER_ROW_HEIGHT = 52;
 
 /**
  * One member, as /live's team card reads in two lines (ADR 814): the portrait with the state dot,
@@ -43,8 +43,8 @@ export function MemberRow({
       style={styles.row}
     >
       <View>
-        <Seat name={member.name} agent={member.kind === 'agent'} size={28} portrait={portrait} />
-        <StateDot state={member.state} />
+        <Seat name={member.name} agent={member.kind === 'agent'} size={34} portrait={portrait} />
+        <StateDot state={member.state} size={10} />
       </View>
       <View style={styles.text}>
         <View style={styles.line1}>
@@ -98,15 +98,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.sm + 2,
   },
-  text: { flex: 1, minWidth: 0, gap: 1 },
+  text: { flex: 1, minWidth: 0, gap: 2 },
   line1: { flexDirection: 'row', alignItems: 'baseline', gap: space.xs + 2 },
-  name: { fontFamily: font.bold, fontSize: 13, flexShrink: 1 },
-  model: { fontFamily: font.medium, fontSize: 10.5, flexShrink: 1 },
+  name: { fontFamily: font.bold, fontSize: 14, flexShrink: 1 },
+  model: { fontFamily: font.medium, fontSize: 11, flexShrink: 1 },
   age: {
     fontFamily: font.medium,
     fontSize: 10.5,
     marginLeft: 'auto',
     fontVariant: ['tabular-nums'],
   },
-  line2: { fontFamily: font.regular, fontSize: 12 },
+  line2: { fontFamily: font.regular, fontSize: 12.5 },
 });

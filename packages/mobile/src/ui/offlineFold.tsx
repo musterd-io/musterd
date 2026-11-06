@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import type { PairingPin } from '../native/pairingPin';
 import type { AppMember } from '../native/team';
 import { tap } from './haptics';
+import { usePortrait } from './memberRow';
 import { Squish } from './motion';
 import { Seat } from './seat';
 import { font, space, usePalette } from './theme';
@@ -12,11 +14,14 @@ import { font, space, usePalette } from './theme';
  */
 export function OfflineFold({
   members,
+  pin,
   open,
   onToggle,
   children,
 }: {
   members: readonly AppMember[];
+  /** For the stacked faces' portraits (ADR 797), as the rows use. */
+  pin: PairingPin;
   open: boolean;
   onToggle: () => void;
   children?: ReactNode;
@@ -41,7 +46,7 @@ export function OfflineFold({
               key={m.name}
               style={[styles.face, { marginLeft: i === 0 ? 0 : -7, borderColor: p.bg }]}
             >
-              <Seat name={m.name} agent={m.kind === 'agent'} size={20} />
+              <FoldFace member={m} pin={pin} />
             </View>
           ))}
         </View>
@@ -51,6 +56,12 @@ export function OfflineFold({
       {open ? children : null}
     </View>
   );
+}
+
+/** One stacked face: the member's portrait once fetched, as their row shows it (nick, build 61). */
+function FoldFace({ member, pin }: { member: AppMember; pin: PairingPin }) {
+  const portrait = usePortrait(pin, member.portrait);
+  return <Seat name={member.name} agent={member.kind === 'agent'} size={22} portrait={portrait} />;
 }
 
 const styles = StyleSheet.create({

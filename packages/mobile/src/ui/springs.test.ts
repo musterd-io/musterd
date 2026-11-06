@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pillBottom, SPRING, TAB_BOUNCE, tabOf, tabTint } from './springs';
+import { GLIDE, pillBottom, SPRING, TAB_BOUNCE, tabOf, tabTint } from './springs';
 import { light } from './theme';
 
 describe('the tab pill (ADR 815, the app shell)', () => {
@@ -31,5 +31,10 @@ describe('the tab pill (ADR 815, the app shell)', () => {
     expect(tabOf('index')).toBe('now');
     expect(tabOf('work')).toBe('work');
     expect(tabOf('you')).toBe('you');
+  });
+
+  it('re-sorts rows on a glide, not a spring: no overshoot (nick, build 61: "a little too much movement")', () => {
+    expect(GLIDE.duration).toBeGreaterThanOrEqual(120);
+    expect(GLIDE.duration).toBeLessThanOrEqual(400);
   });
 });

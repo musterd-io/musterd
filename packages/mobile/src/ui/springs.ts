@@ -13,6 +13,13 @@ export const SPRING = {
   sheet: { damping: 18, stiffness: 220 },
 } as const;
 
+/**
+ * A row moving to its new place when the roster re-sorts: a glide that eases out and stops, never a
+ * spring that overshoots (nick, build 61: "the bounces to member rows back into place is a little
+ * too much — i like the idea but a little too much movement"). One of the brand's durations.
+ */
+export const GLIDE = { duration: 280 } as const;
+
 /** The pressed tab's icon: down, over, and back to rest — movetrail's sequence. */
 export const TAB_BOUNCE = [0.8, 1.15, 1] as const;
 
