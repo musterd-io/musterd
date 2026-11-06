@@ -1,21 +1,22 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import type { AskEntry, AsksView } from '../native/asks';
-import { heldBody, refusalLine, waitingSubtitle } from '../native/notice';
-import { showOffer } from '../native/offer';
-import { endedNote, type PairingEnded } from '../native/pairingEnded';
-import type { PairingPin } from '../native/pairingPin';
-import { summary } from '../native/readable';
-import { Button } from '../ui/button';
-import { Backdrop, Glass } from '../ui/glass';
-import { Icon } from '../ui/icon';
-import { Breathe, Rise, Squish } from '../ui/motion';
-import { NAV_HEIGHT } from '../ui/nav';
-import { Notice, SectionLabel } from '../ui/notice';
-import { confirmPairAgain } from '../ui/pairAgain';
-import { ago, Seat } from '../ui/seat';
-import { font, radius, space, usePalette } from '../ui/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { AskEntry, AsksView } from '../../native/asks';
+import { heldBody, refusalLine, waitingSubtitle } from '../../native/notice';
+import { showOffer } from '../../native/offer';
+import { endedNote, type PairingEnded } from '../../native/pairingEnded';
+import type { PairingPin } from '../../native/pairingPin';
+import { summary } from '../../native/readable';
+import { Button } from '../../ui/button';
+import { useChrome } from '../../ui/chrome';
+import { Backdrop, Glass } from '../../ui/glass';
+import { Icon } from '../../ui/icon';
+import { Breathe, Rise, Squish } from '../../ui/motion';
+import { Notice, SectionLabel } from '../../ui/notice';
+import { confirmPairAgain } from '../../ui/pairAgain';
+import { ago, Seat } from '../../ui/seat';
+import { font, radius, space, usePalette } from '../../ui/theme';
 
 /**
  * The asks list (ADR 676 decisions 7–9). Every open ask addressed to you that reached this phone,
@@ -26,6 +27,10 @@ import { font, radius, space, usePalette } from '../ui/theme';
  */
 export default function AsksScreen() {
   const p = usePalette();
+  // ADR 814: this is a tab under the pill, with no NavBar over it — it pads for the status bar
+  // itself and leaves room under the pill; scrolling down tucks the pill away.
+  const insets = useSafeAreaInsets();
+  const { onScroll } = useChrome();
   const [note, setNote] = useState<string | null>(null);
   const [pin, setPin] = useState<PairingPin | null | undefined>(undefined);
   const [view, setView] = useState<AsksView | null>(null);
@@ -50,7 +55,7 @@ export default function AsksScreen() {
     if (!focused.current) return;
     setLoading(true);
     try {
-      const { loadPairingPin } = await import('../native/pairingPin');
+      const { loadPairingPin } = await import('../../native/pairingPin');
       const current = await loadPairingPin();
       if (!alive.current) return;
       setPin(current);
@@ -59,17 +64,17 @@ export default function AsksScreen() {
         return;
       }
       try {
-        const { checkPairing } = await import('../native/quickAction');
+        const { checkPairing } = await import('../../native/quickAction');
         const verdict = await checkPairing({ pin: current });
         if (alive.current) setEnded(verdict);
       } catch {
         if (alive.current) setEnded(null);
       }
-      const { loadAsks, markShown, requestRedelivery } = await import('../native/asks');
+      const { loadAsks, markShown, requestRedelivery } = await import('../../native/asks');
       // Answers a dropped relay kept from leaving go first (outbox.ts), and before the re-delivery:
       // re-issuing an ask spends the token a kept answer was signed with, and the daemon then
       // refuses it as consumed after the relay already took it (seen on build 40, 2026-11-01).
-      const { flushOutbox } = await import('../native/outbox');
+      const { flushOutbox } = await import('../../native/outbox');
       const stillWaiting = await flushOutbox();
       if (alive.current) setOutgoing(stillWaiting);
       if (redeliver) void requestRedelivery({ pin: current });
@@ -78,7 +83,7 @@ export default function AsksScreen() {
       generation.current += 1;
       setView(next);
       try {
-        const { needsQuestionKey } = await import('../native/questionKey');
+        const { needsQuestionKey } = await import('../../native/questionKey');
         const needed = await needsQuestionKey(
           current,
           next.asks.map((entry) => entry.delivery),
@@ -88,7 +93,7 @@ export default function AsksScreen() {
         if (alive.current) setOfferKey(false);
       }
       try {
-        const { phoneKeys } = await import('../native/phoneKeys');
+        const { phoneKeys } = await import('../../native/phoneKeys');
         setDiagnostics(refusalLine(phoneKeys.recentRefusals(), Date.now()));
       } catch {
         setDiagnostics(null);
@@ -111,8 +116,8 @@ export default function AsksScreen() {
     void (async () => {
       try {
         // Dynamic: Expo Go has no native module, and the import throws there.
-        const { watchNotificationAnswers } = await import('../native/notificationAnswers');
-        const { phoneKeys } = await import('../native/phoneKeys');
+        const { watchNotificationAnswers } = await import('../../native/notificationAnswers');
+        const { phoneKeys } = await import('../../native/phoneKeys');
         if (!alive.current) return;
         answers = watchNotificationAnswers(setNote, (route) =>
           router.push({
@@ -161,7 +166,7 @@ export default function AsksScreen() {
     const started = generation.current;
     setMore(true);
     try {
-      const { loadMoreAsks } = await import('../native/asks');
+      const { loadMoreAsks } = await import('../../native/asks');
       const page = await loadMoreAsks({ pin, routes: view.rest });
       if (!alive.current || generation.current !== started) return;
       setView((prev) =>
@@ -177,7 +182,7 @@ export default function AsksScreen() {
           : prev,
       );
       if (focused.current && AppState.currentState === 'active') {
-        const { markShown } = await import('../native/asks');
+        const { markShown } = await import('../../native/asks');
         void markShown(page.asks.map((entry) => entry.route.ref));
       }
     } catch {
@@ -190,7 +195,7 @@ export default function AsksScreen() {
 
   const turnOnKey = async () => {
     if (!pin?.binding) return;
-    const { enrollQuestionKey } = await import('../native/questionKey');
+    const { enrollQuestionKey } = await import('../../native/questionKey');
     const outcome = await enrollQuestionKey({ pin });
     if (!alive.current) return;
     if (outcome === 'enrolled') {
@@ -389,8 +394,10 @@ export default function AsksScreen() {
     <View style={[styles.screen, { backgroundColor: p.bg }]}>
       <Backdrop />
       <FlatList
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.list}
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.list, { paddingTop: insets.top + space.md }]}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         data={asks}
         keyExtractor={(entry) => entry.delivery.ask.id}
         ListHeaderComponent={header}
@@ -432,7 +439,7 @@ export default function AsksScreen() {
           <RefreshControl
             refreshing={loading}
             tintColor={p.accent}
-            progressViewOffset={NAV_HEIGHT}
+            progressViewOffset={insets.top}
             onRefresh={() => void refresh(true)}
           />
         }
@@ -524,9 +531,8 @@ const styles = StyleSheet.create({
   footer: { gap: space.sm, alignItems: 'center', marginTop: space.md },
   list: {
     padding: space.lg,
-    paddingTop: NAV_HEIGHT + space.sm,
     gap: space.sm + 2,
-    paddingBottom: space.xl * 2,
+    paddingBottom: space.xl * 4,
   },
   header: { gap: space.sm + 2, marginBottom: space.xs },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

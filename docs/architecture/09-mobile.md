@@ -436,14 +436,18 @@ src/
   ui/
     haptics.ts             // a light tick under a press, a success buzz when something lands (ADR 760)
     pairAgain.ts           // "Pair this phone again?" behind a confirm: forgets the pin and keys
+    springs.ts             // the shell's motion constants (ADR 815): three springs, the tab bounce, each tab's tint, where the pill sits
     theme.ts               // brand.md palette (mustard accent on zinc), light only; DM Sans faces (ADR 760)
 ```
 
 The screens are `.tsx` and outside the drift check; kept honest by hand:
 
 ```
-src/app/_layout.tsx   // the Stack, themed from the palette, every screen under the app's own NavBar
-src/app/index.tsx     // the asks list — its empty state, and the way into pairing
+src/app/_layout.tsx   // the Stack: the (tabs) shell first, then pair / ask / seats / poll under the app's own NavBar
+src/app/(tabs)/_layout.tsx // the shell (ADR 814): Now · Work · You under the floating pill (ui/tabBar.tsx)
+src/app/(tabs)/now.tsx // the asks list — its empty state, and the way into pairing (was index.tsx)
+src/app/(tabs)/work.tsx // Work: goals and lanes — a placeholder until phase 4
+src/app/(tabs)/you.tsx  // You: your and the team's settings — a placeholder until phase 5
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
 src/app/seats.tsx     // the team's agent seats, pulled on focus, each with its quick actions; a Twitch poll card for an admin
 src/app/poll.tsx      // a Twitch poll: start one behind Face ID, its count, End / Cancel (admin phones only)
@@ -457,6 +461,9 @@ src/ui/questionCard.tsx // a question: its text, why, options to tap, and a type
 src/ui/quickActions.tsx // one seat's five quick-action buttons, each saying Sending…, Sent or Try again
 src/ui/motion.tsx     // Rise, Squish, Breathe, Pop, Halo — RN Animated, off under Reduce Motion
 src/ui/nav.tsx        // NavBar: a round glass back chevron and the screen's name in a glass capsule; the wordmark on home
+src/ui/tabBar.tsx     // the floating glass tab pill (ADR 815): per-tab tints, a mustard capsule on the active tab, a bounce and a tick on press, hides on scroll
+src/ui/tabIcons.tsx   // the pill's three SVG glyphs: Now (a ring that fills), Work (three bars), You (head and shoulders)
+src/ui/chrome.tsx     // ChromeProvider / useChrome: one shared value the pill reads and a list's onScroll writes
 src/ui/notice.tsx     // Notice (a short note: symbol tile, title, a line) and SectionLabel (a label with a count)
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```
