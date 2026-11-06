@@ -430,6 +430,9 @@ src/
     poll.ts                // Twitch polls (ADR 807): Face ID signs and seals a poll_open / poll_close; pull the outcome by poll-<nonce>
     push.ts                // the musterd block on an APNs payload, and a fetched body
     questionKey.ts         // the question key: enrollment (question_key callback), and answering a question in the app
+    rosterPoll.ts          // ADR 814: the Now screen's 30 s pull cadence, as a pure schedule (nextPollDelay)
+    useRosterPoll.ts       // the hook that runs that schedule: on focus, on a delivery, on the cadence while in front and active
+    team.ts                // teamRows: the roster folded for Now — present in the daemon's order, offline by reach, for-you unioned with the phone's own asks
     quickAction.ts         // quick actions (ADR 791): sign, seal and send one; pull the seat roster by ref; pull a seat portrait by digest (ADR 797); check the pairing stands (ADR 802)
     readable.ts            // an ask's text cleaned for a phone: one-line summary, or paragraphs and bullets
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
@@ -443,13 +446,12 @@ src/
 The screens are `.tsx` and outside the drift check; kept honest by hand:
 
 ```
-src/app/_layout.tsx   // the Stack: the (tabs) shell first, then pair / ask / seats / poll under the app's own NavBar
+src/app/_layout.tsx   // the Stack: the (tabs) shell first, then pair / ask / poll under the app's own NavBar
 src/app/(tabs)/_layout.tsx // the shell (ADR 814): Now · Work · You under the floating pill (ui/tabBar.tsx)
-src/app/(tabs)/now.tsx // the asks list — its empty state, and the way into pairing (was index.tsx)
+src/app/(tabs)/now.tsx // Now (ADR 814): what waits on you, then the team as /live shows it, the offline fold, the member sheet; the way into pairing
 src/app/(tabs)/work.tsx // Work: goals and lanes — a placeholder until phase 4
-src/app/(tabs)/you.tsx  // You: your and the team's settings — a placeholder until phase 5
+src/app/(tabs)/you.tsx  // You: your and the team's settings — a placeholder until phase 5; carries Start a poll (ADR 807) meanwhile
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
-src/app/seats.tsx     // the team's agent seats, pulled on focus, each with its quick actions; a Twitch poll card for an admin
 src/app/poll.tsx      // a Twitch poll: start one behind Face ID, its count, End / Cancel (admin phones only)
 src/app/ask/[ref].tsx // one ask: the descriptor screen for a listed act, the question card, and answering
 src/ui/askText.tsx    // the asker's words on the ask screen: light formatting, long text folded
@@ -464,6 +466,11 @@ src/ui/nav.tsx        // NavBar: a round glass back chevron and the screen's nam
 src/ui/tabBar.tsx     // the floating glass tab pill (ADR 815): per-tab tints, a mustard capsule on the active tab, a bounce and a tick on press, hides on scroll
 src/ui/tabIcons.tsx   // the pill's three SVG glyphs: Now (a ring that fills), Work (three bars), You (head and shoulders)
 src/ui/chrome.tsx     // ChromeProvider / useChrome: one shared value the pill reads and a list's onScroll writes
+src/ui/memberRow.tsx  // one member in two lines, as /live's team card reads: portrait + state dot, name, model, age; state word and what they're on
+src/ui/stateDot.tsx   // /live's state dot on a portrait's corner: working, review, blocked, asking, between (ring), away (none)
+src/ui/forYouRow.tsx  // one thing waiting on you: asker, the question in a line, kind and age, a Review / Answer chip
+src/ui/offlineFold.tsx // the "N offline" fold with stacked faces and Show / Hide
+src/ui/memberSheet.tsx // a member's sheet (reanimated + gesture-handler): rises on a spring, dragged shut; today's quick actions
 src/ui/notice.tsx     // Notice (a short note: symbol tile, title, a line) and SectionLabel (a label with a count)
 src/ui/seat.tsx       // a member's seat avatar (the mark's sand and teal) and relative time
 ```
