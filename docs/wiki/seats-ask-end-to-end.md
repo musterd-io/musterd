@@ -58,6 +58,34 @@ Q2's answer waited behind ryder's hourly wake cap (2 per hour): the cap was chec
 - **Answer → woke from the phone: 26–27 s** for the two answers that found ryder idle, the same as /live. The 70 s one waited for the wake already running.
 - Cost: $1.80 for 47 minutes over five wakes. The day's shift spend was $2.72 against the $10 budget.
 
+**Shift run 3, 2026-11-06 19:45–23:00 UTC (ADR 792), ended at hours end.** nick pressed Start on ryder from the phone twice: the first shift ran out of work, the second ran to 15:00 Pacific. All times are from the hub's `audit` and `shifts` rows.
+
+| Event | Time (UTC) | Detail |
+| --- | --- | --- |
+| Start 1 | 19:45:39 | `shift.started` (`inside_hours: true`), nothing claimed |
+| Wake for the Start | woke 19:45:57 | **18 s** Start → woke; $0.73, 60 s |
+| Out of work | 20:01:01 | `shift.recommended`, three lanes; nick picked the first (01M3AMY549, needs a person with a ChatGPT Business account) |
+| Answers 1–3 (app) | woke 20:01:39, 20:04:17, 20:05:10 | **13 s, 16 s, 15 s** answer → woke; ryder released 01M3AMY549 and asked which lane nick meant |
+| Stop 1 | 20:17:45 | `shift.stopped` `reason: no_work`, `lanes_claimed: 0`, day `spent_usd: 1.75` |
+| nick's steer (CLI) | woke 20:23:51 | ryder claimed 01M6S2NYC4 (outcome quality, $0) |
+| Start 2 | 20:33:20 | `shift.started`, one lane claimed |
+| Wake for the Start | woke 20:33:36 | **16 s**; $0.58, 97 s; opened PR #4031, then asked nick a permissions question |
+| Answers 4–6 (app) | woke 20:45:50, 21:05:17, 21:05:47 | 19 s, 20 s, 11 s; each wake ended in another permissions question |
+| **Claimed-work wake** | woke 21:06:47 | `derivation: work_order`, `edge: dispatch_continuation`, from `board`; pushed the fix that turned #4031 green |
+| (silence) | 21:07–22:33 | no wake, no gate row, shift row `state: on` — see below |
+| fifty's steer | woke 22:34:05 | agent act, hourly cap clear; ryder updated the lane |
+| Claimed-work wakes | 22:41:34, 22:42:34, 22:43:04, 22:44:04 | 55 s, 23 s, 23 s, 18 s; $0.42, $0.26, $0.45, $0.23 |
+| **Stop 2** | 23:00:44 | `shift.stopped` `reason: hours_end`, `lanes_claimed: 1`, day `spent_usd: 5.93`; board line "ryder is off shift: hours ended at 15:00; 1 lane still claimed." |
+
+- **The `hours_end` stop fires on time, with its board line.** 44 s after 15:00 Pacific, with a lane still claimed. (2026-11-06; falsify: the `shifts` row for ryder on 2026-11-06 reading another `stop_reason`.) <!-- claim: other -->
+- **Start → woke 16–18 s and answer → woke 11–20 s** over two Starts and six answers, all faster than runs 1 and 2. The daemon was auto-refreshed several times during the run.
+- **A shift goes silent when the seat works in git but leaves its lane record alone.** The 21:06 wake pushed commits but did not touch lane 01M6S2NYC4, so ADR 306's lane-moved guard (`laneMovedSinceLastWoke`) held every shift candidate for 88 minutes while the shift row said `on` and $10 of budget sat unspent. Telling the seat to update its lane each wake fixed the silence and caused a touch-to-re-wake loop instead: four wakes in three minutes. (2026-11-06; falsify: a `residency.wake_leased` for ryder between 21:07 and 22:33 UTC.) Follows-up: lane `01M6SHH0KXW2QK7GYPPNMWMGH5`. <!-- claim: defect -->
+- **A wake that ends during a daemon restart loses its end report.** Five of the run's wakes have `residency.woke` but no `session_ended` or `wake_cost` row; the host logged "wake-turn post failed … can't reach the daemon" for the 21:06 one ($0.84, 132 s) and did not retry. The lease still reached `reported`, so it did not block the next wake. (2026-11-06; falsify: `wake_cost` rows for the 20:05, 20:23, 21:05:47, 21:06 and 22:34 wakes.) Follows-up: lane `01M6SHH4VPRRSP3NE88MDA6KEZ`. <!-- claim: defect -->
+- **Waiting on its own question holds the shift, and nothing says so.** Three of ryder's questions to nick held the shift for 10, 18 and 1 minutes; the roster said "on shift" throughout. Same as run 1.
+- **A headless wake cannot widen its own permissions.** ryder asked twice for allowlist entries; nick approved in the app, and Claude Code's own permission check still refused the edit to `.claude/settings.local.json` in a wake with nobody at the prompt. ryder refused to work around it. fifty added the three entries on the hub with nick's yes.
+- **/live and the app cannot send a seat a typed message.** To redirect ryder, nick used `musterd send --act steer` from his laptop workspace. (2026-11-06; falsify: a send or steer control on the seat card in `/live` or the app at that date.) Follows-up: lane `01M6SHHGKWPND0YQ45Q1ATB8QA`. <!-- claim: defect -->
+- **Not recorded:** the roster chip and `team_next` line while on shift.
+
 ## What the runs showed besides the numbers
 
 - **A typed answer from the phone works.** nick did not pick an option on Q1. He typed "What do you mean which colour?" in the iOS app, and it arrived as `answer.text` with `answer_proof {channel: app, verified: true}` and woke the seat. (2026-11-03.)
@@ -67,8 +95,8 @@ Q2's answer waited behind ryder's hourly wake cap (2 per hour): the cap was chec
 
 ## Not yet measured
 
-- The `hours_end` stop at 15:00 Pacific with its board line, and a `budget` stop. Shift runs 1 and 2 measured Start → wake, a claimed-work wake, a person's stop and the `no_work` stop. Follows-up: lane `01M6HSKWBZ76EJ714VHDHKF8XA`.
-- A lock-screen answer with the question key (no app open), and answer → woke over more than two samples.
+- A `budget` stop. Shift runs 1–3 measured Start → wake, a claimed-work wake, a person's stop, the `no_work` stop and the `hours_end` stop (run 3). Follows-up: lane `01M6SHHAXJQ8SGNK0G1R8ZBFHM`.
+- A lock-screen answer with the question key (no app open). Answer → woke now has eight samples (runs 2 and 3), all from the app or `/live` with the app open.
 
 ## How to re-run it
 
