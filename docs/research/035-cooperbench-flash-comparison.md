@@ -1,4 +1,4 @@
-# 035 — CooperBench flash comparison: on Opus 5.5, musterd's two agents pass as often as one (38 vs 37 of 50) and beat CooperBench's own team harness (38 vs 19, p < 0.0001)
+# 035 — CooperBench flash comparison: on Opus 5.5, musterd's two agents show no detectable difference from one (38 vs 37 of 50) and beat CooperBench's own team harness (38 vs 19, p < 0.0001)
 
 > **Status:** 2026-11-06, lane 01M6QKA03P (lazara), asked for by nick in session ("lets do all of this",
 > 2026-11-06 ~05:35Z). Pre-registered as the [flash comparison manifest](./cooperbench/flash-manifest.md)
@@ -55,8 +55,10 @@ manifest requires; the composite counts the re-run. Every number below is from a
 Two pairs pass for musterd and not solo (outlines 1655 f7,f10 — the re-run pair — and dirty_equals 43
 f3,f7); one passes for solo and not musterd (huggingface_datasets 3997 f2,f4). Exact McNemar on 2 vs 1:
 p = 1.0. Without the re-run pair the count is 37 of 49 against 37 of 50; the verdict is the same. On this
-model and these 50 pairs, musterd's two agents pass as often as one agent doing both features — the
-result the paper says two agents do not reach, here on the authors' own subset.
+model and these 50 pairs, no difference between musterd's two agents and one agent doing both features
+is detectable: the point estimates are one pair apart. That is not evidence the two arms are equal — N =
+50 with 3 discordant pairs cannot rule out a gap of several pairs either way — but it is not the halving
+the paper reports for two agents, here on the authors' own subset.
 
 ### C2 — musterd vs team: musterd better (38 vs 19, p = 4 × 10⁻⁶)
 
@@ -65,8 +67,9 @@ The team arm's losses have one shape: in **28 of its 50 pairs** CooperBench's ev
 did not carry the member's feature, merged the two agents' patches naively, hit a conflict, and **ran no
 tests** (`merge: conflicts, strategy: naive`, both features failed with 0 tests run). In the 9 conflict
 pairs that passed, the lead's patch held both features and was scored alone (`strategy: solo-agent1`).
-So on Claude Code with Opus 5.5 the team harness's lead mostly did not do the integration the harness
-is built around. musterd's agents ended all 50 pairs with **identical** patches — each merged the
+On Claude Code with Opus 5.5 these losses are consistent with the lead not doing the integration the
+harness is built around; the eval records show the shape of each loss, not why the lead did not
+integrate, and the arm difference alone does not establish that cause. musterd's agents ended all 50 pairs with **identical** patches — each merged the
 other's branch through the shared git remote before finishing — so its eval never merged anything.
 
 ### C3 — team vs solo: solo better (19 vs 37, p = 8 × 10⁻⁶)
@@ -83,20 +86,26 @@ authors' GPT-5.5 run (48%) or the leaderboard's Sonnet 4.5 entry (47%).
 - **All three fail 11 pairs** — task losses no coordination can recover.
 - **Errors:** one musterd pair (the git-server race above), re-run once; none in solo or team. No API
   limit line. Spend $54.08 in all — $49.53 for attempt 2 and the re-run, about $3.50 for the aborted
-  attempt, $1.07 for the smoke pairs — against the $400 stop, which was never near.
+  attempt, $1.07 for the smoke pairs. The manifest's "$400 hard stop" was in fact a threshold polled
+  every 60 s over finished pairs ($370); in-flight pairs were not bounded by it. The costliest pair was
+  $0.87 and at most five were in flight, so the threshold was never close.
+- **Process.** The run started against an open hold: big-body declined the pre-registration lane at
+  04:55Z asking for a concrete spend rule, and lazara started at 05:03Z without having read it. The
+  manifest's post-run amendment records it.
 - **The readout's `cause:coordination` label on solo is an artifact:** `readout.py` classifies a failed
   pair with no merge as coordination; solo has no partner, so its 13 failures are task failures.
 
 ## How far it reaches
 
-- C1 is the strongest result in our CooperBench series: two agents coordinated by musterd pass as often
-  as one on the authors' own 50-pair subset, with the model held fixed. It agrees with findings 018 and
+- C1 is the strongest result in our CooperBench series: no difference is detectable between two agents
+  coordinated by musterd and one agent, on the authors' own 50-pair subset with the model held fixed. It agrees with findings 018 and
   021 (one pair apart on Sonnet 4.5) at a larger N and a higher pass rate. It is a **no-difference**
   result, not a win: 2 vs 1 discordant pairs cannot show musterd is better, and N = 50 cannot rule out a
   difference of a few pairs either way.
-- C2 says the shape of coordination matters more than its amount. A harness built around a lead who
-  integrates did worse than one agent alone when the lead did not integrate; musterd's lanes, gate and
-  shared remote led both agents to the same merged tree every time. This is one model on one adapter —
+- C2 says musterd's arm beat the team harness on this model; the records are consistent with the
+  team's lead not integrating (28 naive-merge conflicts with no tests run) while musterd's agents ended
+  every pair on the same merged tree. Which harness feature produces that difference is not identified
+  by this run. This is one model on one adapter —
   the authors' team harness is tuned on Codex, and this finding does not say it is worse there.
 - C3 shows the paper's "curse" is model- and harness-dependent: on Opus 5.5, solo is strong and CooperBench's
   own two-agent harnesses fall well below it, while musterd's does not.
@@ -106,11 +115,11 @@ authors' GPT-5.5 run (48%) or the leaderboard's Sonnet 4.5 entry (47%).
 ## Decision for nick
 
 The conditional third step in the manifest — build a shared scratchpad and an integration role if the
-team harness beat musterd — is **not triggered**: musterd beat the team harness by 19 pairs, and the
-team's losses were exactly the missing integration that musterd's agents already do through the shared
-remote. The numbers support a public claim of the form "on CooperBench's flash subset, two Claude Code
-agents coordinated by musterd pass as often as one agent (38 vs 37 of 50) and twice as often as
-CooperBench's own team harness on the same model (38 vs 19)", with the cost caveat stated beside it.
+team harness beat musterd — is **not triggered**: musterd beat the team harness by 19 pairs. The numbers
+support a public claim of the form "on CooperBench's flash subset, two Claude Code agents coordinated by
+musterd showed no detectable difference from one agent (38 vs 37 of 50) and passed twice as often as
+CooperBench's own team harness on the same model (38 vs 19, p < 0.0001)", with the cost caveat stated
+beside it and no claim of equivalence.
 Two things would strengthen it before publishing: a second seed of musterd and solo on flash (about $35)
 to show C1 is stable, and the same three arms on a second model (Sonnet 5.5 is cheaper) to show C2 is not
 specific to Opus. The open product problem is cost per pass, now 2.7× solo.
