@@ -13,6 +13,7 @@ import {
   streamTitleEnv,
   type TitleGoal,
   type TitleLane,
+  titleSecretsState,
 } from './channelTitle.js';
 
 const AUDIT = `${TITLE_PREFIX}the twitch channel audit`;
@@ -326,6 +327,98 @@ describe('applyChannelTitle', () => {
     expect(line).toBe('title off — could not read the channel');
     expect(line).not.toContain(token);
     expect(line).not.toContain(clientId);
+  });
+});
+
+describe('applyChannelTitle with a refresh token (lane 01M6Q0W09P)', () => {
+  const clientId = 'client-secret-id';
+  const clientSecret = 'client-secret-value';
+  const refresh = 'refresh-secret-value';
+  const access = 'fresh-access-token';
+  const env = {
+    MUSTERD_TWITCH_CLIENT_ID: clientId,
+    MUSTERD_TWITCH_CLIENT_SECRET: clientSecret,
+    MUSTERD_TWITCH_REFRESH_TOKEN: refresh,
+    MUSTERD_STREAM_TITLE: WATCH,
+    MUSTERD_STREAM_TITLE_PREV: '',
+  };
+
+  it('exchanges the refresh token first and uses the new access token on Helix', async () => {
+    const auths: string[] = [];
+    let exchanged: URLSearchParams | null = null;
+    const line = await applyChannelTitle(env, async (url, init) => {
+      const href = String(url);
+      if (href.startsWith('https://id.twitch.tv/oauth2/token')) {
+        exchanged = new URLSearchParams(String(init?.body));
+        return json(200, { access_token: access, refresh_token: 'rotated' });
+      }
+      auths.push(String((init?.headers as Record<string, string>)['Authorization']));
+      if (href.endsWith('/users')) return json(200, { data: [{ id: '42' }] });
+      if (init?.method === 'PATCH') return json(204, null);
+      return json(200, { data: [{ title: STANDING_TITLE, game_id: '1' }] });
+    });
+    expect(line).toBe('title set');
+    expect(exchanged!.get('grant_type')).toBe('refresh_token');
+    expect(exchanged!.get('refresh_token')).toBe(refresh);
+    expect(exchanged!.get('client_secret')).toBe(clientSecret);
+    expect(new Set(auths)).toEqual(new Set([`Bearer ${access}`]));
+  });
+
+  it('prefers the refresh pair over a stale MUSTERD_TWITCH_TOKEN', async () => {
+    const auths: string[] = [];
+    await applyChannelTitle({ ...env, MUSTERD_TWITCH_TOKEN: 'stale' }, async (url, init) => {
+      if (String(url).startsWith('https://id.twitch.tv/oauth2/token'))
+        return json(200, { access_token: access });
+      auths.push(String((init?.headers as Record<string, string>)['Authorization']));
+      if (String(url).endsWith('/users')) return json(200, { data: [{ id: '42' }] });
+      return json(200, { data: [{ title: WATCH, game_id: SOFTWARE_GAME_ID }] });
+    });
+    expect(auths).not.toContain('Bearer stale');
+  });
+
+  it('names a refused refresh and never puts a secret in the line', async () => {
+    let helix = 0;
+    const line = await applyChannelTitle(env, async (url) => {
+      if (String(url).startsWith('https://id.twitch.tv/oauth2/token'))
+        return json(400, { message: `${refresh} ${clientSecret}` });
+      helix += 1;
+      return json(200, {});
+    });
+    expect(line).toBe('title off — twitch refresh token rejected');
+    expect(helix).toBe(0);
+    expect(line).not.toContain(refresh);
+    expect(line).not.toContain(clientSecret);
+  });
+
+  it('is off when the refresh token has no client secret beside it', async () => {
+    let calls = 0;
+    const line = await applyChannelTitle(
+      { MUSTERD_TWITCH_CLIENT_ID: clientId, MUSTERD_TWITCH_REFRESH_TOKEN: refresh },
+      async () => {
+        calls += 1;
+        throw new Error('no');
+      },
+    );
+    expect(line).toBe('title off — twitch token unset');
+    expect(calls).toBe(0);
+  });
+});
+
+describe('titleSecretsState', () => {
+  it('reads which title credential the app holds', () => {
+    expect(titleSecretsState([])).toBe('missing');
+    expect(titleSecretsState(['MUSTERD_TWITCH_CLIENT_ID'])).toBe('missing');
+    expect(titleSecretsState(['MUSTERD_TWITCH_CLIENT_ID', 'MUSTERD_TWITCH_TOKEN'])).toBe('token');
+    expect(
+      titleSecretsState([
+        'MUSTERD_TWITCH_CLIENT_ID',
+        'MUSTERD_TWITCH_CLIENT_SECRET',
+        'MUSTERD_TWITCH_REFRESH_TOKEN',
+      ]),
+    ).toBe('refresh');
+    expect(titleSecretsState(['MUSTERD_TWITCH_CLIENT_ID', 'MUSTERD_TWITCH_REFRESH_TOKEN'])).toBe(
+      'missing',
+    );
   });
 });
 

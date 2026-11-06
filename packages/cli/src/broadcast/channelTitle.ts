@@ -25,10 +25,35 @@ export const TAIL_MAX = 35;
  */
 export const SOFTWARE_GAME_ID = '1469308723';
 
-/** Optional. Absent, the title is off and the stream still starts. Not part of doctor’s fail list. */
-export const TITLE_SECRET_NAMES = ['MUSTERD_TWITCH_CLIENT_ID', 'MUSTERD_TWITCH_TOKEN'] as const;
+/**
+ * Optional. Absent, the title is off and the stream still starts. Not part of doctor’s fail list.
+ * The refresh pair is the lasting form (lane 01M6Q0W09P, 2026-11-05): `MUSTERD_TWITCH_TOKEN` is a
+ * bare user access token Twitch expires after ~4 h, so a stream started later than that ran
+ * "title off — twitch token rejected". With `MUSTERD_TWITCH_REFRESH_TOKEN` + `_CLIENT_SECRET`
+ * the machine mints its own access token at start, the way the chat reader does.
+ */
+export const TITLE_SECRET_NAMES = [
+  'MUSTERD_TWITCH_CLIENT_ID',
+  'MUSTERD_TWITCH_CLIENT_SECRET',
+  'MUSTERD_TWITCH_REFRESH_TOKEN',
+] as const;
+/** The pre-refresh form, still honoured when no refresh pair is present. */
+export const TITLE_TOKEN_SECRET_NAMES = [
+  'MUSTERD_TWITCH_CLIENT_ID',
+  'MUSTERD_TWITCH_TOKEN',
+] as const;
+
+/** What the app holds for the title, from `fly secrets list` names: the lasting refresh pair, the
+ *  ~4 h access token alone, or nothing usable. */
+export function titleSecretsState(names: readonly string[]): 'refresh' | 'token' | 'missing' {
+  const has = (n: string) => names.includes(n);
+  if (TITLE_SECRET_NAMES.every(has)) return 'refresh';
+  if (TITLE_TOKEN_SECRET_NAMES.every(has)) return 'token';
+  return 'missing';
+}
 
 const HELIX = 'https://api.twitch.tv/helix';
+const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
 const HELIX_TIMEOUT_MS = 8_000;
 
 export interface TitleLane {
@@ -219,7 +244,31 @@ function channelFields(body: unknown): { title: string; game_id: string } | null
 
 const OFF_UNSET = 'title off — twitch token unset';
 const OFF_REJECTED = 'title off — twitch token rejected';
+const OFF_REFRESH_REJECTED = 'title off — twitch refresh token rejected';
 const OFF_UNREAD = 'title off — could not read the channel';
+
+/** Trade the refresh token for an access token. Null when Twitch refused; throws on transport. */
+async function refreshAccessToken(
+  fetchImpl: TitleFetch,
+  clientId: string,
+  clientSecret: string,
+  refreshToken: string,
+): Promise<string | null> {
+  const res = await fetchImpl(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }).toString(),
+    signal: AbortSignal.timeout(HELIX_TIMEOUT_MS),
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { access_token?: unknown };
+  return typeof body.access_token === 'string' && body.access_token ? body.access_token : null;
+}
 
 /**
  * Read the channel, then patch only when `decideTitle` says we own it and something differs.
@@ -233,9 +282,21 @@ export async function applyChannelTitle(
   env: NodeJS.ProcessEnv,
   fetchImpl: TitleFetch = fetch,
 ): Promise<string> {
-  const token = env['MUSTERD_TWITCH_TOKEN']?.trim() ?? '';
   const clientId = env['MUSTERD_TWITCH_CLIENT_ID']?.trim() ?? '';
-  if (!token || !clientId) return OFF_UNSET;
+  const clientSecret = env['MUSTERD_TWITCH_CLIENT_SECRET']?.trim() ?? '';
+  const refreshToken = env['MUSTERD_TWITCH_REFRESH_TOKEN']?.trim() ?? '';
+  const refreshing = Boolean(clientSecret && refreshToken);
+  let token = refreshing ? '' : (env['MUSTERD_TWITCH_TOKEN']?.trim() ?? '');
+  if (!clientId || (!refreshing && !token)) return OFF_UNSET;
+  if (refreshing) {
+    try {
+      const fresh = await refreshAccessToken(fetchImpl, clientId, clientSecret, refreshToken);
+      if (!fresh) return OFF_REFRESH_REJECTED;
+      token = fresh;
+    } catch {
+      return OFF_UNREAD;
+    }
+  }
 
   const desiredRaw = env['MUSTERD_STREAM_TITLE'] ?? '';
   const prevRaw = env['MUSTERD_STREAM_TITLE_PREV'] ?? '';

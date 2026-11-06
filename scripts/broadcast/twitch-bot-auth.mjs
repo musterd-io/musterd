@@ -4,9 +4,9 @@
  *
  * The hosted capture reads Twitch chat (`!who`, `!vote`) and posts polls on a bot account's user
  * token. With `--title` it instead authorizes the CHANNEL account for `channel:manage:broadcast`
- * and stages MUSTERD_TWITCH_CLIENT_ID + MUSTERD_TWITCH_TOKEN, the title writer's pair (ADR 711).
- * That pair is a raw access token Twitch expires after ~4 h, so run `--title` before each stream.
- * The bot pair is a refresh token and lasts. That token comes from an OAuth authorization-code grant a human performs in a browser,
+ * and stages MUSTERD_TWITCH_CLIENT_ID + MUSTERD_TWITCH_CLIENT_SECRET + MUSTERD_TWITCH_REFRESH_TOKEN,
+ * from which the title writer (ADR 711) mints its own access token at every stream start. Both
+ * grants last until Twitch rotates the refresh token; then rerun this. That token comes from an OAuth authorization-code grant a human performs in a browser,
  * signed in as the bot. This script runs that flow on the operator's machine and hands the result
  * straight to `fly secrets import --stage` — it prints digests, never a value.
  *
@@ -182,7 +182,11 @@ if (who.login !== expectBot) {
 console.error(`✓ ${who.login} authorized with ${who.scopes.join(' ')}`);
 
 const pairs = title
-  ? [`MUSTERD_TWITCH_CLIENT_ID=${clientId}`, `MUSTERD_TWITCH_TOKEN=${tok.access_token}`]
+  ? [
+      `MUSTERD_TWITCH_CLIENT_ID=${clientId}`,
+      `MUSTERD_TWITCH_CLIENT_SECRET=${clientSecret}`,
+      `MUSTERD_TWITCH_REFRESH_TOKEN=${tok.refresh_token}`,
+    ]
   : [
       `MUSTERD_TWITCH_CHAT_CLIENT_ID=${clientId}`,
       `MUSTERD_TWITCH_CHAT_CLIENT_SECRET=${clientSecret}`,
@@ -190,10 +194,9 @@ const pairs = title
       `MUSTERD_TWITCH_CHAT_CHANNEL=${channel}`,
     ];
 await run('fly', ['secrets', 'import', '-a', app, '--stage'], pairs.join('\n') + '\n');
-const hours = Math.floor((tok.expires_in ?? 0) / 3600);
 console.error(
   title
-    ? `✓ staged MUSTERD_TWITCH_CLIENT_ID + MUSTERD_TWITCH_TOKEN on ${app} — the token expires in ~${hours} h; rerun --title before each stream`
+    ? `✓ staged the title refresh pair (MUSTERD_TWITCH_CLIENT_ID, _CLIENT_SECRET, _REFRESH_TOKEN) on ${app} — the stream mints its own access token at start; \`fly secrets unset -a ${app} --stage MUSTERD_TWITCH_TOKEN\` retires the old ~4 h token if it is still listed`
     : `✓ staged four MUSTERD_TWITCH_CHAT_* secrets on ${app} — \`musterd stream doctor\` next`,
 );
 await run('fly', ['secrets', 'list', '-a', app]);
