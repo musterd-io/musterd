@@ -1525,4 +1525,7 @@ the tick, not the spawn, is now the cold latency's long pole, and it is bounded 
 construction. The start also ran on the hub's newly attenuated Fly token (staged 19:32Z,
 lane `01M6S36XB0`): no auth failure on the row. Two wakes inside the hour re-trip the cap
 afterwards, as designed; the idle stop is the 15 min rule's business and was still pending at
-writing. Cold act→reply now has its first clean input for ADR 816's two-week eval.
+writing. Cold act→reply now has its first clean input for ADR 816's two-week eval. Scope of
+the claim: one round, one machine, build `5cc47d21`, 2026-11-06 — falsify by re-running this
+round and watching the first lease expire unspawned, or act→reply exceed ~2 min with the tick
+phase accounted for.
