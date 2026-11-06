@@ -92,3 +92,13 @@ export function sinceLabel(since: number | null, now: number): string | null {
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
 }
+
+/** The For you header's number: the merged list it heads, never the phone's own asks alone. */
+export function forYouCount(rows: TeamRows): number {
+  return rows.forYou.length;
+}
+
+/** The model under a name: /live's badge for someone here; nothing for an away row (/live's fold shows none). */
+export function modelLine(m: AppMember): string | null {
+  return m.state === 'away' ? null : m.model;
+}

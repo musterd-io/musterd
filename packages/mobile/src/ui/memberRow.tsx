@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { PairingPin } from '../native/pairingPin';
-import { sinceLabel, type AppMember } from '../native/team';
+import { modelLine, sinceLabel, type AppMember } from '../native/team';
 import { Squish } from './motion';
 import { Seat } from './seat';
 import { StateDot } from './stateDot';
@@ -51,14 +51,12 @@ export function MemberRow({
           <Text numberOfLines={1} style={[styles.name, { color: p.text }]}>
             {member.name}
           </Text>
-          {member.model ? (
+          {modelLine(member) ? (
             <Text numberOfLines={1} style={[styles.model, { color: p.placeholder }]}>
-              {member.model}
+              {modelLine(member)}
             </Text>
           ) : null}
-          {age ? (
-            <Text style={[styles.age, { color: p.placeholder }]}>{age}</Text>
-          ) : null}
+          {age ? <Text style={[styles.age, { color: p.placeholder }]}>{age}</Text> : null}
         </View>
         <Text numberOfLines={1} style={[styles.line2, { color: p.muted }]}>
           {line}
@@ -104,6 +102,11 @@ const styles = StyleSheet.create({
   line1: { flexDirection: 'row', alignItems: 'baseline', gap: space.xs + 2 },
   name: { fontFamily: font.bold, fontSize: 13, flexShrink: 1 },
   model: { fontFamily: font.medium, fontSize: 10.5, flexShrink: 1 },
-  age: { fontFamily: font.medium, fontSize: 10.5, marginLeft: 'auto', fontVariant: ['tabular-nums'] },
+  age: {
+    fontFamily: font.medium,
+    fontSize: 10.5,
+    marginLeft: 'auto',
+    fontVariant: ['tabular-nums'],
+  },
   line2: { fontFamily: font.regular, fontSize: 12 },
 });

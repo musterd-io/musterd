@@ -1,6 +1,6 @@
 import type { Lane, MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { appForYou, appMembers } from './appTeam.js';
+import { appForYou, appMembers, liveAsks, type AskLike, type CloserLike } from './appTeam.js';
 
 /**
  * ADR 814: the daemon folds the team for the phone by the rule /live's team column uses
@@ -185,5 +185,75 @@ describe('appForYou: what waits on the binding’s person', () => {
       ts: i,
     }));
     expect(appForYou(many)).toHaveLength(32);
+  });
+});
+
+describe('liveAsks: an ask is open on the phone exactly when /live shows it loud', () => {
+  const ask = (id: string, over: Partial<AskLike> = {}): AskLike => ({
+    id,
+    ts: NOW - MIN,
+    thread: null,
+    meta: { species: 'approve', tier: 'blocking' },
+    ...over,
+  });
+  const close = (over: Partial<CloserLike> & { act: string }): CloserLike => ({
+    ts: NOW,
+    thread: null,
+    meta: null,
+    ...over,
+  });
+  const ids = (asks: AskLike[], closers: CloserLike[] = []) =>
+    liveAsks(asks, closers, NOW).map((a) => a.id);
+
+  it('keeps an open ask inside its tier deadline', () => {
+    expect(ids([ask('a', { meta: { species: 'approve', tier: 'standard' } })])).toEqual(['a']);
+  });
+
+  it('lapses a standard or advisory ask past its deadline: the work went on without you', () => {
+    const old = NOW - 6 * MIN;
+    expect(
+      ids([
+        ask('std', { ts: old, meta: { species: 'approve', tier: 'standard' } }),
+        ask('adv', { ts: old, meta: { species: 'consult', tier: 'advisory' } }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('keeps a blocking ask past its deadline: it is held, the loudest thing there is', () => {
+    expect(ids([ask('blk', { ts: NOW - 4 * 24 * 60 * MIN })])).toEqual(['blk']);
+  });
+
+  it('reads a review ask’s own window, not the bare tier', () => {
+    const meta = { species: 'approve', tier: 'standard', lane_review: { wait_ms: 20 * MIN } };
+    expect(ids([ask('rev', { ts: NOW - 10 * MIN, meta })])).toEqual(['rev']);
+    expect(ids([ask('rev', { ts: NOW - 30 * MIN, meta })])).toEqual([]);
+  });
+
+  it('closes on a later accept, decline, or a wait that defers it, by reply or ask_ref', () => {
+    expect(ids([ask('a')], [close({ act: 'accept', meta: { in_reply_to: 'a' } })])).toEqual([]);
+    expect(ids([ask('b')], [close({ act: 'decline', meta: { in_reply_to: 'b' } })])).toEqual([]);
+    expect(ids([ask('c')], [close({ act: 'wait', meta: { ask_ref: 'c' } })])).toEqual([]);
+  });
+
+  it('closes on a resolve on its thread — how a publisher withdraws a superseded deploy ask', () => {
+    expect(ids([ask('d')], [close({ act: 'resolve', thread: 'd' })])).toEqual([]);
+    expect(ids([ask('e', { thread: 't1' })], [close({ act: 'resolve', thread: 't1' })])).toEqual(
+      [],
+    );
+  });
+
+  it('closes on an asker’s risk_accepted or stranded outcome, but a held outcome stays loud', () => {
+    const outcome = (o: string) =>
+      close({ act: 'status_update', meta: { ask_ref: 'f', ask_outcome: o } });
+    expect(ids([ask('f')], [outcome('risk_accepted')])).toEqual([]);
+    expect(ids([ask('f')], [outcome('stranded')])).toEqual([]);
+    expect(ids([ask('f')], [outcome('held')])).toEqual(['f']);
+  });
+
+  it('ignores an act that came before the ask, and an ask that is not well formed', () => {
+    expect(ids([ask('g')], [close({ act: 'resolve', thread: 'g', ts: NOW - 2 * MIN })])).toEqual([
+      'g',
+    ]);
+    expect(ids([ask('h', { meta: { tier: 'blocking' } })])).toEqual([]);
   });
 });

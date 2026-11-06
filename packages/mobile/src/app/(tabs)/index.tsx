@@ -9,7 +9,7 @@ import { endedNote, type PairingEnded } from '../../native/pairingEnded';
 import type { PairingPin } from '../../native/pairingPin';
 import type { Roster } from '../../native/quickAction';
 import { summary } from '../../native/readable';
-import { summaryLine, teamRows, type AppMember, type OwnAsk } from '../../native/team';
+import { forYouCount, summaryLine, teamRows, type AppMember, type OwnAsk } from '../../native/team';
 import { useRosterPoll } from '../../native/useRosterPoll';
 import { Button } from '../../ui/button';
 import { useChrome } from '../../ui/chrome';
@@ -251,7 +251,6 @@ export default function AsksScreen() {
   const asks = paired ? (view?.asks ?? []) : [];
   const unfetched = paired ? (view?.rest.length ?? 0) : 0;
   const team = pin?.team ?? null;
-  const count = unfetched > 0 ? `${asks.length}+` : asks.length;
   const now = Date.now();
   const own: OwnAsk[] = asks.map((entry) => ({
     id: entry.delivery.ask.id,
@@ -376,7 +375,7 @@ export default function AsksScreen() {
         </Squish>
       ) : null}
       {paired && rows.forYou.length > 0 ? (
-        <SectionLabel label="For you" count={unfetched > 0 ? `${rows.forYou.length}+` : count} />
+        <SectionLabel label="For you" count={forYouCount(rows)} />
       ) : null}
       {paired
         ? rows.forYou.map((item) => {
@@ -469,33 +468,33 @@ export default function AsksScreen() {
               </OfflineFold>
             ) : null}
             {diagnostics || pin || unfetched > 0 ? (
-            <View style={styles.footer}>
-              {unfetched > 0 ? (
-                <Squish
-                  accessibilityRole="button"
-                  accessibilityLabel="Show more asks"
-                  onPress={() => void loadMore()}
-                  style={styles.textButton}
-                >
-                  <Text style={[styles.textButtonText, { color: p.accentText }]}>
-                    {more ? 'Loading…' : 'Show more'}
-                  </Text>
-                </Squish>
-              ) : null}
-              {diagnostics ? (
-                <Text style={[styles.diagnostics, { color: p.placeholder }]}>{diagnostics}</Text>
-              ) : null}
-              {pin ? (
-                <Squish
-                  accessibilityRole="button"
-                  accessibilityLabel="Pair this phone again"
-                  onPress={pairAgain}
-                  style={styles.textButton}
-                >
-                  <Text style={[styles.textButtonText, { color: p.muted }]}>Pair again</Text>
-                </Squish>
-              ) : null}
-            </View>
+              <View style={styles.footer}>
+                {unfetched > 0 ? (
+                  <Squish
+                    accessibilityRole="button"
+                    accessibilityLabel="Show more asks"
+                    onPress={() => void loadMore()}
+                    style={styles.textButton}
+                  >
+                    <Text style={[styles.textButtonText, { color: p.accentText }]}>
+                      {more ? 'Loading…' : 'Show more'}
+                    </Text>
+                  </Squish>
+                ) : null}
+                {diagnostics ? (
+                  <Text style={[styles.diagnostics, { color: p.placeholder }]}>{diagnostics}</Text>
+                ) : null}
+                {pin ? (
+                  <Squish
+                    accessibilityRole="button"
+                    accessibilityLabel="Pair this phone again"
+                    onPress={pairAgain}
+                    style={styles.textButton}
+                  >
+                    <Text style={[styles.textButtonText, { color: p.muted }]}>Pair again</Text>
+                  </Squish>
+                ) : null}
+              </View>
             ) : null}
           </View>
         }
@@ -519,7 +518,9 @@ export default function AsksScreen() {
           ) : null
         }
       />
-      {pin ? <MemberSheet member={sheet} pin={pin} now={now} onClose={() => setSheet(null)} /> : null}
+      {pin ? (
+        <MemberSheet member={sheet} pin={pin} now={now} onClose={() => setSheet(null)} />
+      ) : null}
     </View>
   );
 }
