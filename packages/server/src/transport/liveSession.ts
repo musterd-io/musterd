@@ -37,6 +37,7 @@ import {
   mintTokenPair,
   revokeChainsForSession,
 } from '../store/oauth.js';
+import { issueCode, type OAuthClientSource } from '../store/oauth.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import {
   consumeSigninState,
@@ -44,6 +45,7 @@ import {
   type SigninStateRow,
 } from '../store/signinStates.js';
 import { getTeamBySlug } from '../store/teams.js';
+import { isCimdClientId } from './cimd.js';
 import { isTlsPeer } from './oauth.js';
 
 /**
@@ -81,6 +83,7 @@ const FORM_MAX_BYTES = 16 * 1024;
 
 export type SessionRefusal =
   | 'origin'
+  | 'connect_malformed'
   | 'not_same_origin'
   | 'no_cookie'
   | 'state_mismatch'
@@ -173,9 +176,17 @@ export async function handleLiveSessionRoutes(
   }
   const team = slug ? await getTeamBySlug(operatorCtx(rootCtx).db, slug) : undefined;
   if (!team) throw new MusterdError('not_found', 'not found');
-  const ctx = teamCtx(rootCtx, team.id);
-  const env: Env = {
-    ctx,
+  const env = envFor(rootCtx, team, cloud);
+  if (path === '/live/signin/start') await start(env, req, res, method, url);
+  else if (path === '/live/signin/callback') await callback(env, req, res);
+  else if (path === '/live/session/token') await exchange(env, req, res);
+  else await signout(env, req, res);
+  return true;
+}
+
+function envFor(rootCtx: Ctx, team: TeamRow, cloud: NonNullable<Ctx['config']['cloud']>): Env {
+  return {
+    ctx: teamCtx(rootCtx, team.id),
     rootCtx,
     team,
     consoleOrigin: consoleOriginOf(cloud.consoleJwksUrl),
@@ -183,11 +194,6 @@ export async function handleLiveSessionRoutes(
     jwksUrl: cloud.consoleJwksUrl,
     audience: cloud.consoleAudience,
   };
-  if (path === '/live/signin/start') await start(env, req, res, method, url);
-  else if (path === '/live/signin/callback') await callback(env, req, res);
-  else if (path === '/live/session/token') await exchange(env, req, res);
-  else await signout(env, req, res);
-  return true;
 }
 
 interface Env {
@@ -198,6 +204,93 @@ interface Env {
   teamOrigin: string;
   jwksUrl: string;
   audience: string;
+}
+
+// ── connect (ADR 820) ───────────────────────────────────────────────────────────────────────────
+
+/** ADR 820: the authorization request a `connect` state carries, plus the client's source. */
+const ConnectRequestSchema = z
+  .object({
+    client_id: z.string().min(1),
+    redirect_uri: z.string().min(1),
+    code_challenge: z.string().min(1),
+    state: z.string().min(1),
+    scope: z.string().optional(),
+    client_source: z.enum(['dcr', 'cimd']),
+  })
+  .strict();
+export type ConnectStart = z.infer<typeof ConnectRequestSchema>;
+
+/**
+ * ADR 820: whether this request reached a hosted team on its own origin over TLS — the only place
+ * "Sign in with musterd" can finish, because the round trip comes back to that origin's callback.
+ */
+export function connectAvailable(ctx: Ctx, req: IncomingMessage, slug: string): boolean {
+  const cloud = ctx.config.cloud;
+  return !!cloud && isTlsPeer(ctx, req) && hostTeam(req.headers.host, cloud.hostSuffix) === slug;
+}
+
+/**
+ * ADR 820 §2: start the console round trip for one MCP client authorization the consent POST has
+ * already validated. Answers the console URL and the signin cookie; the caller sends the 303.
+ */
+export async function beginConnectSignin(
+  rootCtx: Ctx,
+  team: TeamRow,
+  request: ConnectStart,
+): Promise<{ location: string; cookie: string }> {
+  const cloud = rootCtx.config.cloud;
+  if (!cloud) throw new MusterdError('not_found', 'not found');
+  const ctx = teamCtx(rootCtx, team.id);
+  const s = await startSigninState(ctx.db, {
+    teamId: team.id,
+    mode: 'connect',
+    oauthRequest: ConnectRequestSchema.parse(request),
+  });
+  const env = envFor(rootCtx, team, cloud);
+  return { location: handbackUrl(env, s.state), cookie: signinCookie(s.state) };
+}
+
+/** ADR 820 §3: the callback's end for a `connect` state — a code for the client, no session. */
+async function connectBack(
+  env: Env,
+  res: ServerResponse,
+  record: SigninStateRow,
+  member: MemberRow,
+  refuse: (reason: SessionRefusal) => Promise<void>,
+): Promise<void> {
+  const { ctx, team } = env;
+  let request: ConnectStart;
+  try {
+    request = ConnectRequestSchema.parse(JSON.parse(record.oauth_request ?? ''));
+  } catch {
+    return refuse('connect_malformed');
+  }
+  const { code } = await issueCode(ctx.db, {
+    teamId: team.id,
+    memberId: member.id,
+    clientId: request.client_id,
+    clientSource: request.client_source as OAuthClientSource,
+    redirectUri: request.redirect_uri,
+    codeChallenge: request.code_challenge,
+    ...(request.scope ? { scope: request.scope } : {}),
+  });
+  await appendAudit(ctx.db, team.id, {
+    actor: member.name,
+    action: 'oauth.code_issued',
+    target: isCimdClientId(request.client_id) ? null : request.client_id,
+    result: 'allow',
+    detail: { via: 'musterd' },
+  });
+  const sep = request.redirect_uri.includes('?') ? '&' : '?';
+  res.writeHead(302, {
+    location: `${request.redirect_uri}${sep}code=${encodeURIComponent(code)}&state=${encodeURIComponent(request.state)}`,
+    'cache-control': 'no-store',
+    pragma: 'no-cache',
+    'set-cookie': CLEAR_SIGNIN,
+    'content-length': '0',
+  });
+  res.end();
 }
 
 // ── start ───────────────────────────────────────────────────────────────────────────────────────
@@ -327,6 +420,9 @@ async function callback(env: Env, req: IncomingMessage, res: ServerResponse): Pr
 
   const bound = await memberFor(env, consumed.record, claims.accountId);
   if ('refusal' in bound) return refuse(bound.refusal);
+  // ADR 820: a connector's round trip ends in a code for its client, never in a browser session.
+  if (consumed.record.mode === 'connect')
+    return connectBack(env, res, consumed.record, bound.member, refuse);
 
   const session = await createBrowserSession(ctx.db, {
     teamId: team.id,

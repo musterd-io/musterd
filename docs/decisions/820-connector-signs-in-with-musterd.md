@@ -75,7 +75,9 @@ self-hosted teams and guests still need.
   writing any state. A `connect` callback issues a code for the bound member and redirects to the
   stored `redirect_uri` with the client's `state`, and the code redeems at `/token` with the
   client's verifier. A `connect` callback creates no `browser_sessions` row. An unbound account is
-  refused. A `connect` state works once. The real-browser test (lane `01M6S7DKXH`) gains a connect
-  run.
+  refused. A `connect` state works once.
+
+  Follows-up: 01M6S7DKXH0R7TN2QJV1CQQR7V (the real-browser test gains a connect run: a fake client
+  redirect on its own host, the code exchanged with the verifier)
 - **Experiment:** n/a. This is a sign-in path with a closed test set, and the falsifier is the
   browser run.

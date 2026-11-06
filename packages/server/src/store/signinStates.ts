@@ -15,7 +15,19 @@ import { hashToken } from './members.js';
 export const SIGNIN_STATE_TTL_MS = 10 * 60_000;
 const PRUNE_AFTER_MS = 60 * 60_000;
 
-export type SigninMode = 'signin' | 'invite' | 'link';
+export type SigninMode = 'signin' | 'invite' | 'link' | 'connect';
+
+/** ADR 820: the MCP client authorization a `connect` state was started for, already validated. */
+export interface ConnectRequest {
+  client_id: string;
+  redirect_uri: string;
+  code_challenge: string;
+  /** The client's own OAuth `state`, echoed back on the redirect. */
+  state: string;
+  scope?: string | undefined;
+  /** How the client registered (ADR 446 DCR or ADR 470 CIMD), carried onto the code. */
+  client_source: 'dcr' | 'cimd';
+}
 
 export interface SigninStateRow {
   id: string;
@@ -25,6 +37,8 @@ export interface SigninStateRow {
   member_id: string | null;
   invite_id: string | null;
   name: string | null;
+  /** ADR 820: a `connect` state's {@link ConnectRequest}, as JSON; null for every other mode. */
+  oauth_request: string | null;
   created_at: number;
   expires_at: number;
   consumed_at: number | null;
@@ -36,7 +50,14 @@ export type SigninStateOutcome =
 
 export async function startSigninState(
   db: Driver,
-  input: { teamId: string; mode: SigninMode; memberId?: string; inviteId?: string; name?: string },
+  input: {
+    teamId: string;
+    mode: SigninMode;
+    memberId?: string;
+    inviteId?: string;
+    name?: string;
+    oauthRequest?: ConnectRequest;
+  },
   now = Date.now(),
 ): Promise<{ id: string; state: string; expires_at: number }> {
   await db.run('DELETE FROM signin_states WHERE team_id = ? AND expires_at < ?', [
@@ -49,8 +70,8 @@ export async function startSigninState(
   const state = randomBytes(32).toString('base64url');
   const expires_at = now + SIGNIN_STATE_TTL_MS;
   await db.run(
-    `INSERT INTO signin_states (id, team_id, state_hash, mode, member_id, invite_id, name, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO signin_states (id, team_id, state_hash, mode, member_id, invite_id, name, oauth_request, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.teamId,
@@ -59,6 +80,7 @@ export async function startSigninState(
       input.memberId ?? null,
       input.inviteId ?? null,
       input.name ?? null,
+      input.oauthRequest ? JSON.stringify(input.oauthRequest) : null,
       now,
       expires_at,
     ],

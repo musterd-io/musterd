@@ -1394,6 +1394,21 @@ CREATE TABLE IF NOT EXISTS browser_sessions (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_browser_sessions_hash ON browser_sessions(team_id, secret_hash);
 CREATE INDEX IF NOT EXISTS idx_browser_sessions_member ON browser_sessions(team_id, member_id, revoked_at)`,
   },
+  {
+    // v147 — ADR 820 (lane 01M6S2VPWR): a `connect` sign-in state carries the MCP client's
+    // authorization request it was started for — client_id, redirect_uri, code_challenge, scope and
+    // the client's own state, as JSON, all already checked by the consent POST. The callback issues
+    // the OAuth code from it; nothing in it is a secret (the PKCE verifier never leaves the client).
+    version: 147,
+    sqlite: (db) => {
+      const cols = db.prepare(`SELECT name FROM pragma_table_info('signin_states')`).pluck().all();
+      if (!cols.includes('oauth_request'))
+        db.exec(`ALTER TABLE signin_states ADD COLUMN oauth_request TEXT`);
+    },
+    postgres: async (d) => {
+      await d.exec(`ALTER TABLE signin_states ADD COLUMN IF NOT EXISTS oauth_request TEXT`);
+    },
+  },
 ];
 
 /** The interrupt window's text guard (interruptCandidates.ts): a necessary condition for a row to

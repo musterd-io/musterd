@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { request } from 'node:http';
 import { GENERALIST_CAPABILITIES, PROTOCOL_VERSION } from '@musterd/protocol';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -546,6 +546,130 @@ describe('hosted /live sign-in (ADR 722)', () => {
         (a) => a.action === 'session.revoked',
       );
       expect(revoked.map((a) => JSON.parse(String(a.detail)).by)).toEqual(['rotate', 'rotate']);
+    });
+  });
+
+  describe('connecting an MCP client (ADR 820)', () => {
+    const REDIRECT = 'https://claude.ai/api/mcp/auth_callback';
+    const VERIFIER = 'v'.repeat(43);
+    const CHALLENGE = createHash('sha256').update(VERIFIER).digest('base64url');
+    const form = (o: Record<string, string>) => new URLSearchParams(o).toString();
+    const formHeaders = {
+      'content-type': 'application/x-www-form-urlencoded',
+      origin: TEAM_ORIGIN,
+    };
+
+    async function registerClient(): Promise<string> {
+      const r = await call('POST', '/oauth/revive/register', {
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ redirect_uris: [REDIRECT], client_name: 'Claude' }),
+      });
+      expect(r.status).toBe(201);
+      return (JSON.parse(r.body) as { client_id: string }).client_id;
+    }
+
+    const authorizeFields = (client_id: string, over: Record<string, string> = {}) => ({
+      client_id,
+      redirect_uri: REDIRECT,
+      state: 'client-state-1',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+      ...over,
+    });
+
+    /** The consent page's Sign in with musterd: POST authorize → 303 to the console. */
+    async function startConnect(client_id: string): Promise<string> {
+      const r = await call('POST', '/oauth/revive/authorize', {
+        headers: formHeaders,
+        body: form({ ...authorizeFields(client_id), via: 'musterd' }),
+      });
+      expect(r.status).toBe(303);
+      const loc = new URL(String(r.headers['location']));
+      expect(loc.origin).toBe(consoleOrigin);
+      expect(loc.pathname).toBe('/handback');
+      const state = cookieValue(r, SIGNIN_COOKIE)!;
+      expect(loc.searchParams.get('state')).toBe(state);
+      return state;
+    }
+
+    const connectStates = async () =>
+      (await seed.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM signin_states WHERE mode = 'connect'",
+        [],
+      ))!.n;
+
+    it('the hosted consent page leads with Sign in with musterd and asks for no credential', async () => {
+      const client_id = await registerClient();
+      const q = new URLSearchParams({ response_type: 'code', ...authorizeFields(client_id) });
+      const r = await call('GET', `/oauth/revive/authorize?${q.toString()}`);
+      expect(r.status).toBe(200);
+      expect(r.body).toContain('Sign in with musterd');
+      expect(r.body).toContain('name="via" value="musterd"');
+      expect(r.body).not.toContain('name="credential"');
+      // The guest and agent paths stay.
+      expect(r.body).toContain('name="invite"');
+      expect(r.body).toContain('name="agent_connect"');
+    });
+
+    it('signs in through the console and hands the client a code for the bound member', async () => {
+      const client_id = await registerClient();
+      const state = await startConnect(client_id);
+      const cb = await postCallback({ state, statement: statement() });
+      expect(cb.status).toBe(302);
+      const back = new URL(String(cb.headers['location']));
+      expect(`${back.origin}${back.pathname}`).toBe(REDIRECT);
+      expect(back.searchParams.get('state')).toBe('client-state-1');
+      const code = back.searchParams.get('code')!;
+      expect(code).toBeTruthy();
+      // No browser session: a connector never rides, or leaves, a /live cookie.
+      expect(await sessionRows()).toBe(0);
+      expect(cookies(cb).some((c) => c.startsWith(`${SESSION_COOKIE}=`))).toBe(false);
+      expect(cookies(cb).find((c) => c.startsWith(`${SIGNIN_COOKIE}=`))).toContain('Max-Age=0');
+      // The code redeems with the client's own PKCE verifier, as ada.
+      const tok = await call('POST', '/oauth/revive/token', {
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: form({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: REDIRECT,
+          client_id,
+          code_verifier: VERIFIER,
+        }),
+      });
+      expect(tok.status).toBe(200);
+      const access = (JSON.parse(tok.body) as { access_token: string }).access_token;
+      expect(access.startsWith('msat_')).toBe(true);
+      const issued = (await listAudit(seed, team.id)).find(
+        (a) => a.action === 'oauth.code_issued',
+      )!;
+      expect(issued.actor).toBe('ada');
+      expect(JSON.parse(String(issued.detail))).toMatchObject({ via: 'musterd' });
+    });
+
+    it('refuses an unregistered redirect_uri before any state is written', async () => {
+      const client_id = await registerClient();
+      const r = await call('POST', '/oauth/revive/authorize', {
+        headers: formHeaders,
+        body: form({
+          ...authorizeFields(client_id, { redirect_uri: 'https://evil.test/cb' }),
+          via: 'musterd',
+        }),
+      });
+      expect(r.status).toBe(400);
+      expect(r.headers['location']).toBeUndefined();
+      expect(await connectStates()).toBe(0);
+    });
+
+    it('refuses an account not on the team, and a connect state works once', async () => {
+      const client_id = await registerClient();
+      const a = await startConnect(client_id);
+      const stranger = await postCallback({ state: a, statement: statement('acct_stranger') });
+      expect(stranger.status).toBe(403);
+      expect(stranger.headers['location']).toBeUndefined();
+      const b = await startConnect(client_id);
+      expect((await postCallback({ state: b, statement: statement() })).status).toBe(302);
+      expect((await postCallback({ state: b, statement: statement() })).status).toBe(403);
+      expect(await refusals()).toEqual(expect.arrayContaining(['unbound', 'state_spent']));
     });
   });
 });

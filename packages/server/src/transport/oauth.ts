@@ -45,6 +45,7 @@ import type { MemberRow } from '../store/rows.js';
 import { redeemAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { requireTeam } from '../store/teams.js';
 import { CimdResolverCapacityError, isCimdClientId, resolveCimdClient } from './cimd.js';
+import { beginConnectSignin, connectAvailable } from './liveSession.js';
 import { originFrom } from './sponsoredAgentMint.js';
 
 let cimdResolver: (clientId: string) => Promise<OAuthClientMetadata> = resolveCimdClient;
@@ -356,6 +357,9 @@ function metadataFor(
   };
 }
 
+/** ADR 820 §6: the consent fields without a proof — Sign in with musterd proves at the callback. */
+const ConnectConfirmSchema = OAuthAuthorizeConfirmSchema.omit({ proof: true });
+
 function consentPage(input: {
   team: string;
   clientName: string;
@@ -365,6 +369,8 @@ function consentPage(input: {
   redirect_uri: string;
   state: string;
   code_challenge: string;
+  /** ADR 820: a hosted team on its own origin — lead with Sign in with musterd, drop the paste. */
+  musterd: boolean;
 }): string {
   const e = escapeHtml;
   // ADR 450 §2 + ADR 452 §5: three forms, one seam. All post the same OAuth fields; the invite form
@@ -382,7 +388,27 @@ ${input.scope ? `<input type="hidden" name="scope" value="${e(input.scope)}">` :
 <h1>${e(input.clientName)} wants to join <b>${e(input.team)}</b></h1>
 ${input.clientHost ? `<p class="host">Client ID host: <code>${e(input.clientHost)}</code></p>` : ''}
 <p class="lede">Signing in adds this app as your seat on the team. It can read the inbox and send as you until you revoke it.</p>
-<section class="primary">
+${
+  input.musterd
+    ? `<section class="primary">
+<h2>I'm on ${e(input.team)}</h2>
+<form method="post" action="">
+${hidden}
+<input type="hidden" name="via" value="musterd">
+<button type="submit">Sign in with musterd</button>
+</form>
+</section>
+<section>
+<h2>I'm new — I have an invite</h2>
+<form method="post" action="">
+${hidden}
+<label>Invite (the room code, or the value from the join link) <input class="mono" type="text" name="invite" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC-1234-5678"></label>
+<label>Pick a name <input type="text" name="member" autocomplete="off"></label>
+<button type="submit">Join ${e(input.team)}</button>
+</form>
+</section>
+`
+    : `<section class="primary">
 <h2>I'm new — I have an invite</h2>
 <form method="post" action="">
 ${hidden}
@@ -400,7 +426,8 @@ ${hidden}
 <button type="submit">Sign in this app as me</button>
 </form>
 </section>
-<section>
+`
+}<section>
 <h2>Connecting an agent?</h2>
 <form method="post" action="">
 ${hidden}
@@ -481,6 +508,8 @@ function consentFormBody(raw: string): {
   credential: string;
   invite: string;
   agent_connect: string;
+  /** ADR 820: `musterd` when the person chose Sign in with musterd. */
+  via: string;
 } {
   const params = new URLSearchParams(raw);
   const out: Record<string, string> = {};
@@ -498,6 +527,7 @@ function consentFormBody(raw: string): {
     credential: out['credential'] ?? '',
     invite: out['invite'] ?? '',
     agent_connect: out['agent_connect'] ?? '',
+    via: out['via'] ?? '',
   };
 }
 
@@ -693,6 +723,7 @@ export async function handleOAuthRoutes(
         redirect_uri: query.redirect_uri,
         state: query.state,
         code_challenge: query.code_challenge,
+        musterd: connectAvailable(ctx, req, slug),
       }),
     );
     return true;
@@ -704,6 +735,51 @@ export async function handleOAuthRoutes(
     checkRateLimit(ctx, req, 'authorize');
     const raw = (await readBody(req)).toString('utf8');
     const flat = consentFormBody(raw);
+    if (flat.via === 'musterd') {
+      // ADR 820 §2: the same checks every consent POST makes, then the console round trip for
+      // this one authorization. The callback issues the code; no browser session is involved.
+      if (!connectAvailable(ctx, req, slug)) {
+        sendOAuthError(
+          res,
+          new MusterdError('not_found', 'sign in with musterd is not available here'),
+        );
+        return true;
+      }
+      const ask = parseOrOAuth(ConnectConfirmSchema, {
+        client_id: flat.client_id,
+        redirect_uri: flat.redirect_uri,
+        state: flat.state,
+        code_challenge: flat.code_challenge,
+        code_challenge_method: flat.code_challenge_method,
+        ...(flat.scope ? { scope: flat.scope } : {}),
+      });
+      const connectClient = await getClientOrOAuth(ctx.db, team.id, ask.client_id, res);
+      if (!connectClient) return true;
+      if (!registeredRedirect(connectClient, ask.redirect_uri)) {
+        sendOAuthError(
+          res,
+          new MusterdError('bad_request', 'redirect_uri is not registered for this client'),
+        );
+        return true;
+      }
+      const { location, cookie } = await beginConnectSignin(ctx, team, {
+        client_id: ask.client_id,
+        redirect_uri: ask.redirect_uri,
+        code_challenge: ask.code_challenge,
+        state: ask.state,
+        ...(ask.scope ? { scope: ask.scope } : {}),
+        client_source: connectClient.client_source,
+      });
+      res.writeHead(303, {
+        location,
+        'set-cookie': cookie,
+        'cache-control': 'no-store',
+        pragma: 'no-cache',
+        'content-length': '0',
+      });
+      res.end();
+      return true;
+    }
     const body = parseOrOAuth(OAuthAuthorizeConfirmSchema, {
       client_id: flat.client_id,
       redirect_uri: flat.redirect_uri,
