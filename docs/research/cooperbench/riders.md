@@ -334,3 +334,13 @@ flight — a final deadlock after wakes, not the registered "never woken" class,
 first-call cost only for finished pairs ($7.18 seen of $23.58). A seat-ends-turn loop needs a wake
 reason other than the partner's act.
 
+## The act-lane cost series is closed (2026-11-06)
+
+nick, 2026-11-06 ~05:35Z in session, accepting the recommendation in findings 033 and 034: riders 7
+and 8 asked whether the act lane makes a CooperBench pair cheaper, and three runs say it does not —
+$22.50 with the seats waiting inside their first calls (033), $23.58 and a deadlock after wakes with
+the seats ending their turns (034), against $18.45 for the one run with no act lane (028). ADR 809 and
+ADR 810 stay: the lane is a 7 s wake with context for a seat whose acts come from people or working
+teammates. The next CooperBench work is the [flash comparison](./flash-manifest.md) against solo and
+CooperBench's own team harness.
+
