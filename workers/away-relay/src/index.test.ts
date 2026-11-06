@@ -890,6 +890,49 @@ describe('TeamRelay app half (ADR 676 §2, §9)', () => {
   });
 });
 
+describe('TeamRelay live nudge (ADR 819)', () => {
+  it('an app_nudge is one background push per dedupe id, and reports nothing back', async () => {
+    const pair = (await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
+      'sign',
+    ])) as CryptoKeyPair;
+    const der = new Uint8Array(
+      (await crypto.subtle.exportKey('pkcs8', pair.privateKey)) as ArrayBuffer,
+    );
+    const pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----`;
+    const { relay, socket, sent } = await relayWithSocket({
+      APNS_KEY_P8: pem,
+      APNS_KEY_ID: 'K',
+      APNS_TEAM_ID: 'D27MJGWNY3',
+      APNS_TOPIC: 'io.musterd.app',
+    });
+    const frame = JSON.stringify({
+      protocol: 1,
+      type: 'app_nudge',
+      binding: 'b1',
+      push: { token: 'ab'.repeat(32), environment: 'production' },
+      dedupe_id: 'nudge:b1:1',
+    });
+    const posted: { headers: Record<string, string>; body: string }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) => {
+        posted.push({ headers: init.headers as Record<string, string>, body: String(init.body) });
+        return new Response(null, { status: 200 });
+      }),
+    );
+    try {
+      await relay.webSocketMessage(socket as unknown as WebSocket, frame);
+      await relay.webSocketMessage(socket as unknown as WebSocket, frame);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.headers['apns-push-type']).toBe('background');
+    expect(posted[0]!.body).toBe('{"aps":{"content-available":1}}');
+    expect(sent).toEqual([]);
+  });
+});
+
 describe('TeamRelay socket liveness (ADR 756)', () => {
   const callback = () =>
     new Request('https://relay.example/callback/revive/ask-1', {

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { __resetApnsTokenForTest, apnsConfigFrom, apnsProviderToken, sendApns } from './apns.js';
+import {
+  __resetApnsTokenForTest,
+  apnsConfigFrom,
+  apnsProviderToken,
+  sendApns,
+  sendApnsBackground,
+} from './apns.js';
 import { appCallbackRef, apnsPayload, parseDaemonFrame, type DaemonFrame } from './relay.js';
 
 /**
@@ -289,5 +295,34 @@ describe('app frames and payload (ADR 676 §2)', () => {
     ).toBeNull();
     expect(appCallbackRef(JSON.stringify({ app: 2, kind: 'redeliver', binding: 'b1' }))).toBeNull();
     expect(appCallbackRef('payload=x')).toBeNull();
+  });
+});
+
+describe('the live nudge’s background push (ADR 819)', () => {
+  it('carries only content-available, at background priority, expiring in a minute', async () => {
+    const { pem } = await p8();
+    const config = { keyP8: pem, keyId: 'K', teamId: 'T', topic: 'io.musterd.app' };
+    const calls: { url: string; headers: Record<string, string>; body: string }[] = [];
+    const ok = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({
+        url: String(url),
+        headers: init!.headers as Record<string, string>,
+        body: String(init!.body),
+      });
+      return new Response(null, { status: 200, headers: { 'apns-id': 'apns-2' } });
+    });
+    const now = 1_800_000_000_000;
+    await expect(
+      sendApnsBackground(config, { token: TOKEN, environment: 'production' }, now, ok),
+    ).resolves.toEqual({ ok: true, status: 200, apnsId: 'apns-2' });
+    expect(calls[0]!.url).toBe(`https://api.push.apple.com/3/device/${TOKEN}`);
+    expect(calls[0]!.body).toBe('{"aps":{"content-available":1}}');
+    expect(calls[0]!.headers).toMatchObject({
+      'apns-topic': 'io.musterd.app',
+      'apns-push-type': 'background',
+      'apns-priority': '5',
+      'apns-expiration': String(now / 1000 + 60),
+    });
+    expect(calls[0]!.headers['apns-collapse-id']).toBeUndefined();
   });
 });

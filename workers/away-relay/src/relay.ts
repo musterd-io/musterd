@@ -126,6 +126,13 @@ export type DaemonFrame =
     }
   | {
       protocol: 1;
+      type: 'app_nudge';
+      binding: string;
+      push: AppPushTarget;
+      dedupe_id: string;
+    }
+  | {
+      protocol: 1;
       type: 'app_body';
       request_id: string;
       sealed: SealedBody | null;
@@ -287,6 +294,23 @@ export function parseDaemonFrame(raw: string): DaemonFrame | null {
       binding: v['binding'],
       push: { token: v['push'].token, environment: v['push'].environment },
       sealed: { v: 1, enc: v['sealed'].enc, ct: v['sealed'].ct },
+    };
+  }
+  if (v['type'] === 'app_nudge') {
+    // ADR 819: strict — nothing about the moment may ride a nudge, so any other key refuses it.
+    const allowed = new Set(['protocol', 'type', 'binding', 'push', 'dedupe_id']);
+    if (Object.keys(v).some((k) => !allowed.has(k))) return null;
+    if (typeof v['dedupe_id'] !== 'string' || v['dedupe_id'].length === 0) return null;
+    if (v['dedupe_id'].length > 128) return null;
+    if (typeof v['binding'] !== 'string' || v['binding'].length === 0 || v['binding'].length > 64)
+      return null;
+    if (!isPushTarget(v['push'])) return null;
+    return {
+      protocol: 1,
+      type: 'app_nudge',
+      binding: v['binding'],
+      push: { token: v['push'].token, environment: v['push'].environment },
+      dedupe_id: v['dedupe_id'],
     };
   }
   if (v['type'] === 'app_body') {

@@ -21,7 +21,7 @@
  * operator map, so rotation or revocation refuses the old socket's next frame (§4).
  */
 
-import { apnsConfigFrom, sendApns, type ApnsTiming } from './apns.js';
+import { apnsConfigFrom, sendApns, sendApnsBackground, type ApnsTiming } from './apns.js';
 import {
   cloudDestinationFrom,
   ingressSignedPayload,
@@ -841,6 +841,36 @@ export class TeamRelay implements DurableObject {
     return socket;
   }
 
+  /** ADR 819: the nudge dedupe ids this relay instance has pushed, newest last, bounded. */
+  private readonly nudged = new Set<string>();
+
+  /**
+   * Push one content-free background nudge (ADR 819) and answer nothing: the daemon does not wait
+   * on it, and a lost nudge only means the phone's next pull carries the landing. Once per id.
+   */
+  private async appNudge(
+    slug: string,
+    frame: Extract<DaemonFrame, { type: 'app_nudge' }>,
+    now: number,
+  ): Promise<void> {
+    if (this.nudged.has(frame.dedupe_id)) return;
+    this.nudged.add(frame.dedupe_id);
+    if (this.nudged.size > 256) this.nudged.delete(this.nudged.values().next().value!);
+    const config = apnsConfigFrom(this.env);
+    if (!config) return;
+    const result = await sendApnsBackground(config, frame.push, now);
+    // Route and outcome only — never the device token.
+    console.log(
+      JSON.stringify({
+        msg: 'apns_nudge',
+        team: slug,
+        ok: result.ok,
+        status: result.status,
+        reason: result.reason,
+      }),
+    );
+  }
+
   /** Push one sealed delivery to the app and tell the daemon how it went. Nothing is stored. */
   private async appDeliver(
     ws: WebSocket,
@@ -970,6 +1000,10 @@ export class TeamRelay implements DurableObject {
     }
     if (frame.type === 'app_deliver') {
       await this.appDeliver(ws, attachment?.slug ?? '', frame, now);
+      return;
+    }
+    if (frame.type === 'app_nudge') {
+      await this.appNudge(attachment?.slug ?? '', frame, now);
       return;
     }
     if (frame.type === 'app_body') {
