@@ -39,6 +39,7 @@ a field to declare tools, a seat could grant itself an outside-account integrati
    `<name>@synced`), `skills` (skill names beyond the role's own skill) and `mcp_servers`.
    - `mcp_servers` are **names** of servers in the human's layer to let through, such as a claude.ai
      connector. Defining a new server stays in repo-committed toolkits.
+     _(Amended 2026-11-05: the command or URL a harness runs is an admin grant in `seat_tools.servers`. ADR 817.)_
    - Each list is the whole set: writing it replaces it, never merges into it.
    - A team that never set `seat_tools` shares `superpowers@claude-plugins-official` only.
 3. **Only an admin human grants.** `seat_tools` is written through `POST /policy`, which is
@@ -91,6 +92,8 @@ are now its declared set on every start path.
   launcher keeps its argv, because `--setting-sources project,local` would drop musterd's own
   orient hooks, which live in the user layer. Wakes keep `--setting-sources` (ADR 426). So the
   isolation is: wakes exclude the user layer at launch; every path gets the folder complement.
+
+- _2026-11-05 (ADR 817):_ `seat_tools.servers` grants a server definition. A toolkit proposal is provisioned only when it matches that grant or a built-in definition.
 
 - _2026-11-05, increment 4 (lane `01M6HHSXBTG02XH81DGMRZS8NX`):_ each harness adapter declares a strength for plugins, skills, and mcp_servers. The measurements are on `docs/wiki/claude-code-seat-isolation.md` ("Other harnesses"). Codex writes plugin enable tables from the seat's `codex_plugins`, not from a toolkit file, and disables undeclared user MCP servers in the trusted project file. Cursor writes undeclared user MCP names to `~/.cursor/projects/<slug>/mcp-disabled.json` and does not write `~/.cursor/mcp.json`. OpenCode denies undeclared plugins, skills, and MCP servers, including both floor skills, through the project `permission` object. Grok and Muse are open on all three kinds and write nothing for them. Wake backends gained no new flag. A human folder with no agent binding still gets no complement.
 

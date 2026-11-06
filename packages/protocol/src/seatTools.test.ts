@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { PolicyOverrideSchema, PolicySchema, sparsifyPolicy } from './credentials.js';
-import { DEFAULT_SHARED_PLUGIN, PluginIdSchema, SeatToolsPolicySchema } from './seatTools.js';
+import {
+  DEFAULT_SHARED_PLUGIN,
+  PluginIdSchema,
+  SeatToolsPolicySchema,
+  SeatToolServerSchema,
+} from './seatTools.js';
 
 describe('seat_tools (ADR 794)', () => {
   it('a team that never set seat_tools reads superpowers only, and no role sets', () => {
@@ -12,6 +17,7 @@ describe('seat_tools (ADR 794)', () => {
         mcp_servers: [],
       },
       roles: {},
+      servers: {},
     });
     expect(DEFAULT_SHARED_PLUGIN).toBe('superpowers@claude-plugins-official');
   });
@@ -52,6 +58,34 @@ describe('seat_tools (ADR 794)', () => {
     ).toEqual({
       seat_tools: {
         roles: { ios: { claude_plugins: [], codex_plugins: [], skills: ['x'], mcp_servers: [] } },
+      },
+    });
+  });
+
+  it('a server grant is one transport, and an empty map is the default', () => {
+    expect(SeatToolServerSchema.parse({ command: 'fixture' })).toEqual({
+      command: 'fixture',
+      args: [],
+      env: {},
+    });
+    expect(SeatToolServerSchema.parse({ url: 'https://example.com/mcp' })).toEqual({
+      url: 'https://example.com/mcp',
+      args: [],
+      env: {},
+    });
+    expect(() =>
+      SeatToolServerSchema.parse({ command: 'fixture', url: 'https://example.com/mcp' }),
+    ).toThrow(/exactly one transport/);
+    expect(() => SeatToolServerSchema.parse({})).toThrow(/exactly one transport/);
+  });
+
+  it('sparsifyPolicy keeps a server definition and drops the default map', () => {
+    const granted = SeatToolsPolicySchema.parse({
+      servers: { warehouse: { command: 'fixture', args: ['--stdio'] } },
+    });
+    expect(sparsifyPolicy({ seat_tools: granted })).toEqual({
+      seat_tools: {
+        servers: { warehouse: { command: 'fixture', args: ['--stdio'], env: {} } },
       },
     });
   });

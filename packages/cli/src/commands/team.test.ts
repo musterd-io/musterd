@@ -1052,6 +1052,22 @@ describe('team policy command', () => {
     expect(cleared.seat_tools.roles).toEqual({});
   });
 
+  it('sets a server definition and names it in the confirmation', async () => {
+    const doc = { servers: { warehouse: { command: 'fixture', args: ['--stdio'] } } };
+    const set = await capture(() =>
+      teamCommand(parseArgs(['policy', '--seat-tools', JSON.stringify(doc)])),
+    );
+    expect(set.code).toBe(0);
+    expect(set.out).toContain('servers 1');
+    const json = JSON.parse(
+      (await capture(() => teamCommand(parseArgs(['policy', '--json'])))).out,
+    ) as { seat_tools: { servers: { warehouse: { command: string; args: string[] } } } };
+    expect(json.seat_tools.servers.warehouse).toMatchObject({
+      command: 'fixture',
+      args: ['--stdio'],
+    });
+  });
+
   // Guardian spec §4: the autonomy dial — flip one class without a release, never clobber siblings.
   it('sets a guardian tier, shows it, rejects junk, and clears with off', async () => {
     const set = await capture(() =>

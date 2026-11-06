@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { SeatToolServerSchema } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadToolkit, parseToolkit, type Toolkit } from './toolkit.js';
+import { BUILTIN_TOOLKITS, loadToolkit, parseToolkit, type Toolkit } from './toolkit.js';
 import { provisionToolkitIntoHarnesses } from './toolkitProvision.js';
 
 let dir: string;
@@ -152,5 +153,88 @@ describe('provisionToolkitIntoHarnesses (ADR 708)', () => {
     expect(outcome!.harness).toBe('claude-code');
     if (outcome!.error) expect(outcome!.error.length).toBeGreaterThan(0);
     else expect(outcome!.servers).toEqual(['expo', 'xcodebuild', 'apple-docs']);
+  });
+});
+
+function opencodeMcp(root: string): Record<string, unknown> {
+  const path = join(root, '.opencode', 'opencode.json');
+  if (!existsSync(path)) return {};
+  const doc = JSON.parse(readFileSync(path, 'utf8')) as { mcp?: Record<string, unknown> };
+  return doc.mcp ?? {};
+}
+
+describe('an MCP server is provisioned only from an admin grant or a built-in (ADR 817)', () => {
+  const proposal = (servers: unknown[]): Toolkit =>
+    parseToolkit({
+      toolkit: 'data',
+      charter: 'test',
+      tools: { mcp_servers: servers },
+    });
+
+  it('does not write a proposal that matches neither a grant nor a built-in', async () => {
+    const [outcome] = await provisionToolkitIntoHarnesses(
+      proposal([{ name: 'warehouse', command: 'fixture' }]),
+      ['opencode'],
+      dir,
+    );
+    expect(outcome).toMatchObject({ servers: [], refused: ['warehouse'], permissionsAdded: 0 });
+    expect(opencodeMcp(dir)['warehouse']).toBeUndefined();
+  });
+
+  it('writes a grant match, including env key order, and refuses a different command', async () => {
+    const grants = {
+      warehouse: SeatToolServerSchema.parse({
+        command: 'fixture',
+        args: ['--stdio'],
+        env: { A: '2', B: '1' },
+      }),
+      other: SeatToolServerSchema.parse({ command: 'not-the-proposal' }),
+      shifted: SeatToolServerSchema.parse({ command: 'fixture', args: ['--stdio'] }),
+    };
+    const [outcome] = await provisionToolkitIntoHarnesses(
+      proposal([
+        { name: 'warehouse', command: 'fixture', args: ['--stdio'], env: { B: '1', A: '2' } },
+        { name: 'other', command: 'fixture' },
+        { name: 'shifted', command: 'fixture', args: ['--http'] },
+      ]),
+      ['opencode'],
+      dir,
+      grants,
+    );
+    expect(outcome).toMatchObject({ servers: ['warehouse'], refused: ['other', 'shifted'] });
+    expect(opencodeMcp(dir)['warehouse']).toBeDefined();
+    expect(opencodeMcp(dir)['other']).toBeUndefined();
+    expect(opencodeMcp(dir)['shifted']).toBeUndefined();
+  });
+
+  it('writes a proposal equal to a built-in, and refuses that name with another command', async () => {
+    const builtin = BUILTIN_TOOLKITS['backend']!.tools.mcp_servers[0]!;
+    const [kept] = await provisionToolkitIntoHarnesses(
+      proposal([
+        {
+          name: builtin.name,
+          command: builtin.command,
+          args: [...builtin.args],
+          env: { ...builtin.env },
+        },
+      ]),
+      ['opencode'],
+      dir,
+    );
+    expect(kept).toMatchObject({ servers: [builtin.name], refused: [] });
+    expect(opencodeMcp(dir)[builtin.name]).toBeDefined();
+
+    const fresh = mkdtempSync(join(tmpdir(), 'musterd-toolkit-provision-'));
+    try {
+      const [dropped] = await provisionToolkitIntoHarnesses(
+        proposal([{ name: builtin.name, command: 'fixture', args: [...builtin.args] }]),
+        ['opencode'],
+        fresh,
+      );
+      expect(dropped).toMatchObject({ servers: [], refused: [builtin.name] });
+      expect(opencodeMcp(fresh)[builtin.name]).toBeUndefined();
+    } finally {
+      rmSync(fresh, { recursive: true, force: true });
+    }
   });
 });

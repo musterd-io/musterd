@@ -362,6 +362,7 @@ withDrivers('policy-http', (_o, kind) => {
             mcp_servers: [],
           },
           roles: {},
+          servers: {},
         },
       });
     });

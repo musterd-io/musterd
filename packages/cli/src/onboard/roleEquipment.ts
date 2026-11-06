@@ -8,6 +8,7 @@ import {
   type RoleFile,
   roleSkillName,
   roleToolkitName,
+  type SeatToolServer,
   seatRoles,
   SKILL_NAME_RE,
 } from '@musterd/protocol';
@@ -32,6 +33,7 @@ import {
   skillDescription,
   withRoleSkills,
 } from './roleSkills.js';
+import { fetchGrantedServers } from './seatTools/context.js';
 import { GENERALIST, loadToolkit, type Toolkit } from './toolkit.js';
 import { provisionToolkitIntoHarnesses, type ToolkitProvisionOutcome } from './toolkitProvision.js';
 
@@ -58,6 +60,11 @@ export interface RoleEquipTarget {
   harnessIds?: readonly string[] | undefined;
   /** Toolkit name already recorded. When omitted, read from `provisioned.json`. */
   recorded?: string | undefined;
+  /**
+   * Admin-granted server definitions (ADR 817). When omitted, read them from the daemon.
+   * A failed read grants none. Pass `{}` to skip the read.
+   */
+  servers?: Readonly<Record<string, SeatToolServer>> | undefined;
 }
 
 interface ResolvedEquip {
@@ -219,12 +226,15 @@ export async function equipRoleToolkits(
         harness: 'role-tools',
         servers: [],
         skipped: [],
+        refused: [],
         permissionsAdded: 0,
         error,
       });
     }
   }
   const dirs = [ctx.rosterHome, ctx.workspace].filter((d): d is string => d !== undefined);
+  const grants =
+    names.length === 0 ? {} : (target.servers ?? (await fetchGrantedServers(ctx.workspace)));
   for (const name of names) {
     const toolkit = tryLoadToolkit(name, ...dirs);
     if (!toolkit) {
@@ -232,12 +242,15 @@ export async function equipRoleToolkits(
         harness: name,
         servers: [],
         skipped: [],
+        refused: [],
         permissionsAdded: 0,
         error: `unknown toolkit "${name}" (no built-in and no .musterd/toolkits/${name}.json)`,
       });
       continue;
     }
-    outcomes.push(...(await provisionToolkitIntoHarnesses(toolkit, ctx.harnessIds, ctx.workspace)));
+    outcomes.push(
+      ...(await provisionToolkitIntoHarnesses(toolkit, ctx.harnessIds, ctx.workspace, grants)),
+    );
   }
   mergeRoleTools(ctx.workspace, outcomes);
   return outcomes;
@@ -353,6 +366,11 @@ export function equipmentReportLines(
     } else if (o.servers.length > 0) {
       const skipped = o.skipped.length > 0 ? ` (skipped: ${o.skipped.join(', ')})` : '';
       lines.push(`provisioned toolkit tools for ${o.harness}: ${o.servers.join(', ')}${skipped}`);
+    }
+    if (o.refused.length > 0) {
+      lines.push(
+        `left unprovisioned (no matching grant) for ${o.harness}: ${o.refused.join(', ')}`,
+      );
     }
   }
   return [...lines, ...notes];
