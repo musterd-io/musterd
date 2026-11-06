@@ -1377,3 +1377,52 @@ by `fly machine status`, so $0.53 is an estimate within a few cents, not a readi
 it cannot be read until the start path exists (ADR 816). Boot to daemon-up was ~8 s on
 2026-10-28; the unbounded term is the joiner's fold drain on a cold start after days stopped,
 which no reading on this page has measured yet.
+
+## 2026-11-06 — first live scale-to-zero rounds on delta-2 (ADR 816, lane `01M64B25QM`)
+
+Staged on the hub after nick's A2-approved ask: app-scoped deploy token (720 h) in the daemon's
+service env, `flyMachines` mapping `revive/cloud-delta-2 → musterd-agent-delta-2/87e126c01399e8`,
+hub daemon bounced healthy. Staging incident, recorded because it changes how the next token is
+handled: ghost's first verification shell-sourced the env file, the token value contains a space,
+and its tail printed into the session transcript. That token (`p0kOkVpb9m…`) was revoked within
+the minute and never ran in the daemon; the live token was re-minted into a quoted 0600 env file
+and verified over node without printing. Two revoked token ids now sit on the app from this
+staging (the first an aborted shape check); the live one was created 05:48Z, expires 2026-12-06.
+
+**Round 1** (pre-fix stop predicate). Machine stopped by hand 05:49:56Z; hub audit
+`fly.machine_start` 05:50:27.6Z, flyd `started` 05:50:27.4Z. Note honestly: that start fired
+8 s *before* ghost's directed `message` (05:50:35.9Z) — under the first implementation's
+cursor-only unread read, five already-answered acts counted as due, because delta-2 holds **no
+`inbox_cursors` row on the hub** (it reads on its joiner daemon). The same defect then held the
+idle stop open forever: at 06:16Z the machine was still started, 24 min after the reply. Fixed in
+#3989 (undelivered = directed newer than cursor *and* last wake activity; ADR 816 carries the
+dated note). Warm timings from this round: `steer` 05:51:55.2Z → `wake_leased` 05:52:01.8Z →
+`woke` 05:52:04.6Z → reply 05:52:06.1Z — **act→reply 10.9 s** on a running machine.
+
+**Idle stop** (fixed build, hub booted 06:27:43Z): audit `fly.machine_stop` **06:43:45.1Z**
+(`reason: idle`), flyd exit 06:43:46.4Z — one tick after the first sweep's running-since floor
+plus the 15 min window, as designed. A daemon restart resets that floor, so a stop can trail a
+restart by up to the idle window; by construction it can only ever be late, never early.
+
+**Round 2** (clean steer-first cold round, fixed predicate; the falsifier read):
+
+| leg | at (UTC) | Δ |
+| --- | --- | --- |
+| `steer` to the stopped seat | 06:47:22.0 | — |
+| audit `fly.machine_start` | 06:47:46.2 | 24.2 s (the 60 s tick's phase) |
+| flyd `started` | 06:47:46.1 | ~0 s |
+| first `residency.wake_leased` (boot + fold + first poll) | 06:48:06.2 | 20.1 s |
+| `residency.wake_failed` — `lease_expired` | 06:50:09.9 | 123.8 s (the 120 s lease TTL) |
+| second `wake_leased` → `woke` | 06:52:09.0 → 06:52:11.8 | 119.0 s gap, then 2.8 s |
+| reply | 06:52:13.2 | **act→reply 291.2 s** |
+
+**The ~2 min falsifier is breached on this round (291 s), and the fold drain is not why.** Boot
+to first lease was 20.1 s. What cost the round was the first lease expiring before its spawn
+occupied the seat (123.8 s), plus the 119.0 s until the retry leased — and the retry then woke
+in 2.8 s, the signature of a first-attempt cold start (workspace/session cold) that the second
+attempt found warm. Whether that is this machine's cold-spawn norm or a one-off is exactly what
+ADR 816's two-week eval (running hours, cold act→reply p50, flap count, realised machine line
+against the $13.84 baseline) exists to read; one round is an existence proof for the mechanism,
+not a latency verdict. The candidates if it is the norm: a longer first lease for a hub-started
+machine, or counting a `lease_expired` within the no-poll window differently — both are residency
+changes and neither is decided here.
