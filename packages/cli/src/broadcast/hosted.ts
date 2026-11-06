@@ -38,7 +38,7 @@ import {
   serveForwardsPort,
 } from '../integrations/tailscale.js';
 import type { Exec } from '../process.js';
-import { TITLE_SECRET_NAMES } from './channelTitle.js';
+import { titleSecretsState } from './channelTitle.js';
 
 /** The Fly app that hosts the stream. Overridable for a second environment. */
 export const DEFAULT_APP = 'musterd-broadcast';
@@ -555,25 +555,36 @@ export async function runChecks(ctx: DoctorCtx): Promise<Check[]> {
               missing.map((s) => `${s}=<${secretHint(s)}>`).join(' '),
           }),
     });
-    const titleMissing = TITLE_SECRET_NAMES.filter((s) => !secretRows.some((r) => r.name === s));
+    const titleState = titleSecretsState(secretRows.map((r) => r.name));
+    const titleRepair =
+      'node scripts/broadcast/twitch-bot-auth.mjs --client-id <app client id> --title';
     checks.push(
-      titleMissing.length === 0
+      titleState === 'refresh'
         ? {
             key: TITLE_CHECK_KEY,
             label: 'twitch title token set',
             state: 'ok',
-            detail: 'a rejected token is named in the machine log when the stream starts',
-          }
-        : {
-            key: TITLE_CHECK_KEY,
-            label: 'twitch title token set',
-            state: 'skip',
             detail:
-              `optional — the stream still starts and the title is left alone. ` +
-              `fly secrets set -a ${ctx.app} --stage ` +
-              'MUSTERD_TWITCH_CLIENT_ID=<app client id> ' +
-              'MUSTERD_TWITCH_TOKEN=<user token, channel:manage:broadcast>',
-          },
+              'refresh pair — the machine mints its access token at start; a refused refresh is named in the machine log',
+          }
+        : titleState === 'token'
+          ? {
+              key: TITLE_CHECK_KEY,
+              label: 'twitch title token set',
+              state: 'ok',
+              detail:
+                `access token only — Twitch expires it ~4 h after it was minted, and a stream started later runs "title off". ` +
+                `Stage the lasting refresh pair: ${titleRepair}`,
+            }
+          : {
+              key: TITLE_CHECK_KEY,
+              label: 'twitch title token set',
+              state: 'skip',
+              detail:
+                `optional — the stream still starts and the title is left alone. ${titleRepair} ` +
+                '(signs in as the channel account, channel:manage:broadcast; stages MUSTERD_TWITCH_CLIENT_ID, ' +
+                'MUSTERD_TWITCH_CLIENT_SECRET, MUSTERD_TWITCH_REFRESH_TOKEN)',
+            },
     );
   }
 

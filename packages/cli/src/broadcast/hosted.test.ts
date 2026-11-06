@@ -392,8 +392,34 @@ describe('runChecks', () => {
     expect(title.state).toBe('skip');
     expect(title.fix).toBeUndefined();
     expect(title.detail).toContain('the stream still starts');
-    expect(title.detail).toContain('MUSTERD_TWITCH_CLIENT_ID=<app client id>');
-    expect(title.detail).toContain('MUSTERD_TWITCH_TOKEN=<user token, channel:manage:broadcast>');
+    expect(title.detail).toContain('twitch-bot-auth.mjs --client-id <app client id> --title');
+    expect(title.detail).toContain('MUSTERD_TWITCH_REFRESH_TOKEN');
+  });
+
+  it('title row: an access token alone is ok but says it expires, the refresh pair is plain ok', async () => {
+    const withToken = await runChecks({ ...green });
+    const tokenRow = by(withToken, 'twitch-title');
+    expect(tokenRow.state).toBe('ok');
+    expect(tokenRow.detail).toContain('~4 h');
+    expect(tokenRow.detail).toContain('--title');
+    const withRefresh = await runChecks({
+      ...green,
+      exec: greenExec({
+        'fly secrets list': ok(
+          JSON.stringify([
+            { name: 'TS_AUTHKEY', digest: 'dc45' },
+            { name: 'MUSTERD_STREAM_KEY', digest: '26a8' },
+            { name: 'MUSTERD_TWITCH_CLIENT_ID', digest: 'a1b2' },
+            { name: 'MUSTERD_TWITCH_CLIENT_SECRET', digest: 'e5f6' },
+            { name: 'MUSTERD_TWITCH_REFRESH_TOKEN', digest: '0718' },
+          ]),
+        ),
+      }),
+    });
+    const refreshRow = by(withRefresh, 'twitch-title');
+    expect(refreshRow.state).toBe('ok');
+    expect(refreshRow.detail).toContain('refresh pair');
+    expect(refreshRow.detail).not.toContain('~4 h');
   });
 
   it('names the missing secret and never asks for a value it could print', async () => {
