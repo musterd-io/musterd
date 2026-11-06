@@ -3007,3 +3007,16 @@ settings dot, is eager, so initial JS rose 0.3 KB, from 150.2 to 150.5 KB agains
 cannot move that total, so the budget is raised by 3 KB to clear CI's read, which has run about 0.6 KB
 above the laptop's.
 
+## 2026-11-06 — hosted /live signs in with musterd: initial JS RAISED 154,500 → 155,500 B, total JS RAISED 426,000 → 428,000 B (lane 01M6S2TXHVHRZZ38ARRX4BR5PD)
+
+Unified sign-in increment 1b (ADR 722 §3). On load, `/live` asks the team's token route whether it
+is hosted; a self-hosted daemon answers 404 and nothing after it changes. The probe
+(`hostedSession.ts`) and the signed-out card (`HostedSignIn.tsx`) were eager at first and cost
+0.7 KB of initial JS (151.2 KB against 150.9, CI run 42281929864); both now load by dynamic
+import, which brought the laptop read to 150.8 KB. What stays eager is the page's own wiring in
+`live.tsx` — the hosted state, the refresh timer, the sign-out branch — and CI reads it at
+150.9 KB, on the ceiling, with total JS at 416.2 KB against 416.0 (run 42283213410). Initial JS is
+raised by 1 KB and total JS by 2 KB to clear CI's read, which has run about 0.6 KB above the
+laptop's. The next feature that adds eager code to `/live` should look for a lazy split before
+raising again.
+
