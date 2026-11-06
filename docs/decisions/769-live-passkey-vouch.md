@@ -190,6 +190,13 @@ this ADR is its record under hard rule 1. No schema, signing-byte or digest chan
 - The build needs fifty's three passkey fixes first. The lane's scope widens to the code files
   once they land.
 
+**2026-11-06: increment 1, protocol (lane `01M64SXW85`).** `vouchCheckCode(digest)` and the
+`check {code, instruction}` field on `approvalWording` land first, because the server, /live and the
+phone all build on them. fifty's three passkey fixes have landed (#3956, #3966, #3967, then #3972),
+so the server increment follows. Showing `check` on the phone is a mobile follow-up. That follow-up
+also adds a vouch vector to `approval.vectors.json`, which holds only the phone key's public half
+today, so no new signed vector can join it without a fresh vector key.
+
 ## Observability & Evaluation
 
 - **Traces:** the existing `device_key.enrolled` audit row (actor the member) and the countersign
