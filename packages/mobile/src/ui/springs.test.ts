@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { GLIDE, pillBottom, SPRING, TAB_BOUNCE, tabOf, tabTint } from './springs';
+import {
+  AUTO_RETURN_MS,
+  GLIDE,
+  leaveTo,
+  pillBottom,
+  SPRING,
+  TAB_BOUNCE,
+  tabOf,
+  tabTint,
+} from './springs';
 import { light } from './theme';
 
 describe('the tab pill (ADR 815, the app shell)', () => {
@@ -36,5 +45,14 @@ describe('the tab pill (ADR 815, the app shell)', () => {
   it('re-sorts rows on a glide, not a spring: no overshoot (nick, build 61: "a little too much movement")', () => {
     expect(GLIDE.duration).toBeGreaterThanOrEqual(120);
     expect(GLIDE.duration).toBeLessThanOrEqual(400);
+  });
+
+  it('a sent answer returns on its own after five seconds (nick: "fades away after say 5 seconds")', () => {
+    expect(AUTO_RETURN_MS).toBe(5_000);
+  });
+
+  it('returns to where you came from, or to Now when there is nothing behind (a notification opened it cold)', () => {
+    expect(leaveTo(true)).toBe('back');
+    expect(leaveTo(false)).toBe('home');
   });
 });

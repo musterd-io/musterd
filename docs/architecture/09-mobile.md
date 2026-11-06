@@ -467,6 +467,7 @@ src/ui/button.tsx     // the three buttons: one mustard primary, a grey secondar
 src/ui/glass.tsx      // Glass (Liquid Glass card, solid fallback) and the warm Backdrop (ADR 764)
 src/ui/icon.tsx       // an SF Symbol in the text's colour, with a text fallback (ADR 764)
 src/ui/moment.tsx     // one moment — on its way, done, or stopped — as a compact card near the top
+src/ui/sentMoment.tsx // the answer-sent moment: the check pops, a bar drains for 5 s, then it fades and returns you (a tap leaves at once)
 src/ui/questionCard.tsx // a question: its text, why, options to tap, and a typed answer
 src/ui/quickActions.tsx // one seat's five quick-action buttons, each saying Sending…, Sent or Try again
 src/ui/motion.tsx     // Rise, Squish, Breathe, Pop, Halo — RN Animated, off under Reduce Motion

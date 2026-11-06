@@ -21,6 +21,7 @@ import { confirmPairAgain } from '../../ui/pairAgain';
 import { QuestionCard } from '../../ui/questionCard';
 import { QuickActions } from '../../ui/quickActions';
 import { ago, Seat } from '../../ui/seat';
+import { SentMoment } from '../../ui/sentMoment';
 import { font, radius, space, usePalette } from '../../ui/theme';
 
 /**
@@ -192,19 +193,16 @@ export default function AskScreen() {
   if (phase.kind === 'loading') return <Moment title="Opening the ask…" />;
   if (phase.kind === 'sending') return <Moment title="Sealing your answer…" />;
   if (phase.kind === 'sent') {
+    // nick, 2026-11-06: the moment confirms, then fades and returns you on its own.
     return (
-      <Moment
-        icon="checkmark"
-        tone="done"
+      <SentMoment
         title={phase.question ? 'Answered' : 'Sent'}
         copy={
           phase.question
             ? 'Sealed for your team. The seat gets it on its next turn.'
             : 'Signed here and sealed for your team. It closes when the daemon records it.'
         }
-      >
-        <Button label="Back to asks" kind="secondary" onPress={() => router.back()} />
-      </Moment>
+      />
     );
   }
   if (phase.kind === 'gone') {
