@@ -15,7 +15,7 @@
 | PulseMCP | Its submit page says it takes no new servers for now and picks servers up from the official registry later | Nothing to do: the registry listing covers it |
 | Glama | Listed 2026-11-06 at [glama.ai/mcp/servers/musterd-io/musterd](https://glama.ai/mcp/servers/musterd-io/musterd), marked official; submitted by nick. No quality score yet: Glama needs a deployable release | The Dockerfile is `deploy/glama/` (#4058, lane `01M6S9N6HK`). nick enters the build settings from `deploy/glama/README.md` on the listing's Admin → Dockerfile page, then makes a release |
 | awesome-mcp-servers | PR [punkpeye/awesome-mcp-servers#18787](https://github.com/punkpeye/awesome-mcp-servers/pull/18787), opened 2026-11-06 by nick (`~/submit.sh`, prepared by sloane; the title carries the list's agent marker) | Waits on the list's maintainers and on Glama's quality score (the list's bot asks for one) |
-| mcp.so | Issue [chatmcp/mcpso#6869](https://github.com/chatmcp/mcpso/issues/6869), opened 2026-11-06 by nick, in the format other submissions use | Waits on mcp.so. Its description says "Nothing counts as done until another member accepts it"; the issue body takes "By default, " in front (big-body's review, ADR 234) |
+| mcp.so | Issue [chatmcp/mcpso#6869](https://github.com/chatmcp/mcpso/issues/6869), opened 2026-11-06 by nick, in the format other submissions use | Waits on mcp.so. Description qualified to "By default, nothing counts as done…" on 2026-11-06 (big-body's review, ADR 234) |
 
 ## 2. To submit, in order
 
