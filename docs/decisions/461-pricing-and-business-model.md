@@ -182,13 +182,16 @@ does not gate the post, and it does not.
 
 - `PRODUCT.md` gains one line pointing here under a new "Business model" heading; `ROADMAP.md`'s
   hosted-relay item is the build that makes §2 real and is not re-described here.
-- The open-source repo does not change: no cap, no key check, no telemetry. The org tier's key
-  gating is a build for a later ADR, scoped to org capabilities only.
+- The open-source repo does not change: no cap, no key check, no telemetry. *(Revised 2026-11-06:
+  the org features are unlocked by a signed-in musterd account, and the license key is gone (§3).
+  Account gating is a build for a later ADR, scoped to org capabilities only.)*
 - Named risk, accepted: a competitor forks the MIT daemon and hosts it. The counter is execution
   (§4); the trigger to revisit the license is in §Falsifiers, and it is a separate ADR if pulled.
-- Named risk, accepted: the two-human free tier is generous enough that a 2-person shop never
-  pays. That is the intended shape — the buyer is the team of 3–5 and the org — and the falsifier
-  below measures whether the third human converts.
+- Named risk, accepted (revised 2026-11-06): the Cloud allowance is generous enough that a small
+  team never leaves it. Its unit and size stay open until design partners set them (§2, §5), and
+  falsifier 1 measures whether an account that uses it up converts. *(Historical: the 2026-09-28 form
+  of this risk named the two-human free tier and the third human converting. The revision replaced
+  that rule; it no longer applies.)*
 - **`PRIVACY.md` changes before two things ship, each in its own PR.** The first is linking a local
   team to a musterd account (sign-in lane `01M6S2WB7D`): a linked team checks in with musterd.io for
   sign-in keys. The second is Cloud's allowance meter, which counts people and agent hours on Cloud. The
