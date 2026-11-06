@@ -64,6 +64,7 @@
     "adr250:repeat-wakes": "node --disable-warning=ExperimentalWarning scripts/research/adr-250-repeat-wakes.ts",
     "disputes:readout": "node --disable-warning=ExperimentalWarning scripts/research/sycophancy-readout.ts",
     "sycophancy:readout": "pnpm disputes:readout",
+    "quality:readout": "node --disable-warning=ExperimentalWarning scripts/research/acceptance/outcome-quality.ts",
     "style:readout": "node --disable-warning=ExperimentalWarning scripts/research/style-readout.ts",
     "next:readout": "node --disable-warning=ExperimentalWarning scripts/research/next-readout.ts",
     "critique:experiment": "node --disable-warning=ExperimentalWarning scripts/research/critique-channel-experiment.ts",
