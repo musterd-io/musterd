@@ -1180,7 +1180,7 @@ export interface TeamMessagesOpts {
  * asks the function, this read asks the column, and a divergence is a message visible on one
  * surface and hidden on the other.
  */
-function readScopeSql(scope: ReadScope): { sql: string; params: unknown[] } {
+export function readScopeSql(scope: ReadScope): { sql: string; params: unknown[] } {
   switch (scope.grade) {
     case 'full':
       return { sql: '', params: [] };

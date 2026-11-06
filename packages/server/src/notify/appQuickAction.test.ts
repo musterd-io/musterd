@@ -201,5 +201,62 @@ withDrivers('app roster waiting', (_o, kind) => {
       const roster = await buildAppRoster(ctx, team, { id: 'b1' } as ChannelBinding, 3_000);
       expect(roster.members).toBeUndefined();
     });
+
+    it('shows an ask only as the binding person’s /live would (ADR 407 read scope)', async () => {
+      const ctx = operatorCtx({
+        db: server.store,
+        traceDb: server.traceStore,
+        hub: new Hub(),
+        config: server.config,
+        rosterRoots: [],
+      });
+      await fetch(`http://127.0.0.1:${port}/teams`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug: 'eve-team', creator: { name: 'nick', kind: 'human' } }),
+      });
+      const team = (await getTeamBySlug(ctx.db, 'eve-team'))!;
+      const nick = (await ctx.db.get<{ id: string }>(
+        `SELECT id FROM members WHERE team_id = ? AND name = 'nick'`,
+        [team.id],
+      ))!;
+      const ada = (await addMember(ctx.db, team, { name: 'ada', kind: 'agent' })).row!;
+      const eve = (await addMember(ctx.db, team, { name: 'eve', kind: 'human' })).row!;
+      // A confidential ask (ADR 407): ada asks nick about bo. Only ada, nick and admins see it.
+      await insertMessage(
+        ctx.db,
+        team.id,
+        ada.id,
+        nick.id,
+        makeEnvelope({
+          id: 'conf-1',
+          team: 'eve-team',
+          from: 'ada',
+          to: { kind: 'member', name: 'nick' },
+          act: 'ask',
+          body: 'Is bo ok?',
+          ts: 2_000,
+          meta: { species: 'consult', tier: 'standard', about: 'bo' },
+        }),
+      );
+      ctx.memberSummaries = async () =>
+        [
+          {
+            name: 'ada',
+            kind: 'agent',
+            presence: 'online',
+            posture: 'working',
+            presences: [],
+            state: null,
+          },
+        ] as unknown as MemberSummary[];
+      const asSeenBy = async (memberId: string) =>
+        (await buildAppRoster(ctx, team, { id: 'b', member_id: memberId } as ChannelBinding, 3_000))
+          .members?.[0]?.label;
+      // eve is a team-grade member who is not party to it: ada reads as between tasks for her.
+      expect(await asSeenBy(eve.id)).toBe('between tasks');
+      // nick is its addressee (and an admin): ada is asking him.
+      expect(await asSeenBy(nick.id)).toBe('asking nick');
+    });
   });
 });

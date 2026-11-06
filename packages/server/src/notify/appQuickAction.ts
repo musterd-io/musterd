@@ -16,10 +16,12 @@ import type { ChannelBinding } from '../store/channelBindings.js';
 import { listGoals } from '../store/goals.js';
 import { listLanes } from '../store/lanes.js';
 import { getMemberById, listMembers } from '../store/members.js';
+import { readScopeSql } from '../store/messages.js';
 import { portraitsOf } from '../store/portraits.js';
 import { hasLivePresence } from '../store/presence.js';
 import { openQuestions } from '../store/questions.js';
 import { getResidency } from '../store/residency.js';
+import { messageVisibilityOf } from '../store/rows.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { rosterPoll } from './appPoll.js';
 import { verifyPhoneSigned } from './appQuestion.js';
@@ -258,6 +260,12 @@ async function appTeamFor(
   if (!ctx.memberSummaries) return {};
   const person = binding.member_id ? await getMemberById(ctx.db, binding.member_id) : null;
   const viewer = person && person.kind === 'human' ? person : null;
+  // ADR 407: only the asks this person's /live would show them — the timeline's own read scope, so
+  // a confidential ask or another pair's DM never reaches a phone as "asking <name>".
+  const scope = readScopeSql({
+    grade: viewer ? messageVisibilityOf(viewer) : 'public',
+    readerId: viewer?.id ?? '',
+  });
   const asks = await ctx.db.all<{
     id: string;
     body: string;
@@ -271,11 +279,11 @@ async function appTeamFor(
   }>(
     `SELECT msg.id, msg.body, msg.meta, msg.ts, msg.to_kind, msg.to_member,
             mf.name AS from_name, mt.name AS to_name, mt.kind AS to_member_kind
-       FROM messages msg
+       FROM (SELECT * FROM messages
+              WHERE team_id = ? AND act = 'ask' AND ts > ?${scope.sql}) msg
        JOIN members mf ON mf.id = msg.from_member AND mf.team_id = msg.team_id
        LEFT JOIN members mt ON mt.id = msg.to_member AND mt.team_id = msg.team_id
-      WHERE msg.team_id = ? AND msg.act = 'ask' AND msg.ts > ?
-        AND (msg.meta IS NULL OR json_extract(msg.meta, '$.question') IS NULL)
+      WHERE (msg.meta IS NULL OR json_extract(msg.meta, '$.question') IS NULL)
         AND NOT EXISTS (SELECT 1 FROM ask_decisions d WHERE d.team_id = msg.team_id AND d.ask_id = msg.id)
         AND NOT EXISTS (
           SELECT 1 FROM messages a JOIN members author ON author.id = a.from_member AND author.team_id = a.team_id
@@ -283,7 +291,7 @@ async function appTeamFor(
              AND json_extract(a.meta, '$.in_reply_to') = msg.id
         )
       ORDER BY msg.ts, msg.id`,
-    [team.id, now - OPEN_ASK_LOOKBACK_MS],
+    [team.id, now - OPEN_ASK_LOOKBACK_MS, ...scope.params],
   );
   // /live's teamCards: the freshest open ask per asker addressed to a person (or the team).
   const asking = new Map<string, { to: string | null }>();
