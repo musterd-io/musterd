@@ -1919,6 +1919,8 @@ export interface DepthItem {
   /** The same pixels as `fn`, as sprite/live parts in order. Used only when `renderScene` is given a
    * `SpriteCache`; absent on items that stay live (actors, the pet, anything that reads `t` all over). */
   parts?: SpritePart[];
+  /** The profiler's name for this item's stage (`items.<tag>`, lane 01M6S5V5DY). Absent: by its form. */
+  tag?: string;
 }
 
 /** Per-call rendering options — everything here is opt-in and absent on the baked path. */
@@ -4656,7 +4658,7 @@ export function renderScene(
 
   // The office dog sorts with everything else at its own floor position (behaviour lives in pet.ts).
   if (pet)
-    items.push({ d: depth(pet.lx, pet.ly) + 0.08, fn: () => drawDog(ctx, fit, pet, t, rendered) });
+    items.push({ d: depth(pet.lx, pet.ly) + 0.08, fn: () => drawDog(ctx, fit, pet, t, rendered), tag: 'dogs' });
   // The visiting dog sorts the same way, from its own sheet (lane 01M5XS6DP2).
   const visitor = opts.visitor;
   const visitorSheet = rendered.visitorDog;
@@ -4664,6 +4666,7 @@ export function renderScene(
     items.push({
       d: depth(visitor.lx, visitor.ly) + 0.08,
       fn: () => drawRenderedDog(ctx, fit, visitor, t, visitorSheet),
+      tag: 'dogs',
     });
   // The welcome wagon (lane 01M3F81DD9) trails the dog on the floor and sorts at its own position.
   if (pet?.cargo === 'wagon') {
@@ -4766,7 +4769,7 @@ export function renderScene(
       opts.welcome?.tosses.some((x) => x.name === name && t - x.t0 < TOSS_S) ?? false;
     const lanyard = inFlight ? undefined : opts.welcome?.lanyards.get(name);
     if (figure)
-      items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug, lanyard, figure) });
+      items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug, lanyard, figure), tag: 'people' });
 
     // Seated overlay: the desk paints over a member sitting behind it (correct — that is what a desk does
     // to your legs), but their forearms *rest on the surface*, above it, so they must paint on top of the
@@ -4778,6 +4781,7 @@ export function renderScene(
       items.push({
         d: seatedArmsDepth(slot),
         fn: () => drawActor(ctx, fit, pose, node, t, true, mug, undefined, figure),
+        tag: 'people',
       });
     }
 
@@ -4801,13 +4805,19 @@ export function renderScene(
   for (const it of items) {
     if (!cache || !it.parts) {
       run(it.fn);
+      prof?.mark(`items.${it.tag ?? 'live'}`);
       continue;
     }
     // One unit per part: a working desk's monitor animates, and its sprite halves around it should
     // not be damage because it does.
     for (const part of it.parts) {
-      if (part.kind === 'live') run(part.draw);
-      else run(() => blitSprite(ctx, cache, part.key, part.draw, opts.spriteOnly));
+      if (part.kind === 'live') {
+        run(part.draw);
+        prof?.mark(`items.${it.tag ?? 'screens'}`);
+      } else {
+        run(() => blitSprite(ctx, cache, part.key, part.draw, opts.spriteOnly));
+        prof?.mark(`items.${it.tag ?? 'cached'}`);
+      }
     }
   }
 
