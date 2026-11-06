@@ -1,0 +1,137 @@
+{
+ "flash2-musterd+flash2r-musterd": {
+  "base_context_tokens_median": 25352,
+  "calls": 1248,
+  "calls_by": {
+   "bash:other": 10.0,
+   "edit": 98.66666666666666,
+   "final": 100.0,
+   "git:inspect": 13.0,
+   "git:integrate": 207.16666666666669,
+   "meta:ToolSearch": 6.0,
+   "musterd:lane_board": 20.5,
+   "musterd:lane_open": 60.33333333333333,
+   "musterd:lane_release": 0.5,
+   "musterd:lane_resolve": 26.83333333333333,
+   "musterd:lane_submit": 1.0,
+   "musterd:lane_update": 31.16666666666666,
+   "musterd:team_inbox_check": 267.33333333333337,
+   "musterd:team_send": 127.33333333333331,
+   "read": 128.66666666666666,
+   "test": 139.5,
+   "tool:team_send": 1.0,
+   "wait": 9.0
+  },
+  "carried": {
+   "bash:other": 0.000565,
+   "edit": 0.0226486,
+   "git:inspect": 0.006861000000000001,
+   "git:integrate": 0.03537319999999999,
+   "meta:ToolSearch": 0.0,
+   "musterd:lane_board": 0.003392000000000001,
+   "musterd:lane_open": 0.04762600000000002,
+   "musterd:lane_release": 9.78e-05,
+   "musterd:lane_resolve": 0.0025604,
+   "musterd:lane_submit": 0.0001236,
+   "musterd:lane_update": 0.0055347999999999994,
+   "musterd:team_inbox_check": 0.07264719999999988,
+   "musterd:team_send": 0.005144999999999989,
+   "read": 0.30680739999999984,
+   "test": 0.021869000000000003,
+   "tool:team_send": 5.4e-05,
+   "wait": 0.0034979999999999994
+  },
+  "issued": {
+   "bash:other": 0.1428528324481147,
+   "edit": 1.3579510937952648,
+   "final": 5.879508281185311,
+   "git:inspect": 0.13409776376902066,
+   "git:integrate": 2.56517562694754,
+   "meta:ToolSearch": 0.07256245278484014,
+   "musterd:lane_board": 0.3218241213567759,
+   "musterd:lane_open": 0.8376562331043934,
+   "musterd:lane_release": 0.00587535360281195,
+   "musterd:lane_resolve": 0.3637109948555225,
+   "musterd:lane_submit": 0.015935193433895295,
+   "musterd:lane_update": 0.3868182882957847,
+   "musterd:team_inbox_check": 5.916050703041665,
+   "musterd:team_send": 1.7444593290608383,
+   "read": 2.7662451044939793,
+   "test": 1.97193975097515,
+   "tool:team_send": 0.014504215189873418,
+   "wait": 0.14767526165922332
+  },
+  "pairs": 50,
+  "priced": 24.64484260000002,
+  "reported": 24.644842599999993,
+  "sessions": 100
+ },
+ "flash2-solo": {
+  "base_context_tokens_median": 18251,
+  "calls": 317,
+  "calls_by": {
+   "bash:other": 3.0,
+   "edit": 65.5,
+   "final": 50.0,
+   "git:inspect": 1.0,
+   "read": 101.0,
+   "test": 92.5,
+   "wait": 4.0
+  },
+  "carried": {
+   "bash:other": 1.8599999999999998e-05,
+   "edit": 0.005719600000000001,
+   "git:inspect": 0.0008688000000000001,
+   "read": 0.11586460000000001,
+   "test": 0.006811800000000004,
+   "wait": 9.28e-05
+  },
+  "issued": {
+   "bash:other": 0.04337125366135235,
+   "edit": 1.1417838583520183,
+   "final": 3.0646912973069815,
+   "git:inspect": 0.013529409980806142,
+   "read": 2.6864926273060186,
+   "test": 1.7156326507598758,
+   "wait": 0.07121010263295066
+  },
+  "pairs": 50,
+  "priced": 8.736711199999998,
+  "reported": 8.736711200000002,
+  "sessions": 50
+ },
+ "flash2-team": {
+  "base_context_tokens_median": 18590,
+  "calls": 708,
+  "calls_by": {
+   "bash:other": 21.0,
+   "edit": 204.0,
+   "final": 101.0,
+   "git:inspect": 3.0,
+   "read": 182.5,
+   "test": 186.5,
+   "wait": 10.0
+  },
+  "carried": {
+   "bash:other": 0.019032,
+   "edit": 0.05404359999999999,
+   "git:inspect": 0.0005068,
+   "read": 0.20307300000000006,
+   "test": 0.014937599999999995,
+   "wait": 0.0005904000000000001
+  },
+  "issued": {
+   "bash:other": 0.5234878817149244,
+   "edit": 3.325708417443497,
+   "final": 4.4361622526051185,
+   "git:inspect": 0.043831122746887656,
+   "read": 4.635583085000346,
+   "test": 3.1101188132639357,
+   "wait": 0.17735782722528376
+  },
+  "pairs": 50,
+  "priced": 16.25224939999999,
+  "reported": 16.148857800000002,
+  "sessions": 100
+ }
+}
