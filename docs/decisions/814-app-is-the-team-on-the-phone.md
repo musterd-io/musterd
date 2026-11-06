@@ -88,6 +88,13 @@ decides the shell and the team.
   `AppMemberSchema` (with `APP_MEMBER_STATES`) and `AppForYouSchema` in `appChannel.ts`, optional
   on the roster delivery as `members` (at most `APP_ROSTER_MAX`) and `for_you` (at most
   `APP_FOR_YOU_MAX` 32, summaries at most `APP_FOR_YOU_SUMMARY_MAX` 200). SPEC A.33 says so.
+- _(2026-11-06, lane `01M6Q58N0T2K2ZT90JC03WJ0Q1`.)_ The daemon folds `members` in
+  `notify/appTeam.ts` by `teamCards()`'s rule, and labels the model with `shortModel`, which moved
+  from `packages/web` to `@musterd/protocol/model` so the two surfaces share one rule. It reads the
+  roster through an injected `ctx.memberSummaries` (`summarize`, the read /live gets), because
+  `notify/` cannot import the transport that imports it; without the hook, no `members` is sent.
+  The open asks behind "asking <name>" and `for_you` go through the timeline's ADR 407 read scope
+  at the binding person's grade, so a phone never shows an ask its person's /live would hide.
 
 ## Observability & Evaluation
 
