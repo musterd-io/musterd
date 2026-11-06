@@ -46,13 +46,7 @@ import {
   loadMemberIdentity,
   saveMemberIdentity,
 } from '../live/memberIdentity';
-import { HostedSignIn } from '../live/HostedSignIn';
-import {
-  probeHostedSession,
-  refreshDelayMs,
-  signOutHosted,
-  type HostedSession,
-} from '../live/hostedSession';
+import type { HostedSession } from '../live/hostedSession';
 import { firehoseSound, roomTone, setSoundInBackground, soundInBackground } from '../live/sound';
 import { useLiveStream } from '../live/useLiveStream';
 import { HealthBanner } from '../live/HealthBanner';
@@ -102,6 +96,12 @@ export const Route = createFileRoute('/live')({
   component: LivePage,
 });
 
+// Hosted sign-in (ADR 722) is off the eager graph: a self-hosted page pays one dynamic import for
+// the probe and never loads the card (ADR 151 / 183 — lazy-loading is what moves initial JS).
+const loadHosted = () => import('../live/hostedSession');
+const LazyHostedSignIn = lazy(() =>
+  import('../live/HostedSignIn').then((m) => ({ default: m.HostedSignIn })),
+);
 const TEAM_KEY = 'musterd.live.team';
 /** Sign-in copy spec §4: a hosted session that ended somewhere else. */
 const SIGNED_OUT_ELSEWHERE = 'You were signed out. Sign in again to keep going.';
@@ -466,7 +466,8 @@ function LivePage() {
   const signOut = useCallback(() => {
     if (hosted === 'signed_in') {
       // Ends this browser's session on the team (the server closes its sockets); nothing local.
-      void signOutHosted()
+      void loadHosted()
+        .then((m) => m.signOutHosted())
         .catch(() => undefined)
         .finally(() => hostedSignedOut(null));
       return;
@@ -689,13 +690,16 @@ function LivePage() {
       // Ask the team's own origin whether this is a hosted team first (ADR 722 §3): one same-origin
       // POST, a 404 on a self-hosted daemon, after which everything below runs exactly as before.
       setHosted('probing');
-      void probeHostedSession().then((s) => {
-        if (s.kind === 'signed_in') return hostedSignedIn(s);
-        if (s.kind === 'signed_out') return hostedSignedOut(null);
-        setHosted('self_hosted');
-        if (urlTeam) void watch(urlTeam);
-        else setTeam(window.localStorage.getItem(TEAM_KEY) ?? '');
-      });
+      void loadHosted()
+        .then((m) => m.probeHostedSession())
+        .catch((): HostedSession => ({ kind: 'self_hosted' }))
+        .then((s) => {
+          if (s.kind === 'signed_in') return hostedSignedIn(s);
+          if (s.kind === 'signed_out') return hostedSignedOut(null);
+          setHosted('self_hosted');
+          if (urlTeam) void watch(urlTeam);
+          else setTeam(window.localStorage.getItem(TEAM_KEY) ?? '');
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -704,15 +708,16 @@ function LivePage() {
   // the session ended (revoked, signed out elsewhere): back to the button, saying so.
   useEffect(() => {
     if (hosted !== 'signed_in' || hostedExpiresAt === null) return;
-    const t = window.setTimeout(
-      () => {
-        void probeHostedSession().then((s) => {
+    // A minute before expiry — hostedSession's refreshDelayMs, inlined so the timer needs no import.
+    const delay = Math.max(0, hostedExpiresAt - Date.now() - 60_000);
+    const t = window.setTimeout(() => {
+      void loadHosted()
+        .then((m) => m.probeHostedSession())
+        .then((s) => {
           if (s.kind === 'signed_in') hostedSignedIn(s);
           else hostedSignedOut(SIGNED_OUT_ELSEWHERE);
         });
-      },
-      refreshDelayMs({ expiresAt: hostedExpiresAt }, Date.now()),
-    );
+    }, delay);
     return () => window.clearTimeout(t);
   }, [hosted, hostedExpiresAt, hostedSignedIn, hostedSignedOut]);
 
@@ -875,7 +880,9 @@ function LivePage() {
       </header>
 
       {!connected && hosted === 'signed_out' ? (
-        <HostedSignIn notice={formError} />
+        <Suspense fallback={null}>
+          <LazyHostedSignIn notice={formError} />
+        </Suspense>
       ) : !connected && hosted === 'probing' ? null : !connected ? (
         <ConnectForm
           team={team}
