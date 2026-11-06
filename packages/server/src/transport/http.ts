@@ -2887,7 +2887,7 @@ async function loadRosterBase(ctx: Ctx, teamSlug: string, teamId: string) {
  * capabilities (the authority map: who is admin, who is muted, who is narrowed). Permissive by default —
  * no token still yields a usable roster, just without the authority detail that only an admin dashboard needs.
  */
-async function summarize(
+export async function summarize(
   ctx: Ctx,
   teamSlug: string,
   teamId: string,

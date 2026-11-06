@@ -1,4 +1,8 @@
 import type { LaneState } from '@musterd/protocol';
+import { shortModel } from '@musterd/protocol/model';
+
+/** Glanceable model label — moved to protocol so the daemon labels a model as /live does (ADR 814). */
+export { shortModel };
 
 /** Friendly harness labels — never collapse `claude-code` to bare `claude` (reads as the model family). */
 const SURFACE_SHORT: Record<string, string> = {
@@ -18,57 +22,6 @@ export function shortSurface(surface: string | null | undefined): string {
   if (!surface) return '';
   return SURFACE_SHORT[surface] ?? surface;
 }
-
-/** Glanceable model label — prefer family + version crumb over raw id. */
-export function shortModel(model: string | null | undefined): string {
-  if (!model) return '';
-  const raw = model.trim();
-  if (!raw || raw.toLowerCase() === 'unknown') return '';
-  const lower = raw.toLowerCase();
-  // claude-opus-4-5 → opus 4.5 (Anthropic encodes the minor as a hyphen).
-  // `fable` belongs in this list: without it, claude-fable-5 fell through to the generic fallback and
-  // came out "claude fable" — the vendor prefix plus a family name, and no version at all. Any new
-  // Claude family name has to be added here or it regresses the same way, silently.
-  const anthropic = lower.match(/\b(opus|sonnet|haiku|fable)[- ]?(\d+)(?:[-.](\d+))?/);
-  if (anthropic) {
-    const ver = anthropic[3] ? `${anthropic[2]}.${anthropic[3]}` : anthropic[2]!;
-    return `${anthropic[1]} ${ver}`;
-  }
-  // Everything else reads as its own words: family, version, and the named variant the lab gave it
-  // ("gpt-6-luna" → "gpt 6 luna", "gemini-4-argon-contributor" → "gemini 4 argon"). Two things the
-  // old rules lost (nick, 2026-10-19): a per-family rule kept family + version only, so GPT 6 Luna
-  // read "gpt 6"; and the fallback kept the vendor prefix, so moonshotai/kimi-k3 read
-  // "moonshotai/kimi k3". What is dropped is only what describes the route, not the model.
-  const words = lower
-    .slice(lower.lastIndexOf('/') + 1)
-    .split(/[-_\s]+/)
-    .filter((w) => w && !ROUTE_WORDS.has(w) && !/^\d{6,8}$/.test(w));
-  const kept: string[] = [];
-  for (const w of words) {
-    if (kept.length && [...kept, w].join(' ').length > MAX_SHORT) break;
-    kept.push(w);
-  }
-  return kept.join(' ');
-}
-
-/** The plate's width, in characters — whole words only, never a cut mid-word. */
-const MAX_SHORT = 20;
-
-/** Words about how a model was reached, not which one: price tier, programme, preview flag, the
- *  reasoning effort a harness appends. The raw id keeps them on hover. */
-const ROUTE_WORDS = new Set([
-  'free',
-  'contributor',
-  'preview',
-  'latest',
-  'exp',
-  'experimental',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-]);
 
 /**
  * Short model label for the nameplate. Collapsed `/live` shows the provider icon instead; broadcast

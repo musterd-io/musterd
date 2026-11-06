@@ -12,7 +12,7 @@ import {
   resolveConfig,
   resolveRosterRoots,
 } from './config.js';
-import { operatorCtx, type Ctx } from './context.js';
+import { operatorCtx, teamCtx, type Ctx } from './context.js';
 import type { Driver } from './db/driver.js';
 import { schemaVersionOf } from './db/migrations.js';
 import { openDriver } from './db/open.js';
@@ -56,7 +56,7 @@ import { attachSyncStream } from './sync/streamHub.js';
 import { startSyncStream } from './sync/streamJoiner.js';
 import { startTracePush } from './sync/tracePush.js';
 import { registerRuntimeGauges, startTelemetry, telemetryEnabled } from './telemetry.js';
-import { handleHttp } from './transport/http.js';
+import { handleHttp, summarize } from './transport/http.js';
 import { Hub } from './transport/hub.js';
 import type { RemoteMcpFactory } from './transport/mcpHttp.js';
 import { broadcastReconciled } from './transport/memberAdded.js';
@@ -295,6 +295,10 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   // The hub's claim arbitration runs on the request ctx and pulls on an unknown seat too (lane
   // 01M4S7N1HV); same hook, same per-seat rate limit, so a fold and a claim never double the pulls.
   ctx.onUnresolvedSeat = opCtx.onUnresolvedSeat;
+  // ADR 814: the app roster's `members` read the roster exactly as /live does.
+  opCtx.memberSummaries = (team, viewer) =>
+    summarize(teamCtx(opCtx, team.id), team.slug, team.id, viewer);
+  ctx.memberSummaries = opCtx.memberSummaries;
   // ADR 533: how the policy review ask is stored and delivered — the daemon's route, daemon-composed.
   const policyReviewSend = async (from: MemberRow, env: Envelope) => {
     const team = (await getTeamBySlug(opDb, env.team))!;
