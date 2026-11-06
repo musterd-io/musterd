@@ -377,6 +377,7 @@ live/
     replay.ts                   // replay on open (nick, 2026-10-12): the last ten minutes' lane walks (claim / pin / handoff) from backfill, oldest first, capped — the handle plays them at REPLAY_TEMPO× then settles to live
     domCadence.ts               // broadcast only: the page's DOM animations (steam, motes, twinkles, fan, banner) are paused and advanced per drawn frame — the box's software compositor was composing 60 frames/s over a 15 fps canvas (lane 01M4S96VAW, 2026-10-13)
     frameClock.ts               // how far one drawn frame advances the room: wall time, capped at the 250 ms drift beat — the old 50 ms cap ran the stream in slow motion whenever the capture box drew under 20/s (lane 01M6S4FE8C, 2026-11-06)
+    frameProfile.ts             // broadcast only: main-thread ms per stage of a drawn frame (setup, shell, walls, windows, items, light, overlays, labels, measure/plan, sim), surfaced as `stats().prof` and logged by `--perf` as `stageMs` — the instrument that ranks what a frame costs on the stream box (lane 01M6S5V5DY)
     actors.ts / nav.ts / seating.ts / layout.ts / iso.ts   // placement, walk routing, iso projection
     skeleton.ts                 // the beat vocabulary: GESTURE and the idle/errand split, the chair curves under a seated beat, the typing rhythm, a member's seed (ADR 133's joint solver went with the painted office, lane 01M5D8EJ40)
     appearance.ts               // THE character identity: skin/hair/hats/clothes, name-seeded, pure — ADR 142

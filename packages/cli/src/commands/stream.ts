@@ -69,7 +69,7 @@ import { CliError } from '../errors.js';
 import { probeUpgradeHost, tailnetTarget } from '../integrations/tailscale.js';
 import { realExec, type Exec } from '../process.js';
 import { theme } from '../render/theme.js';
-import { summarize, type PerfSample } from './broadcast-perf.js';
+import { meanStageMs, summarize, type PerfSample } from './broadcast-perf.js';
 import { mintBroadcastSeat, seatFromEnv, type BroadcastSeat } from './broadcast.js';
 import { resolveRead } from './helpers.js';
 
@@ -614,10 +614,22 @@ async function perfVerb(a: {
           ` · queue ${m.queueGrowthBytesPerSec.toFixed(0)} B/s · chrome ${m.meanCpu.chrome.toFixed(0)}% · other ${m.meanCpu.other.toFixed(0)}%\n`,
       ),
     );
+    // Where a frame's time goes, costliest first (lane 01M6S5V5DY) — only a page with the profiler has it.
+    const stages = meanStageMs(samples as unknown as PerfSample[]);
+    if (stages) a.out(theme.meta(`  ms/frame · ${formatStages(stages)}\n`));
   } else {
     a.out(jsonl);
   }
   return 0;
+}
+
+/** `frame 98.1 · items 21.3 · walls 12.0 …`: the whole interval first, then stages costliest first. */
+export function formatStages(stages: Record<string, number>): string {
+  const { frame, ...rest } = stages;
+  const parts = Object.entries(rest)
+    .sort((x, y) => y[1] - x[1])
+    .map(([k, v]) => `${k} ${v.toFixed(1)}`);
+  return [...(frame !== undefined ? [`frame ${frame.toFixed(1)}`] : []), ...parts].join(' · ');
 }
 
 /** How long `stream perf --follow` reads by default: the five minutes a measured run records. */

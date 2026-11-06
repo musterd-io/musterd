@@ -39,6 +39,13 @@ export interface PerfSample {
   draws?: number;
   /** `draws` as a rate over this interval — the waste shows against `emitted`, not `deliveredFps`. */
   drawFps?: number;
+  /**
+   * Mean main-thread milliseconds per drawn frame, by stage, over this interval (the page's
+   * `stats().prof`, lane 01M6S5V5DY). `frame` is the whole rAF interval; what the other stages leave
+   * of it is raster/composite work the page cannot attribute, plus idle. Absent on a page without
+   * the profiler, and on an interval that drew nothing.
+   */
+  stageMs?: Record<string, number>;
   /** 1-minute load average. Context only: the capture's own ~1.5 cores dominate it. @see cpu.other */
   load1: number;
   /**
@@ -179,7 +186,10 @@ export interface PerfProbes {
   /** Cumulative CFR frames the pump has emitted. */
   emitted: () => number;
   /** `window.__office.stats()` over CDP; undefined when the probe fails or the scene isn't up yet. */
-  office: () => Promise<{ ticks: number; draws: number } | undefined>;
+  office: () => Promise<
+    | { ticks: number; draws: number; prof?: { frames: number; ms: Record<string, number> } }
+    | undefined
+  >;
   /** Percent CPU per tree, plus everything that is not us. @see PerfSample.cpu */
   cpu: () => Promise<{ chrome: number; ffmpeg: number; pipeline: number; other: number }>;
   /** 1-minute load average. */
@@ -205,6 +215,7 @@ export function makePerfRecorder(probes: PerfProbes): {
   let bytes = 0;
   let lastT = 0;
   let lastDraws: number | undefined;
+  let lastProf: { frames: number; ms: Record<string, number> } | undefined;
   return {
     frame(n) {
       frames++;
@@ -217,6 +228,7 @@ export function makePerfRecorder(probes: PerfProbes): {
       // Rates come from *deltas* of cumulative counters: the office reports since-mount totals, so a
       // naive `draws / elapsed` would smear a mid-capture change across the whole run.
       const drawDelta = office && lastDraws !== undefined ? office.draws - lastDraws : undefined;
+      const stageMs = stageDelta(lastProf, office?.prof);
       const sample: PerfSample = {
         t,
         frames,
@@ -227,6 +239,7 @@ export function makePerfRecorder(probes: PerfProbes): {
         emitted: probes.emitted(),
         ...(office ? { ticks: office.ticks, draws: office.draws } : {}),
         ...(drawDelta !== undefined && dtSec > 0 ? { drawFps: drawDelta / dtSec } : {}),
+        ...(stageMs ? { stageMs } : {}),
         load1: probes.load1(),
         cpu,
       };
@@ -235,8 +248,41 @@ export function makePerfRecorder(probes: PerfProbes): {
       bytes = 0;
       lastT = t;
       lastDraws = office?.draws ?? lastDraws;
+      lastProf = office?.prof ?? lastProf;
     },
   };
+}
+
+/**
+ * Per-drawn-frame mean ms by stage between two cumulative profile readings. Undefined until there are
+ * two readings, when no frame was drawn between them, or after a page reload reset the counters.
+ */
+export function stageDelta(
+  prev: { frames: number; ms: Record<string, number> } | undefined,
+  cur: { frames: number; ms: Record<string, number> } | undefined,
+): Record<string, number> | undefined {
+  if (!prev || !cur) return undefined;
+  const frames = cur.frames - prev.frames;
+  if (frames <= 0) return undefined;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(cur.ms)) {
+    const d = v - (prev.ms[k] ?? 0);
+    if (d >= 0) out[k] = Math.round((d / frames) * 100) / 100;
+  }
+  return out;
+}
+
+/** Mean of each stage's per-frame ms across the samples that carry one — the summary's breakdown. */
+export function meanStageMs(samples: readonly PerfSample[]): Record<string, number> | undefined {
+  const withStages = samples.filter((s) => s.stageMs);
+  if (withStages.length === 0) return undefined;
+  const sums: Record<string, number> = {};
+  for (const s of withStages)
+    for (const [k, v] of Object.entries(s.stageMs!)) sums[k] = (sums[k] ?? 0) + v;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(sums))
+    out[k] = Math.round((v / withStages.length) * 100) / 100;
+  return out;
 }
 
 /**

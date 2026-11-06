@@ -56,6 +56,7 @@ import { READ_PIN_CAP, readPins, stickySway, WALL_COLUMNS, type WallBoard } from
 import { DAY_ENV, deskLampOn, floorLampOn, sunBeam, type LightEnv } from './lighting';
 import type { Weather } from './weather';
 import { drawMovers, moversAt } from './windowSprites';
+import type { FrameProfile } from './frameProfile';
 import { DEFAULT_VIEW, drawWindowViews, type ViewSetting } from './windowView';
 import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
@@ -1920,6 +1921,8 @@ export interface RenderOpts {
    * the ones a partial frame cannot touch. Absent → every unit runs, exactly as before.
    */
   units?: UnitHook | undefined;
+  /** Broadcast's per-stage timer (./frameProfile.ts, lane 01M6S5V5DY). Absent everywhere else. */
+  prof?: FrameProfile | undefined;
   /** What is outside the windows (windowView.ts, lane 01M6ENGW2H). Absent → `DEFAULT_VIEW`. */
   view?: ViewSetting | undefined;
   /** The wall clock, ms, for the movers outside (windowSprites.ts): seeded per team so every viewer
@@ -4464,6 +4467,8 @@ export function renderScene(
   const run = opts.units
     ? (draw: () => void) => opts.units!.run(draw)
     : (draw: () => void) => draw();
+  // No begin(): the stretch since the caller's last mark (the canvas clear) belongs to 'setup'.
+  const prof = opts.prof;
 
   // Desk-slot index → seat owner (for the monitor's working glow). Placement stores an index into
   // `DESK_SLOTS`; IDs are deliberately stable but sparse after pod sizes change, so they are not
@@ -4569,18 +4574,23 @@ export function renderScene(
     opts.weather ?? 'clear',
     teamName,
   );
+  prof?.mark('setup');
   if (cache) {
     const bg = backgroundKey(fit, env, dpr, opts.view ?? DEFAULT_VIEW, opts.weather ?? 'clear');
     run(() => blitSprite(ctx, cache, bg, shell, opts.spriteOnly));
+    prof?.mark('shell');
     // On the stage, in their existing order: the live fixtures over the blitted walls, then the
     // additive bulb strands (see `drawWalls`).
     drawWalls(ctx, fit, env, teamWorkingHours, wallBoard, t, run, rendered, opts.weather, opts.bellAngle);
+    prof?.mark('walls');
     // Source-over floor paint, so it caches cleanly on top of the shell.
     run(() => blitSprite(ctx, cache, `${bg}·rugs`, rugs, opts.spriteOnly));
   } else {
     run(() => shell(ctx));
   }
+  prof?.mark('shell');
   run(() => drawMovers(ctx, fit, movers));
+  prof?.mark('windows');
   {
     const draw = ro('meeting/table', MEETING.lx, MEETING.ly);
     items.push({
@@ -4759,6 +4769,7 @@ export function renderScene(
     });
   }
 
+  prof?.mark('setup');
   items.sort((a, b) => a.d - b.d);
   for (const it of items) {
     if (!cache || !it.parts) {
@@ -4773,12 +4784,14 @@ export function renderScene(
     }
   }
 
+  prof?.mark('items');
   // Lanyards in the air (lane 01M3F81DD9): over everything on the floor, under the night veil.
   const tosses = opts.welcome?.tosses;
   if (tosses?.length) run(() => drawTosses(ctx, fit, tosses, heads, t));
 
   // Interior lighting: veil the room to the night level, then let occupied desks' lamps glow through.
   drawInteriorLight(ctx, fit, env, poses, byName, litLamps, dreamLamps, run);
+  prof?.mark('light');
   // A lane done's glow at the closer's desk, over the veil like the lamps (goal bell spec).
   if (glowing.length)
     run(() => {
@@ -4837,8 +4850,10 @@ export function renderScene(
     );
   }
 
+  prof?.mark('overlays');
   // Frame the whole diorama last — a soft edge vignette so the scene fades into the panel at the corners.
   run(() => drawVignette(ctx));
+  prof?.mark('vignette');
 
   return { heads, bases };
 }
