@@ -18,7 +18,7 @@
 
 | # | Directory | Why | How a person submits | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | **Glama** ([glama.ai/mcp/servers](https://glama.ai/mcp/servers)) | Not listed (searched 2026-11-06). One 2026 guide says awesome-mcp-servers asks for a Glama listing before it merges | Sign in with GitHub, **Add Server**, the repository URL. Browser only; there is no submission API | Claiming the listing for an org repo needs a `glama.json` in the repository root naming the maintainers' GitHub usernames. That is a repo change with its own lane |
+| 1 | **Glama** ([glama.ai/mcp/servers](https://glama.ai/mcp/servers)) | Not listed (searched 2026-11-06). One 2026 guide says awesome-mcp-servers asks for a Glama listing before it merges | Sign in with GitHub, **Add Server**, the repository URL. Browser only; there is no submission API | Claim it after it is listed: `glama.json` at the repository root names `Nas4146` as maintainer (lane `01M6S7JWVZ`). Run the claim flow again after any change to that file |
 | 2 | **awesome-mcp-servers** ([punkpeye](https://github.com/punkpeye/awesome-mcp-servers)) | A large curated list of MCP servers on GitHub | A PR that edits `README.md`: one line, in the right category, alphabetical | Read the README's legend and categories on the day. A person opens the PR; the list's agent fast-track is for automated submitters and is not used |
 | 3 | **awesome-claude-code** ([hesreallyhim](https://github.com/hesreallyhim/awesome-claude-code)) | Read by Claude Code users, the first user in the traction plan | The web issue form "recommend a resource". No PR. **A person, in the browser**: its rules refuse `gh` submissions and require submissions "created by human beings" | One resource at a time. Eligible: at least 14 days old with active development. Description "not a sales pitch", one line, no emoji |
 | 4 | **mcp.so** | A large MCP directory | Its submit page (sources disagree between a form and the `chatmcp/mcpso` repository; the page answered 403 to a script on 2026-11-06, so read it in a browser) | |
@@ -37,10 +37,13 @@ One description, in three lengths. Use the length the field allows; never write 
   This is `packages/mcp/server.json`'s description. Keep the two the same.
 - **Short (for a form's description field, about 50 words):**
   `musterd puts your agents and the people you work with on one team: a roster, a board of lanes, inboxes, and a record of each piece of work. An agent asks a person when it needs a decision. Nothing counts as done until another member accepts it. Runs on your machine, MIT.`
-- **List line, awesome-mcp-servers:**
-  `- [musterd-io/musterd](https://github.com/musterd-io/musterd) <legend marks> - Joins any MCP-capable agent to a team with the people you work with: a board of lanes, inboxes, asks to a person, and a record of who did each piece of work and who accepted it.`
-  Fill `<legend marks>` from the README's legend on the day: TypeScript, a local service, and macOS
-  and Linux. Confirm Windows before marking it.
+- **List line, awesome-mcp-servers**, under **Agreements & Coordination** (its README, read
+  2026-11-06: "commitments, escrow, and multi-party decision workflows across humans, agents, and
+  organizations"), in alphabetical order:
+  `- [musterd-io/musterd](https://github.com/musterd-io/musterd) 📇 🏠 🍎 🐧 - Joins any MCP-capable agent to a team with the people you work with: a board of lanes, inboxes, asks to a person, and a record of who did each piece of work and who accepted it.`
+  The marks are the list's legend: 📇 TypeScript, 🏠 local service, 🍎 macOS, 🐧 Linux. Windows is
+  unmarked: the background service is macOS-only (`docs/architecture/04-cli.md`, `musterd service`)
+  and nobody has run musterd on Windows.
 - **List line, awesome-claude-code (no emoji, a description):**
   `musterd — An MCP server and CLI that put Claude Code sessions and other agents on one team with the people they work with: lanes claimed before work starts, asks to a person, and acceptance by another member.`
 - **Keywords / tags:** `agents`, `multi-agent`, `coordination`, `team`, `mcp-server`, `claude-code`,
