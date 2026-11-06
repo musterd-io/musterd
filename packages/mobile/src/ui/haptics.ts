@@ -16,3 +16,8 @@ export function success(): void {
 export function warning(): void {
   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
 }
+
+/** A heavy thump: a goal finished, the bell rung (ADR 819). Rare by construction. */
+export function heavy(): void {
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
+}

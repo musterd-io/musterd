@@ -298,7 +298,9 @@ module — plain Swift over CryptoKit, Security and DeviceCheck, one config plug
 - `modules/musterd-keys/ios/MusterdPushSubscriber.swift` — an `ExpoAppDelegateSubscriber`
   (declared in `expo-module.config.json`). It registers the advisory and Reply-only question
   categories, asks for notification permission including Time Sensitive, stores the APNs device
-  token, and keeps an Approve/Decline or plain tap until JavaScript takes it. A question's option
+  token, and keeps an Approve/Decline or plain tap until JavaScript takes it. A content-free
+  background push (ADR 819's live nudge; `UIBackgroundModes: remote-notification` in `app.json`)
+  emits `onDelivery` only while the app is active, so Now pulls its roster at once. A question's option
   or Reply goes to `QuestionAnswer.swift` instead, which answers it natively in the background.
 - `modules/musterd-keys/ios/extension/` — the notification service extension. `NotificationService.swift`
   is the principal class and is excluded from the app pod. The other files (route JSON, the
@@ -425,6 +427,7 @@ src/
     asks.ts                // the asks list: Notification Center refs, each fetched live by ref; redeliver
     bytes.ts               // UTF-8 and base64url for a runtime with no Buffer and no TextEncoder
     delivery.ts            // the delivery composition — route AAD, inner {p,s}, the daemon's Ed25519 check
+    floor.ts               // ADR 819: the live floor's rules — floorDesks (8 most recent, +N), bubbleText (asking you → in mustard), newLandings (none on first load), glowQueue (one glow at a time), momentWords (a moment row's copy)
     nonceStore.ts          // seen-nonce verdicts; the extension's Swift copy follows this
     notice.ts              // lock-screen copy and which asks get actions
     notificationAnswers.ts // take a pending action once the app is open; a plain tap opens its ask
@@ -445,9 +448,9 @@ src/
     readable.ts            // an ask's text cleaned for a phone: one-line summary, or paragraphs and bullets
     sha256.ts              // SHA-256, matching the daemon's createHash, with no node: import
   ui/
-    haptics.ts             // a light tick under a press, a success buzz when something lands (ADR 760)
+    haptics.ts             // a light tick under a press, a success buzz when something lands (ADR 760), a heavy thump when a goal finishes (ADR 819)
     pairAgain.ts           // "Pair this phone again?" behind a confirm: forgets the pin and keys
-    springs.ts             // the shell's motion constants (ADR 815): three springs, the tab bounce, each tab's tint, where the pill sits
+    springs.ts             // the shell's motion constants (ADR 815): three springs, the tab bounce, each tab's tint, where the pill sits, GLOW_MS (a landing's glow, ADR 819)
     theme.ts               // brand.md palette (mustard accent on zinc), light only; DM Sans faces (ADR 760)
 ```
 
@@ -456,7 +459,7 @@ The screens are `.tsx` and outside the drift check; kept honest by hand:
 ```
 src/app/_layout.tsx   // the Stack: the (tabs) shell first, then pair / ask / poll under the app's own NavBar
 src/app/(tabs)/_layout.tsx // the shell (ADR 814): Now · Work · You under the floating pill (ui/tabBar.tsx)
-src/app/(tabs)/index.tsx // Now (ADR 814), at "/" — the URL the app opens at (as now.tsx it served /now and build 58 opened on "Unmatched Route"): what waits on you, then the team as /live shows it, the offline fold, the member sheet; the way into pairing
+src/app/(tabs)/index.tsx // Now (ADR 814), at "/" — the URL the app opens at (as now.tsx it served /now and build 58 opened on "Unmatched Route"): the live floor (ADR 819), what waits on you, what is happening now (the day's moments; a new landing glows and buzzes, a goal rings the bell), then the team as /live shows it, the offline fold, the member sheet; the way into pairing
 src/app/(tabs)/work.tsx // Work: goals and lanes — a placeholder until phase 4
 src/app/(tabs)/you.tsx  // You: your and the team's settings — a placeholder until phase 5; carries Start a poll (ADR 807) meanwhile
 src/app/pair.tsx      // scan the QR, compare the fingerprint, wait for approval
@@ -478,6 +481,8 @@ src/ui/chrome.tsx     // ChromeProvider / useChrome: one shared value the pill r
 src/ui/memberRow.tsx  // one member in two lines, as /live's team card reads: portrait + state dot, name, model, age; state word and what they're on
 src/ui/stateDot.tsx   // /live's state dot on a portrait's corner: working, review, blocked, asking, between (ring), away (none)
 src/ui/forYouRow.tsx  // one thing waiting on you: asker, the question in a line, kind and age, a Review / Answer chip
+src/ui/floor.tsx      // the live floor (ADR 819): warm wood (svg gradient), desks of portraits with state dots, one rotating bubble, a landing's glow, the goal bell, LIVE while anyone works; Reduce Motion freezes it
+src/ui/momentRow.tsx  // one "Happening now" moment: a landing or goal as a full row with portrait, lane or outcome, goal and accepted seal; the rest one quiet line
 src/ui/offlineFold.tsx // the "N offline" fold with stacked faces and Show / Hide
 src/ui/memberSheet.tsx // a member's sheet (reanimated + gesture-handler): rises on a spring, dragged shut; today's quick actions
 src/ui/notice.tsx     // Notice (a short note: symbol tile, title, a line) and SectionLabel (a label with a count)
