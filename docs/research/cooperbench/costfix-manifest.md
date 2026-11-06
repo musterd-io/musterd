@@ -141,9 +141,9 @@ expires ~2026-11-07 07:00Z — if the run cannot finish before then it waits for
 | Model | `claude-opus-5-5`, all arms (as finding 035) |
 | Spend | nick, 2026-11-06 ~19:05Z, question `01M6S3X1MV` (verified app answer): "Approve up to $135" |
 
-## Amendment after stage 1 (2026-11-06 ~20:25Z) — the lean arm stops; stage 2 runs seed 2 only
+## Amendment after stage 1 (2026-11-06 20:07Z) — the lean arm stops; stage 2 runs seed 2 only
 
-Recorded after stage 1 and **before any stage-2 pair**; nothing above is changed.
+Recorded after stage 1 and **before any stage-2 pair** (committed 20:07:42Z; the seed-2 run started 20:08:36Z by the run machine's clock); nothing above is changed.
 
 - **Stage 1 ran** 19:25–20:00Z on main `4a1422cc` (smoke 19:21Z: all three arms passed the gate;
   lean sessions loaded 26 musterd tools against baseline's 32). `core`: baseline $5.47, lean $4.79
