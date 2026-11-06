@@ -1311,13 +1311,6 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'credential.minted',
   'credential.refused',
   'residency.host_seen',
-  // ADR 816 (lane 01M6RZ0NRA): the hub's record that it started a seat's Fly machine crosses so
-  // the daemon minting that seat's first lease — in hub mode the machine's own joiner daemon —
-  // can grant the cold first-lease TTL. Without the crossing the row exists only on the hub and
-  // the cold lease never fires where leases are actually minted (measured live 2026-11-06:
-  // round 3's first lease still expired warm at 120 s). `fly.machine_stop` stays hub-local:
-  // nothing off the hub reads it.
-  'fly.machine_start',
   // ADR 689 decision 3 — provisions cross: the hub's pending/cancelled, the joiner's claim/report.
   'host.provision_pending',
   'host.provision_claimed',

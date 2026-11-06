@@ -100,20 +100,13 @@ if [ -n "${MUSTERD_HUB:-}" ]; then
   fi
   unset MUSTERD_INVITE
 
-  # Wait for the first fold to carry the sponsor's host key here (ADR 689 d1): the host loop
-  # would otherwise poll into 401 until the sync tick lands. Bounded; the loop retries anyway.
-  for _ in $(seq 1 90); do
-    # A failed probe is a "not yet", never a death: while the daemon drains its fold backlog
-    # the POST can exceed --max-time, curl exits 28, and the bare assignment under `set -e`
-    # killed the script silently — the machine crash-looped before polling (delta-2, 2026-10-28).
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 -X POST \
-      -H "authorization: Bearer $MUSTERD_HOST_KEY" -H 'content-type: application/json' \
-      -d "{\"host\":\"$MUSTERD_HOST\"}" "http://127.0.0.1:4849/teams/$MUSTERD_TEAM/residency/wake-leases")" || code=""
-    [ "$code" = 200 ] && break
-    sleep 2
-  done
-  [ "${code:-}" = 200 ] && log "host key honoured by this daemon (replicated from the hub)" \
-    || log "! host key not yet honoured here (last status ${code:-none}) — the hub's sync tick may be pending; the host loop keeps polling"
+  # No host-key probe here (lane 01M6RZ0NRA, 2026-11-06): the old probe POSTed the real
+  # /residency/wake-leases claim endpoint to test the replicated host key and discarded the
+  # body — but a wake order is issued only in the poll that mints its lease, so the probe
+  # stranded the first lease of every cold boot and the seat never spawned (rounds 2–5,
+  # docs/perf/cloud-seat.md). Never probe a minting endpoint. The host loop below polls the
+  # same endpoint itself: until the fold carries the key over its polls 401 and are logged,
+  # and the first honoured poll both proves the key and receives the order.
 fi
 
 # ── the workspace clone source (both modes) ───────────────────────────────────────────────────

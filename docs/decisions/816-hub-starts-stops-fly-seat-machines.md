@@ -128,6 +128,14 @@ Alternatives considered:
 
 ## Consequences
 
+- _(2026-11-06, boot-probe fix landed, lane `01M6RZ0NRA`.)_ The cloud-agent boot probe no
+  longer POSTs the wake-lease claim endpoint (deleted outright; the host loop's own polls prove
+  the replicated host key and receive their orders). With the probe gone, the cold first-lease
+  TTL and the `fly.machine_start` ledger crossing that served it were reverted in the same
+  change — the crossing's only reader was the TTL, and 2a can re-add it with a reader if it
+  ever needs one. A clean cold re-round on delta-2 is this note's missing half and is recorded
+  in `docs/perf/cloud-seat.md` when it runs.
+  Follows-up: 01M6RZ0NRAQR9BSJA42ZN5M6N2
 - _(2026-11-06, rule 2 follow-up answered, lane `01M6S36XB0`.)_ The caveat vocabulary can do
   the attenuation: `docs/wiki/fly-token-attenuation.md` (#4003) measures a deploy token
   narrowed to read/start/stop/signal on the named machines, refusing exec, update, create,
