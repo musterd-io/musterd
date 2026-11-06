@@ -35,6 +35,7 @@ import { startPrWatch } from './protocol/prWatch.js';
 import { routeEnvelope } from './protocol/route.js';
 import { startShiftWatch } from './protocol/shiftWatch.js';
 import { startSeedsIngest } from './seeds/ingest.js';
+import { revokePhoneKeysOfEndedBindingsEverywhere } from './store/appPairing.js';
 import { appendAudit } from './store/audit.js';
 import { countDiversityFlagsByTeam } from './store/mast.js';
 import { startExpiredMemberSweep } from './store/members.js';
@@ -506,6 +507,11 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       if (loops.has('roster_watch') && ctx.rosterRoots.length > 0) {
         const summary = await reconcileAll(opDb, ctx.rosterRoots);
         log.info({ msg: 'reconcile_boot', teams: summary.length, roots: ctx.rosterRoots.length });
+      }
+      // Lane 01M6Q1RDTK: phone keys of pairings that ended before the lifecycle was closed.
+      {
+        const swept = await revokePhoneKeysOfEndedBindingsEverywhere(opDb);
+        if (swept.keys > 0) log.info({ msg: 'phone_keys_swept_boot', ...swept });
       }
       return await new Promise((resolve, reject) => {
         http.once('error', reject);

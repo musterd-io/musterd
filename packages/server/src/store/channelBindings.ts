@@ -382,6 +382,18 @@ async function consumeBindingTokens(t: Driver, teamId: string, bindingId: string
   return res.changes;
 }
 
+/** The phone device key an app binding enrolled (`app_keys.device_key_id`), if any. */
+function appDeviceKeyId(binding: ChannelBinding): string | null {
+  const raw = (binding as ChannelBinding & { app_keys?: string | null }).app_keys;
+  if (!raw) return null;
+  try {
+    const id = (JSON.parse(raw) as { device_key_id?: unknown }).device_key_id;
+    return typeof id === 'string' && id.length > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Revoke one binding (ADR 618 §7): the binding dies at its generation and every outstanding
  * token naming it is consumed in the same transaction, so a replayed answer after revoke is
@@ -406,6 +418,22 @@ export async function revokeBinding(
       binding.id,
     ]);
     const tokensRevoked = await consumeBindingTokens(t, input.teamId, binding.id, now);
+    // Lane 01M6Q1RDTK: an app pairing's phone key dies with the pairing, in this transaction — a
+    // failure between the two would leave a key that still signs for a phone nobody is paired to.
+    const phoneKeyId = appDeviceKeyId(binding);
+    if (phoneKeyId) {
+      await t.run(
+        `UPDATE device_keys SET revoked_at = ? WHERE team_id = ? AND id = ? AND revoked_at IS NULL`,
+        [now, input.teamId, phoneKeyId],
+      );
+      await appendAudit(t, input.teamId, {
+        actor: input.actor,
+        action: 'device_key.revoked',
+        target: input.actor,
+        result: 'allow',
+        detail: { key_id: phoneKeyId, via: 'binding_revoked', binding: binding.id },
+      });
+    }
     await appendAudit(t, input.teamId, {
       actor: input.actor,
       action: 'channel.pair.revoked',

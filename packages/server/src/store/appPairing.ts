@@ -428,6 +428,55 @@ export const UNKNOWN_DAEMON_KEY = 'unknown-before-key';
  * revoked, and when the member's keys are listed — the surface where the stale count showed.
  * Idempotent; audited per key as `device_key.revoked` with `via: binding_<reason>`.
  */
+/**
+ * The boot half of lane 01M6Q1RDTK: every member's ended app pairings lose their phone keys once,
+ * for rows from before the lifecycle was closed (a supersession is derived from the daemon key, so
+ * no event ever fired for it). Idempotent; a daemon that boots clean sweeps nothing.
+ */
+export async function revokePhoneKeysOfEndedBindingsEverywhere(
+  db: Driver,
+  opts: { now?: number } = {},
+): Promise<{ members: number; keys: number }> {
+  const rows = await db.all<{ team_id: string; member_id: string; name: string }>(
+    `SELECT DISTINCT b.team_id, b.member_id, m.name
+       FROM channel_bindings b JOIN members m ON m.id = b.member_id
+      WHERE b.channel = ? AND b.app_keys IS NOT NULL`,
+    [APP_CHANNEL],
+  );
+  let keys = 0;
+  for (const row of rows) {
+    const swept = await revokePhoneKeysOfEndedBindings(db, {
+      teamId: row.team_id,
+      member: { id: row.member_id, name: row.name },
+      ...(opts.now !== undefined ? { now: opts.now } : {}),
+    });
+    keys += swept.length;
+  }
+  return { members: rows.length, keys };
+}
+
+/**
+ * Is this phone key's pairing over (lane 01M6Q1RDTK)? The authority boundary reads this at use
+ * time, so a key whose pairing was superseded by a daemon key change — an event no row records —
+ * is refused before any sweep has run. A phone key with no app binding at all is treated as ended:
+ * kind `phone` always means App Attest vouched for it through a pairing.
+ */
+export async function phoneKeyPairingEnded(
+  db: Driver,
+  teamId: string,
+  keyId: string,
+  opts: { current?: string; keyBornAt?: number } = {},
+): Promise<AppBindingEnded | 'unpaired' | null> {
+  const row = await db.get<{ id: string }>(
+    `SELECT id FROM channel_bindings
+      WHERE team_id = ? AND channel = ? AND json_extract(app_keys, '$.device_key_id') = ?
+      ORDER BY created_at DESC LIMIT 1`,
+    [teamId, APP_CHANNEL, keyId],
+  );
+  if (!row) return 'unpaired';
+  return await appBindingEnded(db, teamId, row.id, opts);
+}
+
 export async function revokePhoneKeysOfEndedBindings(
   db: Driver,
   input: {
