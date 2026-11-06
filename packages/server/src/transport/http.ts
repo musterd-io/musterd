@@ -264,6 +264,7 @@ import {
   confirmAppPairing,
   keyFingerprint,
   pairingFingerprint,
+  revokePhoneKeysOfEndedBindings,
   stagedAppKeys,
   startAppPairing,
 } from '../store/appPairing.js';
@@ -5433,6 +5434,12 @@ export async function handleHttp(
             actor: member.name,
             bindingId: decodeURIComponent(bindingMatch[1]!),
           });
+          // Lane 01M6Q1RDTK: the pairing's phone key dies with it.
+          if (result.ok)
+            await revokePhoneKeysOfEndedBindings(ctx.db, {
+              teamId: team.id,
+              member: { id: member.id, name: member.name },
+            });
           if (!result.ok) {
             throw new MusterdError(
               result.reason === 'not_found' ? 'not_found' : 'validation',
@@ -5865,6 +5872,11 @@ export async function handleHttp(
             actor: member.name,
           });
           if (relayed) return sendJson(res, 200, { keys: relayed.keys });
+          // Lane 01M6Q1RDTK: a phone key whose pairing has ended is revoked before it is listed.
+          await revokePhoneKeysOfEndedBindings(ctx.db, {
+            teamId: team.id,
+            member: { id: member.id, name: member.name },
+          });
           const keys = await listDeviceKeys(ctx.db, team.id, member.id);
           return sendJson(res, 200, {
             keys: keys.map((k) => ({

@@ -95,6 +95,14 @@ weakening decision 3: the phone never trusts, and never distinguishes, anything 
 - Hub relocation (ADR 796) inherits this. On switch day every laptop pairing reads superseded on
   the box's /live, and every phone says to pair again on its next fetch.
 - 2026-11-04 (lane `01M6M9JMME`, fifty): decisions 4 and 6, wire half. `RelayAppBodyFrameSchema` gains `ended`, and `AskSkipReason` gains `binding_superseded` ("your phone was paired under this daemon's old key — pair again"). The relay keeps `ended` only with `sealed: null` (wallow) and answers the body fetch with `410 {ended}`, `no-store`. It goes live with the next relay deploy, which is nick's to run.
+- 2026-11-05 (lane `01M6Q1RDTK`, fifty): an ended pairing's phone key now dies with it. Every app
+  pairing enrolls a kind `phone` device key and records it on the binding, and nothing revoked that
+  key when the binding ended — nick's /live said "your 3 paired phones also sign" with one phone
+  paired, one key per pairing round since Oct 29, each still standing authority for `device_key_admin`
+  and the recovery guard's "usable key stands". Because a supersession is derived, not recorded, the
+  fix is a sweep over the member's app bindings (`revokePhoneKeysOfEndedBindings`), run when a pairing
+  is confirmed, when one is revoked, and when the member's keys are listed; each revocation is audited
+  `device_key.revoked` with `via: binding_superseded` or `binding_revoked`.
 
 ## Observability & Evaluation
 

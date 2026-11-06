@@ -18,7 +18,12 @@ import {
 } from '../notify/appSeal.js';
 import { appPairingChallenge, verifyAppAttestation, type AppAttestRefusal } from './appAttest.js';
 import { appendAudit } from './audit.js';
-import { enrollKeyGuarded, type EnrollKeyResult } from './authority.js';
+import {
+  enrollKeyGuarded,
+  getDeviceKey,
+  revokeDeviceKey,
+  type EnrollKeyResult,
+} from './authority.js';
 import {
   confirmPairing,
   startPairing,
@@ -360,6 +365,14 @@ export async function confirmAppPairing(
     JSON.stringify(bound),
     confirmed.binding.id,
   ]);
+  // The pairings this one replaces (a re-pair after a daemon key change) lose their phone keys now.
+  await revokePhoneKeysOfEndedBindings(db, {
+    teamId: input.teamId,
+    member: { id: input.member.id, name: input.member.name },
+    now,
+    // The key this pairing was just confirmed under is, by construction, the daemon's current one.
+    ...(bound.daemon_identity_public_key ? { current: bound.daemon_identity_public_key } : {}),
+  });
   await appendAudit(db, input.teamId, {
     actor: input.member.name,
     action: 'channel.app_paired',
@@ -403,6 +416,58 @@ export async function appBindingKeys(
 
 /** A daemon key the backfill could not vouch for (ADR 802 §2): reads as superseded. */
 export const UNKNOWN_DAEMON_KEY = 'unknown-before-key';
+
+/**
+ * A pairing's phone key dies with the pairing (lane 01M6Q1RDTK). Every app pairing enrolls a fresh
+ * kind `phone` device key and records it on the binding as `device_key_id`; until 2026-11-05
+ * nothing read that back when the binding ended, so a superseded or revoked pairing's key stayed
+ * active — nick's /live said "your 3 paired phones also sign" with one phone paired, one key per
+ * pairing round, and each still counted as standing authority. A pairing ends two ways (ADR 802):
+ * revoked, or superseded by a daemon key change that no row records. So this is a sweep over the
+ * member's app bindings, not a hook on one event: it runs when a pairing is confirmed, when one is
+ * revoked, and when the member's keys are listed — the surface where the stale count showed.
+ * Idempotent; audited per key as `device_key.revoked` with `via: binding_<reason>`.
+ */
+export async function revokePhoneKeysOfEndedBindings(
+  db: Driver,
+  input: {
+    teamId: string;
+    member: { id: string; name: string };
+    now?: number;
+    /** Test seams for {@link appBindingEnded}. */
+    current?: string;
+    keyBornAt?: number;
+  },
+): Promise<{ keyId: string; binding: string; ended: AppBindingEnded }[]> {
+  const now = input.now ?? Date.now();
+  const rows = await db.all<{ id: string; app_keys: string | null }>(
+    `SELECT id, app_keys FROM channel_bindings
+      WHERE team_id = ? AND member_id = ? AND channel = ? AND app_keys IS NOT NULL`,
+    [input.teamId, input.member.id, APP_CHANNEL],
+  );
+  const revoked: { keyId: string; binding: string; ended: AppBindingEnded }[] = [];
+  for (const row of rows) {
+    const keys = JSON.parse(row.app_keys ?? '{}') as AppKeys;
+    if (!keys.device_key_id) continue;
+    const key = await getDeviceKey(db, input.teamId, keys.device_key_id);
+    if (!key || key.kind !== 'phone' || key.revokedAt !== null) continue;
+    const ended = await appBindingEnded(db, input.teamId, row.id, {
+      ...(input.current !== undefined ? { current: input.current } : {}),
+      ...(input.keyBornAt !== undefined ? { keyBornAt: input.keyBornAt } : {}),
+    });
+    if (!ended) continue;
+    await revokeDeviceKey(db, input.teamId, key.id, now);
+    await appendAudit(db, input.teamId, {
+      actor: input.member.name,
+      action: 'device_key.revoked',
+      target: input.member.name,
+      result: 'allow',
+      detail: { key_id: key.id, via: `binding_${ended}`, binding: row.id },
+    });
+    revoked.push({ keyId: key.id, binding: row.id, ended });
+  }
+  return revoked;
+}
 
 export type AppBindingEnded = 'superseded' | 'revoked';
 
