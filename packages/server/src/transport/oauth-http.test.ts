@@ -711,6 +711,10 @@ withDrivers('oauth-http', (_o, kind) => {
       expect(ok.text).toContain('Claude');
       expect(ok.text).toContain('dawn');
       expect(ok.text).not.toContain(nickCred);
+      // Self-hosted (ADR 820 §5): the seat-credential form stays, and there is no console to sign
+      // in through, so no "Sign in with musterd".
+      expect(ok.text).toContain('name="credential"');
+      expect(ok.text).not.toContain('Sign in with musterd');
       for (const m of ['plain', 'none']) {
         expect((await get(q(`&code_challenge_method=${m}`))).status).toBe(400);
       }

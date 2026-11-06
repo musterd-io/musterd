@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { request } from 'node:http';
 import { GENERALIST_CAPABILITIES, PROTOCOL_VERSION } from '@musterd/protocol';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +19,7 @@ import {
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import { createTeam } from '../store/teams.js';
 import { SESSION_COOKIE, SIGNIN_COOKIE, SIGNED_OUT_CLOSE_CODE } from './liveSession.js';
+import { __resetOAuthBucketsForTest, __setCimdResolverForTest } from './oauth.js';
 
 /**
  * ADR 722 §1–4 against a real Cloud server and the test issuer: the falsifier list in its
@@ -546,6 +547,315 @@ describe('hosted /live sign-in (ADR 722)', () => {
         (a) => a.action === 'session.revoked',
       );
       expect(revoked.map((a) => JSON.parse(String(a.detail)).by)).toEqual(['rotate', 'rotate']);
+    });
+  });
+
+  describe('connecting an MCP client (ADR 820)', () => {
+    // The OAuth per-IP buckets are process-wide; each test here registers a client.
+    beforeEach(() => __resetOAuthBucketsForTest());
+    const REDIRECT = 'https://claude.ai/api/mcp/auth_callback';
+    const VERIFIER = 'v'.repeat(43);
+    const CHALLENGE = createHash('sha256').update(VERIFIER).digest('base64url');
+    const form = (o: Record<string, string>) => new URLSearchParams(o).toString();
+    // The consent page's own POST: same-origin by Sec-Fetch-Site. The OAuth pages send no referrer,
+    // so a browser's Origin on it is `null` — which is why Origin cannot be the check.
+    const formHeaders = {
+      'content-type': 'application/x-www-form-urlencoded',
+      origin: 'null',
+      'sec-fetch-site': 'same-origin',
+    };
+
+    async function registerClient(): Promise<string> {
+      const r = await call('POST', '/oauth/revive/register', {
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ redirect_uris: [REDIRECT], client_name: 'Claude' }),
+      });
+      expect(r.status).toBe(201);
+      return (JSON.parse(r.body) as { client_id: string }).client_id;
+    }
+
+    const authorizeFields = (client_id: string, over: Record<string, string> = {}) => ({
+      client_id,
+      redirect_uri: REDIRECT,
+      state: 'client-state-1',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+      ...over,
+    });
+
+    /** The consent page's Sign in with musterd: POST authorize → 303 to the console. */
+    async function startConnect(client_id: string): Promise<string> {
+      const r = await call('POST', '/oauth/revive/authorize', {
+        headers: formHeaders,
+        body: form({ ...authorizeFields(client_id), via: 'musterd' }),
+      });
+      expect(r.status).toBe(303);
+      const loc = new URL(String(r.headers['location']));
+      expect(loc.origin).toBe(consoleOrigin);
+      expect(loc.pathname).toBe('/handback');
+      const state = cookieValue(r, SIGNIN_COOKIE)!;
+      expect(loc.searchParams.get('state')).toBe(state);
+      return state;
+    }
+
+    const connectStates = async () =>
+      (await seed.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM signin_states WHERE mode = 'connect'",
+        [],
+      ))!.n;
+
+    it('the hosted consent page leads with Sign in with musterd and asks for no credential', async () => {
+      const client_id = await registerClient();
+      const q = new URLSearchParams({ response_type: 'code', ...authorizeFields(client_id) });
+      const r = await call('GET', `/oauth/revive/authorize?${q.toString()}`);
+      expect(r.status).toBe(200);
+      expect(r.body).toContain('Sign in with musterd');
+      expect(r.body).toContain('name="via" value="musterd"');
+      expect(r.body).not.toContain('name="credential"');
+      // The guest and agent paths stay.
+      expect(r.body).toContain('name="invite"');
+      expect(r.body).toContain('name="agent_connect"');
+    });
+
+    /** The callback's answer for a connect: the confirm page and its one-time grant state. */
+    async function reachConfirm(
+      client_id: string,
+      sub = 'acct_ada',
+    ): Promise<{ grant: string; body: string }> {
+      const state = await startConnect(client_id);
+      const cb = await postCallback({ state, statement: statement(sub) });
+      expect(cb.status).toBe(200);
+      const grant = cookieValue(cb, SIGNIN_COOKIE)!;
+      expect(grant).toBeTruthy();
+      expect(grant).not.toBe(state);
+      return { grant, body: cb.body };
+    }
+
+    function confirm(
+      grant: string,
+      decision: 'allow' | 'deny',
+      opts: { cookie?: string | null; site?: string; extra?: Record<string, string> } = {},
+    ): Promise<Res> {
+      const headers: Record<string, string> = {
+        'content-type': 'application/x-www-form-urlencoded',
+        origin: TEAM_ORIGIN,
+        'sec-fetch-site': opts.site ?? 'same-origin',
+      };
+      const c = opts.cookie === undefined ? grant : opts.cookie;
+      if (c !== null) headers['cookie'] = `${SIGNIN_COOKIE}=${c}`;
+      return call('POST', '/live/signin/connect', {
+        headers,
+        body: form({ state: grant, decision, ...(opts.extra ?? {}) }),
+      });
+    }
+
+    it('after sign-in, names the client, the team and the member before anything is issued', async () => {
+      const client_id = await registerClient();
+      const { body } = await reachConfirm(client_id);
+      expect(body).toContain('Claude');
+      expect(body).toContain('revive');
+      expect(body).toContain('ada');
+      expect(body).toContain('action="/live/signin/connect"');
+      expect(body).toContain('value="allow"');
+      expect(body).toContain('value="deny"');
+      // Nothing issued yet, and no browser session ever.
+      expect((await listAudit(seed, team.id)).some((a) => a.action === 'oauth.code_issued')).toBe(
+        false,
+      );
+      expect(await sessionRows()).toBe(0);
+    });
+
+    it('Allow hands the client a code for that member, which redeems only with its own verifier', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      const r = await confirm(grant, 'allow');
+      expect(r.status).toBe(302);
+      const back = new URL(String(r.headers['location']));
+      expect(`${back.origin}${back.pathname}`).toBe(REDIRECT);
+      expect(back.searchParams.get('state')).toBe('client-state-1');
+      const code = back.searchParams.get('code')!;
+      expect(cookies(r).find((c) => c.startsWith(`${SIGNIN_COOKIE}=`))).toContain('Max-Age=0');
+      expect(await sessionRows()).toBe(0);
+      const token = (verifier: string) =>
+        call('POST', '/oauth/revive/token', {
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: form({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: REDIRECT,
+            client_id,
+            code_verifier: verifier,
+          }),
+        });
+      // A PKCE mismatch is refused (and burns the code, as ADR 446 does).
+      expect((await token('w'.repeat(43))).status).toBe(400);
+      const { code: code2 } = Object.fromEntries(
+        new URL(
+          String(
+            (await confirm((await reachConfirm(client_id)).grant, 'allow')).headers['location'],
+          ),
+        ).searchParams,
+      ) as { code: string };
+      const ok = await call('POST', '/oauth/revive/token', {
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: form({
+          grant_type: 'authorization_code',
+          code: code2,
+          redirect_uri: REDIRECT,
+          client_id,
+          code_verifier: VERIFIER,
+        }),
+      });
+      expect(ok.status).toBe(200);
+      expect((JSON.parse(ok.body) as { access_token: string }).access_token).toMatch(/^msat_/);
+      const issued = (await listAudit(seed, team.id)).find(
+        (a) => a.action === 'oauth.code_issued',
+      )!;
+      expect(issued.actor).toBe('ada');
+      expect(JSON.parse(String(issued.detail))).toMatchObject({ via: 'musterd' });
+    });
+
+    it('Cancel sends the client access_denied with its state, and issues nothing', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      const r = await confirm(grant, 'deny');
+      expect(r.status).toBe(302);
+      const back = new URL(String(r.headers['location']));
+      expect(`${back.origin}${back.pathname}`).toBe(REDIRECT);
+      expect(back.searchParams.get('error')).toBe('access_denied');
+      expect(back.searchParams.get('state')).toBe('client-state-1');
+      expect(back.searchParams.get('code')).toBeNull();
+      expect((await listAudit(seed, team.id)).some((a) => a.action === 'oauth.code_issued')).toBe(
+        false,
+      );
+    });
+
+    it('refuses a confirm that is cross-site, has no or another cookie, is replayed, or names another request', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      expect((await confirm(grant, 'allow', { site: 'cross-site' })).status).toBe(403);
+      expect((await confirm(grant, 'allow', { cookie: null })).status).toBe(403);
+      expect((await confirm(grant, 'allow', { cookie: 'someone-elses-state' })).status).toBe(403);
+      // Fields that try to swap the request are ignored: the grant carries it.
+      const swapped = await confirm(grant, 'allow', {
+        extra: { client_id: 'other', redirect_uri: 'https://evil.test/cb', code_challenge: 'x' },
+      });
+      expect(swapped.status).toBe(302);
+      expect(String(swapped.headers['location']).startsWith(REDIRECT)).toBe(true);
+      // Spent: a second Allow on the same grant is refused.
+      expect((await confirm(grant, 'allow')).status).toBe(403);
+      // A connect state is not a grant: it cannot skip the callback.
+      const raw = await startConnect(client_id);
+      expect((await confirm(raw, 'allow')).status).toBe(403);
+    });
+
+    it('a native app on an ephemeral loopback port and a CIMD client both get through Allow (ADR 743, ADR 470)', async () => {
+      // Native: registered without a port, authorizing from whatever port it got.
+      const reg = await call('POST', '/oauth/revive/register', {
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          redirect_uris: ['http://127.0.0.1/callback/x'],
+          client_name: 'Codex',
+        }),
+      });
+      const nativeId = (JSON.parse(reg.body) as { client_id: string }).client_id;
+      const native = 'http://127.0.0.1:53111/callback/x';
+      const go = async (client_id: string, redirect: string) => {
+        const st = await call('POST', '/oauth/revive/authorize', {
+          headers: formHeaders,
+          body: form({ ...authorizeFields(client_id, { redirect_uri: redirect }), via: 'musterd' }),
+        });
+        expect(st.status).toBe(303);
+        const cb = await postCallback({
+          state: cookieValue(st, SIGNIN_COOKIE)!,
+          statement: statement(),
+        });
+        expect(cb.status).toBe(200);
+        const r = await confirm(cookieValue(cb, SIGNIN_COOKIE)!, 'allow');
+        expect(r.status).toBe(302);
+        expect(String(r.headers['location']).startsWith(`${redirect}?code=`)).toBe(true);
+      };
+      await go(nativeId, native);
+      // CIMD: no registration row; the metadata document is the registration.
+      const cimdId = 'https://chatgpt.example/oauth/client.json';
+      __setCimdResolverForTest(async (id) => ({
+        client_id: id,
+        client_name: 'ChatGPT',
+        redirect_uris: [REDIRECT],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+      }));
+      try {
+        await go(cimdId, REDIRECT);
+      } finally {
+        __setCimdResolverForTest();
+      }
+    });
+
+    it('refuses Allow when the client was deregistered between sign-in and the click', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      await seed.run('DELETE FROM oauth_clients WHERE client_id = ?', [client_id]);
+      const r = await confirm(grant, 'allow');
+      expect(r.status).toBe(403);
+      expect(r.headers['location']).toBeUndefined();
+      expect(await refusals()).toContain('client_gone');
+    });
+
+    it('refuses Allow when the member left between sign-in and the click', async () => {
+      const client_id = await registerClient();
+      const { grant } = await reachConfirm(client_id);
+      await seed.run('UPDATE members SET left_at = ? WHERE id = ?', [Date.now(), ada.id]);
+      const r = await confirm(grant, 'allow');
+      expect(r.status).toBe(403);
+      expect(r.headers['location']).toBeUndefined();
+    });
+
+    it('refuses a Sign in with musterd POST that did not come from the consent page (CSRF)', async () => {
+      // A page on another site auto-submitting the form with its own client: if this went through,
+      // a victim signed in to the console would be walked to the attacker's redirect with a code.
+      const client_id = await registerClient();
+      for (const site of ['cross-site', 'same-site', 'none', undefined]) {
+        const r = await call('POST', '/oauth/revive/authorize', {
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            origin: 'https://evil.test',
+            ...(site ? { 'sec-fetch-site': site } : {}),
+          },
+          body: form({ ...authorizeFields(client_id), via: 'musterd' }),
+        });
+        expect(r.status).toBe(403);
+        expect(r.headers['location']).toBeUndefined();
+        expect(cookies(r).some((c) => c.startsWith(`${SIGNIN_COOKIE}=`))).toBe(false);
+      }
+      expect(await connectStates()).toBe(0);
+    });
+
+    it('refuses an unregistered redirect_uri before any state is written', async () => {
+      const client_id = await registerClient();
+      const r = await call('POST', '/oauth/revive/authorize', {
+        headers: formHeaders,
+        body: form({
+          ...authorizeFields(client_id, { redirect_uri: 'https://evil.test/cb' }),
+          via: 'musterd',
+        }),
+      });
+      expect(r.status).toBe(400);
+      expect(r.headers['location']).toBeUndefined();
+      expect(await connectStates()).toBe(0);
+    });
+
+    it('refuses an account not on the team, and a connect state works once', async () => {
+      const client_id = await registerClient();
+      const a = await startConnect(client_id);
+      const stranger = await postCallback({ state: a, statement: statement('acct_stranger') });
+      expect(stranger.status).toBe(403);
+      expect(stranger.headers['location']).toBeUndefined();
+      const b = await startConnect(client_id);
+      expect((await postCallback({ state: b, statement: statement() })).status).toBe(200);
+      expect((await postCallback({ state: b, statement: statement() })).status).toBe(403);
+      expect(await refusals()).toEqual(expect.arrayContaining(['unbound', 'state_spent']));
     });
   });
 });

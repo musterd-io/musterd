@@ -45,6 +45,7 @@ import type { MemberRow } from '../store/rows.js';
 import { redeemAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { requireTeam } from '../store/teams.js';
 import { CimdResolverCapacityError, isCimdClientId, resolveCimdClient } from './cimd.js';
+import { beginConnectSignin, connectAvailable } from './liveSession.js';
 import { originFrom } from './sponsoredAgentMint.js';
 
 let cimdResolver: (clientId: string) => Promise<OAuthClientMetadata> = resolveCimdClient;
@@ -356,6 +357,9 @@ function metadataFor(
   };
 }
 
+/** ADR 820 §6: the consent fields without a proof — Sign in with musterd proves at the callback. */
+const ConnectConfirmSchema = OAuthAuthorizeConfirmSchema.omit({ proof: true });
+
 function consentPage(input: {
   team: string;
   clientName: string;
@@ -365,6 +369,8 @@ function consentPage(input: {
   redirect_uri: string;
   state: string;
   code_challenge: string;
+  /** ADR 820: a hosted team on its own origin — lead with Sign in with musterd, drop the paste. */
+  musterd: boolean;
 }): string {
   const e = escapeHtml;
   // ADR 450 §2 + ADR 452 §5: three forms, one seam. All post the same OAuth fields; the invite form
@@ -382,7 +388,27 @@ ${input.scope ? `<input type="hidden" name="scope" value="${e(input.scope)}">` :
 <h1>${e(input.clientName)} wants to join <b>${e(input.team)}</b></h1>
 ${input.clientHost ? `<p class="host">Client ID host: <code>${e(input.clientHost)}</code></p>` : ''}
 <p class="lede">Signing in adds this app as your seat on the team. It can read the inbox and send as you until you revoke it.</p>
-<section class="primary">
+${
+  input.musterd
+    ? `<section class="primary">
+<h2>I'm on ${e(input.team)}</h2>
+<form method="post" action="">
+${hidden}
+<input type="hidden" name="via" value="musterd">
+<button type="submit">Sign in with musterd</button>
+</form>
+</section>
+<section>
+<h2>I'm new — I have an invite</h2>
+<form method="post" action="">
+${hidden}
+<label>Invite (the room code, or the value from the join link) <input class="mono" type="text" name="invite" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC-1234-5678"></label>
+<label>Pick a name <input type="text" name="member" autocomplete="off"></label>
+<button type="submit">Join ${e(input.team)}</button>
+</form>
+</section>
+`
+    : `<section class="primary">
 <h2>I'm new — I have an invite</h2>
 <form method="post" action="">
 ${hidden}
@@ -400,7 +426,8 @@ ${hidden}
 <button type="submit">Sign in this app as me</button>
 </form>
 </section>
-<section>
+`
+}<section>
 <h2>Connecting an agent?</h2>
 <form method="post" action="">
 ${hidden}
@@ -481,6 +508,8 @@ function consentFormBody(raw: string): {
   credential: string;
   invite: string;
   agent_connect: string;
+  /** ADR 820: `musterd` when the person chose Sign in with musterd. */
+  via: string;
 } {
   const params = new URLSearchParams(raw);
   const out: Record<string, string> = {};
@@ -498,6 +527,7 @@ function consentFormBody(raw: string): {
     credential: out['credential'] ?? '',
     invite: out['invite'] ?? '',
     agent_connect: out['agent_connect'] ?? '',
+    via: out['via'] ?? '',
   };
 }
 
@@ -693,6 +723,7 @@ export async function handleOAuthRoutes(
         redirect_uri: query.redirect_uri,
         state: query.state,
         code_challenge: query.code_challenge,
+        musterd: connectAvailable(ctx, req, slug),
       }),
     );
     return true;
@@ -704,6 +735,64 @@ export async function handleOAuthRoutes(
     checkRateLimit(ctx, req, 'authorize');
     const raw = (await readBody(req)).toString('utf8');
     const flat = consentFormBody(raw);
+    if (flat.via === 'musterd') {
+      // ADR 820 §2: the same checks every consent POST makes, then the console round trip for
+      // this one authorization. The callback issues the code; no browser session is involved.
+      // CSRF: only the consent page this server rendered may start a connect. Otherwise any site
+      // could auto-submit this form with its own client_id and, for a visitor already signed in to
+      // the console, walk the code to its redirect with no click. Sec-Fetch-Site is set by the
+      // browser and cannot be set by a page; Origin cannot be the check, because these pages send
+      // no referrer, so a browser's Origin on the real POST is `null`. A browser that sends no
+      // Sec-Fetch-Site is refused: fail closed.
+      if (req.headers['sec-fetch-site'] !== 'same-origin') {
+        sendOAuthError(
+          res,
+          new MusterdError('forbidden', 'sign in with musterd from this team\u2019s consent page'),
+        );
+        return true;
+      }
+      if (!connectAvailable(ctx, req, slug)) {
+        sendOAuthError(
+          res,
+          new MusterdError('not_found', 'sign in with musterd is not available here'),
+        );
+        return true;
+      }
+      const ask = parseOrOAuth(ConnectConfirmSchema, {
+        client_id: flat.client_id,
+        redirect_uri: flat.redirect_uri,
+        state: flat.state,
+        code_challenge: flat.code_challenge,
+        code_challenge_method: flat.code_challenge_method,
+        ...(flat.scope ? { scope: flat.scope } : {}),
+      });
+      const connectClient = await getClientOrOAuth(ctx.db, team.id, ask.client_id, res);
+      if (!connectClient) return true;
+      if (!registeredRedirect(connectClient, ask.redirect_uri)) {
+        sendOAuthError(
+          res,
+          new MusterdError('bad_request', 'redirect_uri is not registered for this client'),
+        );
+        return true;
+      }
+      const { location, cookie } = await beginConnectSignin(ctx, team, {
+        client_id: ask.client_id,
+        redirect_uri: ask.redirect_uri,
+        code_challenge: ask.code_challenge,
+        state: ask.state,
+        ...(ask.scope ? { scope: ask.scope } : {}),
+        client_source: connectClient.client_source,
+      });
+      res.writeHead(303, {
+        location,
+        'set-cookie': cookie,
+        'cache-control': 'no-store',
+        pragma: 'no-cache',
+        'content-length': '0',
+      });
+      res.end();
+      return true;
+    }
     const body = parseOrOAuth(OAuthAuthorizeConfirmSchema, {
       client_id: flat.client_id,
       redirect_uri: flat.redirect_uri,
@@ -1137,18 +1226,24 @@ export async function handleOAuthRoutes(
 }
 
 /** Unknown client on the browser legs is a musterd-shaped 401, not a redirect (never bounce). */
-async function getClientOrOAuth(
-  db: Driver,
-  teamId: string,
-  clientId: string,
-  res: ServerResponse,
-): Promise<{
+interface ResolvedClient {
   client_id: string;
   client_name: string;
   redirect_uris: string;
   client_source: 'dcr' | 'cimd';
   client_id_host?: string;
-} | null> {
+}
+
+/**
+ * The one client resolver: a DCR registration first, then a CIMD metadata document on a DCR miss
+ * (ADR 470). Throws the OAuth-shaped refusal; `getClientOrOAuth` answers it, and ADR 820's
+ * rechecks use the same path so a client that passed authorize cannot fail them on source alone.
+ */
+async function resolveClient(
+  db: Driver,
+  teamId: string,
+  clientId: string,
+): Promise<ResolvedClient> {
   try {
     const row = await getClient(db, teamId, clientId);
     return {
@@ -1158,17 +1253,10 @@ async function getClientOrOAuth(
       client_source: 'dcr',
     };
   } catch (err) {
-    if (!(err instanceof MusterdError && err.code === 'not_found')) {
-      sendOAuthError(res, err);
-      return null;
-    }
+    if (!(err instanceof MusterdError && err.code === 'not_found')) throw err;
   }
-
   const unknownClient = () => new MusterdError('not_found', 'unknown OAuth client for this team');
-  if (!isCimdClientId(clientId)) {
-    sendOAuthError(res, unknownClient());
-    return null;
-  }
+  if (!isCimdClientId(clientId)) throw unknownClient();
   try {
     const metadata = await cimdResolver(clientId);
     if (metadata.client_id !== clientId) throw unknownClient();
@@ -1181,12 +1269,41 @@ async function getClientOrOAuth(
       client_id_host: new URL(clientId).hostname,
     };
   } catch (err) {
-    sendOAuthError(
-      res,
-      err instanceof CimdResolverCapacityError
-        ? new MusterdError('rate_limited', 'client metadata lookup is busy; retry shortly')
-        : unknownClient(),
-    );
+    throw err instanceof CimdResolverCapacityError
+      ? new MusterdError('rate_limited', 'client metadata lookup is busy; retry shortly')
+      : unknownClient();
+  }
+}
+
+async function getClientOrOAuth(
+  db: Driver,
+  teamId: string,
+  clientId: string,
+  res: ServerResponse,
+): Promise<ResolvedClient | null> {
+  try {
+    return await resolveClient(db, teamId, clientId);
+  } catch (err) {
+    sendOAuthError(res, err);
+    return null;
+  }
+}
+
+/**
+ * ADR 820: is this client still one the authorize step would accept, with this redirect? The same
+ * resolver (DCR or CIMD) and the same redirect rule (exact, or ADR 743's loopback port) as
+ * authorize, so a request that started cannot be refused later on source or port alone.
+ */
+export async function connectClientStill(
+  db: Driver,
+  teamId: string,
+  clientId: string,
+  redirectUri: string,
+): Promise<{ client_name: string } | null> {
+  try {
+    const client = await resolveClient(db, teamId, clientId);
+    return registeredRedirect(client, redirectUri) ? client : null;
+  } catch {
     return null;
   }
 }

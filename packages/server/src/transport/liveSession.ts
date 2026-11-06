@@ -37,6 +37,7 @@ import {
   mintTokenPair,
   revokeChainsForSession,
 } from '../store/oauth.js';
+import { issueCode, type OAuthClientSource } from '../store/oauth.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import {
   consumeSigninState,
@@ -44,7 +45,8 @@ import {
   type SigninStateRow,
 } from '../store/signinStates.js';
 import { getTeamBySlug } from '../store/teams.js';
-import { isTlsPeer } from './oauth.js';
+import { isCimdClientId } from './cimd.js';
+import { connectClientStill, isTlsPeer } from './oauth.js';
 
 /**
  * Hosted `/live` sign-in (ADR 722 §1–4) — the four routes a browser session lives on.
@@ -65,6 +67,7 @@ export const LIVE_SESSION_ROUTES = [
   { method: 'GET', path: '/live/signin/start' },
   { method: 'POST', path: '/live/signin/start' },
   { method: 'POST', path: '/live/signin/callback' },
+  { method: 'POST', path: '/live/signin/connect' },
   { method: 'POST', path: '/live/session/token' },
   { method: 'POST', path: '/live/signout' },
 ] as const;
@@ -81,6 +84,9 @@ const FORM_MAX_BYTES = 16 * 1024;
 
 export type SessionRefusal =
   | 'origin'
+  | 'connect_malformed'
+  | 'not_grant'
+  | 'client_gone'
   | 'not_same_origin'
   | 'no_cookie'
   | 'state_mismatch'
@@ -173,9 +179,18 @@ export async function handleLiveSessionRoutes(
   }
   const team = slug ? await getTeamBySlug(operatorCtx(rootCtx).db, slug) : undefined;
   if (!team) throw new MusterdError('not_found', 'not found');
-  const ctx = teamCtx(rootCtx, team.id);
-  const env: Env = {
-    ctx,
+  const env = envFor(rootCtx, team, cloud);
+  if (path === '/live/signin/start') await start(env, req, res, method, url);
+  else if (path === '/live/signin/callback') await callback(env, req, res);
+  else if (path === '/live/signin/connect') await confirmConnect(env, req, res);
+  else if (path === '/live/session/token') await exchange(env, req, res);
+  else await signout(env, req, res);
+  return true;
+}
+
+function envFor(rootCtx: Ctx, team: TeamRow, cloud: NonNullable<Ctx['config']['cloud']>): Env {
+  return {
+    ctx: teamCtx(rootCtx, team.id),
     rootCtx,
     team,
     consoleOrigin: consoleOriginOf(cloud.consoleJwksUrl),
@@ -183,11 +198,6 @@ export async function handleLiveSessionRoutes(
     jwksUrl: cloud.consoleJwksUrl,
     audience: cloud.consoleAudience,
   };
-  if (path === '/live/signin/start') await start(env, req, res, method, url);
-  else if (path === '/live/signin/callback') await callback(env, req, res);
-  else if (path === '/live/session/token') await exchange(env, req, res);
-  else await signout(env, req, res);
-  return true;
 }
 
 interface Env {
@@ -198,6 +208,194 @@ interface Env {
   teamOrigin: string;
   jwksUrl: string;
   audience: string;
+}
+
+// ── connect (ADR 820) ───────────────────────────────────────────────────────────────────────────
+
+/** ADR 820: the authorization request a `connect` state carries, plus the client's source. */
+const ConnectRequestSchema = z
+  .object({
+    client_id: z.string().min(1),
+    redirect_uri: z.string().min(1),
+    code_challenge: z.string().min(1),
+    state: z.string().min(1),
+    scope: z.string().optional(),
+    client_source: z.enum(['dcr', 'cimd']),
+  })
+  .strict();
+export type ConnectStart = z.infer<typeof ConnectRequestSchema>;
+
+/**
+ * ADR 820: whether this request reached a hosted team on its own origin over TLS — the only place
+ * "Sign in with musterd" can finish, because the round trip comes back to that origin's callback.
+ */
+export function connectAvailable(ctx: Ctx, req: IncomingMessage, slug: string): boolean {
+  const cloud = ctx.config.cloud;
+  return !!cloud && isTlsPeer(ctx, req) && hostTeam(req.headers.host, cloud.hostSuffix) === slug;
+}
+
+/**
+ * ADR 820 §2: start the console round trip for one MCP client authorization the consent POST has
+ * already validated. Answers the console URL and the signin cookie; the caller sends the 303.
+ */
+export async function beginConnectSignin(
+  rootCtx: Ctx,
+  team: TeamRow,
+  request: ConnectStart,
+): Promise<{ location: string; cookie: string }> {
+  const cloud = rootCtx.config.cloud;
+  if (!cloud) throw new MusterdError('not_found', 'not found');
+  const ctx = teamCtx(rootCtx, team.id);
+  const s = await startSigninState(ctx.db, {
+    teamId: team.id,
+    mode: 'connect',
+    oauthRequest: ConnectRequestSchema.parse(request),
+  });
+  const env = envFor(rootCtx, team, cloud);
+  return { location: handbackUrl(env, s.state), cookie: signinCookie(s.state) };
+}
+
+/** The client, if authorize would still accept it with this redirect (ADR 820, ADR 470, ADR 743). */
+function clientStill(env: Env, request: ConnectStart): Promise<{ client_name: string } | null> {
+  return connectClientStill(env.ctx.db, env.team.id, request.client_id, request.redirect_uri);
+}
+
+const parseConnect = (raw: string | null): ConnectStart | null => {
+  try {
+    return ConnectRequestSchema.parse(JSON.parse(raw ?? ''));
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * ADR 820 §3: the callback's end for a `connect` state. Nothing is issued yet: the console may
+ * have signed with whatever account was already signed in there, so the person is shown who they
+ * are about to connect as, and the code waits for their Allow on a one-time `grant` state.
+ */
+async function connectBack(
+  env: Env,
+  res: ServerResponse,
+  record: SigninStateRow,
+  member: MemberRow,
+  refuse: (reason: SessionRefusal) => Promise<void>,
+): Promise<void> {
+  const { ctx, team } = env;
+  const request = parseConnect(record.oauth_request);
+  if (!request) return refuse('connect_malformed');
+  const client = await clientStill(env, request);
+  if (!client) return refuse('client_gone');
+  const grant = await startSigninState(ctx.db, {
+    teamId: team.id,
+    mode: 'grant',
+    memberId: member.id,
+    oauthRequest: request,
+  });
+  confirmPage(res, {
+    client: client.client_name,
+    team: team.slug,
+    member: member.name,
+    state: grant.state,
+    cookie: signinCookie(grant.state),
+  });
+}
+
+/**
+ * ADR 820 §3: the person's Allow or Cancel. Same-origin only (the confirm page is the only form
+ * that may post here); the cookie, the form and an unspent `grant` state must agree. The request
+ * comes from the grant, never from the form, so no field can swap the client or the redirect.
+ */
+async function confirmConnect(env: Env, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const { ctx, team } = env;
+  const refuse = async (reason: SessionRefusal): Promise<void> => {
+    await refusedRow(ctx.db, team.id, reason);
+    page(res, 403, "That didn't complete. Start again from the app you were connecting.", [
+      CLEAR_SIGNIN,
+    ]);
+  };
+  if (req.headers['sec-fetch-site'] !== 'same-origin') return refuse('not_same_origin');
+  const cookieState = parseCookies(req.headers.cookie).get(SIGNIN_COOKIE);
+  const form = ConfirmSchema.safeParse(await readForm(req));
+  if (!cookieState) return refuse('no_cookie');
+  if (!form.success || form.data.state !== cookieState) return refuse('state_mismatch');
+  const consumed = await consumeSigninState(ctx.db, team.id, form.data.state);
+  if (!consumed.ok) return refuse(`state_${consumed.reason}`);
+  if (consumed.record.mode !== 'grant') return refuse('not_grant');
+  const request = parseConnect(consumed.record.oauth_request);
+  if (!request) return refuse('connect_malformed');
+  const back = (query: string): void => {
+    const sep = request.redirect_uri.includes('?') ? '&' : '?';
+    res.writeHead(302, {
+      location: `${request.redirect_uri}${sep}${query}&state=${encodeURIComponent(request.state)}`,
+      'cache-control': 'no-store',
+      pragma: 'no-cache',
+      'set-cookie': CLEAR_SIGNIN,
+      'content-length': '0',
+    });
+    res.end();
+  };
+  if (form.data.decision === 'deny') return back('error=access_denied');
+  // Re-checked at the click, not trusted from the callback a minute ago.
+  const member = consumed.record.member_id
+    ? await getMemberById(ctx.db, consumed.record.member_id)
+    : undefined;
+  if (!member || member.left_at !== null || member.team_id !== team.id || member.kind !== 'human')
+    return refuse('member_left');
+  if (!(await clientStill(env, request))) return refuse('client_gone');
+  const { code } = await issueCode(ctx.db, {
+    teamId: team.id,
+    memberId: member.id,
+    clientId: request.client_id,
+    clientSource: request.client_source as OAuthClientSource,
+    redirectUri: request.redirect_uri,
+    codeChallenge: request.code_challenge,
+    ...(request.scope ? { scope: request.scope } : {}),
+  });
+  await appendAudit(ctx.db, team.id, {
+    actor: member.name,
+    action: 'oauth.code_issued',
+    target: isCimdClientId(request.client_id) ? null : request.client_id,
+    result: 'allow',
+    detail: { via: 'musterd' },
+  });
+  back(`code=${encodeURIComponent(code)}`);
+}
+
+const ConfirmSchema = z.object({
+  state: z.string().min(1).max(256),
+  decision: z.enum(['allow', 'deny']),
+});
+
+/**
+ * The confirm page. Never framed (the Allow button is a clickjacking target), no script, and no
+ * `form-action`: a browser applies it to the 302 the POST answers, which goes to the client.
+ */
+function confirmPage(
+  res: ServerResponse,
+  o: { client: string; team: string; member: string; state: string; cookie: string },
+): void {
+  const e = (v: string) => v.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  const body = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect ${e(o.client)} to ${e(o.team)} — musterd</title></head>
+<body style="font-family:system-ui,sans-serif;margin:3rem auto;max-width:32rem;padding:0 1rem;line-height:1.5">
+<h1 style="font-size:1.375rem;margin:0 0 .5rem">Connect ${e(o.client)} to ${e(o.team)}?</h1>
+<p style="margin:0 0 1.5rem">As <strong>${e(o.member)}</strong>. ${e(o.client)} will be able to read the team and send as you until you sign it out.</p>
+<form method="post" action="/live/signin/connect" style="display:flex;gap:.75rem">
+<input type="hidden" name="state" value="${e(o.state)}">
+<button type="submit" name="decision" value="allow" style="min-height:2.75rem;padding:0 1.25rem;font:inherit;font-weight:600;border-radius:8px;border:1px solid #e1ad01;background:#e1ad01;color:#18181b">Allow</button>
+<button type="submit" name="decision" value="deny" style="min-height:2.75rem;padding:0 1.25rem;font:inherit;border-radius:8px;border:1px solid #71717a;background:#fff;color:#18181b">Cancel</button>
+</form></body></html>`;
+  res.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
+    'content-security-policy':
+      "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'no-referrer',
+    'set-cookie': [o.cookie],
+  });
+  res.end(body);
 }
 
 // ── start ───────────────────────────────────────────────────────────────────────────────────────
@@ -327,6 +525,9 @@ async function callback(env: Env, req: IncomingMessage, res: ServerResponse): Pr
 
   const bound = await memberFor(env, consumed.record, claims.accountId);
   if ('refusal' in bound) return refuse(bound.refusal);
+  // ADR 820: a connector's round trip ends in a code for its client, never in a browser session.
+  if (consumed.record.mode === 'connect')
+    return connectBack(env, res, consumed.record, bound.member, refuse);
 
   const session = await createBrowserSession(ctx.db, {
     teamId: team.id,
