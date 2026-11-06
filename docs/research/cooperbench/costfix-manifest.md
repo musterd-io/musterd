@@ -2,7 +2,7 @@
 
 **Lane:** `01M6S2NP0X` (this page), goal `coordination-cost`, asked by nick (2026-11-06, in answer to
 question `01M6S3EXTZ`: "Lean package"). The run is its own lane. **Status:** pre-registered
-2026-11-06, before any pair of this run. **Spend is not yet approved** — see Spend. Nothing below
+2026-11-06, before any pair of this run. Spend approved by nick up to $135 (question `01M6S3X1MV`). Nothing below
 changes once a measured pair has run.
 **CooperBench:** `63b9d44`, as finding 035. Finding number on read: the next free one.
 
@@ -139,4 +139,4 @@ expires ~2026-11-07 07:00Z — if the run cannot finish before then it waits for
 | What to test | nick, 2026-11-06, question `01M6S3EXTZ`: "Lean package" (over a hand-off arm and bigger tasks first) |
 | Fold in the C1 second seed (baseline + solo on flash) | lazara, proposed here: the baseline arm is needed concurrently for K1 anyway; solo adds ~$9 |
 | Model | `claude-opus-5-5`, all arms (as finding 035) |
-| Spend | **pending nick** |
+| Spend | nick, 2026-11-06 ~19:05Z, question `01M6S3X1MV` (verified app answer): "Approve up to $135" |
