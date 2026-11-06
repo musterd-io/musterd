@@ -112,6 +112,9 @@ one gets tapped through.
 
 - The ROADMAP's "iOS deferred" line records this carve-out: an app for asks and signatures, not the
   general surface. A team view, `/live` on the phone, and the calendar stay deferred.
+  _(Amended 2026-11-05 by [ADR 814](814-app-is-the-team-on-the-phone.md): the app is the team on
+  the phone — asks, the team as `/live` shows it, goals, a few settings, a chat with a member. The
+  office scene, Android and the App Store stay out; decision 11 stands.)_
 - ADR 519 stays as the calendar's data model. Its app half (ADR 520 increments 4 and 5) is withdrawn
   with the calendar screens.
 - Increment 7 of away channels splits into three lanes: the daemon and protocol half, the relay's

@@ -63,6 +63,10 @@ The phone cannot send a quick action, and it cannot show the seats it would send
 
 ## Consequences
 
+- _(2026-11-05, [ADR 814](814-app-is-the-team-on-the-phone.md): the roster grows into the team.
+  It gains optional `members` — every standing member with `/live`'s card state — and `for_you`.
+  Decision 7's `seats` stays as it is, for phones built before then.)_
+
 - The phone UI (cider, lane `01M67E5DM8`) can build the per-seat buttons and the question-card
   buttons against these shapes. Both need only decisions 1 to 6.
 - No migration: the spent nonces live in the binding's `app_keys` JSON, beside the question-key
