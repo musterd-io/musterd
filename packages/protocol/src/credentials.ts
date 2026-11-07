@@ -477,7 +477,7 @@ export const ApiKeyCreateRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(80),
     scope: z.enum(API_KEY_SCOPES),
-    expires_days: z.union([z.literal(30), z.literal(90), z.literal(365)]).default(90),
+    expires_days: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(365)]).default(90),
   })
   .strict();
 export type ApiKeyCreateRequest = z.infer<typeof ApiKeyCreateRequestSchema>;
