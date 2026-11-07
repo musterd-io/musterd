@@ -224,7 +224,7 @@ describe('API keys (ADR 821)', () => {
     expect(TOKEN_PREFIXES.api_key).toBe('msak_');
   });
 
-  it('accepts a name, read or act, and one of the three expiries — and nothing else', () => {
+  it('accepts a name, read or act, and one of the four expiries — and nothing else', () => {
     const ok = ApiKeyCreateRequestSchema.parse({
       name: 'deploy job',
       scope: 'read',
@@ -232,11 +232,14 @@ describe('API keys (ADR 821)', () => {
     });
     expect(ok).toEqual({ name: 'deploy job', scope: 'read', expires_days: 90 });
     expect(ApiKeyCreateRequestSchema.parse({ name: 'ci', scope: 'act' }).expires_days).toBe(90);
+    expect(
+      ApiKeyCreateRequestSchema.parse({ name: 'ci', scope: 'read', expires_days: 7 }).expires_days,
+    ).toBe(7);
     for (const bad of [
       { name: '', scope: 'read', expires_days: 90 },
       { name: 'x'.repeat(81), scope: 'read', expires_days: 90 },
       { name: 'ci', scope: 'admin', expires_days: 90 },
-      { name: 'ci', scope: 'read', expires_days: 7 },
+      { name: 'ci', scope: 'read', expires_days: 14 },
       { name: 'ci', scope: 'read', expires_days: 90, member: 'other' },
     ])
       expect(ApiKeyCreateRequestSchema.safeParse(bad).success).toBe(false);

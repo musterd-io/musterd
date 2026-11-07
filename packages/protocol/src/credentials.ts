@@ -470,7 +470,7 @@ export function sparsifyPolicy(stored: unknown): PolicyOverride {
 export const API_KEY_SCOPES = ['read', 'act'] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 /** ADR 821 §3: the only lifetimes a key may have. */
-export const API_KEY_EXPIRY_DAYS = [30, 90, 365] as const;
+export const API_KEY_EXPIRY_DAYS = [7, 30, 90, 365] as const;
 
 /** `POST /teams/:slug/members/:name/api-keys` — the member makes a key for themselves (ADR 821). */
 export const ApiKeyCreateRequestSchema = z

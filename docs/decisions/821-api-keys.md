@@ -6,6 +6,7 @@
 - Builds on: [ADR 580](580-human-credentials-require-human-admin.md)
   (the human credential `mscr_`), [ADR 446](446-remote-mcp-https-oauth.md) (`msat_` as a bearer),
   [ADR 662](662-one-machine-per-hosted-seat.md) (high-authority acts need a device signature)
+- Security read: big-body, 2026-11-06 (allowlists, the `act` ceiling, mint sources, key id, expiry)
 - Spec: [`2026-11-06-unified-sign-in-design.md`](../superpowers/specs/2026-11-06-unified-sign-in-design.md)
   §8, §11.1, §12
 
@@ -31,27 +32,40 @@ be revoked on its own, without a new way around any check that guards admin or h
 1. **A new credential, `msak_`** (`TOKEN_PREFIXES.api_key`): `msak_` plus 32 random bytes,
    base64url. Stored only as its sha256, shown once at creation (hard rule 5). One format on every
    surface that takes a bearer: the HTTP API, and the CLI and MCP adapter through it.
-2. **Two scopes, nothing wider:**
-   - **`read`**: authenticates `GET` (and `HEAD`) requests only. Every other method, the MCP
-     endpoint and the WebSocket claim refuse it as `forbidden`.
-   - **`act`** ("act as me"): authenticates as the member, with the member's capabilities minus
-     `is_admin`, clamped at the read the way a ceiling is ([ADR 621](621-talk-only-guests.md) §4). No route that needs an
-     admin accepts it.
+2. **Two scopes, each a default-deny allowlist of reviewed routes.** A key authenticates only the
+   `(method, route)` pairs on its scope's list, held in one table in the server
+   (`apiKeyRoutes.ts`) and checked at the shared HTTP auth boundary before any handler runs. A route
+   that is not on the list (including any route added later until it is reviewed onto it), the MCP
+   endpoint and the WebSocket claim all refuse every key as `forbidden`.
+   - **`read`**: reviewed read routes only: the board, lanes, inboxes, the record, the roster.
+     Being a `GET` is not enough to be on it; a route is listed because its response is fit for a
+     long-lived script to hold.
+   - **`act`** ("act as me"): the `read` list plus reviewed write routes that act as the member in
+     the work: sending acts, and claiming, updating and submitting lanes. Explicitly never on it:
+     creating, rotating or revoking any credential or key; invites, grants, delegation and
+     connector authorization; team, policy, security and account controls; and any route that takes
+     an ADR 662 signature. Capabilities are the member's with `is_admin` removed, clamped at the read
+     the way a ceiling is ([ADR 621](621-talk-only-guests.md) §4), so a listed route that branches on
+     admin takes the non-admin branch.
 
-   Neither can produce an ADR 662 signature. A key is not a device key, so every act that needs
-   one still needs the member's passkey or phone.
-3. **Expiry is required.** 30, 90 (the default) or 365 days, chosen at creation. Past it the key is
-   refused as `unauthorized`. It is listed as expired until revoked.
-4. **Minted by the member, as themselves.** `POST /teams/:slug/members/:name/api-keys` creates a key
-   for the caller only (`name` must be the caller), authenticated by a human credential, a browser
-   session's `msat_`, or an MCP client's `msat_`. Never by another API key, so a key cannot mint a
+   A key never produces or carries an ADR 662 signature, and a request that combines a key with a
+   signature is refused: a signature is bound to the person's own session, never to a key.
+3. **Expiry is required, short by default for what it is.** 7, 30, 90 (the default) or 365 days,
+   chosen at creation; the form suggests 7 for a CI job. Expiry, revocation and the member's
+   standing (left, expired, disabled) are checked on every request. Past expiry a key is refused as
+   `unauthorized` and listed as expired until revoked.
+4. **Minted by the member, as themselves, in person.** `POST /teams/:slug/members/:name/api-keys`
+   creates a key for the caller only (`name` must be the caller), authenticated by the member's own
+   human credential or a browser session's `msat_` (scope `session:…`, ADR 722). Never by an MCP
+   client's `msat_` (its delegation does not include minting credentials), and never by another
    key. Each member may hold at most 20 live keys.
 5. **Listed and revoked by the member or an admin.** `GET …/api-keys` lists name, scope, created,
    expires and last used, never the key or its hash. `DELETE …/api-keys/:id` revokes at once. A
    member who leaves takes their keys with them: a key whose member is gone authenticates nothing.
 6. **Recorded.** `api_key.created` and `api_key.revoked` audit rows name the key's id and name,
-   never its value. An act sent with a key is stamped `meta.via = "api_key"` beside the member, so
-   the record tells "nick did this" from "nick's deploy key did this". `last_used_at` is written at
+   never its value. An act sent with a key is stamped `meta.via = "api_key"` and `meta.key_id`
+   (the key's non-secret id) beside the member, so the record tells "nick did this" from "nick's
+   deploy key did this". `last_used_at` is written at
    most once a minute per key.
 7. **Bot seats are not in this ADR.** A key that acts as an agent seat would sit beside the agent
    session-lease rules ([ADR 337](337-agent-http-session-authority.md)), so it gets its own design and lane. Until then the UI's bot hint is
@@ -69,9 +83,13 @@ be revoked on its own, without a new way around any check that guards admin or h
 ## Observability & Evaluation
 
 - **Traces:** n/a. No new trace event. The audit rows in §6 and the `meta.via` stamp are the record.
-- **Eval:** server tests. A created key is shown once and stored only as a hash. A `read` key
-  passes a GET and is refused on POST, MCP and WS. An `act` key sends as the member and is refused
-  on an admin route. An expired, revoked or departed member's key is refused. A key cannot create a
-  key. Another member can neither list nor revoke someone's keys; an admin can. `last_used_at` moves
-  at most once a minute. The scrubber redacts `msak_`.
+- **Eval:** server tests. A created key is shown once and stored only as a hash. A `read` key passes
+  a listed read route and is refused on an unlisted GET, HEAD of an unlisted route, every write, MCP
+  and WS. An `act` key sends as the member, stamped with its key id, and is refused on each denied
+  class (credential and key routes, invites and grants, team and policy controls, an admin route, a
+  signature-taking route) and on an unlisted route. A table test fails when a route exists with no
+  review decision. An expired, revoked or departed member's key is refused on the next request. Only
+  a human credential or a browser session mints; an MCP client's token and a key cannot. Another
+  member can neither list nor revoke someone's keys; an admin can. `last_used_at` moves at most once
+  a minute. The scrubber redacts `msak_`.
 - **Experiment:** n/a. A credential with a closed test set.
