@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ApiKeyCreateRequestSchema,
   BootstrapCutoverRequestSchema,
   BootstrapMigrationRequestSchema,
   containsMusterdCredential,
   PolicyOverrideSchema,
   PolicySchema,
   SPEND_CAP_USD_MAX,
+  TOKEN_PREFIXES,
   UNPRICED_WAKE_CAP_MAX,
   sparsifyPolicy,
 } from './credentials.js';
@@ -88,6 +90,8 @@ describe('containsMusterdCredential (ADR 452 §1, big-body 01M3FAF83Z)', () => {
     expect(containsMusterdCredential('https://h/join/t#n=abc&k=MSAC_x')).toBe(true);
     expect(containsMusterdCredential('paste: msat_x')).toBe(true);
     expect(containsMusterdCredential('a/mskey_x')).toBe(true);
+    // ADR 821: an API key is a credential like any other, so every scrubber redacts it.
+    expect(containsMusterdCredential('Authorization: Bearer msak_x')).toBe(true);
   });
 
   it('does not fire inside a base64url run, so a random nonce cannot trip it', () => {
@@ -212,5 +216,32 @@ describe('PolicySchema.unpriced_wake_cap (ADR 639)', () => {
   it('sparsifyPolicy keeps 0 and a positive integer', () => {
     expect(sparsifyPolicy({ unpriced_wake_cap: 0 })).toEqual({ unpriced_wake_cap: 0 });
     expect(sparsifyPolicy({ unpriced_wake_cap: 4 })).toEqual({ unpriced_wake_cap: 4 });
+  });
+});
+
+describe('API keys (ADR 821)', () => {
+  it('has its own prefix', () => {
+    expect(TOKEN_PREFIXES.api_key).toBe('msak_');
+  });
+
+  it('accepts a name, read or act, and one of the four expiries — and nothing else', () => {
+    const ok = ApiKeyCreateRequestSchema.parse({
+      name: 'deploy job',
+      scope: 'read',
+      expires_days: 90,
+    });
+    expect(ok).toEqual({ name: 'deploy job', scope: 'read', expires_days: 90 });
+    expect(ApiKeyCreateRequestSchema.parse({ name: 'ci', scope: 'act' }).expires_days).toBe(90);
+    expect(
+      ApiKeyCreateRequestSchema.parse({ name: 'ci', scope: 'read', expires_days: 7 }).expires_days,
+    ).toBe(7);
+    for (const bad of [
+      { name: '', scope: 'read', expires_days: 90 },
+      { name: 'x'.repeat(81), scope: 'read', expires_days: 90 },
+      { name: 'ci', scope: 'admin', expires_days: 90 },
+      { name: 'ci', scope: 'read', expires_days: 14 },
+      { name: 'ci', scope: 'read', expires_days: 90, member: 'other' },
+    ])
+      expect(ApiKeyCreateRequestSchema.safeParse(bad).success).toBe(false);
   });
 });

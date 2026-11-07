@@ -63,6 +63,11 @@ export const TOKEN_PREFIXES = {
    * dies with the poll. Only the broadcast observer seat is handed it.
    */
   poll: 'mspoll_',
+  /**
+   * A member's API key (ADR 821): what a script or CI job presents. Scoped `read` (GET only) or
+   * `act` (as the member, never admin), with a required expiry; listed and revoked on its own.
+   */
+  api_key: 'msak_',
 } as const;
 export type TokenKind = keyof typeof TOKEN_PREFIXES;
 
@@ -459,4 +464,31 @@ export function sparsifyPolicy(stored: unknown): PolicyOverride {
     if (!(key in defaults) || !sameValue(value, defaults[key])) out[key] = value;
   }
   return PolicyOverrideSchema.parse(out);
+}
+
+/** ADR 821: what an API key may do. `read` is GET/HEAD only; `act` is as the member, never admin. */
+export const API_KEY_SCOPES = ['read', 'act'] as const;
+export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
+/** ADR 821 §3: the only lifetimes a key may have. */
+export const API_KEY_EXPIRY_DAYS = [7, 30, 90, 365] as const;
+
+/** `POST /teams/:slug/members/:name/api-keys` — the member makes a key for themselves (ADR 821). */
+export const ApiKeyCreateRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    scope: z.enum(API_KEY_SCOPES),
+    expires_days: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(365)]).default(90),
+  })
+  .strict();
+export type ApiKeyCreateRequest = z.infer<typeof ApiKeyCreateRequestSchema>;
+
+/** One key as listed: never the key, never its hash. */
+export interface ApiKeySummary {
+  id: string;
+  name: string;
+  scope: ApiKeyScope;
+  created_at: number;
+  expires_at: number;
+  last_used_at: number | null;
+  revoked_at: number | null;
 }
