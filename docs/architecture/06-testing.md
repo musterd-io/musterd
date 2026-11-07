@@ -145,7 +145,10 @@ through a Cloud-mode team server and a real console, each behind `scripts/e2e/tl
 own site (`acme.musterd.test`, `app.console.test`; a throwaway certificate, host-resolver rules).
 It clicks **Sign in with musterd** on `/live`, follows the console's hand-back and its cross-site
 form POST, and checks that a browser session exists and that nothing credential-shaped is in
-`localStorage` or `sessionStorage` (ADR 722, ADR 818). Unit tests set the `Origin` header by hand,
+`localStorage` or `sessionStorage` (ADR 722, ADR 818). It also connects an MCP client (ADR 820):
+a third site, `client.e2e.test`, plays the client; Chrome goes consent page → Sign in with musterd →
+console hand-back → confirm page → Allow, and the client's redirect gets a code that redeems with
+its PKCE verifier; a Cancel run ends in `access_denied`. Unit tests set the `Origin` header by hand,
 so only this test sees what a browser actually sends: its first run found `Origin: null` under the
 hand-back page's `no-referrer` policy.
 
