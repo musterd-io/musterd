@@ -103,7 +103,11 @@ self-hosted teams and guests still need.
   client's verifier. A `connect` callback creates no `browser_sessions` row. An unbound account is
   refused. A `connect` state works once.
 
-  Follows-up: 01M6S7DKXH0R7TN2QJV1CQQR7V (the real-browser test gains a connect run: a fake client
-  redirect on its own host, the code exchanged with the verifier)
+  The real-browser test (`scripts/e2e/hosted-signin.e2e.test.ts`, run in CI) drives it end to end:
+  a third site plays the client; Chrome opens the consent page, signs in with musterd through the
+  console's cross-site hand-back, sees the confirm page name the member, clicks Allow, and the
+  client's redirect receives a code that redeems only with its verifier and acts as that member.
+  Cancel reaches the client as `access_denied` with no code. *(Added 2026-11-06 on big-body's
+  acceptance read.)*
 - **Experiment:** n/a. This is a sign-in path with a closed test set, and the falsifier is the
   browser run.

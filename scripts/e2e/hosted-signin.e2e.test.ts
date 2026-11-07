@@ -9,6 +9,8 @@
  * Opt-in: it needs Chrome and a built web client (`pnpm --filter @musterd/web build`), so it runs
  * only with `MUSTERD_E2E=1` (and `CHROME_BIN` where Chrome is not at the macOS default).
  */
+import { createHash } from 'node:crypto';
+import { createServer as createHttpServer, request as httpRequest } from 'node:http';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ConsoleConfig } from '../../packages/console/src/config.js';
@@ -29,6 +31,9 @@ const TEAM_HOST = `acme.${SUFFIX}`;
 const CONSOLE_HOST = 'app.console.test';
 const CONSOLE_ORIGIN = `https://${CONSOLE_HOST}`;
 const AUD = 'https://cloud.e2e.test';
+/** ADR 820's connector run: a third site plays the MCP client and receives its redirect. */
+const CLIENT_HOST = 'client.e2e.test';
+const CLIENT_REDIRECT = `https://${CLIENT_HOST}/cb`;
 const WEB_ROOT = resolve(import.meta.dirname, '../../packages/web/dist/client');
 
 /** chrome.mjs is untyped JS; this is the slice of it the test uses. */
@@ -46,6 +51,9 @@ describe.skipIf(!process.env['MUSTERD_E2E'])('hosted /live sign-in in a real bro
   const closers: (() => Promise<unknown>)[] = [];
   let page: Page;
   let seed: NonNullable<Awaited<ReturnType<typeof bootCloud>>['seed']>;
+  let teamPort = 0;
+  /** What the client's redirect endpoint received, newest last. */
+  const clientHits: URLSearchParams[] = [];
 
   /** Evaluate in the page and return the value. */
   const js = async <T>(expression: string): Promise<T> => {
@@ -140,7 +148,19 @@ describe.skipIf(!process.env['MUSTERD_E2E'])('hosted /live sign-in in a real bro
       MUSTERD_WEB_ROOT: WEB_ROOT,
     });
     seed = booted.seed!;
+    teamPort = booted.s.port;
     closers.push(() => booted.s.close());
+
+    // The MCP client's redirect endpoint: records what it was handed, answers a plain page.
+    const clientServer = createHttpServer((req, res) => {
+      const u = new URL(req.url ?? '/', CLIENT_REDIRECT);
+      // Only the redirect counts: the browser also asks this host for /favicon.ico.
+      if (u.pathname === '/cb') clientHits.push(u.searchParams);
+      res.writeHead(200, { 'content-type': 'text/plain' }).end('client got it');
+    });
+    await new Promise<void>((r) => clientServer.listen(0, '127.0.0.1', r));
+    const clientPort = (clientServer.address() as { port: number }).port;
+    closers.push(() => new Promise((r) => clientServer.close(r)));
     const team = await createTeam(seed, { slug: 'acme' });
     const ada = (await addMember(seed, team, { name: 'ada', kind: 'human', role: '' })).row;
     await bindMemberAccount(seed, ada.id, 'acct_ada');
@@ -148,8 +168,12 @@ describe.skipIf(!process.env['MUSTERD_E2E'])('hosted /live sign-in in a real bro
     // https for both, one listener, routed by Host.
     const proxy = await startTlsProxy({
       port: 0,
-      routes: { [TEAM_HOST]: booted.s.port, [CONSOLE_HOST]: consolePort },
-      tls: throwawayCert([TEAM_HOST, CONSOLE_HOST]),
+      routes: {
+        [TEAM_HOST]: booted.s.port,
+        [CONSOLE_HOST]: consolePort,
+        [CLIENT_HOST]: clientPort,
+      },
+      tls: throwawayCert([TEAM_HOST, CONSOLE_HOST, CLIENT_HOST]),
     });
     closers.push(proxy.close);
 
@@ -157,7 +181,7 @@ describe.skipIf(!process.env['MUSTERD_E2E'])('hosted /live sign-in in a real bro
       tool: 'hosted-signin-e2e',
       verdictNoun: 'sign-in',
       extraArgs: [
-        `--host-resolver-rules=MAP ${TEAM_HOST}:443 127.0.0.1:${proxy.port}, MAP ${CONSOLE_HOST}:443 127.0.0.1:${proxy.port}`,
+        `--host-resolver-rules=MAP ${TEAM_HOST}:443 127.0.0.1:${proxy.port}, MAP ${CONSOLE_HOST}:443 127.0.0.1:${proxy.port}, MAP ${CLIENT_HOST}:443 127.0.0.1:${proxy.port}`,
         '--ignore-certificate-errors',
       ],
     });
@@ -212,5 +236,121 @@ describe.skipIf(!process.env['MUSTERD_E2E'])('hosted /live sign-in in a real bro
     // The token lives in memory: nothing credential-shaped in either storage.
     const stored = await js<string>('JSON.stringify([localStorage, sessionStorage])');
     expect(stored).not.toMatch(/msat_|mscr_|mbs_/);
+  }, 90_000);
+  /**
+   * A request to the team server as the client would make it, straight to its port. `node:http`,
+   * not `fetch`: fetch drops a custom Host header, and the team is chosen by Host.
+   */
+  const teamFetch = (
+    path: string,
+    init: { method?: string; headers?: Record<string, string>; body?: string } = {},
+  ) =>
+    new Promise<{ status: number; json: () => Promise<unknown> }>((resolveReq, reject) => {
+      const r = httpRequest(
+        {
+          host: '127.0.0.1',
+          port: teamPort,
+          path,
+          method: init.method ?? 'GET',
+          headers: { host: TEAM_HOST, 'x-forwarded-proto': 'https', ...(init.headers ?? {}) },
+        },
+        (res) => {
+          let text = '';
+          res.on('data', (c: Buffer) => (text += c.toString()));
+          res.on('end', () =>
+            resolveReq({ status: res.statusCode ?? 0, json: async () => JSON.parse(text) }),
+          );
+        },
+      );
+      r.on('error', reject);
+      r.end(init.body);
+    });
+
+  async function registerClient(): Promise<string> {
+    const r = await teamFetch('/oauth/acme/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ redirect_uris: [CLIENT_REDIRECT], client_name: 'Claude' }),
+    });
+    expect(r.status).toBe(201);
+    return ((await r.json()) as { client_id: string }).client_id;
+  }
+
+  /** Open the consent page, choose Sign in with musterd, land on the confirm page, click `decision`. */
+  async function connect(
+    client_id: string,
+    challenge: string,
+    state: string,
+    decision: 'allow' | 'deny',
+  ) {
+    const q = new URLSearchParams({
+      response_type: 'code',
+      client_id,
+      redirect_uri: CLIENT_REDIRECT,
+      state,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+    });
+    const before = clientHits.length;
+    await page.send('Page.navigate', { url: `https://${TEAM_HOST}/oauth/acme/authorize?${q}` });
+    await until(
+      'the consent page',
+      `!!document.querySelector('input[name="via"][value="musterd"]')`,
+    );
+    // No credential box on a hosted team (ADR 820 §5).
+    expect(await js<boolean>(`!!document.querySelector('input[name="credential"]')`)).toBe(false);
+    await js(`document.querySelector('input[name="via"][value="musterd"]').form.submit(), true`);
+    // Console hand-back (auto-submitted, cross-site), then the team's confirm page naming ada.
+    await until(
+      'the confirm page',
+      `!!document.querySelector('button[value="${decision}"]')`,
+      30_000,
+    );
+    expect(await js<string>('document.body.innerText')).toContain('ada');
+    await js(`document.querySelector('button[value="${decision}"]').click(), true`);
+    const deadline = Date.now() + 20_000;
+    while (clientHits.length === before) {
+      if (Date.now() > deadline) throw new Error('the client never received its redirect');
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    return clientHits[clientHits.length - 1]!;
+  }
+
+  it('connects an MCP client: consent, console, confirm, Allow, and a code only its verifier redeems (ADR 820)', async () => {
+    const client_id = await registerClient();
+    const verifier = 'v'.repeat(43);
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const back = await connect(client_id, challenge, 'st-allow', 'allow');
+    expect(back.get('state')).toBe('st-allow');
+    const code = back.get('code')!;
+    expect(code).toBeTruthy();
+    const token = await teamFetch('/oauth/acme/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: CLIENT_REDIRECT,
+        client_id,
+        code_verifier: verifier,
+      }).toString(),
+    });
+    expect(token.status).toBe(200);
+    const access = ((await token.json()) as { access_token: string }).access_token;
+    expect(access).toMatch(/^msat_/);
+    // It acts as ada: her own signed-in apps list answers to it, and names this client.
+    const mine = await teamFetch('/teams/acme/members/ada/clients', {
+      headers: { authorization: `Bearer ${access}` },
+    });
+    expect(mine.status).toBe(200);
+    expect(JSON.stringify(await mine.json())).toContain('Claude');
+  }, 90_000);
+
+  it('Cancel on the confirm page sends the client access_denied and no code', async () => {
+    const client_id = await registerClient();
+    const back = await connect(client_id, 'c'.repeat(43), 'st-deny', 'deny');
+    expect(back.get('error')).toBe('access_denied');
+    expect(back.get('state')).toBe('st-deny');
+    expect(back.get('code')).toBeNull();
   }, 90_000);
 });
