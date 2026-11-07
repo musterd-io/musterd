@@ -344,3 +344,24 @@ ADR 810 stay: the lane is a 7 s wake with context for a seat whose acts come fro
 teammates. The next CooperBench work is the [flash comparison](./flash-manifest.md) against solo and
 CooperBench's own team harness.
 
+
+## After the rider series: flash comparison, cost split, cost fix (2026-11-06)
+
+Recorded 2026-11-07; nothing above is changed. No rider was added for these runs: each had its own
+pre-registered manifest, and this section only links them so the series has one current record.
+
+- **[Finding 035](../035-cooperbench-flash-comparison.md)** ([manifest](./flash-manifest.md)): the 50
+  `flash` pairs on `claude-opus-5-5`. musterd 38, solo 37 (no detectable difference); musterd 38,
+  CooperBench's team harness 19 (musterd better, p < 0.0001); solo better than team. musterd 2.8× solo
+  per pair.
+- **[Finding 036](../036-cooperbench-flash-cost-split.md)** ($0 model): 035's cost split call by call.
+  Read/test/edit spend about solo's; the gap is coordination turns, a heavier preamble, a second final
+  answer and both agents integrating. Savings are illustrative estimates, not bounds.
+- **[Finding 037](../037-cooperbench-costfix-seed2.md)** ([manifest](./costfix-manifest.md), amended
+  after stage 1): the "lean package" did not engage on `core` — CooperBench's own git block requires
+  every agent to merge, and musterd's MCP guidance drives the first inbox check — so it stopped. Seed 2
+  of 035's C1: musterd 35, solo 39 (p = 0.22, no detectable difference); summed over both seeds 73 vs
+  76 of 100. Any claim cites both seeds.
+- **Open from these:** cost per pass (2.7–2.8× solo) has no lever left inside the arm that CooperBench
+  can measure; the join-call guidance and the always-loaded tool set are product lanes `01M6S7NNK3` and
+  `01M6S7NS8S`.
